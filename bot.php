@@ -4356,6 +4356,49 @@ function runSetup(): void {
     @file_put_contents(DATA_DIR . '/.htaccess', "Require all denied\nDeny from all\n");
 
     $mode = $_GET['setup'];
+    if ($mode === 'diag') {
+        header('Content-Type: text/html; charset=utf-8');
+        echo "<div style='font-family:monospace;direction:ltr;padding:20px;white-space:pre-wrap'>";
+        echo "<h2>Diagnostics</h2>";
+        echo "PHP version: " . h(PHP_VERSION) . "\n";
+        echo "GD loaded: " . (extension_loaded('gd') ? 'yes' : 'NO') . "\n";
+        if (function_exists('gd_info')) { echo "gd_info: " . h(json_encode(gd_info())) . "\n"; }
+        echo "curl loaded: " . (extension_loaded('curl') ? 'yes' : 'NO') . "\n";
+        echo "memory_limit: " . h(ini_get('memory_limit')) . "\n";
+        echo "max_execution_time: " . h(ini_get('max_execution_time')) . "\n";
+        echo "open_basedir: " . h(ini_get('open_basedir') ?: '(none)') . "\n";
+        echo "sys_get_temp_dir(): " . h(sys_get_temp_dir()) . " writable=" . (is_writable(sys_get_temp_dir()) ? 'yes' : 'NO') . "\n";
+        echo "tg_proxy: " . h(tgProxy() ?: '(empty)') . "\n";
+        echo "http_proxy: " . h(httpProxy() ?: '(empty)') . "\n\n";
+
+        echo "--- renderRialCard('gold', ...) test ---\n";
+        $imgPath = renderRialCard('gold', 940465000, [900000000,910000000,905000000,920000000,940465000], ['qty' => 1, 'dp' => 0.5, 'dt' => 'low']);
+        if ($imgPath && is_file($imgPath)) {
+            $sz = filesize($imgPath);
+            $info = @getimagesize($imgPath);
+            echo "renderRialCard OK: file=$imgPath size={$sz}b " . ($info ? "dims={$info[0]}x{$info[1]} mime={$info['mime']}" : "getimagesize FAILED (corrupt file?)") . "\n";
+            $b64 = base64_encode(file_get_contents($imgPath));
+            echo "</div><p>Preview (if this looks broken/blank, the PNG itself is bad):</p><img src=\"data:image/png;base64,$b64\" style=\"border:2px solid red;max-width:100%\">";
+            echo "<div style='font-family:monospace;direction:ltr;padding:20px;white-space:pre-wrap'>";
+            @unlink($imgPath);
+        } else {
+            echo "renderRialCard FAILED: returned null/no file\n";
+        }
+
+        echo "\n--- tgApi('getMe') test ---\n";
+        $me = tgApi('getMe');
+        echo h(json_encode($me, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) . "\n";
+
+        echo "\n--- fetchTradingViewIdeas('BTC') test ---\n";
+        $tv = fetchTradingViewIdeas('BTC');
+        echo "items count: " . count($tv) . "\n";
+        if ($tv) {
+            echo "first item title: " . h($tv[0]['title'] ?? '') . "\n";
+            echo "first item author: " . h($tv[0]['author'] ?? '') . " (author='Auto' means the TradingView scrape failed and this is the local fallback)\n";
+        }
+        echo "</div>";
+        return;
+    }
     if ($mode === 'delete') {
         $r = tgApi('deleteWebhook', ['drop_pending_updates' => true]);
         echo "<pre>" . h(json_encode($r, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) . "</pre>";
