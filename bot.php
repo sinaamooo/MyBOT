@@ -1356,7 +1356,7 @@ function gregorianToHijri(int $gy, int $gm, int $gd): array {
 }
 
 /** کارت تاریخ/ساعت کامل (شمسی + قمری + میلادی) */
-const DEFAULT_TPL_DATE = "{{pe:cal}} <b>ساعت و تاریخ :</b>\n\n▪️ ساعت : \n └─  <b>{time}</b>\n\n▪️ تاریخ امروز : \n └─  <b>{weekday} {jd} {jmonth} {jyear}</b>\n\n▪️ تاریخ قمری : \n └─  <b>{hd} {hmonth} {hyear}</b>\n\n▪️ تاریخ میلادی : \n └─  <b>{gdate}</b>";
+const DEFAULT_TPL_DATE = "{{pe:date}} <b>ساعت و تاریخ :</b>\n\n▪️ ساعت : \n └─  <b>{time}</b>\n\n▪️ تاریخ امروز : \n └─  <b>{weekday} {jd} {jmonth} {jyear}</b>\n\n▪️ تاریخ قمری : \n └─  <b>{hd} {hmonth} {hyear}</b>\n\n▪️ تاریخ میلادی : \n └─  <b>{gdate}</b>";
 function sendDateCard($chatId, $replyTo = null): void {
     $ts = time();
     $wd  = ['یکشنبه','دوشنبه','سه‌شنبه','چهارشنبه','پنجشنبه','جمعه','شنبه'][(int)date('w', $ts)];
@@ -1444,7 +1444,7 @@ function buildPriceCaption(string $base, array $d): string {
         '{high}' => fmtPrice($high), '{low}' => fmtPrice($low), '{volume}' => fmtBig($vol),
     ]) . priceQuote();
 }
-const DEFAULT_TPL_PRICE = "ارز{{pe:coin}} {name} - {base}\n\n┓━━❲ قیمت لحظه ای ❳\n┨≡دلار{{pe:usd}}: {price} $\n┚≡تومان{{pe:toman}}: {toman}\n\n┓━━❲ اطلاعات{{pe:info24}} 24h ❳\n┨≡تغییرات{{pe:change}}: ❲ {sign}{change}% ❳\n┨≡سقف{{pe:high}}: {high} $\n┨≡کف{{pe:low}}: {low} $\n┚≡حجم{{pe:volume}}: {volume} $\n";
+const DEFAULT_TPL_PRICE = "{{pe:coin}} ارز {name} - {base}\n\n┓━━❲ قیمت لحظه ای ❳\n┨≡{{pe:usd}} دلار: {price} $\n┚≡{{pe:toman}} تومان: {toman}\n\n┓━━❲ {{pe:info24}} اطلاعات 24h ❳\n┨≡{{pe:change}} تغییرات: ❲ {sign}{change}% ❳\n┨≡{{pe:high}} سقف: {high} $\n┨≡{{pe:low}} کف: {low} $\n┚≡{{pe:volume}} حجم: {volume} $\n";
 
 /** رندر چارت شمعی و برگرداندن مسیر فایل PNG موقت (اقتباس از Chart.php) */
 /** تبدیل کد هگز ۶ کاراکتری (بدون #) به [r,g,b] */
@@ -1925,7 +1925,7 @@ function sendPriceCard($chatId, string $base, string $interval = '30m', $editMsg
     if ($cbId) { answerCallback($cbId); }
     return true;
 }
-const DEFAULT_TPL_PRICE_SIMPLE = "ارز{{pe:coin}} {name} - {base}\n\n┓━━❲ قیمت لحظه‌ای ❳\n┨≡دلار{{pe:usd}}: {price} $\n┚≡تومان{{pe:toman}}: {toman}\n";
+const DEFAULT_TPL_PRICE_SIMPLE = "{{pe:coin}} ارز {name} - {base}\n\n┓━━❲ قیمت لحظه‌ای ❳\n┨≡{{pe:usd}} دلار: {price} $\n┚≡{{pe:toman}} تومان: {toman}\n";
 /** کارت سادهٔ قیمت (بدون عکس چارت) — برای وقتی فقط قیمت لحظه‌ای از منبع پشتیبان در دسترس است */
 function buildSimplePriceCaption(string $base, float $price): string {
     $name = coinName($base);
@@ -1934,7 +1934,7 @@ function buildSimplePriceCaption(string $base, float $price): string {
     $tpl = getTemplate('tpl_price_simple', DEFAULT_TPL_PRICE_SIMPLE);
     return renderTemplate($tpl, ['{name}' => $name, '{base}' => $base, '{price}' => fmtPrice($price), '{toman}' => $toman]) . priceQuote();
 }
-const DEFAULT_TPL_USDT = "ارز{{pe:coin}} Tether - USDT\n\n┓━━❲ قیمت لحظه ای ❳\n┨≡دلار{{pe:usd}}: 1.00 $\n┚≡تومان{{pe:toman}}: {toman}\n";
+const DEFAULT_TPL_USDT = "{{pe:coin}} ارز Tether - USDT\n\n┓━━❲ قیمت لحظه ای ❳\n┨≡{{pe:usd}} دلار: 1.00 $\n┚≡{{pe:toman}} تومان: {toman}\n";
 /** تتر: فقط قیمت تومانی (بدون چارت) */
 function sendUsdtCard($chatId, $cbId = null, $replyTo = null): bool {
     $rls   = nobitexRls('usdt');
@@ -1947,7 +1947,7 @@ function sendUsdtCard($chatId, $cbId = null, $replyTo = null): bool {
 }
 
 // ---- کارت‌های دلار و طلای بازار آزاد (منبع tgju) ----
-const DEFAULT_TPL_DOLLAR = "<b>نرخ دلار آمریکا{{pe:r_usd}}</b>\n\n┓━━❲ نرخ لحظه‌ای ❳\n┨≡ تومان{{pe:r_toman}}: <b>{toman}</b> تومان\n┨≡ مقدار{{pe:usd_qty}}: <b>{qty}</b> $\n┚≡ {arrow} تغییر ۲۴ساعته{{pe:usd_change}}: <b>{change}%</b>\n{hilo}";
+const DEFAULT_TPL_DOLLAR = "<b>{{pe:r_usd}} نرخ دلار آمریکا</b>\n\n┓━━❲ نرخ لحظه‌ای ❳\n┨≡ {{pe:r_toman}} تومان: <b>{toman}</b> تومان\n┨≡ {{pe:usd_qty}} مقدار: <b>{qty}</b> $\n┚≡ {arrow} {{pe:usd_change}} تغییر ۲۴ساعته: <b>{change}%</b>\n{hilo}";
 /** قالب متن دلار — نسخهٔ خفن با کادر، نشان تغییرات ۲۴ساعته و سقف/کف (ایموجی پریمیوم: r_usd / r_toman / r_date) */
 function buildDollarCaption(float $qty, float $priceToman, array $meta = []): string {
     $qtyStr = rtrim(rtrim(number_format($qty, 4, '.', ','), '0'), '.');
@@ -1957,18 +1957,18 @@ function buildDollarCaption(float $qty, float $priceToman, array $meta = []): st
     $hilo = '';
     if (isset($meta['high']) && isset($meta['low'])) {
         $hilo = "\n┓━━❲ سقف کف امروز ❳\n" .
-                "┨≡ سقف" . pe('rg_high') . ": <b>" . number_format(round($meta['high'])) . "</b> تومان\n" .
-                "┚≡ کف" . pe('rg_low') . ": <b>" . number_format(round($meta['low'])) . "</b> تومان\n";
+                "┨≡ " . pe('rg_high') . " سقف: <b>" . number_format(round($meta['high'])) . "</b> تومان\n" .
+                "┚≡ " . pe('rg_low') . " کف: <b>" . number_format(round($meta['low'])) . "</b> تومان\n";
     }
     $tpl = getTemplate('tpl_dollar', DEFAULT_TPL_DOLLAR);
     $t = renderTemplate($tpl, [
         '{toman}' => number_format(round($priceToman)), '{qty}' => $qtyStr, '{arrow}' => $arrow,
         '{change}' => number_format(abs($dp), 2), '{hilo}' => $hilo,
     ]);
-    return $t . "\n" . quoteBlock("تاریخ" . pe('r_date') . " " . jalaliDateLine());
+    return $t . "\n" . quoteBlock(pe('r_date') . " " . jalaliDateLine());
 }
 
-const DEFAULT_TPL_GOLD = "<b>طلای 18 عیار{{pe:gold_title}}</b>\n\n┓━━❲ نرخ لحظه‌ای ❳\n┨≡ وزن{{pe:g_qty}}: <b>{qty}</b> گرم\n┨≡ تومان{{pe:r_toman}}: <b>{toman}</b> تومان\n┨≡ دلاری{{pe:r_usd}}: <b>\${usd}</b>\n┚≡ {arrow} تغییر ۲۴ساعته{{pe:gold_change}}: <b>{change}%</b>\n{hilo}";
+const DEFAULT_TPL_GOLD = "<b>{{pe:gold_title}} طلای 18 عیار</b>\n\n┓━━❲ نرخ لحظه‌ای ❳\n┨≡ {{pe:g_qty}} وزن: <b>{qty}</b> گرم\n┨≡ {{pe:r_toman}} تومان: <b>{toman}</b> تومان\n┨≡ {{pe:r_usd}} دلاری: <b>\${usd}</b>\n┚≡ {arrow} {{pe:gold_change}} تغییر ۲۴ساعته: <b>{change}%</b>\n{hilo}";
 /** قالب متن طلای ۱۸ عیار — نسخهٔ خفن با کادر، نشان تغییرات و سقف/کف (ایموجی: g_qty / r_toman / r_usd) */
 function buildGoldCaption(float $qty, float $priceToman, float $usdValue, array $meta = []): string {
     $qtyStr = rtrim(rtrim(number_format($qty, 4, '.', ','), '0'), '.');
@@ -1978,15 +1978,15 @@ function buildGoldCaption(float $qty, float $priceToman, float $usdValue, array 
     $hilo = '';
     if (isset($meta['high']) && isset($meta['low'])) {
         $hilo = "\n┓━━❲ سقف کف امروز ❳\n" .
-                "┨≡ سقف" . pe('rg_high') . ": <b>" . number_format(round($meta['high'])) . "</b> تومان\n" .
-                "┚≡ کف" . pe('rg_low') . ": <b>" . number_format(round($meta['low'])) . "</b> تومان\n";
+                "┨≡ " . pe('rg_high') . " سقف: <b>" . number_format(round($meta['high'])) . "</b> تومان\n" .
+                "┚≡ " . pe('rg_low') . " کف: <b>" . number_format(round($meta['low'])) . "</b> تومان\n";
     }
     $tpl = getTemplate('tpl_gold', DEFAULT_TPL_GOLD);
     $t = renderTemplate($tpl, [
         '{qty}' => $qtyStr, '{toman}' => number_format(round($priceToman)), '{usd}' => number_format($usdValue, 2),
         '{arrow}' => $arrow, '{change}' => number_format(abs($dp), 2), '{hilo}' => $hilo,
     ]);
-    return $t . "\n" . quoteBlock("تاریخ" . pe('r_date') . " " . jalaliDateLine());
+    return $t . "\n" . quoteBlock(pe('r_date') . " " . jalaliDateLine());
 }
 /** خط تاریخ‌شمسی/ساعت مشترک برای قالب‌های دلار و طلا */
 function jalaliDateLine(): string {
@@ -2816,7 +2816,7 @@ function tronTxCard($ret, $amount, $sym, $from, $to, $ts, $hash, $type): string 
         pemo('money') . " مقدار: <b>" . h($amount) . " " . h($sym) . "</b>\n" .
         "از: <code>" . h($from) . "</code>\n" .
         "به: <code>" . h($to) . "</code>\n" .
-        pemo('cal') . " " . date('Y/m/d H:i:s', $ts)
+        pe('date') . " " . date('Y/m/d H:i:s', $ts)
     );
     $txt .= "\n🔗 <code>" . h($hash) . "</code>";
     return $txt;
@@ -3391,15 +3391,15 @@ function renderFearGreedGauge(int $value, string $labelEn, ?array $hist = null):
     imagedestroy($out);
     return is_file($tmp) ? $tmp : null;
 }
-const DEFAULT_TPL_FEARGREED = "<b>شاخص ترس و طمع بازار کریپتو{{pe:fng_title}}</b>\n\n┓━━❲ وضعیت امروز ❳\n┨≡ عدد شاخص{{pe:fng_value}}: <b>{value} / 100</b>\n┚≡ وضعیت{{pe:fng_status}}: <b>{label}</b>\n{trend}\n{bar}\n";
+const DEFAULT_TPL_FEARGREED = "<b>{{pe:fng_title}} شاخص ترس و طمع بازار کریپتو</b>\n\n┓━━❲ وضعیت امروز ❳\n┨≡ {{pe:fng_value}} عدد شاخص: <b>{value} / 100</b>\n┚≡ {{pe:fng_status}} وضعیت: <b>{label}</b>\n{trend}\n{bar}\n";
 function buildFearGreedCaption(array $d, ?array $hist = null): string {
     $v = (int)$d['value'];
     $trend = '';
     if ($hist) {
         $trend = "\n┓━━❲ روند اخیر ❳\n";
-        if ($hist['yesterday'] !== null) { $trend .= "┨≡ دیروز" . pe('fng_yesterday') . ": <b>{$hist['yesterday']}</b> " . fngLabelFa($hist['yesterday']) . "\n"; }
-        if ($hist['week_avg']  !== null) { $trend .= "┨≡ میانگین هفتهٔ گذشته" . pe('fng_week') . ": <b>{$hist['week_avg']}</b>\n"; }
-        if ($hist['month_avg'] !== null) { $trend .= "┚≡ میانگین ماه گذشته" . pe('fng_month') . ": <b>{$hist['month_avg']}</b>\n"; }
+        if ($hist['yesterday'] !== null) { $trend .= "┨≡ " . pe('fng_yesterday') . " دیروز: <b>{$hist['yesterday']}</b> " . fngLabelFa($hist['yesterday']) . "\n"; }
+        if ($hist['week_avg']  !== null) { $trend .= "┨≡ " . pe('fng_week') . " میانگین هفتهٔ گذشته: <b>{$hist['week_avg']}</b>\n"; }
+        if ($hist['month_avg'] !== null) { $trend .= "┚≡ " . pe('fng_month') . " میانگین ماه گذشته: <b>{$hist['month_avg']}</b>\n"; }
     }
     $tpl = getTemplate('tpl_feargreed', DEFAULT_TPL_FEARGREED);
     $t = renderTemplate($tpl, [
@@ -3674,7 +3674,7 @@ function buildLocalAnalysis(string $base): ?array {
 
     return ['title' => coinName($base) . ' — تحلیل پرایس‌اکشن', 'desc' => $desc, 'url' => null, 'image' => null, 'author' => ''];
 }
-const DEFAULT_TPL_ANALYSIS = "<b>تحلیل{{pe:analysis_title}} {name} ({base})</b>\n{{pe:analysis_author}} نویسنده: {author}\n\n{{quote}}<b>{title}</b>\n\n{desc}{{/quote}}";
+const DEFAULT_TPL_ANALYSIS = "<b>{{pe:analysis_title}} تحلیل {name} ({base})</b>\n{{pe:analysis_author}} نویسنده: {author}\n\n{{quote}}<b>{title}</b>\n\n{desc}{{/quote}}";
 function buildAnalysisCaption(string $base, array $item, int $idx, int $total): string {
     $tpl = getTemplate('tpl_analysis', DEFAULT_TPL_ANALYSIS);
     $t = renderTemplate($tpl, [
