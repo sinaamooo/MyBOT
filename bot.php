@@ -411,6 +411,20 @@ function pemo(string $name): string {
 function backBtnText(): string {
     return getSetting('back_btn_text', 'بازگشت');
 }
+/** مقدار کلید API: اگر از پنل ادمین تنظیم شده باشد (settings) همان استفاده می‌شود،
+ *  وگرنه مقدار ثابتِ بالای فایل (برای سازگاری با نصب‌های قبلی که مستقیم در سورس ست شده). */
+function apiKeyValue(string $settingKey, string $constDefault): string {
+    $v = getSetting($settingKey, '');
+    return $v !== '' ? $v : $constDefault;
+}
+/** رنگ سفارشی چارت (settings، هگز #RRGGBB) یا رنگ پیش‌فرض در نبود تنظیم سفارشی */
+function chartColorSetting(string $key, array $default): array {
+    $v = getSetting("chart_color_$key", '');
+    if ($v !== '' && preg_match('/^#?([0-9a-fA-F]{6})$/', $v, $m)) {
+        return [hexdec(substr($m[1], 0, 2)), hexdec(substr($m[1], 2, 2)), hexdec(substr($m[1], 4, 2))];
+    }
+    return $default;
+}
 
 function sendMessage($chatId, string $text, $keyboard = null, $replyTo = null, string $parseMode = 'HTML') {
     $p = [
@@ -1323,12 +1337,12 @@ function renderCandlestickChart(array $candles, string $symbol, string $interval
     $cw = $width - $pl - $pr; $chh = $height - $pt - $pb;
 
     $img = imagecreatetruecolor($width, $height);
-    // چارت تیره: پس‌زمینهٔ سیاه، کندل صعودی آبی پررنگ، کندل نزولی سفید
-    $bg     = imagecolorallocate($img, 0, 0, 0);
+    // چارت تیره: پس‌زمینهٔ سیاه، کندل صعودی آبی پررنگ، کندل نزولی سفید — هرسه از پنل ادمین قابل تغییرند
+    $bg     = imagecolorallocate($img, ...chartColorSetting('bg', [0, 0, 0]));
     $border = imagecolorallocate($img, 55, 58, 66);
     $grid   = imagecolorallocate($img, 32, 34, 40);
-    $up     = imagecolorallocate($img, 33, 111, 237);
-    $down   = imagecolorallocate($img, 255, 255, 255);
+    $up     = imagecolorallocate($img, ...chartColorSetting('up', [33, 111, 237]));
+    $down   = imagecolorallocate($img, ...chartColorSetting('down', [255, 255, 255]));
     $dark   = imagecolorallocate($img, 235, 237, 242);
     $muted  = imagecolorallocate($img, 150, 155, 168);
 
@@ -2356,6 +2370,45 @@ function showTemplateDetail($chatId, $editMsgId, string $key): void {
     $rows[] = [btn(emo('back') . ' ' . backBtnText(), 'ap:tpl', 'primary', 'back')];
     editMessageText($chatId, $editMsgId, $txt, ikb($rows));
 }
+/** پوشاندن کلید API برای نمایش امن (فقط ۴ کاراکتر آخر) */
+function maskApiKey(string $k): string {
+    if ($k === '') { return '—'; }
+    $n = mb_strlen($k, 'UTF-8');
+    return $n <= 4 ? str_repeat('•', $n) : str_repeat('•', $n - 4) . mb_substr($k, -4, 4, 'UTF-8');
+}
+const API_KEY_DEFS = [
+    'ai_api_key'       => ['label' => 'کلید AI (تحلیل هوشمند SMC)', 'const' => AI_API_KEY],
+    'coinglass_api_key' => ['label' => 'کلید Coinglass (لیکویدیتی)', 'const' => COINGLASS_API_KEY],
+];
+function showApiKeysPanel($chatId, $editMsgId): void {
+    $txt = "🔑 <b>کلیدهای API</b>\nهرکدام را برای تغییر لمس کنید:\n\n";
+    $rows = [];
+    foreach (API_KEY_DEFS as $sk => $def) {
+        $val = apiKeyValue($sk, $def['const']);
+        $txt .= "• " . h($def['label']) . ": <code>" . h(maskApiKey($val)) . "</code>\n";
+        $rows[] = [btn('✏️ ' . $def['label'], "ap:keyedit:$sk", 'primary')];
+    }
+    $rows[] = [btn(emo('back') . ' ' . backBtnText(), 'ap:home', 'primary', 'back')];
+    editMessageText($chatId, $editMsgId, $txt, ikb($rows));
+}
+const CHART_COLOR_DEFS = [
+    'bg'   => ['label' => 'پس‌زمینه', 'default' => [0, 0, 0]],
+    'up'   => ['label' => 'کندل صعودی', 'default' => [33, 111, 237]],
+    'down' => ['label' => 'کندل نزولی', 'default' => [255, 255, 255]],
+];
+function rgbToHex(array $rgb): string { return sprintf('#%02X%02X%02X', $rgb[0], $rgb[1], $rgb[2]); }
+function showChartColorPanel($chatId, $editMsgId): void {
+    $txt = "🎨 <b>رنگ چارت شمعی</b>\nهگز (مثل <code>#21C06F</code>) — هرکدام را برای تغییر لمس کنید:\n\n";
+    $rows = [];
+    foreach (CHART_COLOR_DEFS as $ck => $def) {
+        $rgb = chartColorSetting($ck, $def['default']);
+        $txt .= "• " . h($def['label']) . ": <code>" . rgbToHex($rgb) . "</code>\n";
+        $rows[] = [btn('🎨 ' . $def['label'], "ap:colredit:$ck", 'primary')];
+    }
+    $rows[] = [btn('♻️ بازگردانی پیش‌فرض‌ها', 'ap:colreset', 'danger')];
+    $rows[] = [btn(emo('back') . ' ' . backBtnText(), 'ap:home', 'primary', 'back')];
+    editMessageText($chatId, $editMsgId, $txt, ikb($rows));
+}
 function showAdminPanel($chatId, $editMsgId = null): void {
     $txt = pemo('shield') . " <b>پنل مدیریت ربات</b>\nیکی از گزینه‌ها را انتخاب کنید:";
     if ($editMsgId) { editMessageText($chatId, $editMsgId, $txt, adminHomeKeyboard()); }
@@ -3086,12 +3139,13 @@ function freeLiquidityEstimate(string $base): ?array {
  *  نزدیک‌ترین ناحیهٔ سقف/کف نقدینگی به قیمت فعلی. توجه: ساختار دقیق پاسخ ممکن است بسته به پلن
  *  اشتراک شما متفاوت باشد؛ در صورت لزوم مسیر/فیلدهای زیر را مطابق مستندات پلن خودتان تنظیم کنید. */
 function coinglassLiquidity(string $base): ?array {
-    if (COINGLASS_API_KEY === '') { return null; }
+    $cgKey = apiKeyValue('coinglass_api_key', COINGLASS_API_KEY);
+    if ($cgKey === '') { return null; }
     $symbol = strtoupper($base);
     $ch = curl_init('https://open-api-v4.coinglass.com/api/futures/liquidation/heatmap?symbol=' . urlencode($symbol) . '&range=1d');
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_HTTPHEADER => ['CG-API-KEY: ' . COINGLASS_API_KEY, 'Accept: application/json'],
+        CURLOPT_HTTPHEADER => ['CG-API-KEY: ' . $cgKey, 'Accept: application/json'],
         CURLOPT_SSL_VERIFYPEER => false, CURLOPT_TIMEOUT => 15, CURLOPT_CONNECTTIMEOUT => 8,
     ]);
     $res = curl_exec($ch); curl_close($ch);
@@ -3123,7 +3177,7 @@ function coinglassLiquidity(string $base): ?array {
 }
 /** مسیر اصلی: اگر COINGLASS_API_KEY تنظیم شده از آن (دقیق‌تر) استفاده می‌کند، وگرنه از برآورد رایگان بایننس. */
 function fetchLiquidityData(string $base): ?array {
-    if (COINGLASS_API_KEY !== '') {
+    if (apiKeyValue('coinglass_api_key', COINGLASS_API_KEY) !== '') {
         $d = coinglassLiquidity($base);
         if ($d !== null) { return $d; }
     }
@@ -3214,7 +3268,8 @@ function buildSmcPrompt(string $base, string $tf, array $candles): string {
 }
 /** فراخوانی API هوش مصنوعی (سازگار با فرمت OpenAI Chat Completions) */
 function callAiApi(string $prompt): ?string {
-    if (AI_API_KEY === '') { return null; }
+    $aiKey = apiKeyValue('ai_api_key', AI_API_KEY);
+    if ($aiKey === '') { return null; }
     $body = json_encode([
         'model' => AI_MODEL,
         'messages' => [
@@ -3226,7 +3281,7 @@ function callAiApi(string $prompt): ?string {
     $ch = curl_init(AI_API_URL);
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true, CURLOPT_POST => true, CURLOPT_POSTFIELDS => $body,
-        CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'Authorization: Bearer ' . AI_API_KEY],
+        CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'Authorization: Bearer ' . $aiKey],
         CURLOPT_TIMEOUT => 55, CURLOPT_CONNECTTIMEOUT => 10, CURLOPT_SSL_VERIFYPEER => false,
     ]);
     $res = curl_exec($ch); curl_close($ch);
@@ -3265,7 +3320,7 @@ function sendAiAnalysis($chatId, string $base, string $tf, $msgId = null, $cbId 
     }
     $analysis = callAiApi(buildSmcPrompt($base, $tf, $candles));
     if ($analysis === null) {
-        $analysis = "برای فعال‌سازی تحلیل هوشمند، کلید AI_API_KEY را در تنظیمات ربات وارد کنید (سازگار با فرمت OpenAI Chat Completions).";
+        $analysis = "برای فعال‌سازی تحلیل هوشمند، کلید AI را از پنل ادمین (🔑 کلیدهای API) یا مستقیم در سورس (AI_API_KEY) وارد کنید (سازگار با فرمت OpenAI Chat Completions).";
     }
     $cap = buildAiAnalysisCaption($base, $tf, $analysis);
     $kb  = ikb([[addToGroupBtnGreen()]]);
@@ -3482,6 +3537,29 @@ function routeState($chatId, $userId, array $state, array $msg, string $text): b
             setSetting('back_btn_text', $val);
             clearState($chatId);
             sendMessage($chatId, pemo('ok') . " متن دکمهٔ بازگشت به «" . h($val) . "» تغییر کرد.");
+            return true;
+
+        case 'set_apikey':
+            if (!isGlobalAdmin($userId)) { clearState($chatId); return true; }
+            $sk = $state['data'] ?? '';
+            if (!isset(API_KEY_DEFS[$sk])) { clearState($chatId); return true; }
+            setSetting($sk, trim($text));
+            clearState($chatId);
+            sendMessage($chatId, pemo('ok') . " «" . h(API_KEY_DEFS[$sk]['label']) . "» بروزرسانی شد.");
+            return true;
+
+        case 'set_chartcolor':
+            if (!isGlobalAdmin($userId)) { clearState($chatId); return true; }
+            $ck = $state['data'] ?? '';
+            if (!isset(CHART_COLOR_DEFS[$ck])) { clearState($chatId); return true; }
+            $val = trim($text);
+            if (!preg_match('/^#?[0-9a-fA-F]{6}$/', $val)) {
+                sendMessage($chatId, emo('no') . " فرمت رنگ نامعتبر است. مثل <code>#21C06F</code> ارسال کنید.");
+                return true;
+            }
+            setSetting("chart_color_$ck", '#' . ltrim($val, '#'));
+            clearState($chatId);
+            sendMessage($chatId, pemo('ok') . " رنگ «" . h(CHART_COLOR_DEFS[$ck]['label']) . "» بروزرسانی شد.");
             return true;
 
         case 'broadcast':
@@ -3704,6 +3782,30 @@ function handleAdminCallback($chatId, $msgId, $userId, string $data, $cbId): voi
         setState($chatId, 'set_backtxt');
         editMessageText($chatId, $msgId, "🔙 متن جدید دکمهٔ «بازگشت» را ارسال کنید (فعلی: <b>" . h(backBtnText()) . "</b>):", ikb([[btn(emo('back') . ' انصراف', 'ap:home', 'danger', 'back')]]));
         answerCallback($cbId);
+        return;
+    }
+    if ($data === 'ap:keys') { showApiKeysPanel($chatId, $msgId); answerCallback($cbId); return; }
+    if (strpos($data, 'ap:keyedit:') === 0) {
+        $sk = substr($data, strlen('ap:keyedit:'));
+        if (!isset(API_KEY_DEFS[$sk])) { answerCallback($cbId, 'نامعتبر.', true); return; }
+        setState($chatId, 'set_apikey', $sk);
+        editMessageText($chatId, $msgId, "🔑 مقدار جدید «" . h(API_KEY_DEFS[$sk]['label']) . "» را ارسال کنید:", ikb([[btn(emo('back') . ' انصراف', 'ap:keys', 'danger', 'back')]]));
+        answerCallback($cbId);
+        return;
+    }
+    if ($data === 'ap:chartcolor') { showChartColorPanel($chatId, $msgId); answerCallback($cbId); return; }
+    if (strpos($data, 'ap:colredit:') === 0) {
+        $ck = substr($data, strlen('ap:colredit:'));
+        if (!isset(CHART_COLOR_DEFS[$ck])) { answerCallback($cbId, 'نامعتبر.', true); return; }
+        setState($chatId, 'set_chartcolor', $ck);
+        editMessageText($chatId, $msgId, "🎨 رنگ جدید «" . h(CHART_COLOR_DEFS[$ck]['label']) . "» را به‌صورت هگز ارسال کنید (مثل <code>#21C06F</code>):", ikb([[btn(emo('back') . ' انصراف', 'ap:chartcolor', 'danger', 'back')]]));
+        answerCallback($cbId);
+        return;
+    }
+    if ($data === 'ap:colreset') {
+        foreach (CHART_COLOR_DEFS as $ck => $def) { setSetting("chart_color_$ck", ''); }
+        showChartColorPanel($chatId, $msgId);
+        answerCallback($cbId, 'رنگ‌ها به پیش‌فرض بازگشت.');
         return;
     }
     if ($data === 'ap:bc') {
