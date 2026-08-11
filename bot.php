@@ -713,6 +713,10 @@ function groupPriceOn($chatId): bool {
 // ==========================================================================
 // 4) ماژول قیمت (Binance + Nobitex + چارت)
 // ==========================================================================
+/** پروکسی عمومی (غیر از تلگرام) برای همهٔ APIهای بیرونی — بایننس/MEXC/تریدینگ‌ویو/... از پنل
+ *  ادمین («🌐 پروکسی تلگرام») یا مستقیم با setSetting('http_proxy', ...) قابل‌تنظیم است. خیلی از
+ *  هاست‌های ایرانی به همان اندازه که به تلگرام، به بایننس/MEXC هم دسترسی مستقیم محدود/کند دارند. */
+function httpProxy(): string { return trim((string) getSetting('http_proxy', '')); }
 function httpGet(string $url, int $timeout = 12): ?string {
     $ch = curl_init($url);
     curl_setopt_array($ch, [
@@ -723,6 +727,8 @@ function httpGet(string $url, int $timeout = 12): ?string {
         CURLOPT_FOLLOWLOCATION => true,
         CURLOPT_USERAGENT      => 'Mozilla/5.0 (compatible; PriceBot/1.0)',
     ]);
+    $proxy = httpProxy();
+    if ($proxy !== '') { curl_setopt($ch, CURLOPT_PROXY, $proxy); }
     $r = curl_exec($ch);
     curl_close($ch);
     return $r === false ? null : $r;
@@ -741,6 +747,8 @@ function httpPostJson(string $url, string $json, int $timeout = 12): ?string {
         CURLOPT_HTTPHEADER     => ['Content-Type: application/json', 'Accept: application/json'],
         CURLOPT_USERAGENT      => 'Mozilla/5.0 (compatible; PriceBot/1.0)',
     ]);
+    $proxy = httpProxy();
+    if ($proxy !== '') { curl_setopt($ch, CURLOPT_PROXY, $proxy); }
     $r = curl_exec($ch);
     curl_close($ch);
     return $r === false ? null : $r;
@@ -871,6 +879,15 @@ function cryptoComparePrice(string $base, string $quote = 'USD'): ?float {
     $d = json_decode($j, true);
     return isset($d[$quote]) && is_numeric($d[$quote]) ? (float)$d[$quote] : null;
 }
+/** آمار کامل ۲۴ساعته از MEXC (قیمت+تغییرات+سقف/کف/حجم) — فرمت پاسخ عیناً مثل بایننس است،
+ *  پس برای آلت‌کوین‌های کوچکی که در بایننس نیستند ولی در MEXC هستند هم سقف/کف/حجم واقعی داریم
+ *  (نه فقط قیمت لحظه‌ای)، و کارت کامل با چارت نشان داده می‌شود نه کارت سادهٔ بدون سقف/کف. */
+function mexc24h(string $symbol): ?array {
+    $j = httpGet(apiBase('mexc', 'https://api.mexc.com') . '/api/v3/ticker/24hr?symbol=' . urlencode($symbol), 12);
+    if (!$j) { return null; }
+    $d = json_decode($j, true);
+    return isset($d['lastPrice']) ? $d : null;
+}
 /** قیمت لحظه‌ای از MEXC — API این صرافی هم‌فرمت با بایننس است (همان مسیر/فیلدها) */
 function mexcPriceOnly(string $symbol): ?float {
     $j = httpGet(apiBase('mexc', 'https://api.mexc.com') . '/api/v3/ticker/price?symbol=' . urlencode($symbol), 10);
@@ -914,15 +931,18 @@ function wallexPrice(string $base): ?float {
  * دریافت قیمت با زنجیرهٔ پشتیبان تا ربات به‌خاطر قطعی/مسدودبودن یک سرویس از کار نیفتد و
  * محدودیت ارزی نداشته باشد:
  * ۱) بایننس ticker/24hr (کامل: قیمت+تغییرات+سقف/کف/حجم → کارت با چارت)
- * ۲) بایننس ticker/price (فقط قیمت لحظه‌ای)
- * ۳) MEXC (فقط قیمت لحظه‌ای)
- * ۴) والکس — صرافی ایرانی (فقط قیمت لحظه‌ای)
- * ۵) CryptoCompare (فقط قیمت لحظه‌ای)
- * اگر فقط قیمت لحظه‌ای در دسترس باشد (حالت ۲ تا ۵)، چون داده‌ای برای آمار ۲۴ساعته نیست،
- * کارت سادهٔ بدون عکس چارت نمایش داده می‌شود (full=false) — چارت جدا واکشی می‌شود.
+ * ۲) MEXC ticker/24hr (کامل — برای آلت‌کوین‌هایی که در بایننس نیستند ولی در MEXC هستند)
+ * ۳) بایننس ticker/price (فقط قیمت لحظه‌ای)
+ * ۴) MEXC ticker/price (فقط قیمت لحظه‌ای)
+ * ۵) والکس — صرافی ایرانی (فقط قیمت لحظه‌ای)
+ * ۶) CryptoCompare (فقط قیمت لحظه‌ای)
+ * اگر فقط قیمت لحظه‌ای در دسترس باشد (حالت ۳ تا ۶)، چون داده‌ای برای آمار ۲۴ساعته نیست،
+ * کارت سادهٔ بدون سقف/کف/حجم نمایش داده می‌شود (full=false) — چارت جدا واکشی می‌شود.
  */
 function fetchPriceChain(string $symbol, string $base): array {
     $d = binance24h($symbol);
+    if ($d) { return ['full' => true, 'data' => $d, 'price' => (float)$d['lastPrice']]; }
+    $d = mexc24h($symbol);
     if ($d) { return ['full' => true, 'data' => $d, 'price' => (float)$d['lastPrice']]; }
     $p = binancePriceOnly($symbol);
     if ($p !== null) { return ['full' => false, 'data' => null, 'price' => $p]; }
@@ -1078,12 +1098,16 @@ function persianDateLine(): string {
 
 function coinName(string $base): string { return COIN_NAMES[strtoupper($base)] ?? $base; }
 
-/** تومان هر واحد ارز: مستقیم از نوبیتکس، وگرنه از نرخ تتر */
+/**
+ * تومان هر واحد ارز: مستقیم از نوبیتکس (اگر آن نماد را داشته باشد)، وگرنه قیمت دلاری × نرخ
+ * تومان‌به‌ازای‌هردلار (که خودش از نوبیتکس-تتر و در نبود آن از tgju به‌دست می‌آید — دو منبع
+ * پشتیبان پشت‌سرهم، تا برای اکثر آلت‌کوین‌ها که نوبیتکس ندارد هم مقدار «—» نمایش داده نشود).
+ */
 function tomanFor(string $base, float $usdPrice): ?float {
     $rls = nobitexRls(strtolower($base));
     if ($rls !== null) { return $rls / 10; }
-    $u = nobitexRls('usdt');
-    if ($u !== null) { return $usdPrice * ($u / 10); }
+    $u = tomanPerUsd();
+    if ($u !== null) { return $usdPrice * $u; }
     return null;
 }
 
@@ -1276,15 +1300,19 @@ function sendDateCard($chatId, $replyTo = null): void {
 }
 
 const DEFAULT_TPL_CONVERSION = "{{pe:cv_coin}} ارز {name} | {base}\n\n┓━━❲ تعداد {qty} ❳\n┨≡{{pe:cv_usd}} دلار: {usd} $\n┨≡{{pe:cv_star}} استارز: {stars}\n┚≡{{pe:cv_toman}} تومن: {toman}\n";
-/** کارت تبدیل مقدار ارز → دلار/استارز/تومان */
+/**
+ * کارت تبدیل مقدار ارز → دلار/استارز/تومان. از همان زنجیرهٔ کامل قیمت (بایننس→MEXC→والکس→
+ * CryptoCompare) استفاده می‌کند که بقیهٔ بخش‌های ربات استفاده می‌کنند — نه فقط بایننس — تا هم
+ * برای ارزهایی که در بایننس نیستند کار کند، هم اگر بایننس از این هاست کند/فیلتر باشد گیر نکند.
+ */
 function sendConversionCard($chatId, float $qty, string $base, $replyTo = null): void {
     $name = coinName($base);
     if ($base === 'USDT') {
         $usdPrice = 1.0;
     } else {
-        $d = binance24h($base . 'USDT');
-        if (!$d) { sendMessage($chatId, emo('no') . " نماد <b>" . h($base) . "</b> در بایننس یافت نشد.", null, $replyTo); return; }
-        $usdPrice = (float)$d['lastPrice'];
+        $pc = fetchPriceChain($base . 'USDT', $base);
+        if ($pc['price'] === null) { sendMessage($chatId, emo('no') . " نماد <b>" . h($base) . "</b> پیدا نشد.", null, $replyTo); return; }
+        $usdPrice = (float)$pc['price'];
     }
     $usd   = $qty * $usdPrice;
     $tmU   = tomanFor($base, $usdPrice);
@@ -1547,6 +1575,15 @@ function mbTruncate(string $s, int $max): string {
 
 /** نوشتن متن با مبدأ گوشهٔ بالا-چپ و ارتفاع تقریبی $px پیکسل.
  *  اگر TTF موجود بود از FreeType (واضح) وگرنه از فونت بیت‌مپ بزرگ‌شده استفاده می‌کند. */
+/** ارتفاع تقریبی متن برای چیدمان عناصر بعدی؛ اگر فونت TTF نبود، بر پایهٔ فونت داخلی GD تخمین می‌زند. */
+function textAscent(int $px, ?string $font): float {
+    if ($font && function_exists('imagettfbbox')) {
+        return abs(imagettfbbox($px * 0.70, 0, $font, 'Hg0')[7]);
+    }
+    $gh = imagefontheight(5);
+    $scale = max(1, (int) round($px / $gh));
+    return $gh * $scale * 0.8;
+}
 function cardText($img, string $text, int $x, int $y, int $px, int $color, bool $bold = false, string $align = 'left'): void {
     $font = function_exists('imagettftext') ? findTtf($bold) : null;
     if ($font) {
@@ -1672,9 +1709,11 @@ function drawAreaChart($img, array $series, int $x0, int $y0, int $x1, int $y1, 
  * $asset='usd'|'gold' ، $priceToman قیمت کل ، $series سری تاریخی تومان.
  */
 function renderRialCard(string $asset, float $priceToman, array $series, array $meta = []): ?string {
+    // توجه: عمداً اینجا برنمی‌گردیم اگر فونت TTF پیدا نشد — cardText() خودش وقتی فونتی نباشد
+    // به فونت داخلی GD (بدون نیاز به فایل TTF) سوییچ می‌کند، پس این کارت روی هر هاستی (حتی
+    // بدون هیچ فونتی) باز هم به‌صورت عکس ساخته می‌شود، نه فقط متن.
     if (!function_exists('imagecreatetruecolor')) { return null; }
-    $latFont = findTtf(false); $latFontB = findTtf(true);
-    if (!$latFont || !$latFontB) { return null; }
+    $latFontB = findTtf(true);
 
     $isGold = ($asset === 'gold');
     $SS = 2; // سوپرسمپل
@@ -1708,8 +1747,7 @@ function renderRialCard(string $asset, float $priceToman, array $series, array $
     $priceStr = number_format((int)round($priceToman));
     $priceSizePx = 78 * $SS;
     cardText($img, $priceStr, $padX, 128 * $SS, $priceSizePx, $white, true, 'left');
-    $priceSizePt = $priceSizePx * 0.70;
-    $priceAsc = abs(imagettfbbox($priceSizePt, 0, $latFontB, $priceStr)[7]);
+    $priceAsc = textAscent($priceSizePx, $latFontB);
 
     // برچسب واحد TOMAN زیر عدد
     $unitY = 128 * $SS + $priceAsc + 14 * $SS;
@@ -2343,7 +2381,7 @@ function adminHomeKeyboard(): array {
         [btn('✏️ ویرایش متن‌های ربات', 'ap:tpl', 'primary')],
         [btn('🔘 برچسب دکمه‌ها', 'ap:btn', 'primary')],
         [btn('🔌 مدیریت APIها', 'ap:api', 'primary'), btn('🎨 رنگ چارت', 'ap:chartcolor', 'primary')],
-        [btn('🌐 پروکسی تلگرام', 'ap:tgproxy', 'primary')],
+        [btn('🌐 پروکسی (تلگرام + APIها)', 'ap:tgproxy', 'primary')],
         [btn(emo('bell') . ' پیام همگانی', 'ap:bc', 'primary', 'bell')],
         [btn(emo('admin') . ' ادمین‌ها', 'ap:admins', 'primary', 'admin'),
          btn('🔗 جوین اجباری', 'ap:fj', 'primary')],
@@ -3510,8 +3548,47 @@ function fetchTradingViewIdeas(string $base): array {
         }
         if ($items) { break; }
     }
-    if ($items) { setSetting($cacheKey, json_encode(['ts' => time(), 'items' => $items], JSON_UNESCAPED_UNICODE)); }
-    return $items;
+    if ($items) {
+        setSetting($cacheKey, json_encode(['ts' => time(), 'items' => $items], JSON_UNESCAPED_UNICODE));
+        return $items;
+    }
+    // اگر تریدینگ‌ویو چیزی نداد (فیلترینگ/تغییر ساختار صفحه)، به‌جای خالی‌دست‌ماندن، یک تحلیل
+    // پرایس‌اکشن واقعی و همیشه در دسترس از دادهٔ خود صرافی‌ها می‌سازیم — تا «تحلیل ...» هیچ‌وقت
+    // فقط یک لینک خالی برنگرداند.
+    $local = buildLocalAnalysis($base);
+    return $local ? [$local] : [];
+}
+/** تحلیل خودکار پرایس‌اکشن از کندل واقعی (روند/مقاومت/حمایت/مومنتوم) — پشتیبان همیشه‌کارِ تحلیل تریدینگ‌ویو */
+function buildLocalAnalysis(string $base): ?array {
+    $candles = fetchKlinesChain($base . 'USDT', $base, '1h', 72);
+    if (!$candles || count($candles) < 10) { return null; }
+    $closes = array_map(fn($c) => (float)$c[4], $candles);
+    $highs  = array_map(fn($c) => (float)$c[2], $candles);
+    $lows   = array_map(fn($c) => (float)$c[3], $candles);
+    $current = end($closes);
+    $first = $closes[0];
+    $resistance = max($highs);
+    $support = min($lows);
+    $changePct = $first > 0 ? (($current - $first) / $first) * 100 : 0;
+
+    if ($changePct > 2) { $trend = 'صعودی 📈'; }
+    elseif ($changePct < -2) { $trend = 'نزولی 📉'; }
+    else { $trend = 'رنج / خنثی ↔️'; }
+
+    $n = count($closes);
+    $shortN = min(8, $n); $longN = min(24, $n);
+    $maShort = array_sum(array_slice($closes, -$shortN)) / $shortN;
+    $maLong  = array_sum(array_slice($closes, -$longN)) / $longN;
+    $momentum = $maShort > $maLong ? 'مثبت (میانگین کوتاه‌مدت بالای بلندمدت)' : 'منفی (میانگین کوتاه‌مدت زیر بلندمدت)';
+
+    $desc = "روند ۷۲ ساعت اخیر: {$trend} (" . ($changePct >= 0 ? '+' : '') . number_format($changePct, 2) . "%)\n" .
+            "مقاومت نزدیک: " . fmtPrice($resistance) . " $\n" .
+            "حمایت نزدیک: " . fmtPrice($support) . " $\n" .
+            "مومنتوم کوتاه‌مدت (MA8 در برابر MA24): {$momentum}\n" .
+            "قیمت فعلی: " . fmtPrice($current) . " $\n\n" .
+            "این تحلیل به‌صورت خودکار از دادهٔ قیمت واقعی صرافی‌ها محاسبه شده (پست تریدینگ‌ویو در دسترس نبود).";
+
+    return ['title' => coinName($base) . ' — تحلیل خودکار پرایس‌اکشن', 'desc' => $desc, 'url' => null, 'image' => null, 'author' => 'Auto'];
 }
 const DEFAULT_TPL_ANALYSIS = "📊 ✨ <b>تحلیل کامیونیتی {name} ({base})</b> ✨\n<i>نویسنده: {author}</i>\n\n{{quote}}<b>{title}</b>\n\n{desc}{{/quote}}\n\nتحلیل {idx} از {total}";
 function buildAnalysisCaption(string $base, array $item, int $idx, int $total): string {
@@ -3858,8 +3935,9 @@ function routeState($chatId, $userId, array $state, array $msg, string $text): b
             }
             if ($val === '-') { $val = ''; }
             setSetting('tg_proxy', $val);
+            setSetting('http_proxy', $val);
             clearState($chatId);
-            sendMessage($chatId, pemo('ok') . " پروکسی تلگرام " . ($val !== '' ? 'ذخیره شد.' : 'حذف شد.'), ikb([[backBtn('ap:home', 'primary')]]));
+            sendMessage($chatId, pemo('ok') . " پروکسی " . ($val !== '' ? 'ذخیره شد (تلگرام + بقیهٔ APIها).' : 'حذف شد.'), ikb([[backBtn('ap:home', 'primary')]]));
             return true;
 
         case 'set_chartcolor':
@@ -4063,14 +4141,15 @@ function handleAdminCallback($chatId, $msgId, $userId, string $data, $cbId): voi
         return;
     }
 
-    // پروکسی تلگرام (برای هاست‌هایی که به api.telegram.org مستقیم دسترسی ندارند)
+    // پروکسی تلگرام + سایر APIها (برای هاست‌هایی که دسترسی مستقیم/سریع ندارند)
     if ($data === 'ap:tgproxy') {
         $cur = tgProxy();
         setState($chatId, 'set_tgproxy');
-        $txt = "🌐 <b>پروکسی تلگرام</b>\n" .
-            "اگر ربات روی هاستی است که اتصال مستقیمش به api.telegram.org قطع/فیلتر است " .
-            "(علامتش: خطای «Operation timed out» در لاگ برای setWebhook/getMe/sendPhoto)، " .
-            "یک پروکسی HTTP یا SOCKS5 اینجا بفرستید تا همهٔ درخواست‌های تلگرام از آن رد شود.\n\n" .
+        $txt = "🌐 <b>پروکسی</b>\n" .
+            "اگر ربات روی هاستی است که اتصال مستقیمش به api.telegram.org و/یا بایننس/MEXC " .
+            "قطع/کند/فیلتر است (علامتش: خطای «Operation timed out» در لاگ، یا قیمت/چارت خیلی از " .
+            "ارزها دیر یا اصلاً نمی‌آید)، یک پروکسی HTTP یا SOCKS5 اینجا بفرستید — روی هم تلگرام و هم " .
+            "بقیهٔ APIها (بایننس/MEXC/تریدینگ‌ویو/...) اعمال می‌شود.\n\n" .
             "فرمت‌های مجاز:\n<code>http://ip:port</code>\n<code>http://user:pass@ip:port</code>\n<code>socks5://ip:port</code>\n\n" .
             "مقدار فعلی: <code>" . h($cur !== '' ? $cur : '— (خالی، بدون پروکسی)') . "</code>";
         $rows = [];
@@ -4082,6 +4161,7 @@ function handleAdminCallback($chatId, $msgId, $userId, string $data, $cbId): voi
     }
     if ($data === 'ap:tgproxyclear') {
         setSetting('tg_proxy', '');
+        setSetting('http_proxy', '');
         showAdminPanel($chatId, $msgId);
         answerCallback($cbId, 'پروکسی حذف شد.');
         return;
@@ -4261,8 +4341,10 @@ function runSetup(): void {
             echo "پروکسی نامعتبر است. باید با http:// ، https:// یا socks5:// شروع شود.";
             return;
         }
-        setSetting('tg_proxy', $proxy === '-' ? '' : $proxy);
-        echo "پروکسی تلگرام " . ($proxy !== '' && $proxy !== '-' ? "ذخیره شد: " . h($proxy) : "حذف شد") . "\nحالا دوباره <code>?setup=1&key=...</code> را باز کنید.";
+        $v = $proxy === '-' ? '' : $proxy;
+        setSetting('tg_proxy', $v);
+        setSetting('http_proxy', $v);
+        echo "پروکسی (تلگرام + APIها) " . ($v !== '' ? "ذخیره شد: " . h($v) : "حذف شد") . "\nحالا دوباره <code>?setup=1&key=...</code> را باز کنید.";
         return;
     }
     // ست‌کردن وبهوک
