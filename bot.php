@@ -2312,8 +2312,58 @@ function buildNewsCard(array $items): string {
     $t .= priceQuote();
     return $t;
 }
+/**
+ * بنر تصویری خفن برای اخبار (سبک مدرن تیره، مشابه ربات‌های حرفه‌ای). عمداً فقط از متن
+ * لاتین/عددی داخل تصویر استفاده می‌شود چون فونت‌های GD روی هاست‌های اشتراکی معمولاً حروف
+ * فارسی/عربی را به‌درستی نمی‌چسبانند (shaping) و نتیجه بهم‌ریخته می‌شود؛ خود عناوین خبر
+ * (فارسی) به‌صورت متن HTML تمیز در پیام بعدی ارسال می‌شوند.
+ */
+function renderNewsBanner(int $count): ?string {
+    if (!function_exists('imagecreatetruecolor')) { return null; }
+    $W = 900; $H = 420;
+    $img = imagecreatetruecolor($W, $H);
+    imagealphablending($img, true); imagesavealpha($img, true);
+
+    $bgTop = [46, 14, 66]; $bgBot = [8, 5, 18];
+    for ($y = 0; $y < $H; $y++) {
+        $t = $y / ($H - 1);
+        $c = imagecolorallocate($img,
+            (int)round($bgTop[0] + ($bgBot[0] - $bgTop[0]) * $t),
+            (int)round($bgTop[1] + ($bgBot[1] - $bgTop[1]) * $t),
+            (int)round($bgTop[2] + ($bgBot[2] - $bgTop[2]) * $t));
+        imageline($img, 0, $y, $W, $y, $c);
+    }
+    $accent = imagecolorallocate($img, 255, 111, 97);
+    $white  = imagecolorallocate($img, 245, 248, 251);
+    $muted  = imagecolorallocate($img, 197, 188, 214);
+    $faint  = imagecolorallocatealpha($img, 255, 255, 255, 120);
+    $panel  = imagecolorallocatealpha($img, 255, 255, 255, 123);
+    $liveBg = imagecolorallocatealpha($img, 255, 60, 60, 60);
+    $cntBg  = imagecolorallocatealpha($img, 255, 111, 97, 70);
+
+    roundedRect($img, 22, 22, $W - 22, $H - 22, 30, $panel);
+    roundedRectOutline($img, 22, 22, $W - 22, $H - 22, 30, $faint);
+    imagefilledrectangle($img, 22, 22, $W - 22, 28, $accent);
+
+    pill($img, 52, 52, '● LIVE', $liveBg, $white, 20, 'left');
+    cardText($img, 'CRYPTO NEWS', 52, 128, 56, $white, true, 'left');
+    cardText($img, 'Digital Currency Market Updates', 54, 202, 22, $muted, false, 'left');
+    pill($img, $W - 52, 52, $count . ' HEADLINES', $cntBg, $white, 22, 'right');
+
+    $ts = time();
+    cardText($img, date('d F Y — H:i', $ts) . ' (Tehran)', 52, $H - 58, 20, $muted, false, 'left');
+    cardText($img, '@' . BOT_USERNAME, $W - 52, $H - 58, 20, $muted, false, 'right');
+
+    $tmp = tempnam(sys_get_temp_dir(), 'news') . '.png';
+    imagepng($img, $tmp);
+    imagedestroy($img);
+    return is_file($tmp) ? $tmp : null;
+}
 function sendNewsCard($chatId, $replyTo = null): void {
-    sendMessage($chatId, buildNewsCard(fetchNews(5)), addGroupKeyboardGreen(), $replyTo);
+    $items = fetchNews(5);
+    $img = renderNewsBanner(count($items));
+    if ($img) { sendPhotoFile($chatId, $img, '📰 <b>آخرین اخبار داغ ارز دیجیتال</b>', null, $replyTo); @unlink($img); }
+    sendMessage($chatId, buildNewsCard($items), addGroupKeyboardGreen(), $replyTo);
 }
 
 // --------------------------------------------------------------------------
@@ -2378,24 +2428,132 @@ function fngLabelFa(int $v): string {
     if ($v <= 75) { return 'طمع'; }
     return 'طمع شدید';
 }
+function fngLabelEn(int $v): string {
+    if ($v <= 24) { return 'Extreme Fear'; }
+    if ($v <= 44) { return 'Fear'; }
+    if ($v <= 55) { return 'Neutral'; }
+    if ($v <= 75) { return 'Greed'; }
+    return 'Extreme Greed';
+}
 function fngBar(int $v): string {
     $filled = (int)round(max(0, min(100, $v)) / 10);
     return str_repeat('🟩', $filled) . str_repeat('⬜️', 10 - $filled);
 }
-function buildFearGreedCaption(array $d): string {
+/** میانگین‌های تاریخی شاخص (دیروز/هفتهٔ گذشته/ماه گذشته) از alternative.me — رایگان، تا ۳۰ روز اخیر */
+function fetchFearGreedHistory(): ?array {
+    $j = httpGet('https://api.alternative.me/fng/?limit=30', 12);
+    if (!$j) { return null; }
+    $d = json_decode($j, true);
+    $rows = $d['data'] ?? null;
+    if (!is_array($rows) || !$rows) { return null; }
+    $vals = array_map(fn($r) => (int)$r['value'], $rows); // rows[0] = امروز (جدیدترین)
+    $week  = array_slice($vals, 0, min(7, count($vals)));
+    $month = array_slice($vals, 0, min(30, count($vals)));
+    return [
+        'yesterday' => $vals[1] ?? null,
+        'week_avg'  => $week  ? (int)round(array_sum($week) / count($week))   : null,
+        'month_avg' => $month ? (int)round(array_sum($month) / count($month)) : null,
+    ];
+}
+/** رنگ گرادیانی گِیج بین قرمز (ترس) و سبز (طمع) برای نسبت ۰..۱ */
+function fngGaugeColor(float $frac): array {
+    if ($frac <= 0.5) {
+        $t = $frac / 0.5;
+        return [(int)round(224 + (250 - 224) * $t), (int)round(60 + (204 - 60) * $t), (int)round(60 + (21 - 60) * $t)];
+    }
+    $t = ($frac - 0.5) / 0.5;
+    return [(int)round(250 + (34 - 250) * $t), (int)round(204 + (197 - 204) * $t), (int)round(21 + (94 - 21) * $t)];
+}
+/** رندر تصویر گِیج (سرعت‌سنج) شاخص ترس‌وطمع، سبک مدرن تیره. متن داخل تصویر عمداً لاتین است
+ *  (محدودیت shaping فارسی در GD)؛ جزئیات فارسی در کپشن پیام می‌آید. */
+function renderFearGreedGauge(int $value, string $labelEn): ?string {
+    if (!function_exists('imagecreatetruecolor')) { return null; }
+    $W = 900; $H = 620;
+    $img = imagecreatetruecolor($W, $H);
+    imagealphablending($img, true); imagesavealpha($img, true);
+
+    $bgTop = [12, 16, 26]; $bgBot = [4, 6, 12];
+    for ($y = 0; $y < $H; $y++) {
+        $t = $y / ($H - 1);
+        $c = imagecolorallocate($img,
+            (int)round($bgTop[0] + ($bgBot[0] - $bgTop[0]) * $t),
+            (int)round($bgTop[1] + ($bgBot[1] - $bgTop[1]) * $t),
+            (int)round($bgTop[2] + ($bgBot[2] - $bgTop[2]) * $t));
+        imageline($img, 0, $y, $W, $y, $c);
+    }
+    $white = imagecolorallocate($img, 245, 248, 251);
+    $muted = imagecolorallocate($img, 150, 161, 176);
+    $faint = imagecolorallocatealpha($img, 255, 255, 255, 120);
+    $panel = imagecolorallocatealpha($img, 255, 255, 255, 123);
+
+    roundedRect($img, 22, 22, $W - 22, $H - 22, 30, $panel);
+    roundedRectOutline($img, 22, 22, $W - 22, $H - 22, 30, $faint);
+
+    cardText($img, 'Fear & Greed Index', (int)($W / 2), 44, 36, $white, true, 'center');
+    cardText($img, strtoupper($labelEn), (int)($W / 2), 92, 22, $muted, false, 'center');
+
+    $cx = (int)($W / 2); $cy = 430; $rOuter = 260; $rInner = 200;
+    $segments = 120;
+    for ($i = 0; $i < $segments; $i++) {
+        $f0 = $i / $segments; $f1 = ($i + 1) / $segments;
+        $a0 = 180 + $f0 * 180; $a1 = 180 + $f1 * 180;
+        [$r, $g, $b] = fngGaugeColor(($f0 + $f1) / 2);
+        $col = imagecolorallocate($img, $r, $g, $b);
+        imagefilledarc($img, $cx, $cy, $rOuter * 2, $rOuter * 2, (int)round($a0), (int)round($a1) + 1, $col, IMG_ARC_PIE);
+    }
+    // برش حلقه: پانچ نیم‌دایرهٔ داخلی با رنگ نزدیک به پس‌زمینهٔ همان ارتفاع تا حلقه (نه دیسک توپر) دیده شود
+    $holeT = $cy / ($H - 1);
+    $holeCol = imagecolorallocate($img,
+        (int)round($bgTop[0] + ($bgBot[0] - $bgTop[0]) * $holeT),
+        (int)round($bgTop[1] + ($bgBot[1] - $bgTop[1]) * $holeT),
+        (int)round($bgTop[2] + ($bgBot[2] - $bgTop[2]) * $holeT));
+    imagefilledarc($img, $cx, $cy, $rInner * 2, $rInner * 2, 180, 361, $holeCol, IMG_ARC_PIE);
+
+    // عقربه
+    $angleDeg = 180 + (max(0, min(100, $value)) / 100) * 180;
+    $angleRad = deg2rad($angleDeg);
+    $needleLen = $rInner - 20;
+    $nx = $cx + (int)round(cos($angleRad) * $needleLen);
+    $ny = $cy + (int)round(sin($angleRad) * $needleLen);
+    imagesetthickness($img, 6);
+    imageline($img, $cx, $cy, $nx, $ny, $white);
+    imagesetthickness($img, 1);
+    imagefilledellipse($img, $cx, $cy, 24, 24, $white);
+
+    cardText($img, (string)$value, $cx, $cy + 36, 76, $white, true, 'center');
+
+    $ts = time();
+    cardText($img, date('d F Y', $ts), $cx, $H - 58, 22, $muted, false, 'center');
+    cardText($img, '@' . BOT_USERNAME, $W - 52, $H - 46, 20, $muted, false, 'right');
+
+    $tmp = tempnam(sys_get_temp_dir(), 'fng') . '.png';
+    imagepng($img, $tmp);
+    imagedestroy($img);
+    return is_file($tmp) ? $tmp : null;
+}
+function buildFearGreedCaption(array $d, ?array $hist = null): string {
     $v = (int)$d['value'];
     $t  = "🧭 ✨ <b>شاخص ترس و طمع بازار کریپتو</b> ✨ 🧭\n\n";
     $t .= "┓━━❲ وضعیت امروز ❳\n";
     $t .= "┨≡ " . fngEmoji($v) . " عدد شاخص: <b>{$v} / 100</b>\n";
-    $t .= "┚≡ 🏷 وضعیت: <b>" . fngLabelFa($v) . "</b>\n\n";
-    $t .= fngBar($v) . "\n\n";
+    $t .= "┚≡ 🏷 وضعیت: <b>" . fngLabelFa($v) . "</b>\n";
+    if ($hist) {
+        $t .= "\n┓━━❲ روند اخیر ❳\n";
+        if ($hist['yesterday'] !== null) { $t .= "┨≡ " . fngEmoji($hist['yesterday']) . " دیروز: <b>{$hist['yesterday']}</b> " . fngLabelFa($hist['yesterday']) . "\n"; }
+        if ($hist['week_avg']  !== null) { $t .= "┨≡ " . fngEmoji($hist['week_avg'])  . " میانگین هفتهٔ گذشته: <b>{$hist['week_avg']}</b>\n"; }
+        if ($hist['month_avg'] !== null) { $t .= "┚≡ " . fngEmoji($hist['month_avg']) . " میانگین ماه گذشته: <b>{$hist['month_avg']}</b>\n"; }
+    }
+    $t .= "\n" . fngBar($v) . "\n\n";
     $t .= priceQuote();
     return $t;
 }
 function sendFearGreedCard($chatId, $replyTo = null): void {
     $d = fetchFearGreed();
     if ($d === null) { sendMessage($chatId, emo('no') . " دریافت شاخص ترس و طمع در حال حاضر ممکن نشد؛ کمی بعد دوباره تلاش کنید.", null, $replyTo); return; }
-    sendMessage($chatId, buildFearGreedCaption($d), addGroupKeyboardGreen(), $replyTo);
+    $cap = buildFearGreedCaption($d, fetchFearGreedHistory());
+    $img = renderFearGreedGauge($d['value'], fngLabelEn((int)$d['value']));
+    if ($img) { sendPhotoFile($chatId, $img, $cap, addGroupKeyboardGreen(), $replyTo); @unlink($img); }
+    else { sendMessage($chatId, $cap, addGroupKeyboardGreen(), $replyTo); }
 }
 
 // --------------------------------------------------------------------------
