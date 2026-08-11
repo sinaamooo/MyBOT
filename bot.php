@@ -140,6 +140,24 @@ function isCustomEmojiError($r): bool {
     return strpos($d, 'custom_emoji') !== false || strpos($d, 'custom emoji') !== false
         || strpos($d, 'emoji') !== false && strpos($d, 'invalid') !== false;
 }
+/**
+ * آیا خطای پاسخ تلگرام «message is not modified» است؟ این خطا وقتی رخ می‌دهد که محتوای جدید
+ * (متن/کپشن/کیبورد) دقیقاً همان محتوای قبلی باشد — یعنی واقعاً هیچ خطایی نیست، فقط تغییری برای
+ * اعمال وجود نداشت. اگر این حالت را «شکست» حساب کنیم، توابع ویرایش به‌اشتباه سراغ fallback
+ * (فرستادن پیام تازه) می‌روند و باعث می‌شوند به‌جای ویرایش، یک پیام تکراری ساخته شود — دقیقاً
+ * همان باگ «وقتی تایم‌فریم عوض می‌کنی، پیام عوض نمی‌شود و متن جدید می‌آید».
+ */
+function isNotModifiedError($r): bool {
+    if (!is_array($r) || !empty($r['ok'])) { return false; }
+    $d = mb_strtolower((string)($r['description'] ?? ''), 'UTF-8');
+    return strpos($d, 'not modified') !== false;
+}
+/** لاگ اختصاصی برای دیباگ (جدا از error_log عمومی که ممکن است روی هاست اشتراکی قابل‌مشاهده نباشد).
+ *  در bot_data/debug.log ذخیره می‌شود (همان پوشه‌ای که .htaccess با Deny from all محافظتش می‌کند). */
+function dlog(string $msg): void {
+    if (!is_dir(DATA_DIR)) { @mkdir(DATA_DIR, 0775, true); }
+    @file_put_contents(DATA_DIR . '/debug.log', '[' . date('Y-m-d H:i:s') . '] ' . $msg . "\n", FILE_APPEND);
+}
 
 // یوزرنیم ربات (برای دکمه «افزودن به گروه» و آیدی داخل قالب)
 const BOT_USERNAME = 'PriceNik_BOT';
@@ -503,13 +521,20 @@ function editMessageText($chatId, $messageId, string $text, $keyboard = null, st
         $p['text'] = stripPremiumEmoji($text);
         $r = tgApi('editMessageText', $p);
     }
-    if (!$r || empty($r['ok'])) { return sendMessage($chatId, $text, $keyboard, null, $parseMode); }
+    if (isNotModifiedError($r)) { dlog("editMessageText($messageId): not modified, treating as success (no duplicate sent)"); return $r; }
+    if (!$r || empty($r['ok'])) {
+        dlog("editMessageText($messageId) FAILED: " . json_encode($r, JSON_UNESCAPED_UNICODE) . " -> falling back to sendMessage (new message)");
+        return sendMessage($chatId, $text, $keyboard, null, $parseMode);
+    }
     return $r;
 }
 /**
  * ویرایش فقط کپشن یک پیامِ عکس‌دار (نه متن). تلگرام روی پیام‌هایی که عکس دارند اجازهٔ
  * editMessageText نمی‌دهد («there is no text to edit»)؛ برای آن پیام‌ها باید از این متد
  * استفاده شود (مثلاً وقتی برای یک تایم‌فریم جدید چارت در دسترس نبود ولی پیام قبلی عکس داشت).
+ * توجه: عمداً روی شکست به editMessageText سقوط نمی‌کند (که خودش روی fallback به sendMessage
+ * می‌رود) — چون پیام مقصد عکس‌دار است و ارسال یک پیام متنی جدید همان باگ تکرار پیام را می‌سازد.
+ * فقط کیبورد را (اگر ممکن بود) به‌روز می‌کند و همان‌جا تمام می‌شود.
  */
 function editMessageCaption($chatId, $messageId, string $caption, $keyboard = null, string $parseMode = 'HTML') {
     $p = ['chat_id' => $chatId, 'message_id' => $messageId, 'caption' => $caption, 'parse_mode' => $parseMode];
@@ -519,7 +544,12 @@ function editMessageCaption($chatId, $messageId, string $caption, $keyboard = nu
         $p['caption'] = stripPremiumEmoji($caption);
         $r = tgApi('editMessageCaption', $p);
     }
-    if (!$r || empty($r['ok'])) { return editMessageText($chatId, $messageId, $caption, $keyboard, $parseMode); }
+    if (isNotModifiedError($r)) { dlog("editMessageCaption($messageId): not modified, treating as success (no duplicate sent)"); return $r; }
+    if (!$r || empty($r['ok'])) {
+        dlog("editMessageCaption($messageId) FAILED: " . json_encode($r, JSON_UNESCAPED_UNICODE) . " -> only updating keyboard, NOT sending a new message");
+        if ($keyboard !== null) { return editMessageReplyMarkup($chatId, $messageId, $keyboard); }
+        return $r;
+    }
     return $r;
 }
 function editMessageReplyMarkup($chatId, $messageId, $keyboard) {
@@ -569,9 +599,14 @@ function editPhotoMedia($chatId, $messageId, string $filePath, string $caption, 
     if (isCustomEmojiError($r) && $caption !== stripPremiumEmoji($caption)) {
         $r = $send(stripPremiumEmoji($caption));
     }
+    if (isNotModifiedError($r)) { dlog("editPhotoMedia($messageId): not modified, treating as success (no duplicate sent)"); return $r; }
     // اگر ویرایش عکس ناموفق بود، پیام همچنان عکس‌دار است؛ editMessageText روی آن کار نمی‌کند
-    // (خطای «no text to edit»)، پس فقط کپشن/کیبورد ویرایش می‌شود، نه اینکه پیام متنی جدید بفرستد.
-    if (!$r || empty($r['ok'])) { return editMessageCaption($chatId, $messageId, $caption, $keyboard); }
+    // (خطای «no text to edit»)، پس فقط کپشن/کیبورد ویرایش می‌شود (editMessageCaption خودش دیگر
+    // هیچ‌وقت به sendMessage سقوط نمی‌کند) — نه اینکه پیام متنی جدید بفرستد.
+    if (!$r || empty($r['ok'])) {
+        dlog("editPhotoMedia($messageId) FAILED: " . json_encode($r, JSON_UNESCAPED_UNICODE) . " -> falling back to editMessageCaption (still no duplicate message)");
+        return editMessageCaption($chatId, $messageId, $caption, $keyboard);
+    }
     return $r;
 }
 function copyMessage($toChat, $fromChat, $messageId, $keyboard = null) {
@@ -1852,6 +1887,7 @@ function sendPriceCard($chatId, string $base, string $interval = '30m', $editMsg
     // ایموجی «tfinfo» فقط روی ارسال اول (پیش از هرگونه تعویض تایم‌فریم) نشان داده می‌شود.
     $kb = $chart ? timeframeKeyboard($base, $interval, $editMsgId === null) : addGroupKeyboard();
 
+    if ($editMsgId !== null) { dlog("sendPriceCard(base=$base, tf=$interval, editMsgId=$editMsgId): chart=" . ($chart ? 'yes' : 'no') . " -> " . ($chart ? 'editPhotoMedia' : 'editMessageCaption')); }
     if ($chart) {
         if ($editMsgId !== null) { editPhotoMedia($chatId, $editMsgId, $chart, $caption, $kb); }
         else { sendPhotoFile($chatId, $chart, $caption, $kb, $replyTo); }
@@ -4356,6 +4392,15 @@ function runSetup(): void {
     @file_put_contents(DATA_DIR . '/.htaccess', "Require all denied\nDeny from all\n");
 
     $mode = $_GET['setup'];
+    if ($mode === 'log') {
+        header('Content-Type: text/plain; charset=utf-8');
+        $log = DATA_DIR . '/debug.log';
+        if (!is_file($log)) { echo "(no debug.log yet — trigger a timeframe change in the bot, then reload this page)"; return; }
+        if (isset($_GET['clear'])) { @unlink($log); echo "log cleared."; return; }
+        $lines = file($log, FILE_IGNORE_NEW_LINES);
+        echo implode("\n", array_slice($lines, -200)); // آخرین ۲۰۰ خط
+        return;
+    }
     if ($mode === 'diag') {
         header('Content-Type: text/html; charset=utf-8');
         echo "<div style='font-family:monospace;direction:ltr;padding:20px;white-space:pre-wrap'>";
