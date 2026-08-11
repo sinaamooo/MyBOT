@@ -731,6 +731,15 @@ function mexcPriceOnly(string $symbol): ?float {
     $d = json_decode($j, true);
     return isset($d['price']) && is_numeric($d['price']) ? (float)$d['price'] : null;
 }
+/** قیمت لحظه‌ای از دامنهٔ قدیمی MEXC (open/api/v2) — دامنهٔ جدا (www.mexc.com به‌جای api.mexc.com)
+ *  که گاهی حتی وقتی دامنهٔ API جدید از هاست شما مسدود/در دسترس نیست، همچنان پاسخ می‌دهد. */
+function mexcV2PriceOnly(string $base): ?float {
+    $j = httpGet('https://www.mexc.com/open/api/v2/market/ticker?symbol=' . urlencode(strtoupper($base)) . '_USDT', 10);
+    if (!$j) { return null; }
+    $d = json_decode($j, true);
+    $last = $d['data'][0]['last'] ?? null;
+    return ($last !== null && is_numeric($last)) ? (float)$last : null;
+}
 /** لیست بازارهای صرافی ایرانی والکس (کش در حافظهٔ همان اجرا) — چون صرافی داخلی است، معمولاً
  *  حتی وقتی بایننس/MEXC از هاست شما در دسترس نباشند، والکس در دسترس می‌ماند. */
 function wallexMarkets(): ?array {
@@ -768,10 +777,11 @@ function wallexPrice(string $base): ?float {
  * محدودیت ارزی نداشته باشد:
  * ۱) بایننس ticker/24hr (کامل: قیمت+تغییرات+سقف/کف/حجم → کارت با چارت)
  * ۲) بایننس ticker/price (فقط قیمت لحظه‌ای)
- * ۳) MEXC (فقط قیمت لحظه‌ای)
- * ۴) والکس — صرافی ایرانی (فقط قیمت لحظه‌ای)
- * ۵) CryptoCompare (فقط قیمت لحظه‌ای)
- * اگر فقط قیمت لحظه‌ای در دسترس باشد (حالت ۲ تا ۵)، چون داده‌ای برای آمار ۲۴ساعته نیست،
+ * ۳) MEXC — دامنهٔ جدید api.mexc.com (فقط قیمت لحظه‌ای)
+ * ۴) MEXC — دامنهٔ قدیمی www.mexc.com/open/api/v2 (فقط قیمت لحظه‌ای، پشتیبان دامنهٔ جدید)
+ * ۵) والکس — صرافی ایرانی (فقط قیمت لحظه‌ای)
+ * ۶) CryptoCompare (فقط قیمت لحظه‌ای)
+ * اگر فقط قیمت لحظه‌ای در دسترس باشد (حالت ۲ تا ۶)، چون داده‌ای برای آمار ۲۴ساعته نیست،
  * کارت سادهٔ بدون عکس چارت نمایش داده می‌شود (full=false) — چارت جدا واکشی می‌شود.
  */
 function fetchPriceChain(string $symbol, string $base): array {
@@ -780,6 +790,8 @@ function fetchPriceChain(string $symbol, string $base): array {
     $p = binancePriceOnly($symbol);
     if ($p !== null) { return ['full' => false, 'data' => null, 'price' => $p]; }
     $p = mexcPriceOnly($symbol);
+    if ($p !== null) { return ['full' => false, 'data' => null, 'price' => $p]; }
+    $p = mexcV2PriceOnly($base);
     if ($p !== null) { return ['full' => false, 'data' => null, 'price' => $p]; }
     $p = wallexPrice($base);
     if ($p !== null) { return ['full' => false, 'data' => null, 'price' => $p]; }
