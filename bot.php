@@ -11,7 +11,7 @@
  *   - ایموجی و دکمه‌های رنگی + نقل‌قول (blockquote) با تاریخ شمسی
  *   - قالب‌های خفن قیمت دلار/طلای بازار آزاد (tgju) با نشان تغییرات و دامنهٔ سقف/کف
  *   - اخبار روز ارز دیجیتال با /News (RSS)، شاخص ترس و طمع (CoinMarketCap/alternative.me) با کلمهٔ «شاخص»
- *   - نقشهٔ لیکویدیتی کوین‌گلس با «لیکویدی <ارز>»، دارایی گیفت‌های تلگرام با «/me @username»
+ *   - نقشهٔ لیکویدیتی کوین‌گلس با «لیکویدی <ارز>»
  *   - تحلیل هوشمند تکنیکال (Smart Money Concepts) با هوش مصنوعی — «تحلیل <ارز>» با انتخاب تایم‌فریم
  *
  * راه‌اندازی: کل پوشه (شامل bot.php و پوشهٔ fonts/) را روی هاست بگذارید و یک‌بار این آدرس را باز کنید:
@@ -20,8 +20,8 @@
  * پوشهٔ fonts/ شامل فونت فارسی وزیرمتن — Vazirmatn (مجوز آزاد SIL OFL 1.1) است که برای تایپ‌شدن متن
  * فارسی داخل تصاویر تولیدی (مثل کارت اخبار) لازم است؛ اگر آپلود نشود، آن قابلیت به‌طور خودکار
  * و بدون خطا به حالت متنی ساده برمی‌گردد.
- * برای قابلیت‌های جدید (شاخص ترس‌وطمع پولی، لیکویدیتی دقیق‌تر، گیفت پورتال، تحلیل هوش مصنوعی) کلیدهای
- * CMC_API_KEY / COINGLASS_API_KEY / GIFTS_API_BASE+KEY / AI_API_KEY را در بالای همین فایل تنظیم کنید
+ * برای قابلیت‌های جدید (شاخص ترس‌وطمع پولی، لیکویدیتی دقیق‌تر، تحلیل هوش مصنوعی) کلیدهای
+ * CMC_API_KEY / COINGLASS_API_KEY / AI_API_KEY را در بالای همین فایل تنظیم کنید
  * (شاخص ترس‌وطمع و لیکویدیتی حتی بدون این کلیدها هم به‌صورت رایگان کار می‌کنند).
  */
 
@@ -69,7 +69,7 @@ const PREMIUM_EMOJI = [
     'wave'   => ['id' => '', 'fb' => '👋'],
     'people' => ['id' => '', 'fb' => '👥'],
     'rocket' => ['id' => '', 'fb' => '🚀'],
-    'back'   => ['id' => '', 'fb' => '◀️'],
+    'back'   => ['id' => '5875082500023258804', 'fb' => '◀️'],
     'refresh'=> ['id' => '', 'fb' => '🔄'],
 ];
 
@@ -113,7 +113,9 @@ const PE_IDS = [
     'w_ton'   => ['5843606192244398823', '💎'], // پشت اسم شبکهٔ تون
     'w_bnb'   => ['5845933235590142297', '🟡'], // پشت اسم شبکهٔ بی‌ان‌بی
     'w_tron'  => ['5846143156411703699', '🔴'], // پشت اسم شبکهٔ ترون
-    'w_addr'  => ['5846030233131556720', '📍'], // پشت آدرس ولت
+    'w_addr'  => ['5282843764451195532', '📍'], // پشت آدرس ولت
+    // ایموجی عمومی جدید (به‌جای ایموجی‌های ساده/پیش‌فرض): عنوان طلا، آیکون دلاری طلا، شروع خط تغییر ۲۴س
+    'mark'    => ['5282843764451195532', '🔹'],
 ];
 /** ایموجی پریمیوم داخل متن (parse_mode=HTML). اگر پریمیوم فعال نباشد، جایگزین معمولی. */
 function pe(string $key): string {
@@ -167,11 +169,6 @@ const COINGLASS_API_KEY = '';
 const AI_API_KEY   = '';
 const AI_API_URL   = 'https://api.groq.com/openai/v1/chat/completions';
 const AI_MODEL     = 'llama-3.3-70b-versatile';
-// فروشگاه پورتال گیفت‌های تلگرام (Portals Market یا مشابه) — بر خلاف موارد بالا، معادل رایگان
-// و مستندی برای این سرویس وجود ندارد (دادهٔ گیفت‌های یک کاربر خاص را تلگرام رسمی هم به‌صورت
-// عمومی/بدون سشن کاربری نمی‌دهد)، پس این یکی همچنان نیاز به آدرس و کلید API واقعی خودتان دارد.
-const GIFTS_API_BASE = '';
-const GIFTS_API_KEY  = '';
 // فید RSS اخبار ارز دیجیتال (منبع: ارز دیجیتال / ArzDigital)
 const NEWS_RSS_URL = 'https://arzdigital.com/feed/';
 
@@ -673,6 +670,24 @@ function isValidBase(string $base): bool {
     if (!$set) { return true; } // اگر لیست در دسترس نبود، اجازه بده (بایننس خودش خطا می‌دهد)
     return isset($set[strtoupper($base)]);
 }
+/** دستور /list: نمایش نمادهای پشتیبانی‌شده. محدودیت واقعی وجود ندارد — این فقط لیست
+ *  بایننس (برای مرجع سریع) است؛ هر نماد دیگری هم از طریق زنجیرهٔ MEXC/والکس/CryptoCompare
+ *  امتحان می‌شود، پس اگر نمادی اینجا نبود باز هم می‌توان مستقیماً امتحانش کرد. */
+function sendSupportedList($chatId, $replyTo = null): void {
+    $set = validUsdtSymbols();
+    if (!$set) {
+        sendMessage($chatId, emo('no') . " لیست ارزها موقتاً در دسترس نیست؛ اما محدودیتی وجود ندارد — هر نماد ارزی را مستقیم بفرستید تا قیمتش بررسی شود.", null, $replyTo);
+        return;
+    }
+    $symbols = array_keys($set);
+    sort($symbols);
+    $count = count($symbols);
+    $shown = array_slice($symbols, 0, 200);
+    $t = pemo('chart') . " <b>نمادهای پشتیبانی‌شده</b> (مجموع: {$count})\n";
+    $t .= quoteExpandable(h(implode('، ', $shown)) . ($count > count($shown) ? '، …' : ''));
+    $t .= "\nمحدودیتی در کار نیست؛ حتی نمادهایی که در این لیست نباشند هم از طریق MEXC/والکس/CryptoCompare امتحان می‌شوند — کافیست نمادش را مستقیم بفرستید.";
+    sendMessage($chatId, $t, addGroupKeyboard(), $replyTo);
+}
 
 /** نرمال‌سازی ورودی کاربر به نماد پایه (یا null) */
 function normalizeSymbol(string $text): ?string {
@@ -702,25 +717,71 @@ function binancePriceOnly(string $symbol): ?float {
     $d = json_decode($j, true);
     return isset($d['price']) && is_numeric($d['price']) ? (float)$d['price'] : null;
 }
-/** قیمت از CryptoCompare (پشتیبان دوم، وقتی هر دو endpoint بایننس در دسترس نباشند) */
+/** قیمت از CryptoCompare (پشتیبان، وقتی صرافی‌ها در دسترس نباشند) */
 function cryptoComparePrice(string $base, string $quote = 'USD'): ?float {
     $j = httpGet('https://min-api.cryptocompare.com/data/price?fsym=' . urlencode(strtoupper($base)) . '&tsym=' . urlencode($quote), 10);
     if (!$j) { return null; }
     $d = json_decode($j, true);
     return isset($d[$quote]) && is_numeric($d[$quote]) ? (float)$d[$quote] : null;
 }
+/** قیمت لحظه‌ای از MEXC — API این صرافی هم‌فرمت با بایننس است (همان مسیر/فیلدها) */
+function mexcPriceOnly(string $symbol): ?float {
+    $j = httpGet('https://api.mexc.com/api/v3/ticker/price?symbol=' . urlencode($symbol), 10);
+    if (!$j) { return null; }
+    $d = json_decode($j, true);
+    return isset($d['price']) && is_numeric($d['price']) ? (float)$d['price'] : null;
+}
+/** لیست بازارهای صرافی ایرانی والکس (کش در حافظهٔ همان اجرا) — چون صرافی داخلی است، معمولاً
+ *  حتی وقتی بایننس/MEXC از هاست شما در دسترس نباشند، والکس در دسترس می‌ماند. */
+function wallexMarkets(): ?array {
+    static $cache = null;
+    if ($cache !== null) { return $cache ?: null; }
+    $j = httpGet('https://api.wallex.ir/v1/markets', 12);
+    if (!$j) { $cache = false; return null; }
+    $d = json_decode($j, true);
+    $syms = $d['result']['symbols'] ?? null;
+    $cache = is_array($syms) ? $syms : false;
+    return $cache ?: null;
+}
+/** قیمت دلاری یک ارز از والکس (بازار USDT مستقیم، وگرنه از بازار TMN تقسیم‌بر نرخ تتر/تومان) */
+function wallexPrice(string $base): ?float {
+    $syms = wallexMarkets();
+    if (!$syms) { return null; }
+    $base = strtoupper($base);
+    foreach ([$base . 'USDT', $base . 'TMN'] as $key) {
+        if (!isset($syms[$key])) { continue; }
+        $stats = $syms[$key]['stats'] ?? $syms[$key];
+        $price = $stats['lastPrice'] ?? $stats['last_price'] ?? $stats['price'] ?? null;
+        if ($price === null || !is_numeric($price)) { continue; }
+        $price = (float)$price;
+        if (substr($key, -3) === 'TMN') {
+            $usdt = $syms['USDTTMN']['stats']['lastPrice'] ?? $syms['USDTTMN']['lastPrice'] ?? null;
+            if ($usdt === null || !is_numeric($usdt) || (float)$usdt <= 0) { continue; }
+            $price = $price / (float)$usdt;
+        }
+        return $price;
+    }
+    return null;
+}
 /**
- * دریافت قیمت با زنجیرهٔ پشتیبان تا ربات هیچ‌وقت به‌خاطر قطعی یک سرویس از کار نیفتد:
+ * دریافت قیمت با زنجیرهٔ پشتیبان تا ربات به‌خاطر قطعی/مسدودبودن یک سرویس از کار نیفتد و
+ * محدودیت ارزی نداشته باشد:
  * ۱) بایننس ticker/24hr (کامل: قیمت+تغییرات+سقف/کف/حجم → کارت با چارت)
  * ۲) بایننس ticker/price (فقط قیمت لحظه‌ای)
- * ۳) CryptoCompare (فقط قیمت لحظه‌ای)
- * اگر فقط قیمت لحظه‌ای در دسترس باشد (حالت ۲ یا ۳)، چون داده‌ای برای چارت/تغییرات ۲۴ساعته
- * نیست، کارت سادهٔ بدون عکس چارت نمایش داده می‌شود (full=false).
+ * ۳) MEXC (فقط قیمت لحظه‌ای)
+ * ۴) والکس — صرافی ایرانی (فقط قیمت لحظه‌ای)
+ * ۵) CryptoCompare (فقط قیمت لحظه‌ای)
+ * اگر فقط قیمت لحظه‌ای در دسترس باشد (حالت ۲ تا ۵)، چون داده‌ای برای آمار ۲۴ساعته نیست،
+ * کارت سادهٔ بدون عکس چارت نمایش داده می‌شود (full=false) — چارت جدا واکشی می‌شود.
  */
 function fetchPriceChain(string $symbol, string $base): array {
     $d = binance24h($symbol);
     if ($d) { return ['full' => true, 'data' => $d, 'price' => (float)$d['lastPrice']]; }
     $p = binancePriceOnly($symbol);
+    if ($p !== null) { return ['full' => false, 'data' => null, 'price' => $p]; }
+    $p = mexcPriceOnly($symbol);
+    if ($p !== null) { return ['full' => false, 'data' => null, 'price' => $p]; }
+    $p = wallexPrice($base);
     if ($p !== null) { return ['full' => false, 'data' => null, 'price' => $p]; }
     $p = cryptoComparePrice($base);
     if ($p !== null) { return ['full' => false, 'data' => null, 'price' => $p]; }
@@ -766,8 +827,24 @@ function cryptoCompareKlines(string $base, string $interval, int $limit = 70): ?
     return $out ?: null;
 }
 /** دریافت کندل با زنجیرهٔ پشتیبان (بایننس → CryptoCompare) تا چارت تقریباً همیشه در دسترس باشد */
+/** کندل از MEXC — API این صرافی هم‌فرمت با بایننس است (همان مسیر/فیلدها/تایم‌فریم‌ها) */
+function mexcKlinesRaw(string $symbol, string $interval, int $limit): ?array {
+    $j = httpGet('https://api.mexc.com/api/v3/klines?symbol=' . urlencode($symbol) . '&interval=' . urlencode($interval) . '&limit=' . $limit, 12);
+    if (!$j) { return null; }
+    $d = json_decode($j, true);
+    return is_array($d) && $d ? $d : null;
+}
+function mexcKlines(string $symbol, string $interval, int $limit = 70): ?array {
+    if ($interval === '3h') {
+        $raw = mexcKlinesRaw($symbol, '1h', $limit * 3 + 3);
+        return $raw ? aggregateKlines($raw, 3) : null;
+    }
+    return mexcKlinesRaw($symbol, $interval, $limit);
+}
 function fetchKlinesChain(string $symbol, string $base, string $interval, int $limit = 70): ?array {
     $k = binanceKlines($symbol, $interval, $limit);
+    if ($k) { return $k; }
+    $k = mexcKlines($symbol, $interval, $limit);
     if ($k) { return $k; }
     return cryptoCompareKlines($base, $interval, $limit);
 }
@@ -1105,13 +1182,14 @@ function renderCandlestickChart(array $candles, string $symbol, string $interval
     $cw = $width - $pl - $pr; $chh = $height - $pt - $pb;
 
     $img = imagecreatetruecolor($width, $height);
-    $bg     = imagecolorallocate($img, 255, 255, 255);
-    $border = imagecolorallocate($img, 200, 205, 215);
-    $grid   = imagecolorallocate($img, 228, 231, 238);
-    $green  = imagecolorallocate($img, 22, 163, 74);
-    $black  = imagecolorallocate($img, 17, 17, 17);
-    $dark   = imagecolorallocate($img, 30, 34, 45);
-    $muted  = imagecolorallocate($img, 120, 126, 140);
+    // چارت تیره: پس‌زمینهٔ سیاه، کندل صعودی آبی پررنگ، کندل نزولی سفید
+    $bg     = imagecolorallocate($img, 0, 0, 0);
+    $border = imagecolorallocate($img, 55, 58, 66);
+    $grid   = imagecolorallocate($img, 32, 34, 40);
+    $up     = imagecolorallocate($img, 33, 111, 237);
+    $down   = imagecolorallocate($img, 255, 255, 255);
+    $dark   = imagecolorallocate($img, 235, 237, 242);
+    $muted  = imagecolorallocate($img, 150, 155, 168);
 
     imagefill($img, 0, 0, $bg);
     imagerectangle($img, $pl - 10, $pt - 10, $width - $pr + 10, $height - $pb + 10, $border);
@@ -1139,7 +1217,7 @@ function renderCandlestickChart(array $candles, string $symbol, string $interval
         $yc = $pt + $chh - (($c - $min) / ($max - $min) * $chh);
         $yh = $pt + $chh - (($high - $min) / ($max - $min) * $chh);
         $yl = $pt + $chh - (($low - $min) / ($max - $min) * $chh);
-        $col = ($c >= $o) ? $green : $black;
+        $col = ($c >= $o) ? $up : $down;
         $cx = (int)($x + $bw / 2);
         imageline($img, $cx, (int)$yh, $cx, (int)$yl, $col);
         $top = (int)min($yo, $yc); $bot = (int)max($yo, $yc);
@@ -1595,7 +1673,7 @@ function buildDollarCaption(float $qty, float $priceToman, array $meta = []): st
     $qtyStr = rtrim(rtrim(number_format($qty, 4, '.', ','), '0'), '.');
     $dp    = (float)($meta['dp'] ?? 0);
     $up    = (($meta['dt'] ?? 'high') !== 'low');
-    $arrow = $up ? '🟢 ▲' : '🔴 ▼';
+    $arrow = pe('mark') . ($up ? ' ▲' : ' ▼');
 
     $t  = "💵 <b>نرخ دلار آمریکا</b> " . pe('r_usd') . "\n\n";
     $t .= "┓━━❲ نرخ لحظه‌ای ❳\n";
@@ -1603,11 +1681,11 @@ function buildDollarCaption(float $qty, float $priceToman, array $meta = []): st
     $t .= "┨≡ " . pe('r_usd') . " مقدار: <b>{$qtyStr}</b> $\n";
     $t .= "┚≡ {$arrow} تغییر ۲۴س: " . pe('rg_change') . " <b>" . number_format(abs($dp), 2) . "%</b>\n";
     if (isset($meta['high']) && isset($meta['low'])) {
-        $t .= "\n┓━━❲ سقف کف امروز " . pe('rg_label') . " ❳\n";
+        $t .= "\n┓━━❲ " . pe('rg_label') . " سقف کف امروز ❳\n";
         $t .= "┨≡ " . pe('rg_high') . " سقف: <b>" . number_format(round($meta['high'])) . "</b> تومان\n";
         $t .= "┚≡ " . pe('rg_low') . " کف: <b>" . number_format(round($meta['low'])) . "</b> تومان\n";
     }
-    $t .= "\n" . pe('r_date') . " " . jalaliDateLine();
+    $t .= "\n" . quoteBlock(pe('r_date') . " " . jalaliDateLine());
     return $t;
 }
 
@@ -1616,20 +1694,20 @@ function buildGoldCaption(float $qty, float $priceToman, float $usdValue, array 
     $qtyStr = rtrim(rtrim(number_format($qty, 4, '.', ','), '0'), '.');
     $dp    = (float)($meta['dp'] ?? 0);
     $up    = (($meta['dt'] ?? 'high') !== 'low');
-    $arrow = $up ? '🟢 ▲' : '🔴 ▼';
+    $arrow = pe('mark') . ($up ? ' ▲' : ' ▼');
 
-    $t  = "🥇 <b>طلای ۱۸ عیار</b> " . pe('g_qty') . "\n\n";
+    $t  = "🥇 <b>طلای ۱۸ عیار</b> " . pe('mark') . "\n\n";
     $t .= "┓━━❲ نرخ لحظه‌ای ❳\n";
     $t .= "┨≡ " . pe('g_qty') . " وزن: <b>{$qtyStr}</b> گرم\n";
     $t .= "┨≡ " . pe('r_toman') . " تومان: <b>" . number_format(round($priceToman)) . "</b> تومان\n";
-    $t .= "┨≡ " . pe('r_usd') . " دلاری: <b>$" . number_format($usdValue, 2) . "</b>\n";
+    $t .= "┨≡ " . pe('mark') . " دلاری: <b>$" . number_format($usdValue, 2) . "</b>\n";
     $t .= "┚≡ {$arrow} تغییر ۲۴س: " . pe('rg_change') . " <b>" . number_format(abs($dp), 2) . "%</b>\n";
     if (isset($meta['high']) && isset($meta['low'])) {
-        $t .= "\n┓━━❲ سقف کف امروز " . pe('rg_label') . " ❳\n";
+        $t .= "\n┓━━❲ " . pe('rg_label') . " سقف کف امروز ❳\n";
         $t .= "┨≡ " . pe('rg_high') . " سقف: <b>" . number_format(round($meta['high'])) . "</b> تومان\n";
         $t .= "┚≡ " . pe('rg_low') . " کف: <b>" . number_format(round($meta['low'])) . "</b> تومان\n";
     }
-    $t .= "\n" . pe('r_date') . " " . jalaliDateLine();
+    $t .= "\n" . quoteBlock(pe('r_date') . " " . jalaliDateLine());
     return $t;
 }
 /** خط تاریخ‌شمسی/ساعت مشترک برای قالب‌های دلار و طلا */
@@ -1836,13 +1914,14 @@ function handleGroupCommand($chatId, array $msg, string $text, bool $isAdmin): b
     $lower = mb_strtolower($text);
     $first = preg_split('/\s+/u', $text)[0] ?? $text;
 
-    // اخبار / شاخص ترس‌وطمع / گیفت‌های تلگرام
+    // اخبار / شاخص ترس‌وطمع / لیست ارزها / لیکویدیتی
     if ($lower === '/news' || strpos($lower, '/news@') === 0) { sendNewsCard($chatId); return true; }
     if ($lower === '/feargreed' || $lower === '/fng') { sendFearGreedCard($chatId); return true; }
-    if ($first === '/me' || strpos(mb_strtolower($first), '/me@') === 0) {
-        $username = parseMeCommand(preg_replace('/^(\/me)(@\w+)?/iu', '/me', $text, 1));
-        if ($username === null) { sendMessage($chatId, emo('no') . " لطفاً یوزرنیم را هم وارد کنید. مثال: <code>/me @username</code>"); }
-        else { sendGiftsCard($chatId, $username); }
+    if ($first === '/list' || strpos(mb_strtolower($first), '/list@') === 0) { sendSupportedList($chatId); return true; }
+    if ($first === '/liquidy' || $first === '/liquidity' || strpos(mb_strtolower($first), '/liquidy@') === 0) {
+        $rest = trim(mb_substr($text, mb_strlen($first)));
+        $liqBase = $rest !== '' ? (normalizeSymbol($rest) ?: 'BTC') : 'BTC';
+        sendLiquidityCard($chatId, $liqBase);
         return true;
     }
 
@@ -2442,7 +2521,7 @@ function buildWalletCaption(string $chain, string $chainFa, string $address, flo
     $out .= "┨≡ " . pe('w_toman') . " تومان: <b>$tmnStr</b>\n\n";
     $out .= "┚≡ " . pe('w_addr') . " آدرس ولت :\n";
     $out .= pe('w_addr') . " <code>" . h($address) . "</code>\n\n";
-    $out .= " " . pe('w_date') . " $clock | $shamsi";
+    $out .= quoteBlock(pe('w_date') . " $clock | $shamsi");
     return $out;
 }
 /** کارت ولت را برای شبکهٔ مشخص می‌سازد و می‌فرستد (پیام متنی) */
@@ -2968,78 +3047,6 @@ function sendLiquidityCard($chatId, string $base, $replyTo = null): void {
 }
 
 // --------------------------------------------------------------------------
-// گیفت‌های تلگرام (فروشگاه پورتال) — /me @username
-// --------------------------------------------------------------------------
-function parseMeCommand(string $text): ?string {
-    if (!preg_match('/^\/me(?:@\w+)?\s+(@?[A-Za-z0-9_]{3,32})\s*$/u', trim($text), $m)) { return null; }
-    return ltrim($m[1], '@');
-}
-/** دریافت دارایی گیفت‌های تلگرام یک کاربر از فروشگاه پورتال (Portals Market یا مشابه).
- *  توجه مهم: مسیر واقعی API و فرمت پاسخ به دسترسی شما بستگی دارد؛ GIFTS_API_BASE و
- *  GIFTS_API_KEY را طبق مستندات API واقعی خودتان تنظیم کنید. هرگز داده جعلی نمایش داده نمی‌شود:
- *  اگر پاسخ نامعتبر باشد null برمی‌گردد و پیام خطا نشان داده می‌شود. */
-function fetchUserGifts(string $username): ?array {
-    if (GIFTS_API_BASE === '') { return null; }
-    $ch = curl_init(rtrim(GIFTS_API_BASE, '/') . '/users/' . urlencode($username) . '/gifts');
-    $headers = ['Accept: application/json'];
-    if (GIFTS_API_KEY !== '') { $headers[] = 'Authorization: Bearer ' . GIFTS_API_KEY; }
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true, CURLOPT_HTTPHEADER => $headers,
-        CURLOPT_SSL_VERIFYPEER => false, CURLOPT_TIMEOUT => 15, CURLOPT_CONNECTTIMEOUT => 8,
-    ]);
-    $res = curl_exec($ch); curl_close($ch);
-    if (!$res) { return null; }
-    $d = json_decode($res, true);
-    if (!is_array($d) || !isset($d['gifts']) || !is_array($d['gifts'])) { return null; }
-
-    $gifts = []; $totalCost = 0.0; $totalValue = 0.0;
-    foreach ($d['gifts'] as $g) {
-        $name  = (string)($g['name'] ?? $g['title'] ?? '?');
-        $link  = (string)($g['url'] ?? $g['link'] ?? '');
-        $cost  = (float)($g['cost'] ?? $g['buy_price'] ?? 0);
-        $value = (float)($g['price'] ?? $g['floor_price'] ?? $g['value'] ?? 0);
-        $totalCost  += $cost;
-        $totalValue += $value;
-        $gifts[] = ['name' => $name, 'link' => $link, 'value' => $value];
-    }
-    $pnlPct = $totalCost > 0 ? (($totalValue - $totalCost) / $totalCost) * 100 : 0.0;
-    return ['count' => count($gifts), 'gifts' => $gifts, 'total_cost' => $totalCost, 'total_value' => $totalValue, 'pnl_pct' => $pnlPct];
-}
-function buildGiftsCaption(string $username, array $d): string {
-    $up = $d['pnl_pct'] >= 0;
-    $arrow = $up ? '🟢 ▲ +' : '🔴 ▼ ';
-    $t  = "🎁 ✨ <b>دارایی گیفت‌های تلگرام</b> ✨ 🎁\n";
-    $t .= "👤 @" . h($username) . "\n\n";
-    $t .= "┓━━❲ خلاصهٔ دارایی ❳\n";
-    $t .= "┨≡ 🎁 تعداد گیفت‌ها: <b>{$d['count']}</b>\n";
-    $t .= "┨≡ 💰 ارزش خرید: <b>" . number_format($d['total_cost'], 2) . "</b> TON\n";
-    $t .= "┨≡ 💎 ارزش فعلی: <b>" . number_format($d['total_value'], 2) . "</b> TON\n";
-    $t .= "┚≡ {$arrow}" . number_format(abs($d['pnl_pct']), 2) . "% سود/زیان\n";
-    if ($d['gifts']) {
-        $body = '';
-        foreach ($d['gifts'] as $g) {
-            $body .= $g['link'] !== ''
-                ? "🎁 <a href=\"" . h($g['link']) . "\">" . h($g['name']) . "</a> — " . number_format($g['value'], 2) . " TON\n"
-                : "🎁 <b>" . h($g['name']) . "</b> — " . number_format($g['value'], 2) . " TON\n";
-        }
-        $t .= "\n" . quoteExpandable($body);
-    }
-    $t .= "\n" . pe('date') . ' ' . jalaliDateLine();
-    return $t;
-}
-function sendGiftsCard($chatId, string $username, $replyTo = null): void {
-    $d = fetchUserGifts($username);
-    if ($d === null) {
-        $msg = GIFTS_API_BASE === ''
-            ? emo('no') . " برای فعال‌سازی این قابلیت، آدرس و کلید API فروشگاه پورتال گیفت (GIFTS_API_BASE / GIFTS_API_KEY) را در تنظیمات ربات وارد کنید."
-            : emo('no') . " اطلاعات گیفت‌های @" . h($username) . " یافت نشد (ممکن است پروفایل عمومی نباشد یا سرویس در دسترس نباشد).";
-        sendMessage($chatId, $msg, null, $replyTo);
-        return;
-    }
-    sendMessage($chatId, buildGiftsCaption($username, $d), addGroupKeyboardGreen(), $replyTo);
-}
-
-// --------------------------------------------------------------------------
 // تحلیل هوشمند تکنیکال (Smart Money Concepts) با هوش مصنوعی — بدون محدودیت ارزی
 // --------------------------------------------------------------------------
 /** تشخیص درخواست «تحلیل ...» و استخراج نماد ارز (هر نمادی که در بایننس معتبر باشد، بدون محدودیت) */
@@ -3224,10 +3231,14 @@ function handlePrivate(array $msg, $chatId, ?array $from): void {
             sendFearGreedCard($chatId);
             return;
         }
-        if ($cmd === '/me') {
-            $username = parseMeCommand($text);
-            if ($username === null) { sendMessage($chatId, emo('no') . " لطفاً یوزرنیم را هم وارد کنید. مثال: <code>/me @username</code>"); }
-            else { sendGiftsCard($chatId, $username); }
+        if ($cmd === '/list') {
+            sendSupportedList($chatId);
+            return;
+        }
+        if ($cmd === '/liquidy' || $cmd === '/liquidity') {
+            $rest = trim(mb_substr($text, mb_strlen(explode(' ', $text)[0])));
+            $liqBase = $rest !== '' ? (normalizeSymbol($rest) ?: 'BTC') : 'BTC';
+            sendLiquidityCard($chatId, $liqBase);
             return;
         }
         // ناشناخته → استارت
@@ -3315,8 +3326,7 @@ function helpText(): string {
         "• اخبار روز ارز دیجیتال: <code>/News</code>\n" .
         "• شاخص ترس و طمع بازار: کلمهٔ <code>شاخص</code> را بفرستید.\n" .
         "• نقشهٔ لیکویدیتی: <code>لیکویدی بیت کوین</code>\n" .
-        "• تحلیل هوشمند SMC: <code>تحلیل بیت کوین</code> (هر نمادی که در بایننس باشد)\n" .
-        "• دارایی گیفت‌های تلگرام: <code>/me @username</code>"
+        "• تحلیل هوشمند SMC: <code>تحلیل بیت کوین</code> (هر نمادی که در بایننس باشد)"
     );
 }
 
