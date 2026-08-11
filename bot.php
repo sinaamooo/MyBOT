@@ -1422,6 +1422,63 @@ function roundedRectOutline($img, int $x0, int $y0, int $x1, int $y1, int $r, in
         imagearc($img, $x1 - $r, $y1 - $r, $d, $d, 0, 90, $color);
     }
 }
+/** چندضلعی پرشده سازگار با PHP 7.4 و 8.x */
+function filledPoly($img, array $points, int $color): void {
+    $n = intdiv(count($points), 2);
+    if ($n < 3) { return; }
+    if (PHP_VERSION_ID >= 80100) { imagefilledpolygon($img, $points, $color); }
+    else { imagefilledpolygon($img, $points, $n, $color); }
+}
+
+/** نمودار سطحی (خط + سایهٔ گرادیانی زیر آن + هالهٔ نقطهٔ آخر) در مستطیل مشخص.
+ *  $rgb سه‌تایی رنگ لهجه برای ساخت گرادیان محو. */
+function drawAreaChart($img, array $series, int $x0, int $y0, int $x1, int $y1, int $line, int $fill, array $rgb = null, int $scale = 1): void {
+    $series = array_values(array_filter($series, fn($v) => is_numeric($v) && $v > 0));
+    $n = count($series);
+    if ($n < 2) { return; }
+    $min = min($series); $max = max($series);
+    $pad = ($max - $min) * 0.14; if ($pad <= 0) { $pad = max(1, $max * 0.02); }
+    $min -= $pad; $max += $pad;
+    $w = $x1 - $x0; $h = $y1 - $y0;
+    $pts = [];
+    for ($i = 0; $i < $n; $i++) {
+        $px = $x0 + (int)round($w * ($n === 1 ? 0 : $i / ($n - 1)));
+        $py = $y1 - (int)round($h * ($series[$i] - $min) / ($max - $min));
+        $pts[] = [$px, $py];
+    }
+    // پر کردن گرادیانی: چند نوار افقی با آلفای کاهنده از خط به سمت پایین
+    if ($rgb) {
+        $bands = 26;
+        for ($b = 0; $b < $bands; $b++) {
+            $ya = (int)round($y0 + ($y1 - $y0) * ($b / $bands));
+            $yb = (int)round($y0 + ($y1 - $y0) * (($b + 1) / $bands));
+            if ($yb <= $ya) { $yb = $ya + 1; }
+            $alpha = (int)round(78 + ($b / $bands) * 49); // 78→127 (کم‌رنگ‌تر پایین)
+            $bandCol = imagecolorallocatealpha($img, $rgb[0], $rgb[1], $rgb[2], min(127, $alpha));
+            $band = [];
+            foreach ($pts as $p) { $band[] = $p[0]; $band[] = min(max($p[1], $ya), $yb); }
+            $band[] = $x1; $band[] = $yb; $band[] = $x0; $band[] = $yb;
+            filledPoly($img, $band, $bandCol);
+        }
+    } else {
+        $poly = [];
+        foreach ($pts as $p) { $poly[] = $p[0]; $poly[] = $p[1]; }
+        $poly[] = $x1; $poly[] = $y1; $poly[] = $x0; $poly[] = $y1;
+        filledPoly($img, $poly, $fill);
+    }
+    // خط اصلی
+    imagesetthickness($img, 3 * $scale);
+    for ($i = 1; $i < $n; $i++) { imageline($img, $pts[$i-1][0], $pts[$i-1][1], $pts[$i][0], $pts[$i][1], $line); }
+    imagesetthickness($img, 1);
+    // هالهٔ نقطهٔ آخر
+    $last = $pts[$n - 1];
+    if ($rgb) {
+        $halo = imagecolorallocatealpha($img, $rgb[0], $rgb[1], $rgb[2], 96);
+        imagefilledellipse($img, $last[0], $last[1], 22 * $scale, 22 * $scale, $halo);
+    }
+    imagefilledellipse($img, $last[0], $last[1], 12 * $scale, 12 * $scale, $line);
+}
+
 /** مثلث کوچک صعود/نزول رسم‌شده مستقیم با GD (مستقل از فونت) — چون ▲/▼ در خیلی از فونت‌های
  *  فارسی (از‌جمله وزیرمتن) گلیف ندارند و روی برخی هاست‌ها اصلاً نمایش داده نمی‌شوند. */
 function drawTrendTriangle($img, int $cx, int $cy, int $size, bool $up, int $color): void {
@@ -1432,156 +1489,99 @@ function drawTrendTriangle($img, int $cx, int $cy, int $size, bool $up, int $col
     else { imagefilledpolygon($img, $pts, 3, $color); }
 }
 
-/** نمودار خطی سادهٔ بدون پرشدگی (مثل polyline در SVG) — برای کارت‌های سبک با پس‌زمینهٔ روشن */
-function drawSparkline($img, array $series, int $x0, int $y0, int $x1, int $y1, int $line, int $thickness = 3): void {
-    $series = array_values(array_filter($series, fn($v) => is_numeric($v) && $v > 0));
-    $n = count($series);
-    if ($n < 2) { return; }
-    $min = min($series); $max = max($series);
-    $pad = ($max - $min) * 0.14; if ($pad <= 0) { $pad = max(1, $max * 0.02); }
-    $min -= $pad; $max += $pad;
-    $w = $x1 - $x0; $h = $y1 - $y0;
-    imagesetthickness($img, $thickness);
-    $prev = null;
-    for ($i = 0; $i < $n; $i++) {
-        $px = $x0 + (int)round($w * ($n === 1 ? 0 : $i / ($n - 1)));
-        $py = $y1 - (int)round($h * ($series[$i] - $min) / ($max - $min));
-        if ($prev !== null) { imageline($img, $prev[0], $prev[1], $px, $py, $line); }
-        $prev = [$px, $py];
-    }
-    imagesetthickness($img, 1);
-}
-
-/** کارت مدرن دلار/طلا: $asset='usd'|'gold' ، $priceToman قیمت کل ، $series سری تاریخی تومان. */
 /**
- * کارت مدرن دلار/طلا — پورت مستقیم از قالب HTML/CSS ارسالی کاربر (کارت روشن با تگ،
- * آیکون دایره‌ای، قیمت بزرگ، پیل درصد تغییر، نمودار خطی ساده و پیل «آخرین به‌روزرسانی»).
+ * کارت مدرن دلار/طلا — طرح شیشه‌ای تیره با نمودار سطحی گرادیانی (نسخه‌ای که کاربر ترجیح داد).
+ * متن‌های داخل تصویر عمداً انگلیسی‌اند (خواستهٔ کاربر) — فارسی فقط در کپشن HTML زیر عکس می‌آید.
  */
 function renderRialCard(string $asset, float $priceToman, array $series, array $meta = []): ?string {
-    if (!function_exists('imagecreatetruecolor')) { return null; }
-    // findTtf() خودش در نبود فونت لاتین سیستمی به فونت فارسی (وزیرمتن) برمی‌گردد، پس اینجا
-    // همیشه یک فونت معتبر برای هر دو نقش برمی‌گردد مگر هیچ فونتی اصلاً روی هاست نباشد.
-    $latFont = findTtf(false); $latFontB = findTtf(true);
-    if (!$latFont || !$latFontB) { return null; }
-    $faFont = findFaTtf(false) ?? $latFont;
-    $faFontB = findFaTtf(true) ?? $latFontB;
-
-    $isGold = ($asset === 'gold');
+    if (!function_exists('imagecreatetruecolor') || !function_exists('imagettftext')) { return null; }
     $SS = 3; // سوپرسمپل: رسم در ابعاد بزرگ‌تر و کوچک‌سازی نرم در پایان برای لبه‌های صاف
-    $W = 680; $H = 430;
+    $W = 900; $H = 520;
     $Wp = $W * $SS; $Hp = $H * $SS;
     $img = imagecreatetruecolor($Wp, $Hp);
     imagealphablending($img, true); imagesavealpha($img, true);
 
-    // رنگ‌ها — پورت دقیق از فایل‌های gold.php / logo.php ارسالی کاربر
-    if ($isGold) {
-        $bodyBg = [23, 19, 10];   $cardBg = [250, 248, 241];
-        $tagBg  = [238, 229, 201]; $tagFg = [141, 107, 24];
-        $iconBg = [212, 160, 23]; $unitFg = [177, 132, 22];
-        $chgBg  = [255, 241, 201]; $chgFg = [177, 132, 22];
-        $chartCl = [212, 160, 23];
-        $iconTxt = 'Au'; $tagTxt = 'GOLD / IRR'; $title = 'قیمت طلا';
-    } else {
-        $bodyBg = [8, 125, 91];   $cardBg = [248, 249, 247];
-        $tagBg  = [230, 236, 233]; $tagFg = [119, 119, 119];
-        $iconBg = [0, 168, 120]; $unitFg = [0, 168, 120];
-        $chgBg  = [223, 248, 237]; $chgFg = [0, 155, 98];
-        $chartCl = [0, 168, 120];
-        $iconTxt = '$'; $tagTxt = 'USD / IRR'; $title = 'دلار آمریکا';
+    $isGold = ($asset === 'gold');
+    // رنگ لهجه (زمردی برای دلار، طلایی برای طلا)
+    $acc = $isGold ? [246, 199, 63] : [46, 213, 158];
+    // پس‌زمینهٔ گرادیانی عمودی با ته‌رنگ لهجه
+    $bgTop = $isGold ? [46, 35, 13] : [9, 26, 38];
+    $bgBot = $isGold ? [17, 13, 5]  : [5, 10, 16];
+    for ($y = 0; $y < $Hp; $y++) {
+        $t = $y / ($Hp - 1);
+        $c = imagecolorallocate($img,
+            (int)round($bgTop[0] + ($bgBot[0] - $bgTop[0]) * $t),
+            (int)round($bgTop[1] + ($bgBot[1] - $bgTop[1]) * $t),
+            (int)round($bgTop[2] + ($bgBot[2] - $bgTop[2]) * $t));
+        imageline($img, 0, $y, $Wp, $y, $c);
     }
-    $priceFg = [17, 17, 17];
-    $updateBg = [236, 236, 236]; $updateFg = [119, 119, 119];
 
-    // پس‌زمینهٔ صفحه (همان body{background} در HTML مرجع)
-    $bodyCol = imagecolorallocate($img, $bodyBg[0], $bodyBg[1], $bodyBg[2]);
-    imagefilledrectangle($img, 0, 0, $Wp, $Hp, $bodyCol);
+    $accent     = imagecolorallocate($img, $acc[0], $acc[1], $acc[2]);
+    $accentSoft = imagecolorallocatealpha($img, $acc[0], $acc[1], $acc[2], 102);
+    $white  = imagecolorallocate($img, 245, 248, 251);
+    $muted  = imagecolorallocate($img, 150, 161, 176);
+    $faint  = imagecolorallocatealpha($img, 255, 255, 255, 118);
+    $panel  = imagecolorallocatealpha($img, 255, 255, 255, 121); // پنل شیشه‌ای بسیار محو
+    $chipBg = imagecolorallocatealpha($img, $acc[0], $acc[1], $acc[2], 112);
 
-    $cardX0 = 40 * $SS; $cardY0 = 40 * $SS; $cardX1 = 640 * $SS; $cardY1 = 390 * $SS;
+    // پنل داخلی گردگوشه + قاب لهجه‌ای نازک
+    roundedRect($img, 22 * $SS, 22 * $SS, $Wp - 22 * $SS, $Hp - 22 * $SS, 30 * $SS, $panel);
+    roundedRectOutline($img, 22 * $SS, 22 * $SS, $Wp - 22 * $SS, $Hp - 22 * $SS, 30 * $SS, $faint);
+    // نوار لهجه‌ای بالای پنل
+    imagefilledrectangle($img, 22 * $SS, 22 * $SS, $Wp - 22 * $SS, 28 * $SS, $accent);
 
-    // سایهٔ نرم زیر کارت (شبیه‌سازی box-shadow با چند لایهٔ محو)
-    for ($i = 8; $i >= 1; $i--) {
-        $sCol = imagecolorallocatealpha($img, 0, 0, 0, 112 + $i);
-        $off = (int)round($i * 1.8 * $SS);
-        roundedRect($img, $cardX0 - (int)($off / 3), $cardY0 + $off, $cardX1 + (int)($off / 3), $cardY1 + $off, 35 * $SS, $sCol);
+    $padX = 52 * $SS;
+
+    // واترمارک بزرگ و محو نماد دارایی
+    $wm = imagecolorallocatealpha($img, $acc[0], $acc[1], $acc[2], 118);
+    cardText($img, $isGold ? 'AU' : '$', $Wp - 150 * $SS, 250 * $SS, 240 * $SS, $wm, true, 'center');
+
+    // نمودار سطحی نیمهٔ پایین (با گرادیان و هاله)
+    $chartTop = 300 * $SS; $chartBot = $Hp - 70 * $SS;
+    for ($i = 1; $i <= 3; $i++) {
+        $gy = (int)round($chartTop + ($chartBot - $chartTop) * $i / 4);
+        imageline($img, $padX, $gy, $Wp - $padX, $gy, $faint);
     }
-    // خود کارت
-    $cardCol = imagecolorallocate($img, $cardBg[0], $cardBg[1], $cardBg[2]);
-    roundedRect($img, $cardX0, $cardY0, $cardX1, $cardY1, 35 * $SS, $cardCol);
+    drawAreaChart($img, $series, $padX, $chartTop, $Wp - $padX, $chartBot, $accent, $accentSoft, $acc, $SS);
 
-    $cx0 = $cardX0 + 35 * $SS; $cx1 = $cardX1 - 35 * $SS;
-    $cTop = $cardY0 + 35 * $SS;
-    $priceFgCol = imagecolorallocate($img, $priceFg[0], $priceFg[1], $priceFg[2]);
-    $whiteCol = imagecolorallocate($img, 255, 255, 255);
+    // چیپ برچسب دارایی (بالا-راست) داخل پیل
+    $label = $isGold ? 'GOLD · 18K' : 'USD';
+    pill($img, $Wp - $padX, 52 * $SS, $label, $chipBg, $white, 28 * $SS, 'right');
+    cardText($img, 'IRT', $Wp - $padX, 100 * $SS, 20 * $SS, $muted, false, 'right');
 
-    // تگ بالا-چپ
-    $tagBgCol = imagecolorallocate($img, $tagBg[0], $tagBg[1], $tagBg[2]);
-    $tagFgCol = imagecolorallocate($img, $tagFg[0], $tagFg[1], $tagFg[2]);
-    pill($img, $cx0, $cTop, $tagTxt, $tagBgCol, $tagFgCol, 18 * $SS, 'left');
+    // مقدار (بالا-چپ)
+    $qty = (float)($meta['qty'] ?? 1);
+    $qtyStr = rtrim(rtrim(number_format($qty, 4, '.', ''), '0'), '.');
+    cardText($img, ($isGold ? $qtyStr . ' g' : 'x' . $qtyStr), $padX, 52 * $SS, 26 * $SS, $accent, true, 'left');
 
-    // هدر: آیکون دایره‌ای بالا-راست + عنوان فارسی سمت چپ آن
-    $iconD = 55 * $SS;
-    $iconCx = $cx1 - (int)($iconD / 2); $iconCy = $cTop + (int)($iconD / 2);
-    $iconBgCol = imagecolorallocate($img, $iconBg[0], $iconBg[1], $iconBg[2]);
-    imagefilledellipse($img, $iconCx, $iconCy, $iconD, $iconD, $iconBgCol);
-    cardText($img, $iconTxt, $iconCx, $cTop + (int)(15 * $SS), 24 * $SS, $whiteCol, true, 'center');
-    faDrawLine($img, $title, $faFontB, $latFontB, $cx1 - $iconD - 18 * $SS, $cTop + (int)(38 * $SS), 30 * $SS * 0.7, $priceFgCol);
+    // قیمت بزرگ (تومان)
+    cardText($img, number_format((int)round($priceToman)), $padX, 122 * $SS, 88 * $SS, $white, true, 'left');
+    cardText($img, 'TOMAN', $padX + 4 * $SS, 224 * $SS, 22 * $SS, $muted, false, 'left');
 
-    // قیمت بزرگ + واحد «تومان» (راست‌چین، همان جهت خواندن فارسی)
-    $priceTop = $cTop + $iconD + 35 * $SS;
-    $priceSizePx = ($isGold ? 60 : 70) * $SS;
-    $priceStr = number_format((int)round($priceToman));
-    cardText($img, $priceStr, $cx1, $priceTop, $priceSizePx, $priceFgCol, true, 'right');
-    $priceSizePt = $priceSizePx * 0.70;
-    $priceW = faTextWidth($latFontB, $priceSizePt, $priceStr);
-    $priceAsc = abs(imagettfbbox($priceSizePt, 0, $latFontB, $priceStr)[7]);
-    $unitFgCol = imagecolorallocate($img, $unitFg[0], $unitFg[1], $unitFg[2]);
-    $unitSizePt = ($isGold ? 23 : 25) * $SS * 0.70;
-    faDrawLine($img, 'تومان', $faFont, $latFont, (int)($cx1 - $priceW - 14 * $SS), $priceTop + (int)$priceAsc, $unitSizePt, $unitFgCol);
-
-    // پیل درصد تغییر — مثلث صعود/نزول را خودمان با GD می‌کشیم (نه با کاراکتر ▲/▼) چون این
-    // نویسه در فونت‌های فارسی (ازجمله وزیرمتن) گلیف ندارد و ممکن است اصلاً دیده نشود.
-    $up = (($meta['dt'] ?? 'high') !== 'low');
+    // نشان تغییر داخل پیل رنگی — مثلث را خودمان با GD می‌کشیم (نه با کاراکتر ▲/▼) چون این
+    // نویسه در خیلی از فونت‌ها گلیف ندارد و ممکن است روی برخی هاست‌ها اصلاً نمایش داده نشود.
     $dp = (float)($meta['dp'] ?? 0);
-    $chgBgCol = imagecolorallocate($img, $chgBg[0], $chgBg[1], $chgBg[2]);
-    $chgFgCol = imagecolorallocate($img, $chgFg[0], $chgFg[1], $chgFg[2]);
-    $chgY = $priceTop + (int)$priceAsc + 22 * $SS;
-    $chgPx = 24 * $SS;
-    $chgPt = $chgPx * 0.70;
+    $up = (($meta['dt'] ?? 'high') !== 'low');
+    $badgeBg = imagecolorallocatealpha($img, $up ? 55 : 235, $up ? 214 : 92, $up ? 122 : 78, 96);
+    $chgPx = 26 * $SS; $chgPt = $chgPx * 0.70;
     $chgText = ($up ? '+' : '-') . number_format(abs($dp), 2) . '%';
+    $latFontB = findTtf(true) ?? findFaTtf(true);
     $chgBB = imagettfbbox($chgPt, 0, $latFontB, $chgText);
     $chgTw = abs($chgBB[2] - $chgBB[0]); $chgAsc = abs($chgBB[7]);
-    $triSize = (int)round($chgPx * 0.26);
+    $triSize = (int)round($chgPx * 0.24);
     $padH = (int)round($chgPx * 0.62); $padV = (int)round($chgPx * 0.36);
     $chgH = $chgAsc + $padV * 2;
     $chgW = $chgTw + $padH * 2 + $triSize * 3;
-    $chgX0 = $cx1 - $chgW;
-    roundedRect($img, $chgX0, $chgY, $cx1, $chgY + $chgH, (int)($chgH / 2), $chgBgCol);
-    drawTrendTriangle($img, $chgX0 + $padH + $triSize, (int)($chgY + $chgH / 2), $triSize, $up, $chgFgCol);
-    cardText($img, $chgText, $chgX0 + $padH + $triSize * 3, $chgY + $padV, $chgPx, $chgFgCol, true, 'left');
-    $chgBottom = $chgY + $chgH;
+    $chgY = 260 * $SS;
+    roundedRect($img, $padX, $chgY, $padX + $chgW, $chgY + $chgH, (int)($chgH / 2), $badgeBg);
+    drawTrendTriangle($img, $padX + $padH + $triSize, (int)($chgY + $chgH / 2), $triSize, $up, $white);
+    cardText($img, $chgText, $padX + $padH + $triSize * 3, $chgY + $padV, $chgPx, $white, true, 'left');
 
-    // نمودار خطی سادهٔ پایین کارت (مثل polyline در SVG مرجع) — فاصله‌اش از بلوک قیمت/تغییر و
-    // از پیل فوتر به‌صورت پویا حساب می‌شود تا هیچ‌وقت با آن‌ها تداخل تصویری نداشته باشد.
-    $chartX0 = $cx0; $chartX1 = $cx1;
-    $chartY1 = $cardY1 - 80 * $SS;
-    $chartY0 = max($chgBottom + 24 * $SS, $chartY1 - 95 * $SS);
-    $chartCol = imagecolorallocate($img, $chartCl[0], $chartCl[1], $chartCl[2]);
-    drawSparkline($img, $series, $chartX0, $chartY0, $chartX1, $chartY1, $chartCol, 5 * $SS);
-
-    // فوتر: پیل میان‌چین «آخرین بروزرسانی»
-    $updBgCol = imagecolorallocate($img, $updateBg[0], $updateBg[1], $updateBg[2]);
-    $updFgCol = imagecolorallocate($img, $updateFg[0], $updateFg[1], $updateFg[2]);
-    $updText = 'آخرین بروزرسانی : ' . date('H:i');
-    $updPt = 16 * $SS * 0.70;
-    $updTotal = faMeasureLine($updText, $faFont, $latFont, $updPt)['total'];
-    $updBB = imagettfbbox($updPt, 0, $latFont, 'Hg');
-    $updAsc = abs($updBB[7]); $updDesc = abs($updBB[1]);
-    $padH = 22 * $SS; $padV = 8 * $SS;
-    $pillW = (int)($updTotal + $padH * 2); $pillH = (int)($updAsc + $updDesc + $padV * 2);
-    $pillCx = (int)(($cardX0 + $cardX1) / 2);
-    $pillY0 = $cardY1 - 18 * $SS - $pillH;
-    roundedRect($img, $pillCx - (int)($pillW / 2), $pillY0, $pillCx + (int)($pillW / 2), $pillY0 + $pillH, (int)($pillH / 2), $updBgCol);
-    faDrawLineCentered($img, $updText, $faFont, $latFont, $pillCx, $pillY0 + (int)$padV + (int)$updAsc, $updPt, $updFgCol);
+    // فوتر
+    cardText($img, '@' . BOT_USERNAME, $padX, $Hp - 46 * $SS, 22 * $SS, $muted, false, 'left');
+    $ts = time();
+    [$jy, $jm, $jd] = gregorianToJalali((int)date('Y', $ts), (int)date('n', $ts), (int)date('j', $ts));
+    cardText($img, sprintf('%04d/%02d/%02d  %s', $jy, $jm, $jd, date('H:i', $ts)), $Wp - $padX, $Hp - 46 * $SS, 22 * $SS, $muted, false, 'right');
 
     $out = imagecreatetruecolor($W, $H);
     imagecopyresampled($out, $img, 0, 0, 0, 0, $W, $H, $Wp, $Hp);
