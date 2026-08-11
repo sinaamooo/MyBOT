@@ -942,11 +942,22 @@ function binanceKlines(string $symbol, string $interval, int $limit = 70): ?arra
     }
     return binanceKlinesRaw($symbol, $interval, $limit);
 }
+/**
+ * بررسی می‌کند پاسخ JSON صرافی واقعاً «لیستی از کندل‌ها» است، نه یک شیء خطا مثل
+ * {"code":-1121,"msg":"Invalid symbol."} (که بایننس/MEXC برای نمادهای نامعتبر برمی‌گردانند).
+ * بدون این بررسی، آن شیء خطا به‌اشتباه به‌عنوان کندل معتبر پردازش می‌شد و باعث می‌شد چارت
+ * برخی نمادها به‌صورت یک خط صاف و خراب (روی محدودهٔ ‑1..1) رسم شود.
+ */
+function isValidKlineList($d): bool {
+    if (!is_array($d) || !$d) { return false; }
+    if (array_keys($d) !== range(0, count($d) - 1)) { return false; } // باید لیست باشد نه شیء (assoc) خطا
+    return is_array($d[0]) && count($d[0]) >= 6;
+}
 function binanceKlinesRaw(string $symbol, string $interval, int $limit): ?array {
     $j = httpGet(apiBase('binance', 'https://api.binance.com') . '/api/v3/klines?symbol=' . urlencode($symbol) . '&interval=' . urlencode($interval) . '&limit=' . $limit);
     if (!$j) { return null; }
     $d = json_decode($j, true);
-    return is_array($d) && $d ? $d : null;
+    return isValidKlineList($d) ? $d : null;
 }
 /** کندل از CryptoCompare (پشتیبان چارت وقتی بایننس در دسترس نباشد) — خروجی هم‌فرمت با کندل بایننس */
 function cryptoCompareKlines(string $base, string $interval, int $limit = 70): ?array {
@@ -979,7 +990,7 @@ function mexcKlinesRaw(string $symbol, string $interval, int $limit): ?array {
     $j = httpGet(apiBase('mexc', 'https://api.mexc.com') . '/api/v3/klines?symbol=' . urlencode($symbol) . '&interval=' . urlencode($interval) . '&limit=' . $limit, 12);
     if (!$j) { return null; }
     $d = json_decode($j, true);
-    return is_array($d) && $d ? $d : null;
+    return isValidKlineList($d) ? $d : null;
 }
 function mexcKlines(string $symbol, string $interval, int $limit = 70): ?array {
     if ($interval === '3h') {
@@ -1338,7 +1349,9 @@ function hexRgb(string $hex): array {
     return [hexdec(substr($hex, 0, 2)), hexdec(substr($hex, 2, 2)), hexdec(substr($hex, 4, 2))];
 }
 function renderCandlestickChart(array $candles, string $symbol, string $interval): ?string {
-    if (!function_exists('imagecreatetruecolor') || !$candles) { return null; }
+    // فیلتر دفاعی: هر ردیف کندل نامعتبر (کمتر از ۶ فیلد، مثلاً باقیماندهٔ یک پاسخ خطای صرافی) کنار گذاشته می‌شود.
+    $candles = array_values(array_filter($candles, fn($c) => is_array($c) && count($c) >= 6));
+    if (!function_exists('imagecreatetruecolor') || count($candles) < 2) { return null; }
     $width = 850; $height = 520;
     $pl = 90; $pr = 40; $pt = 50; $pb = 80;
     $cw = $width - $pl - $pr; $chh = $height - $pt - $pb;
