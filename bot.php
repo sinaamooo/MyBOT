@@ -506,6 +506,22 @@ function editMessageText($chatId, $messageId, string $text, $keyboard = null, st
     if (!$r || empty($r['ok'])) { return sendMessage($chatId, $text, $keyboard, null, $parseMode); }
     return $r;
 }
+/**
+ * ویرایش فقط کپشن یک پیامِ عکس‌دار (نه متن). تلگرام روی پیام‌هایی که عکس دارند اجازهٔ
+ * editMessageText نمی‌دهد («there is no text to edit»)؛ برای آن پیام‌ها باید از این متد
+ * استفاده شود (مثلاً وقتی برای یک تایم‌فریم جدید چارت در دسترس نبود ولی پیام قبلی عکس داشت).
+ */
+function editMessageCaption($chatId, $messageId, string $caption, $keyboard = null, string $parseMode = 'HTML') {
+    $p = ['chat_id' => $chatId, 'message_id' => $messageId, 'caption' => $caption, 'parse_mode' => $parseMode];
+    if ($keyboard !== null) { $p['reply_markup'] = $keyboard; }
+    $r = tgApi('editMessageCaption', $p);
+    if (isCustomEmojiError($r) && $caption !== stripPremiumEmoji($caption)) {
+        $p['caption'] = stripPremiumEmoji($caption);
+        $r = tgApi('editMessageCaption', $p);
+    }
+    if (!$r || empty($r['ok'])) { return editMessageText($chatId, $messageId, $caption, $keyboard, $parseMode); }
+    return $r;
+}
 function editMessageReplyMarkup($chatId, $messageId, $keyboard) {
     return tgApi('editMessageReplyMarkup', ['chat_id' => $chatId, 'message_id' => $messageId, 'reply_markup' => $keyboard]);
 }
@@ -553,7 +569,9 @@ function editPhotoMedia($chatId, $messageId, string $filePath, string $caption, 
     if (isCustomEmojiError($r) && $caption !== stripPremiumEmoji($caption)) {
         $r = $send(stripPremiumEmoji($caption));
     }
-    if (!$r || empty($r['ok'])) { return editMessageText($chatId, $messageId, $caption, $keyboard); }
+    // اگر ویرایش عکس ناموفق بود، پیام همچنان عکس‌دار است؛ editMessageText روی آن کار نمی‌کند
+    // (خطای «no text to edit»)، پس فقط کپشن/کیبورد ویرایش می‌شود، نه اینکه پیام متنی جدید بفرستد.
+    if (!$r || empty($r['ok'])) { return editMessageCaption($chatId, $messageId, $caption, $keyboard); }
     return $r;
 }
 function copyMessage($toChat, $fromChat, $messageId, $keyboard = null) {
@@ -1668,7 +1686,14 @@ function drawSparkline($img, array $series, int $x0, int $y0, int $x1, int $y1, 
 }
 
 /** نمودار سطحی (filled area) با پرشدگی نیم‌شفاف زیر خط — برای کارت‌های تیرهٔ دلار/طلا */
-function drawAreaChart($img, array $series, int $x0, int $y0, int $x1, int $y1, array $rgb, int $thickness = 4): void {
+/**
+ * نمودار سطحی با پرشدگی — عمداً بدون هیچ کانال آلفای GD (imagecolorallocatealpha/savealpha)
+ * پیاده‌سازی شده: رنگ هر نوار به‌صورت دستی بین رنگ اصلی و رنگ پس‌زمینه در PHP ترکیب می‌شود.
+ * روی برخی بیلدهای GD مشترک‌المنافع هاست‌های اشتراکی، ترکیب alphablending+savealpha+resample
+ * PNG خروجی را طوری معیوب می‌کند که تلگرام رد می‌کند (و کارت فقط به‌صورت متن fallback می‌شد)؛
+ * رنگ‌آمیزی دستی کاملاً از این مشکل مستقل و روی هر نسخهٔ GD یکسان است.
+ */
+function drawAreaChart($img, array $series, int $x0, int $y0, int $x1, int $y1, array $rgb, array $bgRgb, int $thickness = 4): void {
     $series = array_values(array_filter($series, fn($v) => is_numeric($v) && $v > 0));
     $n = count($series);
     if ($n < 2) { return; }
@@ -1682,11 +1707,15 @@ function drawAreaChart($img, array $series, int $x0, int $y0, int $x1, int $y1, 
         $py = $y1 - (int)round($h * ($series[$i] - $min) / ($max - $min));
         $pts[] = [$px, $py];
     }
-    // پرشدگی: چند نوار افقی نیم‌شفاف با آلفای کاهنده به سمت پایین (تقریب گرادیان بدون نیاز به پردازش پیکسلی)
+    // پرشدگی: چند نوار افقی با رنگ ترکیبی (رنگ اصلی → پس‌زمینه) به‌جای شفافیت GD
     $bands = 36;
     for ($b = 0; $b < $bands; $b++) {
-        $alpha = 30 + (int)round(($b / max(1, $bands - 1)) * 87); // 30 (کدر، بالا) → 117 (شفاف، پایین)
-        $bandCol = imagecolorallocatealpha($img, $rgb[0], $rgb[1], $rgb[2], $alpha);
+        $t = $b / max(1, $bands - 1); // 0=بالا (پررنگ‌تر) .. 1=پایین (نزدیک‌تر به پس‌زمینه)
+        $mix = 0.68 - $t * 0.56;
+        $r = (int) round($rgb[0] * $mix + $bgRgb[0] * (1 - $mix));
+        $g = (int) round($rgb[1] * $mix + $bgRgb[1] * (1 - $mix));
+        $bl = (int) round($rgb[2] * $mix + $bgRgb[2] * (1 - $mix));
+        $bandCol = imagecolorallocate($img, $r, $g, $bl);
         $by0 = $y0 + (int)round(($h / $bands) * $b);
         $by1 = $y0 + (int)round(($h / $bands) * ($b + 1));
         $poly = [];
@@ -1720,7 +1749,8 @@ function renderRialCard(string $asset, float $priceToman, array $series, array $
     $W = 900; $H = 520;
     $Wp = $W * $SS; $Hp = $H * $SS;
     $img = imagecreatetruecolor($Wp, $Hp);
-    imagealphablending($img, true); imagesavealpha($img, true);
+    // عمداً هیچ کانال آلفایی (imagealphablending/imagesavealpha) روی این تصویر فعال نمی‌شود —
+    // تصویر کاملاً کدر است، پس روی هر بیلد GD (حتی هاست‌های اشتراکی محدود) بدون ریسک PNG معیوب رندر می‌شود.
 
     if ($isGold) {
         $bg = [16, 13, 8]; $accent = [230, 176, 47]; $tagTop = 'GRAM'; $tagRight1 = 'GOLD 18K';
@@ -1767,7 +1797,7 @@ function renderRialCard(string $asset, float $priceToman, array $series, array $
     $chartX0 = $padX; $chartX1 = $Wp - $padX;
     $chartY1 = $Hp - 60 * $SS;
     $chartY0 = $chartY1 - 165 * $SS;
-    drawAreaChart($img, $series, $chartX0, $chartY0, $chartX1, $chartY1, $accent, 4 * $SS);
+    drawAreaChart($img, $series, $chartX0, $chartY0, $chartX1, $chartY1, $accent, $bg, 4 * $SS);
 
     // فوتر: یوزرنیم ربات چپ، تاریخ/ساعت راست
     [$jy, $jm, $jd] = gregorianToJalali((int)date('Y'), (int)date('n'), (int)date('j'));
@@ -1827,7 +1857,10 @@ function sendPriceCard($chatId, string $base, string $interval = '30m', $editMsg
         else { sendPhotoFile($chatId, $chart, $caption, $kb, $replyTo); }
         @unlink($chart);
     } else {
-        if ($editMsgId !== null) { editMessageText($chatId, $editMsgId, $caption, $kb); }
+        // این پیام (اگر editMsgId دارد) از قبل عکس دارد؛ چون تلگرام editMessageText را روی پیام
+        // عکس‌دار قبول نمی‌کند، باید فقط کپشن ویرایش شود — وگرنه (رفتار قبلی) تلگرام خطا می‌داد و
+        // کد به‌جای ویرایش، یک پیام متنی جدید می‌فرستاد (یعنی تایم‌فریم در پیام اصلی عوض نمی‌شد).
+        if ($editMsgId !== null) { editMessageCaption($chatId, $editMsgId, $caption, $kb); }
         else { sendMessage($chatId, $caption, $kb, $replyTo); }
     }
     if ($cbId) { answerCallback($cbId); }
