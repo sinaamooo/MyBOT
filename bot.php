@@ -1183,7 +1183,10 @@ function findTtf(bool $bold = false): ?string {
         'C:/Windows/Fonts/arial.ttf',
     ];
     foreach ($list as $f) { if (@is_file($f)) { return $cache[$k] = $f; } }
-    return $cache[$k] = null;
+    // هیچ فونت لاتین سیستمی (DejaVu/Liberation) پیدا نشد — روی بسیاری از هاست‌های اشتراکی این
+    // فونت‌ها اصلاً نصب نیستند. به‌جای خالی‌ماندن همهٔ کارت‌های تصویری، از فونت فارسی وزیرمتن
+    // (که پوشش کامل اعداد/لاتین هم دارد) به‌عنوان آخرین راه‌حل استفاده می‌شود.
+    return $cache[$k] = findFaTtf($bold);
 }
 
 /**
@@ -1341,6 +1344,15 @@ function roundedRectOutline($img, int $x0, int $y0, int $x1, int $y1, int $r, in
         imagearc($img, $x1 - $r, $y1 - $r, $d, $d, 0, 90, $color);
     }
 }
+/** مثلث کوچک صعود/نزول رسم‌شده مستقیم با GD (مستقل از فونت) — چون ▲/▼ در خیلی از فونت‌های
+ *  فارسی (از‌جمله وزیرمتن) گلیف ندارند و روی برخی هاست‌ها اصلاً نمایش داده نمی‌شوند. */
+function drawTrendTriangle($img, int $cx, int $cy, int $size, bool $up, int $color): void {
+    $pts = $up
+        ? [$cx, $cy - $size, $cx - $size, $cy + $size, $cx + $size, $cy + $size]
+        : [$cx, $cy + $size, $cx - $size, $cy - $size, $cx + $size, $cy - $size];
+    if (PHP_VERSION_ID >= 80100) { imagefilledpolygon($img, $pts, $color); }
+    else { imagefilledpolygon($img, $pts, 3, $color); }
+}
 
 /** نمودار خطی سادهٔ بدون پرشدگی (مثل polyline در SVG) — برای کارت‌های سبک با پس‌زمینهٔ روشن */
 function drawSparkline($img, array $series, int $x0, int $y0, int $x1, int $y1, int $line, int $thickness = 3): void {
@@ -1369,6 +1381,8 @@ function drawSparkline($img, array $series, int $x0, int $y0, int $x1, int $y1, 
  */
 function renderRialCard(string $asset, float $priceToman, array $series, array $meta = []): ?string {
     if (!function_exists('imagecreatetruecolor')) { return null; }
+    // findTtf() خودش در نبود فونت لاتین سیستمی به فونت فارسی (وزیرمتن) برمی‌گردد، پس اینجا
+    // همیشه یک فونت معتبر برای هر دو نقش برمی‌گردد مگر هیچ فونتی اصلاً روی هاست نباشد.
     $latFont = findTtf(false); $latFontB = findTtf(true);
     if (!$latFont || !$latFontB) { return null; }
     $faFont = findFaTtf(false) ?? $latFont;
@@ -1446,17 +1460,27 @@ function renderRialCard(string $asset, float $priceToman, array $series, array $
     $unitSizePt = ($isGold ? 23 : 25) * $SS * 0.70;
     faDrawLine($img, 'تومان', $faFont, $latFont, (int)($cx1 - $priceW - 14 * $SS), $priceTop + (int)$priceAsc, $unitSizePt, $unitFgCol);
 
-    // پیل درصد تغییر
+    // پیل درصد تغییر — مثلث صعود/نزول را خودمان با GD می‌کشیم (نه با کاراکتر ▲/▼) چون این
+    // نویسه در فونت‌های فارسی (ازجمله وزیرمتن) گلیف ندارد و ممکن است اصلاً دیده نشود.
     $up = (($meta['dt'] ?? 'high') !== 'low');
     $dp = (float)($meta['dp'] ?? 0);
     $chgBgCol = imagecolorallocate($img, $chgBg[0], $chgBg[1], $chgBg[2]);
     $chgFgCol = imagecolorallocate($img, $chgFg[0], $chgFg[1], $chgFg[2]);
     $chgY = $priceTop + (int)$priceAsc + 22 * $SS;
     $chgPx = 24 * $SS;
-    $chgText = ($up ? '▲ +' : '▼ -') . number_format(abs($dp), 2) . '%';
-    pill($img, $cx1, $chgY, $chgText, $chgBgCol, $chgFgCol, $chgPx, 'right');
-    $chgAsc = abs(imagettfbbox($chgPx * 0.70, 0, $latFontB, $chgText)[7]);
-    $chgBottom = $chgY + $chgAsc + 2 * (int)round($chgPx * 0.36);
+    $chgPt = $chgPx * 0.70;
+    $chgText = ($up ? '+' : '-') . number_format(abs($dp), 2) . '%';
+    $chgBB = imagettfbbox($chgPt, 0, $latFontB, $chgText);
+    $chgTw = abs($chgBB[2] - $chgBB[0]); $chgAsc = abs($chgBB[7]);
+    $triSize = (int)round($chgPx * 0.26);
+    $padH = (int)round($chgPx * 0.62); $padV = (int)round($chgPx * 0.36);
+    $chgH = $chgAsc + $padV * 2;
+    $chgW = $chgTw + $padH * 2 + $triSize * 3;
+    $chgX0 = $cx1 - $chgW;
+    roundedRect($img, $chgX0, $chgY, $cx1, $chgY + $chgH, (int)($chgH / 2), $chgBgCol);
+    drawTrendTriangle($img, $chgX0 + $padH + $triSize, (int)($chgY + $chgH / 2), $triSize, $up, $chgFgCol);
+    cardText($img, $chgText, $chgX0 + $padH + $triSize * 3, $chgY + $padV, $chgPx, $chgFgCol, true, 'left');
+    $chgBottom = $chgY + $chgH;
 
     // نمودار خطی سادهٔ پایین کارت (مثل polyline در SVG مرجع) — فاصله‌اش از بلوک قیمت/تغییر و
     // از پیل فوتر به‌صورت پویا حساب می‌شود تا هیچ‌وقت با آن‌ها تداخل تصویری نداشته باشد.
