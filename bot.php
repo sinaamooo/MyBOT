@@ -136,19 +136,27 @@ const AI_TF_LABELS  = ['5m' => '5m', '30m' => '30m', '1h' => '1H', '4h' => '4H',
 const AI_TF_BINANCE = ['5m' => '5m', '30m' => '30m', '1h' => '1h', '4h' => '4h', '1d' => '1d'];
 
 // ==========================================================================
-// 1‑ب) کلیدهای API سرویس‌های جدید — این مقادیر را با کلیدهای واقعی خودتان پر کنید
+// 1‑ب) کلیدهای API سرویس‌های جدید
 // ==========================================================================
-// کوین‌مارکت‌کپ (Pro API) — برای شاخص ترس و طمع. اگر خالی بماند، به‌صورت خودکار
-// از منبع رایگان جایگزین (alternative.me) استفاده می‌شود تا قابلیت همیشه کار کند.
+// کوین‌مارکت‌کپ (Pro API، پولی) — کاملاً اختیاری. شاخص ترس‌وطمع همین الان و بدون هیچ
+// کلیدی از منبع رایگان alternative.me کار می‌کند؛ این کلید فقط اگر خودتان اشتراک
+// CoinMarketCap دارید و می‌خواهید دادهٔ آن‌ها را جایگزین کنید لازم است.
 const CMC_API_KEY = '';
-// کوین‌گلس (Coinglass) — برای نقشهٔ لیکویدیتی. بدون این کلید، پیام راهنمای تنظیم نمایش داده می‌شود.
+// کوین‌گلس (Coinglass، پولی) — کاملاً اختیاری. نقشهٔ لیکویدیتی همین الان و بدون هیچ کلیدی
+// با دادهٔ عمومی فیوچرز بایننس (سقف/کف نقدینگی از پرایس‌اکشن + فاندینگ‌ریت + نسبت لانگ/شورت)
+// کار می‌کند. اگر این کلید را پر کنید، به‌جای برآورد رایگان از دادهٔ دقیق‌تر Coinglass استفاده می‌شود.
 const COINGLASS_API_KEY = '';
-// هوش مصنوعی (سازگار با فرمت OpenAI Chat Completions — OpenAI/OpenRouter/DeepSeek/... را می‌پذیرد)
+// هوش مصنوعی (سازگار با فرمت OpenAI Chat Completions). پیش‌فرض روی Groq تنظیم شده چون یک
+// کلید کاملاً رایگان (بدون کارت بانکی، فقط ثبت‌نام با ایمیل) از https://console.groq.com/keys
+// می‌دهد و سرعت پاسخ‌دهی بالایی دارد. اگر بعداً خواستید از OpenAI/OpenRouter/... استفاده کنید،
+// کافیست AI_API_URL و AI_MODEL را عوض کنید — فقط AI_API_KEY همیشه باید توسط خودتان پر شود،
+// چون ساخت اکانت/کلید نیاز به تأیید ایمیل شماست و از سمت کد قابل انجام نیست.
 const AI_API_KEY   = '';
-const AI_API_URL   = 'https://api.openai.com/v1/chat/completions';
-const AI_MODEL     = 'gpt-4o-mini';
-// فروشگاه پورتال گیفت‌های تلگرام (Portals Market یا مشابه) — آدرس پایه و کلید API را
-// طبق دسترسی خودتان تنظیم کنید. تا زمانی که تنظیم نشده، دستور /me پیام راهنما می‌دهد.
+const AI_API_URL   = 'https://api.groq.com/openai/v1/chat/completions';
+const AI_MODEL     = 'llama-3.3-70b-versatile';
+// فروشگاه پورتال گیفت‌های تلگرام (Portals Market یا مشابه) — بر خلاف موارد بالا، معادل رایگان
+// و مستندی برای این سرویس وجود ندارد (دادهٔ گیفت‌های یک کاربر خاص را تلگرام رسمی هم به‌صورت
+// عمومی/بدون سشن کاربری نمی‌دهد)، پس این یکی همچنان نیاز به آدرس و کلید API واقعی خودتان دارد.
 const GIFTS_API_BASE = '';
 const GIFTS_API_KEY  = '';
 // فید RSS اخبار ارز دیجیتال (منبع: ارز دیجیتال / ArzDigital)
@@ -2391,7 +2399,7 @@ function sendFearGreedCard($chatId, $replyTo = null): void {
 }
 
 // --------------------------------------------------------------------------
-// لیکویدیتی (Coinglass)
+// لیکویدیتی — پیش‌فرض کاملاً رایگان (دادهٔ عمومی فیوچرز بایننس)، با ارتقای اختیاری به Coinglass
 // --------------------------------------------------------------------------
 function parseLiquidityQuery(string $t): ?string {
     $t = trim($t);
@@ -2400,9 +2408,39 @@ function parseLiquidityQuery(string $t): ?string {
     if ($rest === '') { return 'BTC'; }
     return normalizeSymbol($rest) ?: 'BTC';
 }
-/** دریافت نقشهٔ لیکویدیتی از Coinglass و استخراج نزدیک‌ترین ناحیهٔ سقف/کف نقدینگی به قیمت فعلی.
- *  توجه: ساختار دقیق پاسخ ممکن است بسته به پلن اشتراک Coinglass شما متفاوت باشد؛ در صورت لزوم
- *  مسیر/فیلدهای زیر را مطابق مستندات پلن خودتان تنظیم کنید. */
+function binanceFuturesGet(string $path): ?array {
+    $j = httpGet('https://fapi.binance.com' . $path, 12);
+    if (!$j) { return null; }
+    $d = json_decode($j, true);
+    return is_array($d) ? $d : null;
+}
+/**
+ * برآورد رایگان نواحی نقدینگی از دادهٔ عمومی فیوچرز بایننس (بدون نیاز به هیچ کلید API):
+ * سقف/کف اخیر قیمت به‌عنوان استخر نقدینگی (جایی که استاپ‌لاس/لیکویدیشن معامله‌گران معمولاً
+ * خوشه می‌شود) + نرخ فاندینگ و نسبت لانگ/شورت برای نشان‌دادن سمت پرریسک‌تر بازار.
+ */
+function freeLiquidityEstimate(string $base): ?array {
+    $symbol = strtoupper($base) . 'USDT';
+    $tk = binance24h($symbol);
+    if (!$tk) { return null; }
+    $current = (float)$tk['lastPrice'];
+
+    $candles = binanceKlinesRaw($symbol, '1h', 100);
+    if (!$candles) { return null; }
+    $ceil  = max(array_map(fn($c) => (float)$c[2], $candles));
+    $floor = min(array_map(fn($c) => (float)$c[3], $candles));
+
+    $funding = null; $lsRatio = null;
+    $prem = binanceFuturesGet('/fapi/v1/premiumIndex?symbol=' . urlencode($symbol));
+    if ($prem && isset($prem['lastFundingRate'])) { $funding = (float)$prem['lastFundingRate'] * 100; }
+    $ls = binanceFuturesGet('/futures/data/globalLongShortAccountRatio?symbol=' . urlencode($symbol) . '&period=1h&limit=1');
+    if (is_array($ls) && isset($ls[0]['longShortRatio'])) { $lsRatio = (float)$ls[0]['longShortRatio']; }
+
+    return ['current' => $current, 'ceil' => $ceil, 'floor' => $floor, 'funding' => $funding, 'ls_ratio' => $lsRatio, 'symbol' => strtoupper($base), 'source' => 'estimate'];
+}
+/** دریافت نقشهٔ لیکویدیتی از Coinglass (پولی، فقط اگر COINGLASS_API_KEY تنظیم شده باشد) و استخراج
+ *  نزدیک‌ترین ناحیهٔ سقف/کف نقدینگی به قیمت فعلی. توجه: ساختار دقیق پاسخ ممکن است بسته به پلن
+ *  اشتراک شما متفاوت باشد؛ در صورت لزوم مسیر/فیلدهای زیر را مطابق مستندات پلن خودتان تنظیم کنید. */
 function coinglassLiquidity(string $base): ?array {
     if (COINGLASS_API_KEY === '') { return null; }
     $symbol = strtoupper($base);
@@ -2433,35 +2471,46 @@ function coinglassLiquidity(string $base): ?array {
 
     $ceil = null; $floor = null;
     foreach ($levels as $lv) {
-        if ($lv['price'] > $current && $ceil === null) { $ceil = $lv; }
-        if ($lv['price'] < $current && $floor === null) { $floor = $lv; }
+        if ($lv['price'] > $current && $ceil === null) { $ceil = $lv['price']; }
+        if ($lv['price'] < $current && $floor === null) { $floor = $lv['price']; }
         if ($ceil !== null && $floor !== null) { break; }
     }
-    return ['current' => $current, 'ceil' => $ceil, 'floor' => $floor, 'symbol' => $symbol];
+    return ['current' => $current, 'ceil' => $ceil, 'floor' => $floor, 'funding' => null, 'ls_ratio' => null, 'symbol' => $symbol, 'source' => 'coinglass'];
+}
+/** مسیر اصلی: اگر COINGLASS_API_KEY تنظیم شده از آن (دقیق‌تر) استفاده می‌کند، وگرنه از برآورد رایگان بایننس. */
+function fetchLiquidityData(string $base): ?array {
+    if (COINGLASS_API_KEY !== '') {
+        $d = coinglassLiquidity($base);
+        if ($d !== null) { return $d; }
+    }
+    return freeLiquidityEstimate($base);
 }
 function buildLiquidityCaption(array $d): string {
     $name = coinName($d['symbol']);
     $t  = "🌊 ✨ <b>نقشهٔ لیکویدیتی {$name}</b> ({$d['symbol']}) ✨ 🌊\n\n";
     $body = "💰 قیمت فعلی: <b>" . fmtPrice($d['current']) . "</b> $\n\n";
-    if ($d['ceil']) {
-        $body .= "📈 <b>سقف نقدینگی (ناحیهٔ لیکوییدیشن شورت‌ها):</b>\n";
-        $body .= "حدود <b>" . fmtPrice($d['ceil']['price']) . "</b> $ — احتمال جاروب نقدینگی و برخورد با مقاومت.\n\n";
+    if ($d['ceil'] !== null) {
+        $body .= "📈 <b>سقف نقدینگی (ناحیهٔ احتمالی لیکویید شورت‌ها):</b>\n";
+        $body .= "حدود <b>" . fmtPrice($d['ceil']) . "</b> $ — احتمال جاروب نقدینگی و برخورد با مقاومت.\n\n";
     }
-    if ($d['floor']) {
-        $body .= "📉 <b>کف نقدینگی (ناحیهٔ لیکوییدیشن لانگ‌ها):</b>\n";
-        $body .= "حدود <b>" . fmtPrice($d['floor']['price']) . "</b> $ — احتمال واکنش قیمتی و برگشت روند.\n";
+    if ($d['floor'] !== null) {
+        $body .= "📉 <b>کف نقدینگی (ناحیهٔ احتمالی لیکویید لانگ‌ها):</b>\n";
+        $body .= "حدود <b>" . fmtPrice($d['floor']) . "</b> $ — احتمال واکنش قیمتی و برگشت روند.\n";
+    }
+    if (($d['funding'] ?? null) !== null || ($d['ls_ratio'] ?? null) !== null) {
+        $body .= "\n";
+        if (($d['funding'] ?? null) !== null) { $body .= "💸 نرخ فاندینگ: <b>" . number_format($d['funding'], 4) . "%</b>\n"; }
+        if (($d['ls_ratio'] ?? null) !== null) { $body .= "⚖️ نسبت لانگ/شورت: <b>" . number_format($d['ls_ratio'], 2) . "</b>\n"; }
     }
     $t .= quoteExpandable($body);
+    $t .= "\n📡 منبع: " . (($d['source'] ?? '') === 'coinglass' ? 'Coinglass' : 'برآورد رایگان از دادهٔ عمومی فیوچرز بایننس');
     $t .= "\n" . pe('date') . ' ' . jalaliDateLine();
     return $t;
 }
 function sendLiquidityCard($chatId, string $base, $replyTo = null): void {
-    $d = coinglassLiquidity($base);
+    $d = fetchLiquidityData($base);
     if ($d === null) {
-        $msg = COINGLASS_API_KEY === ''
-            ? emo('no') . " برای فعال‌سازی این قابلیت، کلید COINGLASS_API_KEY را در تنظیمات ربات وارد کنید."
-            : emo('no') . " دریافت اطلاعات لیکویدیتی برای <b>" . h(strtoupper($base)) . "</b> ممکن نشد.";
-        sendMessage($chatId, $msg, null, $replyTo);
+        sendMessage($chatId, emo('no') . " دریافت اطلاعات لیکویدیتی برای <b>" . h(strtoupper($base)) . "</b> ممکن نشد؛ کمی بعد دوباره تلاش کنید.", null, $replyTo);
         return;
     }
     sendMessage($chatId, buildLiquidityCaption($d), addGroupKeyboardGreen(), $replyTo);
