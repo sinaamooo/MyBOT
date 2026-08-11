@@ -2842,12 +2842,18 @@ function fngGaugeColor(float $frac): array {
     $t = ($frac - 0.5) / 0.5;
     return [(int)round(250 + (34 - 250) * $t), (int)round(204 + (197 - 204) * $t), (int)round(21 + (94 - 21) * $t)];
 }
-/** رندر تصویر گِیج (سرعت‌سنج) شاخص ترس‌وطمع، سبک مدرن تیره. متن داخل تصویر عمداً لاتین است
- *  (محدودیت shaping فارسی در GD)؛ جزئیات فارسی در کپشن پیام می‌آید. */
-function renderFearGreedGauge(int $value, string $labelEn): ?string {
+/** رندر تصویر گِیج (سرعت‌سنج) شاخص ترس‌وطمع، سبک مدرن تیره با هالهٔ نوری هم‌رنگ وضعیت، خط‌کش
+ *  درجه‌بندی‌شده و ردیف آمار روند (اختیاری). متن داخل تصویر عمداً لاتین است (محدودیت shaping
+ *  فارسی در GD)؛ جزئیات فارسی در کپشن پیام می‌آید. */
+function renderFearGreedGauge(int $value, string $labelEn, ?array $hist = null): ?string {
     if (!function_exists('imagecreatetruecolor') || !function_exists('imagettftext')) { return null; }
     $SS = 3; // سوپرسمپل: رسم در ابعاد بزرگ‌تر و کوچک‌سازی نرم در پایان برای لبه‌های صاف (رفع پیکسلی‌بودن)
-    $W = 900; $H = 620;
+    $value = max(0, min(100, $value));
+    $frac  = $value / 100;
+    [$zr, $zg, $zb] = fngGaugeColor($frac); // رنگ لهجهٔ وضعیت فعلی، برای هاله/پیل/نوک عقربه
+
+    $hasHist = $hist && (($hist['yesterday'] ?? null) !== null || ($hist['week_avg'] ?? null) !== null || ($hist['month_avg'] ?? null) !== null);
+    $W = 900; $H = $hasHist ? 800 : 660;
     $Wp = $W * $SS; $Hp = $H * $SS;
     $img = imagecreatetruecolor($Wp, $Hp);
     imagealphablending($img, true); imagesavealpha($img, true);
@@ -2861,19 +2867,32 @@ function renderFearGreedGauge(int $value, string $labelEn): ?string {
             (int)round($bgTop[2] + ($bgBot[2] - $bgTop[2]) * $t));
         imageline($img, 0, $y, $Wp, $y, $c);
     }
-    $white = imagecolorallocate($img, 245, 248, 251);
-    $muted = imagecolorallocate($img, 150, 161, 176);
-    $faint = imagecolorallocatealpha($img, 255, 255, 255, 120);
-    $panel = imagecolorallocatealpha($img, 255, 255, 255, 123);
+    $white  = imagecolorallocate($img, 245, 248, 251);
+    $muted  = imagecolorallocate($img, 150, 161, 176);
+    $faint  = imagecolorallocatealpha($img, 255, 255, 255, 120);
+    $panel  = imagecolorallocatealpha($img, 255, 255, 255, 123);
+    $zoneCol  = imagecolorallocate($img, $zr, $zg, $zb);
+    $zoneChip = imagecolorallocatealpha($img, $zr, $zg, $zb, 108);
 
     roundedRect($img, 22 * $SS, 22 * $SS, $Wp - 22 * $SS, $Hp - 22 * $SS, 30 * $SS, $panel);
     roundedRectOutline($img, 22 * $SS, 22 * $SS, $Wp - 22 * $SS, $Hp - 22 * $SS, 30 * $SS, $faint);
+    // نوار لهجه‌ای بالای پنل، هم‌رنگ وضعیت فعلی (هماهنگ با سبک کارت‌های طلا/دلار)
+    imagefilledrectangle($img, 22 * $SS, 22 * $SS, $Wp - 22 * $SS, 28 * $SS, $zoneCol);
 
-    cardText($img, 'Fear & Greed Index', (int)($Wp / 2), 44 * $SS, 36 * $SS, $white, true, 'center');
-    cardText($img, strtoupper($labelEn), (int)($Wp / 2), 92 * $SS, 22 * $SS, $muted, false, 'center');
+    cardText($img, 'FEAR & GREED INDEX', (int)($Wp / 2), 50 * $SS, 34 * $SS, $white, true, 'center');
 
-    $cx = (int)($Wp / 2); $cy = 430 * $SS; $rOuter = 260 * $SS; $rInner = 200 * $SS;
-    $segments = 160;
+    $cx = (int)($Wp / 2); $cy = 410 * $SS; $rOuter = 230 * $SS; $rInner = 175 * $SS;
+
+    // هالهٔ نوری ملایم هم‌رنگ وضعیت، فقط چسبیده به لبهٔ بیرونی کمان (نه سرتاسر کارت) —
+    // آلفای بالا (نزدیک ۱۲۷ یعنی تقریباً شفاف) تا هاله محو بماند و رنگ پس‌زمینه را نبلعد.
+    for ($i = 4; $i >= 1; $i--) {
+        $alpha = 116 + $i; // 117..120 از ۱۲۷ (خیلی محو)
+        $glow = imagecolorallocatealpha($img, $zr, $zg, $zb, min(127, $alpha));
+        $rad = ($rOuter + $i * 12 * $SS) * 2;
+        imagefilledellipse($img, $cx, $cy, $rad, $rad, $glow);
+    }
+
+    $segments = 200;
     for ($i = 0; $i < $segments; $i++) {
         $f0 = $i / $segments; $f1 = ($i + 1) / $segments;
         $a0 = 180 + $f0 * 180; $a1 = 180 + $f1 * 180;
@@ -2889,22 +2908,77 @@ function renderFearGreedGauge(int $value, string $labelEn): ?string {
         (int)round($bgTop[2] + ($bgBot[2] - $bgTop[2]) * $holeT));
     imagefilledarc($img, $cx, $cy, $rInner * 2, $rInner * 2, 180, 361, $holeCol, IMG_ARC_PIE);
 
-    // عقربه
-    $angleDeg = 180 + (max(0, min(100, $value)) / 100) * 180;
+    // خط‌کش درجه‌بندی: ۵ نشانه (۰/۲۵/۵۰/۷۵/۱۰۰) دور کمان + سه برچسب راهنما
+    imagesetthickness($img, 3 * $SS);
+    foreach ([0, 25, 50, 75, 100] as $mark) {
+        $ang = deg2rad(180 + ($mark / 100) * 180);
+        $x0 = $cx + (int)round(cos($ang) * ($rOuter + 6 * $SS));
+        $y0 = $cy + (int)round(sin($ang) * ($rOuter + 6 * $SS));
+        $x1 = $cx + (int)round(cos($ang) * ($rOuter + 20 * $SS));
+        $y1 = $cy + (int)round(sin($ang) * ($rOuter + 20 * $SS));
+        imageline($img, $x0, $y0, $x1, $y1, $faint);
+    }
+    imagesetthickness($img, 1);
+    cardText($img, 'FEAR', $cx - $rOuter, $cy + 26 * $SS, 18 * $SS, $muted, true, 'center');
+    cardText($img, 'NEUTRAL', $cx, $cy - $rOuter - 40 * $SS, 18 * $SS, $muted, true, 'center');
+    cardText($img, 'GREED', $cx + $rOuter, $cy + 26 * $SS, 18 * $SS, $muted, true, 'center');
+
+    // عقربه با سایهٔ نرم + نوک رنگی هم‌رنگ وضعیت داخل هاب سفید
+    $angleDeg = 180 + $frac * 180;
     $angleRad = deg2rad($angleDeg);
-    $needleLen = $rInner - 20 * $SS;
+    $needleLen = $rInner - 18 * $SS;
     $nx = $cx + (int)round(cos($angleRad) * $needleLen);
     $ny = $cy + (int)round(sin($angleRad) * $needleLen);
-    imagesetthickness($img, 6 * $SS);
+    $shadow = imagecolorallocatealpha($img, 0, 0, 0, 90);
+    imagesetthickness($img, 9 * $SS);
+    imageline($img, $cx + 2 * $SS, $cy + 3 * $SS, $nx + 2 * $SS, $ny + 3 * $SS, $shadow);
+    imagesetthickness($img, 7 * $SS);
     imageline($img, $cx, $cy, $nx, $ny, $white);
     imagesetthickness($img, 1);
-    imagefilledellipse($img, $cx, $cy, 24 * $SS, 24 * $SS, $white);
+    imagefilledellipse($img, $cx, $cy, 30 * $SS, 30 * $SS, $white);
+    imagefilledellipse($img, $cx, $cy, 16 * $SS, 16 * $SS, $zoneCol);
+    imagefilledellipse($img, $nx, $ny, 14 * $SS, 14 * $SS, $zoneCol);
+    imagefilledellipse($img, $nx, $ny, 7 * $SS, 7 * $SS, $white);
 
-    cardText($img, (string)$value, $cx, $cy + 36 * $SS, 76 * $SS, $white, true, 'center');
+    cardText($img, (string)$value, $cx, $cy + 40 * $SS, 78 * $SS, $white, true, 'center');
+    // پیل رنگی وضعیت (خنثی/ترس/طمع...) زیر عدد بزرگ
+    $moodText = strtoupper($labelEn);
+    $moodPt = 20 * $SS * 0.70;
+    $moodFont = findTtf(true) ?? findFaTtf(true);
+    $mbb = imagettfbbox($moodPt, 0, $moodFont, $moodText);
+    $mtw = abs($mbb[2] - $mbb[0]); $masc = abs($mbb[7]);
+    $mPadH = 22 * $SS; $mPadV = 12 * $SS;
+    $mw = $mtw + $mPadH * 2; $mh = $masc + $mPadV * 2;
+    $mY = $cy + 126 * $SS;
+    roundedRect($img, $cx - intdiv($mw, 2), $mY, $cx + intdiv($mw, 2), $mY + $mh, intdiv($mh, 2), $zoneChip);
+    cardText($img, $moodText, $cx, $mY + $mPadV, 20 * $SS, $white, true, 'center');
+
+    $footerY = $Hp - 44 * $SS;
+    if ($hasHist) {
+        // ردیف آمار روند: دیروز / میانگین هفته / میانگین ماه، هرکدام با رنگ هم‌رنگ مقدارش
+        $sepY = $mY + $mh + 34 * $SS;
+        imageline($img, 60 * $SS, $sepY, $Wp - 60 * $SS, $sepY, $faint);
+        $stats = [
+            ['label' => 'YESTERDAY',  'val' => $hist['yesterday'] ?? null],
+            ['label' => 'WEEK AVG',   'val' => $hist['week_avg']  ?? null],
+            ['label' => 'MONTH AVG',  'val' => $hist['month_avg'] ?? null],
+        ];
+        $cols = count($stats);
+        $colW = ($Wp - 100 * $SS) / $cols;
+        $rowY = $sepY + 32 * $SS;
+        foreach ($stats as $i => $s) {
+            $scx = (int)round(60 * $SS + $colW * ($i + 0.5));
+            if ($s['val'] === null) { continue; }
+            [$sr, $sg, $sb] = fngGaugeColor(max(0, min(100, $s['val'])) / 100);
+            $sCol = imagecolorallocate($img, $sr, $sg, $sb);
+            cardText($img, (string)$s['val'], $scx, $rowY, 36 * $SS, $sCol, true, 'center');
+            cardText($img, $s['label'], $scx, $rowY + 50 * $SS, 16 * $SS, $muted, false, 'center');
+        }
+    }
 
     $ts = time();
-    cardText($img, date('d F Y', $ts), $cx, $Hp - 58 * $SS, 22 * $SS, $muted, false, 'center');
-    cardText($img, '@' . BOT_USERNAME, $Wp - 52 * $SS, $Hp - 46 * $SS, 20 * $SS, $muted, false, 'right');
+    cardText($img, date('d F Y', $ts), 52 * $SS, $footerY, 20 * $SS, $muted, false, 'left');
+    cardText($img, '@' . BOT_USERNAME, $Wp - 52 * $SS, $footerY, 20 * $SS, $muted, false, 'right');
 
     $out = imagecreatetruecolor($W, $H);
     imagecopyresampled($out, $img, 0, 0, 0, 0, $W, $H, $Wp, $Hp);
@@ -2934,8 +3008,9 @@ function buildFearGreedCaption(array $d, ?array $hist = null): string {
 function sendFearGreedCard($chatId, $replyTo = null): void {
     $d = fetchFearGreed();
     if ($d === null) { sendMessage($chatId, emo('no') . " دریافت شاخص ترس و طمع در حال حاضر ممکن نشد؛ کمی بعد دوباره تلاش کنید.", null, $replyTo); return; }
-    $cap = buildFearGreedCaption($d, fetchFearGreedHistory());
-    $img = renderFearGreedGauge($d['value'], fngLabelEn((int)$d['value']));
+    $hist = fetchFearGreedHistory();
+    $cap = buildFearGreedCaption($d, $hist);
+    $img = renderFearGreedGauge($d['value'], fngLabelEn((int)$d['value']), $hist);
     if ($img) { sendPhotoFile($chatId, $img, $cap, addGroupKeyboardGreen(), $replyTo); @unlink($img); }
     else { sendMessage($chatId, $cap, addGroupKeyboardGreen(), $replyTo); }
 }
