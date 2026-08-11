@@ -81,32 +81,46 @@ const PREMIUM_EMOJI = [
 // اگر ربات اجازهٔ نمایش نداشته باشد، به‌صورت خودکار جایگزین معمولی استفاده می‌شود.
 const PE_IDS = [
     // قالب اطلاعات ارز
-    'coin'    => ['5332455502917949981', '💎'], // پشت اسم ارز
+    'coin'    => ['5427168083074628963', '💎'], // پشت کلمهٔ «ارز»
     'usd'     => ['5951773156887764244', '💵'], // پشت دلار
     'toman'   => ['5965097893491642896', '💵'], // پشت تومان
-    'date'    => ['5274055917766202507', '🗓'], // تاریخ
-    'change'  => ['5190806721286657692', '🕯'], // تغییرات
-    'volume'  => ['5197503331215361533', '📊'], // حجم
-    'high'    => ['5877540355187937244', '📈'], // سقف
-    'low'     => ['5877307202888273539', '📉'], // کف
-    'info24'  => ['5900006938271288826', '📈'], // اطلاعات ۲۴ ساعته
+    'date'    => ['5413879192267805083', '🗓'], // پشت تاریخ
+    'change'  => ['5203993413346680064', '🕯'], // پشت تغییرات
+    'volume'  => ['5451882707875276247', '📊'], // پشت حجم
+    'high'    => ['5875059049501825783', '📈'], // پشت سقف
+    'low'     => ['5877603233509153525', '📉'], // پشت کف
+    'info24'  => ['5341715473882955310', '📈'], // پشت کلمهٔ «اطلاعات»
     // قالب تبدیل ارز
     'cv_coin' => ['5778505852520501441', '💎'], // اسم ارز
     'cv_usd'  => ['5951773156887764244', '💵'], // به دلار
     'cv_toman'=> ['5965097893491642896', '💵'], // تومان
     'cv_star' => ['5438496463044752972', '⭐'], // استارز
     // آیدی ربات
-    'botid'   => ['5879585266426973039', '🤖'], // جلوی آیدی ربات
+    'botid'   => ['5206615520945666304', '🤖'], // جلوی آیدی ربات
     // قالب دلار / طلا (منبع: tgju)
     'r_usd'   => ['5951773156887764244', '💵'], // پشت دلار
     'r_toman' => ['5965097893491642896', '💵'], // پشت تومان
     'r_date'  => ['5413879192267805083', '🪙'], // پشت تاریخ (دلار)
-    'g_qty'   => ['5949707595445968258', '✨'], // پشت عددی که ممبر گفته (طلا)
+    'g_qty'   => ['5224607267797606837', '✨'], // پشت «وزن» (طلا)
+    'gold_title'  => ['5949707595445968258', '✨'], // پشت کلمهٔ «طلا»
+    'gold_change' => ['4956611513369494230', '📊'], // پشت «تغییرات» (طلا)
+    'usd_change'  => ['5224607267797606837', '📊'], // پشت «تغییرات» (دلار)
+    'usd_qty'     => ['4956611513369494230', '✨'], // پشت «مقدار» (دلار)
     // سقف/کف دامنهٔ امروز (هم برای قالب دلار و هم طلا)
-    'rg_high'   => ['5445355530111437729', '📈'], // پشت سقف دامنهٔ امروز
-    'rg_low'    => ['5443127283898405358', '📉'], // پشت کف دامنهٔ امروز
+    'rg_high'   => ['5875059049501825783', '📈'], // پشت سقف دامنهٔ امروز
+    'rg_low'    => ['5877603233509153525', '📉'], // پشت کف دامنهٔ امروز
     'rg_label'  => ['5994378914636500516', '🎯'], // پشت عنوان «سقف کف امروز»
     'rg_change' => ['5451882707875276247', '📊'], // پشت درصد تغییرات امروز
+    // قالب شاخص ترس و طمع
+    'fng_title'     => ['5134201302888219205', '🧭'], // پشت «شاخص ترس و طمع»
+    'fng_value'     => ['4918354603281482671', '🔢'], // پشت عدد شاخص
+    'fng_status'    => ['4904565554943099861', '🏷'],  // پشت «وضعیت»
+    'fng_yesterday' => ['5413879192267805083', '🗓'], // پشت «دیروز»
+    'fng_week'      => ['5222444124698853913', '📊'], // پشت میانگین هفتهٔ گذشته
+    'fng_month'     => ['5341715473882955310', '📊'], // پشت میانگین ماه گذشته
+    // قالب تحلیل
+    'analysis_title'  => ['5341715473882955310', '📊'], // پشت کلمهٔ «تحلیل»
+    'analysis_author' => ['5231005931550030290', '✍️'], // جلوی «نویسنده:»
     // قالب ولت (ترون / تون / بی‌ان‌بی)
     'w_info'  => ['5296369303661067030', '🪙'], // عنوان: اطلاعات ولت
     'w_usd'   => ['5951773156887764244', '💵'], // پشت دلار
@@ -1430,7 +1444,7 @@ function buildPriceCaption(string $base, array $d): string {
         '{high}' => fmtPrice($high), '{low}' => fmtPrice($low), '{volume}' => fmtBig($vol),
     ]) . priceQuote();
 }
-const DEFAULT_TPL_PRICE = "💎 ارز {name} - {base} {{pe:coin}}\n\n┓━━❲ قیمت لحظه ای ❳\n┨≡{{pe:usd}} دلار: {price} $\n┚≡{{pe:toman}} تومن: {toman}\n\n┓━━❲ اطلاعات 𝟐𝟒𝐡 ❳ {{pe:info24}}\n┨≡{{pe:change}} تغییرات: ❲ {sign}{change}% ❳\n┨≡{{pe:high}} سقف: {high} $\n┨≡{{pe:low}} کف: {low} $\n┚≡{{pe:volume}} حجم: {volume} $\n";
+const DEFAULT_TPL_PRICE = "ارز{{pe:coin}} {name} - {base}\n\n┓━━❲ قیمت لحظه ای ❳\n┨≡دلار{{pe:usd}}: {price} $\n┚≡تومان{{pe:toman}}: {toman}\n\n┓━━❲ اطلاعات{{pe:info24}} 24h ❳\n┨≡تغییرات{{pe:change}}: ❲ {sign}{change}% ❳\n┨≡سقف{{pe:high}}: {high} $\n┨≡کف{{pe:low}}: {low} $\n┚≡حجم{{pe:volume}}: {volume} $\n";
 
 /** رندر چارت شمعی و برگرداندن مسیر فایل PNG موقت (اقتباس از Chart.php) */
 /** تبدیل کد هگز ۶ کاراکتری (بدون #) به [r,g,b] */
@@ -1911,7 +1925,7 @@ function sendPriceCard($chatId, string $base, string $interval = '30m', $editMsg
     if ($cbId) { answerCallback($cbId); }
     return true;
 }
-const DEFAULT_TPL_PRICE_SIMPLE = "💎 ارز {name} - {base} {{pe:coin}}\n\n┓━━❲ قیمت لحظه‌ای ❳\n┨≡{{pe:usd}} دلار: {price} $\n┚≡{{pe:toman}} تومن: {toman}\n";
+const DEFAULT_TPL_PRICE_SIMPLE = "ارز{{pe:coin}} {name} - {base}\n\n┓━━❲ قیمت لحظه‌ای ❳\n┨≡دلار{{pe:usd}}: {price} $\n┚≡تومان{{pe:toman}}: {toman}\n";
 /** کارت سادهٔ قیمت (بدون عکس چارت) — برای وقتی فقط قیمت لحظه‌ای از منبع پشتیبان در دسترس است */
 function buildSimplePriceCaption(string $base, float $price): string {
     $name = coinName($base);
@@ -1920,7 +1934,7 @@ function buildSimplePriceCaption(string $base, float $price): string {
     $tpl = getTemplate('tpl_price_simple', DEFAULT_TPL_PRICE_SIMPLE);
     return renderTemplate($tpl, ['{name}' => $name, '{base}' => $base, '{price}' => fmtPrice($price), '{toman}' => $toman]) . priceQuote();
 }
-const DEFAULT_TPL_USDT = "💎 ارز Tether - USDT {{pe:coin}}\n\n┓━━❲ قیمت لحظه ای ❳\n┨≡{{pe:usd}} دلار: 1.00 $\n┚≡{{pe:toman}} تومن: {toman}\n";
+const DEFAULT_TPL_USDT = "ارز{{pe:coin}} Tether - USDT\n\n┓━━❲ قیمت لحظه ای ❳\n┨≡دلار{{pe:usd}}: 1.00 $\n┚≡تومان{{pe:toman}}: {toman}\n";
 /** تتر: فقط قیمت تومانی (بدون چارت) */
 function sendUsdtCard($chatId, $cbId = null, $replyTo = null): bool {
     $rls   = nobitexRls('usdt');
@@ -1933,46 +1947,46 @@ function sendUsdtCard($chatId, $cbId = null, $replyTo = null): bool {
 }
 
 // ---- کارت‌های دلار و طلای بازار آزاد (منبع tgju) ----
-const DEFAULT_TPL_DOLLAR = "💵 <b>نرخ دلار آمریکا</b> {{pe:r_usd}}\n\n┓━━❲ نرخ لحظه‌ای ❳\n┨≡ {{pe:r_toman}} تومان: <b>{toman}</b> تومان\n┨≡ {{pe:r_usd}} مقدار: <b>{qty}</b> $\n┚≡ {arrow} تغییر ۲۴س: {{pe:rg_change}} <b>{change}%</b>\n{hilo}";
+const DEFAULT_TPL_DOLLAR = "<b>نرخ دلار آمریکا{{pe:r_usd}}</b>\n\n┓━━❲ نرخ لحظه‌ای ❳\n┨≡ تومان{{pe:r_toman}}: <b>{toman}</b> تومان\n┨≡ مقدار{{pe:usd_qty}}: <b>{qty}</b> $\n┚≡ {arrow} تغییر ۲۴ساعته{{pe:usd_change}}: <b>{change}%</b>\n{hilo}";
 /** قالب متن دلار — نسخهٔ خفن با کادر، نشان تغییرات ۲۴ساعته و سقف/کف (ایموجی پریمیوم: r_usd / r_toman / r_date) */
 function buildDollarCaption(float $qty, float $priceToman, array $meta = []): string {
     $qtyStr = rtrim(rtrim(number_format($qty, 4, '.', ','), '0'), '.');
     $dp    = (float)($meta['dp'] ?? 0);
     $up    = (($meta['dt'] ?? 'high') !== 'low');
-    $arrow = pe('mark') . ($up ? ' ▲' : ' ▼');
+    $arrow = $up ? '▲' : '▼';
     $hilo = '';
     if (isset($meta['high']) && isset($meta['low'])) {
-        $hilo = "\n┓━━❲ " . pe('rg_label') . " سقف کف امروز ❳\n" .
-                "┨≡ " . pe('rg_high') . " سقف: <b>" . number_format(round($meta['high'])) . "</b> تومان\n" .
-                "┚≡ " . pe('rg_low') . " کف: <b>" . number_format(round($meta['low'])) . "</b> تومان\n";
+        $hilo = "\n┓━━❲ سقف کف امروز ❳\n" .
+                "┨≡ سقف" . pe('rg_high') . ": <b>" . number_format(round($meta['high'])) . "</b> تومان\n" .
+                "┚≡ کف" . pe('rg_low') . ": <b>" . number_format(round($meta['low'])) . "</b> تومان\n";
     }
     $tpl = getTemplate('tpl_dollar', DEFAULT_TPL_DOLLAR);
     $t = renderTemplate($tpl, [
         '{toman}' => number_format(round($priceToman)), '{qty}' => $qtyStr, '{arrow}' => $arrow,
         '{change}' => number_format(abs($dp), 2), '{hilo}' => $hilo,
     ]);
-    return $t . "\n" . quoteBlock(pe('r_date') . " " . jalaliDateLine());
+    return $t . "\n" . quoteBlock("تاریخ" . pe('r_date') . " " . jalaliDateLine());
 }
 
-const DEFAULT_TPL_GOLD = "🥇 <b>طلای ۱۸ عیار</b> {{pe:mark}}\n\n┓━━❲ نرخ لحظه‌ای ❳\n┨≡ {{pe:g_qty}} وزن: <b>{qty}</b> گرم\n┨≡ {{pe:r_toman}} تومان: <b>{toman}</b> تومان\n┨≡ {{pe:mark}} دلاری: <b>\${usd}</b>\n┚≡ {arrow} تغییر ۲۴س: {{pe:rg_change}} <b>{change}%</b>\n{hilo}";
+const DEFAULT_TPL_GOLD = "<b>طلای 18 عیار{{pe:gold_title}}</b>\n\n┓━━❲ نرخ لحظه‌ای ❳\n┨≡ وزن{{pe:g_qty}}: <b>{qty}</b> گرم\n┨≡ تومان{{pe:r_toman}}: <b>{toman}</b> تومان\n┨≡ دلاری{{pe:r_usd}}: <b>\${usd}</b>\n┚≡ {arrow} تغییر ۲۴ساعته{{pe:gold_change}}: <b>{change}%</b>\n{hilo}";
 /** قالب متن طلای ۱۸ عیار — نسخهٔ خفن با کادر، نشان تغییرات و سقف/کف (ایموجی: g_qty / r_toman / r_usd) */
 function buildGoldCaption(float $qty, float $priceToman, float $usdValue, array $meta = []): string {
     $qtyStr = rtrim(rtrim(number_format($qty, 4, '.', ','), '0'), '.');
     $dp    = (float)($meta['dp'] ?? 0);
     $up    = (($meta['dt'] ?? 'high') !== 'low');
-    $arrow = pe('mark') . ($up ? ' ▲' : ' ▼');
+    $arrow = $up ? '▲' : '▼';
     $hilo = '';
     if (isset($meta['high']) && isset($meta['low'])) {
-        $hilo = "\n┓━━❲ " . pe('rg_label') . " سقف کف امروز ❳\n" .
-                "┨≡ " . pe('rg_high') . " سقف: <b>" . number_format(round($meta['high'])) . "</b> تومان\n" .
-                "┚≡ " . pe('rg_low') . " کف: <b>" . number_format(round($meta['low'])) . "</b> تومان\n";
+        $hilo = "\n┓━━❲ سقف کف امروز ❳\n" .
+                "┨≡ سقف" . pe('rg_high') . ": <b>" . number_format(round($meta['high'])) . "</b> تومان\n" .
+                "┚≡ کف" . pe('rg_low') . ": <b>" . number_format(round($meta['low'])) . "</b> تومان\n";
     }
     $tpl = getTemplate('tpl_gold', DEFAULT_TPL_GOLD);
     $t = renderTemplate($tpl, [
         '{qty}' => $qtyStr, '{toman}' => number_format(round($priceToman)), '{usd}' => number_format($usdValue, 2),
         '{arrow}' => $arrow, '{change}' => number_format(abs($dp), 2), '{hilo}' => $hilo,
     ]);
-    return $t . "\n" . quoteBlock(pe('r_date') . " " . jalaliDateLine());
+    return $t . "\n" . quoteBlock("تاریخ" . pe('r_date') . " " . jalaliDateLine());
 }
 /** خط تاریخ‌شمسی/ساعت مشترک برای قالب‌های دلار و طلا */
 function jalaliDateLine(): string {
@@ -3221,13 +3235,6 @@ function fetchFearGreed(): ?array {
     setSetting($cacheKey, json_encode($out, JSON_UNESCAPED_UNICODE));
     return $out;
 }
-function fngEmoji(int $v): string {
-    if ($v <= 24) { return '🥶'; }
-    if ($v <= 44) { return '😨'; }
-    if ($v <= 55) { return '😐'; }
-    if ($v <= 75) { return '😃'; }
-    return '🤑';
-}
 function fngLabelFa(int $v): string {
     if ($v <= 24) { return 'ترس شدید'; }
     if ($v <= 44) { return 'ترس'; }
@@ -3384,19 +3391,19 @@ function renderFearGreedGauge(int $value, string $labelEn, ?array $hist = null):
     imagedestroy($out);
     return is_file($tmp) ? $tmp : null;
 }
-const DEFAULT_TPL_FEARGREED = "🧭 ✨ <b>شاخص ترس و طمع بازار کریپتو</b> ✨ 🧭\n\n┓━━❲ وضعیت امروز ❳\n┨≡ {emoji} عدد شاخص: <b>{value} / 100</b>\n┚≡ 🏷 وضعیت: <b>{label}</b>\n{trend}\n{bar}\n";
+const DEFAULT_TPL_FEARGREED = "<b>شاخص ترس و طمع بازار کریپتو{{pe:fng_title}}</b>\n\n┓━━❲ وضعیت امروز ❳\n┨≡ عدد شاخص{{pe:fng_value}}: <b>{value} / 100</b>\n┚≡ وضعیت{{pe:fng_status}}: <b>{label}</b>\n{trend}\n{bar}\n";
 function buildFearGreedCaption(array $d, ?array $hist = null): string {
     $v = (int)$d['value'];
     $trend = '';
     if ($hist) {
         $trend = "\n┓━━❲ روند اخیر ❳\n";
-        if ($hist['yesterday'] !== null) { $trend .= "┨≡ " . fngEmoji($hist['yesterday']) . " دیروز: <b>{$hist['yesterday']}</b> " . fngLabelFa($hist['yesterday']) . "\n"; }
-        if ($hist['week_avg']  !== null) { $trend .= "┨≡ " . fngEmoji($hist['week_avg'])  . " میانگین هفتهٔ گذشته: <b>{$hist['week_avg']}</b>\n"; }
-        if ($hist['month_avg'] !== null) { $trend .= "┚≡ " . fngEmoji($hist['month_avg']) . " میانگین ماه گذشته: <b>{$hist['month_avg']}</b>\n"; }
+        if ($hist['yesterday'] !== null) { $trend .= "┨≡ دیروز" . pe('fng_yesterday') . ": <b>{$hist['yesterday']}</b> " . fngLabelFa($hist['yesterday']) . "\n"; }
+        if ($hist['week_avg']  !== null) { $trend .= "┨≡ میانگین هفتهٔ گذشته" . pe('fng_week') . ": <b>{$hist['week_avg']}</b>\n"; }
+        if ($hist['month_avg'] !== null) { $trend .= "┚≡ میانگین ماه گذشته" . pe('fng_month') . ": <b>{$hist['month_avg']}</b>\n"; }
     }
     $tpl = getTemplate('tpl_feargreed', DEFAULT_TPL_FEARGREED);
     $t = renderTemplate($tpl, [
-        '{emoji}' => fngEmoji($v), '{value}' => (string)$v, '{label}' => fngLabelFa($v),
+        '{value}' => (string)$v, '{label}' => fngLabelFa($v),
         '{trend}' => $trend, '{bar}' => fngBar($v),
     ]);
     return $t . "\n" . priceQuote();
@@ -3498,22 +3505,22 @@ function fetchLiquidityData(string $base): ?array {
     }
     return freeLiquidityEstimate($base);
 }
-const DEFAULT_TPL_LIQUIDITY = "🌊 ✨ <b>نقشهٔ لیکویدیتی {name}</b> ({symbol}) ✨ 🌊\n\n{{quote}}💰 قیمت فعلی: <b>{current}</b> $\n\n{ceil}{floor}{extra}{{/quote}}\n📡 منبع: {source}";
+const DEFAULT_TPL_LIQUIDITY = "<b>نقشهٔ لیکویدیتی {name}</b> ({symbol})\n\n{{quote}}قیمت فعلی: <b>{current}</b> $\n\n{ceil}{floor}{extra}{{/quote}}\nمنبع: {source}";
 function buildLiquidityCaption(array $d): string {
     $name = coinName($d['symbol']);
     $ceil = ''; $floor = ''; $extra = '';
     if ($d['ceil'] !== null) {
-        $ceil = "📈 <b>سقف نقدینگی (ناحیهٔ احتمالی لیکویید شورت‌ها):</b>\n" .
+        $ceil = "<b>سقف نقدینگی (ناحیهٔ احتمالی لیکویید شورت‌ها):</b>\n" .
                 "حدود <b>" . fmtPrice($d['ceil']) . "</b> $ — احتمال جاروب نقدینگی و برخورد با مقاومت.\n\n";
     }
     if ($d['floor'] !== null) {
-        $floor = "📉 <b>کف نقدینگی (ناحیهٔ احتمالی لیکویید لانگ‌ها):</b>\n" .
+        $floor = "<b>کف نقدینگی (ناحیهٔ احتمالی لیکویید لانگ‌ها):</b>\n" .
                  "حدود <b>" . fmtPrice($d['floor']) . "</b> $ — احتمال واکنش قیمتی و برگشت روند.\n";
     }
     if (($d['funding'] ?? null) !== null || ($d['ls_ratio'] ?? null) !== null) {
         $extra = "\n";
-        if (($d['funding'] ?? null) !== null) { $extra .= "💸 نرخ فاندینگ: <b>" . number_format($d['funding'], 4) . "%</b>\n"; }
-        if (($d['ls_ratio'] ?? null) !== null) { $extra .= "⚖️ نسبت لانگ/شورت: <b>" . number_format($d['ls_ratio'], 2) . "</b>\n"; }
+        if (($d['funding'] ?? null) !== null) { $extra .= "نرخ فاندینگ: <b>" . number_format($d['funding'], 4) . "%</b>\n"; }
+        if (($d['ls_ratio'] ?? null) !== null) { $extra .= "نسبت لانگ/شورت: <b>" . number_format($d['ls_ratio'], 2) . "</b>\n"; }
     }
     $tpl = getTemplate('tpl_liquidity', DEFAULT_TPL_LIQUIDITY);
     $t = renderTemplate($tpl, [
@@ -3649,9 +3656,9 @@ function buildLocalAnalysis(string $base): ?array {
     $support = min($lows);
     $changePct = $first > 0 ? (($current - $first) / $first) * 100 : 0;
 
-    if ($changePct > 2) { $trend = 'صعودی 📈'; }
-    elseif ($changePct < -2) { $trend = 'نزولی 📉'; }
-    else { $trend = 'رنج / خنثی ↔️'; }
+    if ($changePct > 2) { $trend = 'صعودی'; }
+    elseif ($changePct < -2) { $trend = 'نزولی'; }
+    else { $trend = 'رنج / خنثی'; }
 
     $n = count($closes);
     $shortN = min(8, $n); $longN = min(24, $n);
@@ -3663,18 +3670,16 @@ function buildLocalAnalysis(string $base): ?array {
             "مقاومت نزدیک: " . fmtPrice($resistance) . " $\n" .
             "حمایت نزدیک: " . fmtPrice($support) . " $\n" .
             "مومنتوم کوتاه‌مدت (MA8 در برابر MA24): {$momentum}\n" .
-            "قیمت فعلی: " . fmtPrice($current) . " $\n\n" .
-            "این تحلیل به‌صورت خودکار از دادهٔ قیمت واقعی صرافی‌ها محاسبه شده (پست تریدینگ‌ویو در دسترس نبود).";
+            "قیمت فعلی: " . fmtPrice($current) . " $";
 
-    return ['title' => coinName($base) . ' — تحلیل خودکار پرایس‌اکشن', 'desc' => $desc, 'url' => null, 'image' => null, 'author' => 'Auto'];
+    return ['title' => coinName($base) . ' — تحلیل پرایس‌اکشن', 'desc' => $desc, 'url' => null, 'image' => null, 'author' => ''];
 }
-const DEFAULT_TPL_ANALYSIS = "📊 ✨ <b>تحلیل کامیونیتی {name} ({base})</b> ✨\n<i>نویسنده: {author}</i>\n\n{{quote}}<b>{title}</b>\n\n{desc}{{/quote}}\n\nتحلیل {idx} از {total}";
+const DEFAULT_TPL_ANALYSIS = "<b>تحلیل{{pe:analysis_title}} {name} ({base})</b>\n{{pe:analysis_author}} نویسنده: {author}\n\n{{quote}}<b>{title}</b>\n\n{desc}{{/quote}}";
 function buildAnalysisCaption(string $base, array $item, int $idx, int $total): string {
     $tpl = getTemplate('tpl_analysis', DEFAULT_TPL_ANALYSIS);
     $t = renderTemplate($tpl, [
         '{name}' => coinName($base), '{base}' => $base, '{author}' => h($item['author'] ?: '—'),
         '{title}' => h($item['title']), '{desc}' => h($item['desc']),
-        '{idx}' => (string)($idx + 1), '{total}' => (string)$total,
     ]);
     return $t . "\n" . priceQuote();
 }
