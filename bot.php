@@ -407,6 +407,10 @@ function pemo(string $name): string {
     }
     return $e['fb'];
 }
+/** متن دکمهٔ «بازگشت» در همهٔ کیبوردهای شیشه‌ای — از پنل ادمین قابل تغییر است */
+function backBtnText(): string {
+    return getSetting('back_btn_text', 'بازگشت');
+}
 
 function sendMessage($chatId, string $text, $keyboard = null, $replyTo = null, string $parseMode = 'HTML') {
     $p = [
@@ -2318,7 +2322,7 @@ function adminHomeKeyboard(): array {
         [btn(emo('chart') . ' آمار', 'ap:stats', 'primary', 'chart')],
         [btn(emo('star') . ' متن استارت', 'ap:start', 'primary', 'star'),
          btn(($q ? '✅' : '❌') . ' حالت نقل‌قول', 'ap:quote', $q ? 'success' : 'danger')],
-        [btn('✏️ ویرایش پیام‌ها', 'ap:tpl', 'primary')],
+        [btn('✏️ ویرایش پیام‌ها', 'ap:tpl', 'primary'), btn('🔙 متن دکمهٔ بازگشت', 'ap:backtxt', 'primary')],
         [btn('🔑 کلیدهای API', 'ap:keys', 'primary'), btn('🎨 رنگ چارت', 'ap:chartcolor', 'primary')],
         [btn(emo('bell') . ' پیام همگانی', 'ap:bc', 'primary', 'bell')],
         [btn(emo('admin') . ' ادمین‌ها', 'ap:admins', 'primary', 'admin'),
@@ -2334,7 +2338,7 @@ function showTemplateList($chatId, $editMsgId): void {
         $custom = getBotText("tpl_$key") !== null;
         $rows[] = [btn(($custom ? '✅ ' : '▫️ ') . $def['label'], "ap:tpl:$key", $custom ? 'success' : 'primary')];
     }
-    $rows[] = [btn(emo('back') . ' بازگشت', 'ap:home', 'primary', 'back')];
+    $rows[] = [btn(emo('back') . ' ' . backBtnText(), 'ap:home', 'primary', 'back')];
     editMessageText($chatId, $editMsgId, $txt, ikb($rows));
 }
 /** جزئیات یک قالب: راهنمای نگه‌دارنده‌ها + دکمهٔ ویرایش/بازگردانی */
@@ -2349,7 +2353,7 @@ function showTemplateDetail($chatId, $editMsgId, string $key): void {
     $txt .= "برای ویرایش، دکمهٔ زیر را بزنید و پیام جدید را با فرمت دلخواه (بولد، کوت، ایموجی پریمیوم — دقیقاً همان‌طور که در تلگرام تایپ می‌کنید) به‌همراه نگه‌دارنده‌های بالا ارسال کنید.";
     $rows = [[btn('✏️ ویرایش', "ap:tpledit:$key", 'success')]];
     if ($custom !== null) { $rows[] = [btn('♻️ بازگردانی پیش‌فرض', "ap:tplreset:$key", 'danger')]; }
-    $rows[] = [btn(emo('back') . ' بازگشت', 'ap:tpl', 'primary', 'back')];
+    $rows[] = [btn(emo('back') . ' ' . backBtnText(), 'ap:tpl', 'primary', 'back')];
     editMessageText($chatId, $editMsgId, $txt, ikb($rows));
 }
 function showAdminPanel($chatId, $editMsgId = null): void {
@@ -2377,7 +2381,7 @@ function showStats($chatId, $editMsgId): void {
         emo('people') . " گروه‌های فعال: <b>{$s['groups_active']}</b> (کل: {$s['groups_total']})\n" .
         pemo('admin') . " ادمین‌ها: <b>{$s['admins']}</b>"
     );
-    editMessageText($chatId, $editMsgId, $txt, ikb([[btn(emo('back') . ' بازگشت', 'ap:home', 'primary', 'back')]]));
+    editMessageText($chatId, $editMsgId, $txt, ikb([[btn(emo('back') . ' ' . backBtnText(), 'ap:home', 'primary', 'back')]]));
 }
 function showAdminsList($chatId, $editMsgId): void {
     $rows = db()->query("SELECT chat_id, role FROM admins ORDER BY role")->fetchAll();
@@ -2391,7 +2395,7 @@ function showAdminsList($chatId, $editMsgId): void {
         }
     }
     $kbRows[] = [btn('➕ افزودن ادمین', 'ap:admadd', 'success')];
-    $kbRows[] = [btn(emo('back') . ' بازگشت', 'ap:home', 'primary', 'back')];
+    $kbRows[] = [btn(emo('back') . ' ' . backBtnText(), 'ap:home', 'primary', 'back')];
     editMessageText($chatId, $editMsgId, $txt, ikb($kbRows));
 }
 function showForceJoin($chatId, $editMsgId): void {
@@ -2408,7 +2412,7 @@ function showForceJoin($chatId, $editMsgId): void {
         ];
     }
     $kbRows[] = [btn('➕ افزودن کانال', 'ap:fjadd', 'success')];
-    $kbRows[] = [btn(emo('back') . ' بازگشت', 'ap:home', 'primary', 'back')];
+    $kbRows[] = [btn(emo('back') . ' ' . backBtnText(), 'ap:home', 'primary', 'back')];
     editMessageText($chatId, $editMsgId, $txt, ikb($kbRows));
 }
 
@@ -3287,7 +3291,7 @@ function tronMenuKeyboard(): array {
         [btn('🔎 اطلاعات تراکنش', 'tron:tx', 'primary')],
         [btn(emo('wallet') . ' موجودی ولت (ترون/تون/BNB)', 'tron:wallet', 'primary', 'wallet')],
         [btn('📜 انتقال‌های TRC20', 'tron:tr', 'primary')],
-        [btn(emo('back') . ' بازگشت', 'm:back', 'danger', 'back')],
+        [btn(emo('back') . ' ' . backBtnText(), 'm:back', 'danger', 'back')],
     ]);
 }
 function sendStart($chatId, $userId): void {
@@ -3468,6 +3472,18 @@ function routeState($chatId, $userId, array $state, array $msg, string $text): b
             sendMessage($chatId, pemo('ok') . " قالب «" . h(TPL_DEFS[$key]['label']) . "» بروزرسانی شد.");
             return true;
 
+        case 'set_backtxt':
+            if (!isGlobalAdmin($userId)) { clearState($chatId); return true; }
+            $val = trim($text);
+            if ($val === '' || mb_strlen($val, 'UTF-8') > 24) {
+                sendMessage($chatId, emo('no') . " متن باید بین ۱ تا ۲۴ نویسه باشد. دوباره تلاش کنید یا دکمهٔ انصراف را بزنید.");
+                return true;
+            }
+            setSetting('back_btn_text', $val);
+            clearState($chatId);
+            sendMessage($chatId, pemo('ok') . " متن دکمهٔ بازگشت به «" . h($val) . "» تغییر کرد.");
+            return true;
+
         case 'broadcast':
             if (!isGlobalAdmin($userId)) { clearState($chatId); return true; }
             clearState($chatId);
@@ -3615,13 +3631,13 @@ function handleCallback(array $cb): void {
 
     // منوی اصلی
     if ($data === 'm:back') { editMessageText($chatId, $msgId, maybeQuote(getBotText('start') ?? 'منوی اصلی'), mainMenuKeyboard($userId)); answerCallback($cbId); return; }
-    if ($data === 'm:help') { editMessageText($chatId, $msgId, helpText(), ikb([[btn(emo('back') . ' بازگشت', 'm:back', 'primary', 'back')]])); answerCallback($cbId); return; }
+    if ($data === 'm:help') { editMessageText($chatId, $msgId, helpText(), ikb([[btn(emo('back') . ' ' . backBtnText(), 'm:back', 'primary', 'back')]])); answerCallback($cbId); return; }
     if ($data === 'm:tron') { editMessageText($chatId, $msgId, pemo('tron') . " <b>ابزارهای ترون</b>\nیک گزینه را انتخاب کنید:", tronMenuKeyboard()); answerCallback($cbId); return; }
 
     // ترون: شروع فرم
-    if ($data === 'tron:tx')     { setState($chatId, 'tron_tx');     editMessageText($chatId, $msgId, "🔎 <b>هش تراکنش</b> را ارسال کنید:", ikb([[btn(emo('back') . ' بازگشت', 'm:tron', 'primary', 'back')]])); answerCallback($cbId); return; }
-    if ($data === 'tron:wallet') { setState($chatId, 'tron_wallet'); editMessageText($chatId, $msgId, pemo('wallet') . " <b>آدرس ولت</b> را ارسال کنید:\n<code>ترون (T...)</code> ، <code>تون (EQ/UQ...)</code> یا <code>بی‌ان‌بی (0x...)</code>", ikb([[btn(emo('back') . ' بازگشت', 'm:tron', 'primary', 'back')]])); answerCallback($cbId); return; }
-    if ($data === 'tron:tr')     { setState($chatId, 'tron_tr');     editMessageText($chatId, $msgId, "📜 <b>آدرس ولت</b> را برای مشاهده انتقال‌های TRC20 ارسال کنید:", ikb([[btn(emo('back') . ' بازگشت', 'm:tron', 'primary', 'back')]])); answerCallback($cbId); return; }
+    if ($data === 'tron:tx')     { setState($chatId, 'tron_tx');     editMessageText($chatId, $msgId, "🔎 <b>هش تراکنش</b> را ارسال کنید:", ikb([[btn(emo('back') . ' ' . backBtnText(), 'm:tron', 'primary', 'back')]])); answerCallback($cbId); return; }
+    if ($data === 'tron:wallet') { setState($chatId, 'tron_wallet'); editMessageText($chatId, $msgId, pemo('wallet') . " <b>آدرس ولت</b> را ارسال کنید:\n<code>ترون (T...)</code> ، <code>تون (EQ/UQ...)</code> یا <code>بی‌ان‌بی (0x...)</code>", ikb([[btn(emo('back') . ' ' . backBtnText(), 'm:tron', 'primary', 'back')]])); answerCallback($cbId); return; }
+    if ($data === 'tron:tr')     { setState($chatId, 'tron_tr');     editMessageText($chatId, $msgId, "📜 <b>آدرس ولت</b> را برای مشاهده انتقال‌های TRC20 ارسال کنید:", ikb([[btn(emo('back') . ' ' . backBtnText(), 'm:tron', 'primary', 'back')]])); answerCallback($cbId); return; }
 
     // پنل ادمین
     if (strpos($data, 'ap:') === 0) {
@@ -3640,7 +3656,7 @@ function handleCallback(array $cb): void {
 }
 
 function handleAdminCallback($chatId, $msgId, $userId, string $data, $cbId): void {
-    if ($data === 'ap:home')   { showAdminPanel($chatId, $msgId); answerCallback($cbId); return; }
+    if ($data === 'ap:home')   { clearState($chatId); showAdminPanel($chatId, $msgId); answerCallback($cbId); return; }
     if ($data === 'ap:stats')  { showStats($chatId, $msgId); answerCallback($cbId); return; }
     if ($data === 'ap:admins') { showAdminsList($chatId, $msgId); answerCallback($cbId); return; }
     if ($data === 'ap:fj')     { showForceJoin($chatId, $msgId); answerCallback($cbId); return; }
@@ -3681,6 +3697,12 @@ function handleAdminCallback($chatId, $msgId, $userId, string $data, $cbId): voi
     if ($data === 'ap:start') {
         setState($chatId, 'set_start');
         editMessageText($chatId, $msgId, pemo('star') . " متن جدید استارت را ارسال کنید (بولد/کوت/ایموجی پریمیوم مجاز است):", ikb([[btn(emo('back') . ' انصراف', 'ap:home', 'danger', 'back')]]));
+        answerCallback($cbId);
+        return;
+    }
+    if ($data === 'ap:backtxt') {
+        setState($chatId, 'set_backtxt');
+        editMessageText($chatId, $msgId, "🔙 متن جدید دکمهٔ «بازگشت» را ارسال کنید (فعلی: <b>" . h(backBtnText()) . "</b>):", ikb([[btn(emo('back') . ' انصراف', 'ap:home', 'danger', 'back')]]));
         answerCallback($cbId);
         return;
     }
