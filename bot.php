@@ -17,7 +17,7 @@
  * راه‌اندازی: کل پوشه (شامل bot.php و پوشهٔ fonts/) را روی هاست بگذارید و یک‌بار این آدرس را باز کنید:
  *   https://YOURDOMAIN/bot.php?setup=1&key=WEBHOOK_SECRET
  * نیازمندی‌ها: PHP 7.4+ با اکستنشن‌های cURL, GD, PDO_SQLite, mbstring.
- * پوشهٔ fonts/ شامل فونت Noto Sans Arabic (مجوز آزاد SIL OFL 1.1) است که برای تایپ‌شدن متن
+ * پوشهٔ fonts/ شامل فونت فارسی وزیرمتن — Vazirmatn (مجوز آزاد SIL OFL 1.1) است که برای تایپ‌شدن متن
  * فارسی داخل تصاویر تولیدی (مثل کارت اخبار) لازم است؛ اگر آپلود نشود، آن قابلیت به‌طور خودکار
  * و بدون خطا به حالت متنی ساده برمی‌گردد.
  * برای قابلیت‌های جدید (شاخص ترس‌وطمع پولی، لیکویدیتی دقیق‌تر، گیفت پورتال، تحلیل هوش مصنوعی) کلیدهای
@@ -99,12 +99,21 @@ const PE_IDS = [
     'r_toman' => ['5965097893491642896', '💵'], // پشت تومان
     'r_date'  => ['5413879192267805083', '🪙'], // پشت تاریخ (دلار)
     'g_qty'   => ['5949707595445968258', '✨'], // پشت عددی که ممبر گفته (طلا)
+    // سقف/کف دامنهٔ امروز (هم برای قالب دلار و هم طلا)
+    'rg_high'   => ['5445355530111437729', '📈'], // پشت سقف دامنهٔ امروز
+    'rg_low'    => ['5443127283898405358', '📉'], // پشت کف دامنهٔ امروز
+    'rg_label'  => ['5994378914636500516', '🎯'], // پشت عنوان «سقف کف امروز»
+    'rg_change' => ['5451882707875276247', '📊'], // پشت درصد تغییرات امروز
     // قالب ولت (ترون / تون / بی‌ان‌بی)
     'w_info'  => ['5296369303661067030', '🪙'], // عنوان: اطلاعات ولت
     'w_usd'   => ['5951773156887764244', '💵'], // پشت دلار
     'w_toman' => ['5965097893491642896', '💵'], // پشت تومان
     'w_date'  => ['5413879192267805083', '🪙'], // پشت تاریخ
     'w_bal'   => ['5767258028956978383', '💰'], // موجودی ولت
+    'w_ton'   => ['5843606192244398823', '💎'], // پشت اسم شبکهٔ تون
+    'w_bnb'   => ['5845933235590142297', '🟡'], // پشت اسم شبکهٔ بی‌ان‌بی
+    'w_tron'  => ['5846143156411703699', '🔴'], // پشت اسم شبکهٔ ترون
+    'w_addr'  => ['5846030233131556720', '📍'], // پشت آدرس ولت
 ];
 /** ایموجی پریمیوم داخل متن (parse_mode=HTML). اگر پریمیوم فعال نباشد، جایگزین معمولی. */
 function pe(string $key): string {
@@ -686,6 +695,37 @@ function binance24h(string $symbol): ?array {
     $d = json_decode($j, true);
     return isset($d['lastPrice']) ? $d : null;
 }
+/** قیمت لحظه‌ای بایننس (بدون آمار ۲۴ساعته) — سبک‌تر از ticker/24hr، برای پشتیبان/کاربردهای ساده */
+function binancePriceOnly(string $symbol): ?float {
+    $j = httpGet('https://api.binance.com/api/v3/ticker/price?symbol=' . urlencode($symbol));
+    if (!$j) { return null; }
+    $d = json_decode($j, true);
+    return isset($d['price']) && is_numeric($d['price']) ? (float)$d['price'] : null;
+}
+/** قیمت از CryptoCompare (پشتیبان دوم، وقتی هر دو endpoint بایننس در دسترس نباشند) */
+function cryptoComparePrice(string $base, string $quote = 'USD'): ?float {
+    $j = httpGet('https://min-api.cryptocompare.com/data/price?fsym=' . urlencode(strtoupper($base)) . '&tsym=' . urlencode($quote), 10);
+    if (!$j) { return null; }
+    $d = json_decode($j, true);
+    return isset($d[$quote]) && is_numeric($d[$quote]) ? (float)$d[$quote] : null;
+}
+/**
+ * دریافت قیمت با زنجیرهٔ پشتیبان تا ربات هیچ‌وقت به‌خاطر قطعی یک سرویس از کار نیفتد:
+ * ۱) بایننس ticker/24hr (کامل: قیمت+تغییرات+سقف/کف/حجم → کارت با چارت)
+ * ۲) بایننس ticker/price (فقط قیمت لحظه‌ای)
+ * ۳) CryptoCompare (فقط قیمت لحظه‌ای)
+ * اگر فقط قیمت لحظه‌ای در دسترس باشد (حالت ۲ یا ۳)، چون داده‌ای برای چارت/تغییرات ۲۴ساعته
+ * نیست، کارت سادهٔ بدون عکس چارت نمایش داده می‌شود (full=false).
+ */
+function fetchPriceChain(string $symbol, string $base): array {
+    $d = binance24h($symbol);
+    if ($d) { return ['full' => true, 'data' => $d, 'price' => (float)$d['lastPrice']]; }
+    $p = binancePriceOnly($symbol);
+    if ($p !== null) { return ['full' => false, 'data' => null, 'price' => $p]; }
+    $p = cryptoComparePrice($base);
+    if ($p !== null) { return ['full' => false, 'data' => null, 'price' => $p]; }
+    return ['full' => false, 'data' => null, 'price' => null];
+}
 function binanceKlines(string $symbol, string $interval, int $limit = 70): ?array {
     // بایننس تایم‌فریم 3h ندارد → از کندل‌های 1h (سه‌تایی) می‌سازیم.
     if ($interval === '3h') {
@@ -1116,8 +1156,8 @@ function findTtf(bool $bold = false): ?string {
 }
 
 /**
- * یافتن فونت فارسی/عربی (Noto Sans Arabic) برای نوشتن متن فارسی داخل تصاویر GD.
- * برای اینکه این قابلیت کار کند، فایل‌های NotoSansArabic-Regular.ttf و -Bold.ttf باید در
+ * یافتن فونت فارسی اصلی — وزیرمتن (Vazirmatn) — برای نوشتن متن فارسی داخل تصاویر GD.
+ * برای اینکه این قابلیت کار کند، فایل‌های Vazirmatn-Regular.ttf و Vazirmatn-Bold.ttf باید در
  * پوشهٔ fonts/ کنار همین فایل آپلود شوند (فونت آزاد/رایگان با مجوز SIL OFL 1.1).
  * اگر فونت پیدا نشود، رندر متن فارسی داخل تصویر به‌آرامی غیرفعال می‌شود (بدون خطا/کرش).
  */
@@ -1126,13 +1166,13 @@ function findFaTtf(bool $bold = false): ?string {
     $k = $bold ? 'b' : 'r';
     if (array_key_exists($k, $cache)) { return $cache[$k]; }
     $list = $bold ? [
-        __DIR__ . '/fonts/persian-bold.ttf', __DIR__ . '/fonts/NotoSansArabic-Bold.ttf',
-        '/usr/share/fonts/truetype/noto/NotoSansArabic-Bold.ttf',
-        '/usr/share/fonts/noto/NotoSansArabic-Bold.ttf',
+        __DIR__ . '/fonts/persian-bold.ttf', __DIR__ . '/fonts/Vazirmatn-Bold.ttf',
+        '/usr/share/fonts/truetype/vazirmatn/Vazirmatn-Bold.ttf',
+        '/usr/share/fonts/truetype/noto/NotoSansArabic-Bold.ttf', // آخرین راه‌حل اگر وزیرمتن موجود نبود
     ] : [
-        __DIR__ . '/fonts/persian.ttf', __DIR__ . '/fonts/NotoSansArabic-Regular.ttf',
-        '/usr/share/fonts/truetype/noto/NotoSansArabic-Regular.ttf',
-        '/usr/share/fonts/noto/NotoSansArabic-Regular.ttf',
+        __DIR__ . '/fonts/persian.ttf', __DIR__ . '/fonts/Vazirmatn-Regular.ttf',
+        '/usr/share/fonts/truetype/vazirmatn/Vazirmatn-Regular.ttf',
+        '/usr/share/fonts/truetype/noto/NotoSansArabic-Regular.ttf', // آخرین راه‌حل اگر وزیرمتن موجود نبود
     ];
     foreach ($list as $f) { if (@is_file($f)) { return $cache[$k] = $f; } }
     return $cache[$k] = null;
@@ -1430,12 +1470,23 @@ function pill($img, int $x, int $y, string $text, int $bg, int $fg, int $px, str
 function sendPriceCard($chatId, string $base, string $interval = '30m', $editMsgId = null, $cbId = null, $replyTo = null): bool {
     if ($base === 'USDT') { return sendUsdtCard($chatId, $cbId, $replyTo); }
     $symbol = $base . 'USDT';
-    $d = binance24h($symbol);
-    if (!$d) {
+    $pc = fetchPriceChain($symbol, $base);
+    if ($pc['price'] === null) {
         if ($cbId) { answerCallback($cbId, 'دریافت داده ناموفق بود.', true); }
-        elseif ($editMsgId === null) { sendMessage($chatId, emo('no') . " نماد <b>" . h($base) . "</b> در بایننس یافت نشد.", null, $replyTo); }
+        elseif ($editMsgId === null) { sendMessage($chatId, emo('no') . " نماد <b>" . h($base) . "</b> یافت نشد.", null, $replyTo); }
         return false;
     }
+    // اگر فقط قیمت لحظه‌ای در دسترس بود (بایننس ticker/price یا CryptoCompare)، بدون چارت/تایم‌فریم
+    // یک کارت سادهٔ قیمت نمایش داده می‌شود، چون داده‌ای برای ساخت چارت/آمار ۲۴ساعته وجود ندارد.
+    if (!$pc['full']) {
+        $caption = buildSimplePriceCaption($base, $pc['price']);
+        $kb = addGroupKeyboard();
+        if ($editMsgId !== null) { editMessageText($chatId, $editMsgId, $caption, $kb); }
+        else { sendMessage($chatId, $caption, $kb, $replyTo); }
+        if ($cbId) { answerCallback($cbId); }
+        return true;
+    }
+    $d = $pc['data'];
     $candles = binanceKlines($symbol, $interval);
     $caption = buildPriceCaption($base, $d);
     $kb = timeframeKeyboard($base, $interval);
@@ -1451,6 +1502,18 @@ function sendPriceCard($chatId, string $base, string $interval = '30m', $editMsg
     }
     if ($cbId) { answerCallback($cbId); }
     return true;
+}
+/** کارت سادهٔ قیمت (بدون عکس چارت) — برای وقتی فقط قیمت لحظه‌ای از منبع پشتیبان در دسترس است */
+function buildSimplePriceCaption(string $base, float $price): string {
+    $name = coinName($base);
+    $tmU = tomanFor($base, $price);
+    $toman = $tmU !== null ? number_format(round($tmU)) . ' تومان' : '—';
+    $t  = "💎 ارز {$name} - {$base} " . pe('coin') . "\n\n";
+    $t .= "┓━━❲ قیمت لحظه‌ای ❳\n";
+    $t .= "┨≡" . pe('usd') . " دلار: " . fmtPrice($price) . " $\n";
+    $t .= "┚≡" . pe('toman') . " تومن: {$toman}\n";
+    $t .= priceQuote();
+    return $t;
 }
 /** تتر: فقط قیمت تومانی (بدون چارت) */
 function sendUsdtCard($chatId, $cbId = null, $replyTo = null): bool {
@@ -1474,15 +1537,15 @@ function buildDollarCaption(float $qty, float $priceToman, array $meta = []): st
     $up    = (($meta['dt'] ?? 'high') !== 'low');
     $arrow = $up ? '🟢 ▲' : '🔴 ▼';
 
-    $t  = "💵 ✨ <b>نرخ دلار آمریکا</b> ✨ " . pe('r_usd') . "\n\n";
+    $t  = "💵 <b>نرخ دلار آمریکا</b> " . pe('r_usd') . "\n\n";
     $t .= "┓━━❲ نرخ لحظه‌ای ❳\n";
     $t .= "┨≡ " . pe('r_toman') . " تومان: <b>" . number_format(round($priceToman)) . "</b> تومان\n";
     $t .= "┨≡ " . pe('r_usd') . " مقدار: <b>{$qtyStr}</b> $\n";
-    $t .= "┚≡ {$arrow} تغییر ۲۴س: <b>" . number_format(abs($dp), 2) . "%</b>\n";
+    $t .= "┚≡ {$arrow} تغییر ۲۴س: " . pe('rg_change') . " <b>" . number_format(abs($dp), 2) . "%</b>\n";
     if (isset($meta['high']) && isset($meta['low'])) {
-        $t .= "\n┓━━❲ دامنهٔ امروز ❳\n";
-        $t .= "┨≡ 📈 سقف: <b>" . number_format(round($meta['high'])) . "</b> تومان\n";
-        $t .= "┚≡ 📉 کف: <b>" . number_format(round($meta['low'])) . "</b> تومان\n";
+        $t .= "\n┓━━❲ سقف کف امروز " . pe('rg_label') . " ❳\n";
+        $t .= "┨≡ " . pe('rg_high') . " سقف: <b>" . number_format(round($meta['high'])) . "</b> تومان\n";
+        $t .= "┚≡ " . pe('rg_low') . " کف: <b>" . number_format(round($meta['low'])) . "</b> تومان\n";
     }
     $t .= "\n" . pe('r_date') . " " . jalaliDateLine();
     return $t;
@@ -1495,16 +1558,16 @@ function buildGoldCaption(float $qty, float $priceToman, float $usdValue, array 
     $up    = (($meta['dt'] ?? 'high') !== 'low');
     $arrow = $up ? '🟢 ▲' : '🔴 ▼';
 
-    $t  = "🥇 ✨ <b>طلای ۱۸ عیار</b> ✨ " . pe('g_qty') . "\n\n";
+    $t  = "🥇 <b>طلای ۱۸ عیار</b> " . pe('g_qty') . "\n\n";
     $t .= "┓━━❲ نرخ لحظه‌ای ❳\n";
     $t .= "┨≡ " . pe('g_qty') . " وزن: <b>{$qtyStr}</b> گرم\n";
     $t .= "┨≡ " . pe('r_toman') . " تومان: <b>" . number_format(round($priceToman)) . "</b> تومان\n";
     $t .= "┨≡ " . pe('r_usd') . " دلاری: <b>$" . number_format($usdValue, 2) . "</b>\n";
-    $t .= "┚≡ {$arrow} تغییر ۲۴س: <b>" . number_format(abs($dp), 2) . "%</b>\n";
+    $t .= "┚≡ {$arrow} تغییر ۲۴س: " . pe('rg_change') . " <b>" . number_format(abs($dp), 2) . "%</b>\n";
     if (isset($meta['high']) && isset($meta['low'])) {
-        $t .= "\n┓━━❲ دامنهٔ امروز ❳\n";
-        $t .= "┨≡ 📈 سقف: <b>" . number_format(round($meta['high'])) . "</b> تومان\n";
-        $t .= "┚≡ 📉 کف: <b>" . number_format(round($meta['low'])) . "</b> تومان\n";
+        $t .= "\n┓━━❲ سقف کف امروز " . pe('rg_label') . " ❳\n";
+        $t .= "┨≡ " . pe('rg_high') . " سقف: <b>" . number_format(round($meta['high'])) . "</b> تومان\n";
+        $t .= "┚≡ " . pe('rg_low') . " کف: <b>" . number_format(round($meta['low'])) . "</b> تومان\n";
     }
     $t .= "\n" . pe('r_date') . " " . jalaliDateLine();
     return $t;
@@ -2310,14 +2373,15 @@ function buildWalletCaption(string $chain, string $chainFa, string $address, flo
     $clock  = date('H:i:s', $ts);
     $usdStr = number_format($usd, 2, '.', '');
     $tmnStr = $toman !== null ? number_format((int)round($toman)) : '—';
-    $chainIcon = CHAIN_EMOJI[$chain] ?? '🔷';
+    $chainPeKey = ['tron' => 'w_tron', 'ton' => 'w_ton', 'bnb' => 'w_bnb'][$chain] ?? null;
+    $chainIcon = $chainPeKey ? pe($chainPeKey) : (CHAIN_EMOJI[$chain] ?? '🔷');
 
     $out  = pe('w_info') . " اطلاعات ولت " . $chainIcon . " " . h($chainFa) . "\n\n";
     $out .= "┓━━❲ " . pe('w_bal') . "موجودی ولت ❳\n";
     $out .= "┨≡ " . pe('w_usd') . " دلار: <b>$usdStr</b> $\n";
     $out .= "┨≡ " . pe('w_toman') . " تومان: <b>$tmnStr</b>\n\n";
-    $out .= "┚≡ " . $chainIcon . " آدرس ولت :\n";
-    $out .= $chainIcon . " <code>" . h($address) . "</code>\n\n";
+    $out .= "┚≡ " . pe('w_addr') . " آدرس ولت :\n";
+    $out .= pe('w_addr') . " <code>" . h($address) . "</code>\n\n";
     $out .= " " . pe('w_date') . " $clock | $shamsi";
     return $out;
 }
@@ -2419,7 +2483,7 @@ function newsImpactColored(string $title, string $desc): array {
 /**
  * تصویر خفن اخبار: برخلاف نسخهٔ قبلی، عناوین واقعی خبر با فونت فارسی داخل خود تصویر تایپ
  * می‌شوند (نه فقط در کپشن). این کار با یافتن الگوی «معکوس‌کردن ترتیب کلمات» ممکن شده: GD به
- * کمک فونت Noto Sans Arabic حروف فارسی مجاور را خودش به‌درستی می‌چسباند، فقط ترتیب کلمات را
+ * کمک فونت فارسی وزیرمتن حروف فارسی مجاور را خودش به‌درستی می‌چسباند، فقط ترتیب کلمات را
  * معکوس نمی‌کند؛ پس فقط ترتیب کلمات (نه حروف داخل هر کلمه) معکوس می‌شود [faDrawLine].
  * اگر فونت فارسی در fonts/ موجود نباشد null برمی‌گرداند و caller باید به کارت متنی برگردد.
  */
