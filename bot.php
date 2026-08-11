@@ -14,11 +14,15 @@
  *   - نقشهٔ لیکویدیتی کوین‌گلس با «لیکویدی <ارز>»، دارایی گیفت‌های تلگرام با «/me @username»
  *   - تحلیل هوشمند تکنیکال (Smart Money Concepts) با هوش مصنوعی — «تحلیل <ارز>» با انتخاب تایم‌فریم
  *
- * راه‌اندازی: فایل را روی هاست بگذارید و یک‌بار این آدرس را باز کنید:
+ * راه‌اندازی: کل پوشه (شامل bot.php و پوشهٔ fonts/) را روی هاست بگذارید و یک‌بار این آدرس را باز کنید:
  *   https://YOURDOMAIN/bot.php?setup=1&key=WEBHOOK_SECRET
  * نیازمندی‌ها: PHP 7.4+ با اکستنشن‌های cURL, GD, PDO_SQLite, mbstring.
- * برای قابلیت‌های جدید (شاخص ترس‌وطمع پولی، لیکویدیتی، گیفت پورتال، تحلیل هوش مصنوعی) کلیدهای
- * CMC_API_KEY / COINGLASS_API_KEY / GIFTS_API_BASE+KEY / AI_API_KEY را در بالای همین فایل تنظیم کنید.
+ * پوشهٔ fonts/ شامل فونت Noto Sans Arabic (مجوز آزاد SIL OFL 1.1) است که برای تایپ‌شدن متن
+ * فارسی داخل تصاویر تولیدی (مثل کارت اخبار) لازم است؛ اگر آپلود نشود، آن قابلیت به‌طور خودکار
+ * و بدون خطا به حالت متنی ساده برمی‌گردد.
+ * برای قابلیت‌های جدید (شاخص ترس‌وطمع پولی، لیکویدیتی دقیق‌تر، گیفت پورتال، تحلیل هوش مصنوعی) کلیدهای
+ * CMC_API_KEY / COINGLASS_API_KEY / GIFTS_API_BASE+KEY / AI_API_KEY را در بالای همین فایل تنظیم کنید
+ * (شاخص ترس‌وطمع و لیکویدیتی حتی بدون این کلیدها هم به‌صورت رایگان کار می‌کنند).
  */
 
 // ==========================================================================
@@ -1111,6 +1115,94 @@ function findTtf(bool $bold = false): ?string {
     return $cache[$k] = null;
 }
 
+/**
+ * یافتن فونت فارسی/عربی (Noto Sans Arabic) برای نوشتن متن فارسی داخل تصاویر GD.
+ * برای اینکه این قابلیت کار کند، فایل‌های NotoSansArabic-Regular.ttf و -Bold.ttf باید در
+ * پوشهٔ fonts/ کنار همین فایل آپلود شوند (فونت آزاد/رایگان با مجوز SIL OFL 1.1).
+ * اگر فونت پیدا نشود، رندر متن فارسی داخل تصویر به‌آرامی غیرفعال می‌شود (بدون خطا/کرش).
+ */
+function findFaTtf(bool $bold = false): ?string {
+    static $cache = [];
+    $k = $bold ? 'b' : 'r';
+    if (array_key_exists($k, $cache)) { return $cache[$k]; }
+    $list = $bold ? [
+        __DIR__ . '/fonts/persian-bold.ttf', __DIR__ . '/fonts/NotoSansArabic-Bold.ttf',
+        '/usr/share/fonts/truetype/noto/NotoSansArabic-Bold.ttf',
+        '/usr/share/fonts/noto/NotoSansArabic-Bold.ttf',
+    ] : [
+        __DIR__ . '/fonts/persian.ttf', __DIR__ . '/fonts/NotoSansArabic-Regular.ttf',
+        '/usr/share/fonts/truetype/noto/NotoSansArabic-Regular.ttf',
+        '/usr/share/fonts/noto/NotoSansArabic-Regular.ttf',
+    ];
+    foreach ($list as $f) { if (@is_file($f)) { return $cache[$k] = $f; } }
+    return $cache[$k] = null;
+}
+/** آیا این کلمه شامل حرف عربی/فارسی است؟ (برای انتخاب فونت مناسب هر توکن) */
+function faIsArabicWord(string $w): bool {
+    return (bool)preg_match('/[\x{0600}-\x{06FF}\x{0750}-\x{077F}\x{FB50}-\x{FDFF}\x{FE70}-\x{FEFF}]/u', $w);
+}
+/** عرض پیکسلی یک رشته با فونت/سایز مشخص */
+function faTextWidth(string $font, float $pt, string $text): float {
+    $bb = imagettfbbox($pt, 0, $font, $text);
+    return abs($bb[2] - $bb[0]);
+}
+/**
+ * رسم یک خط ترکیبی فارسی/لاتین به‌صورت راست‌به‌چپ.
+ * نکتهٔ کلیدی: GD/FreeType حروف فارسی/عربی مجاور هم را در یک تک‌کلمه به‌درستی می‌چسباند
+ * (shaping خودکار)، اما ترتیب کلمات را معکوس نمی‌کند. پس اینجا فقط «ترتیب کلمات» معکوس
+ * می‌شود (نه حروف داخل هر کلمه) تا هم اتصال حروف درست بماند و هم ترتیب خواندن راست‌به‌چپ شود.
+ * هر توکن با فونت خودش (فارسی یا لاتین) رسم می‌شود تا اعداد/نمادهای لاتین هم درست دربیایند.
+ * $rightX لبهٔ راست خط (نقطهٔ شروع خواندن) است. عرض کل خط را برمی‌گرداند.
+ */
+function faDrawLine($img, string $text, string $faFont, string $latFont, int $rightX, int $baselineY, float $pt, int $color): float {
+    $words = preg_split('/\s+/u', trim($text));
+    $words = array_values(array_filter($words, fn($w) => $w !== ''));
+    if (!$words) { return 0.0; }
+    $rev = array_reverse($words);
+    $spaceW = faTextWidth($latFont, $pt, ' ');
+    $widths = [];
+    $total = 0.0;
+    foreach ($rev as $w) {
+        $font = faIsArabicWord($w) ? $faFont : $latFont;
+        $ww = faTextWidth($font, $pt, $w);
+        $widths[] = $ww;
+        $total += $ww;
+    }
+    $total += $spaceW * (count($rev) - 1);
+    $x = $rightX - $total;
+    foreach ($rev as $i => $w) {
+        $font = faIsArabicWord($w) ? $faFont : $latFont;
+        imagettftext($img, $pt, 0, (int)round($x), $baselineY, $color, $font, $w);
+        $x += $widths[$i] + $spaceW;
+    }
+    return $total;
+}
+/** شکستن متن ترکیبی فارسی/لاتین به چند خط بر اساس حداکثر عرض پیکسلی (بر مبنای ترتیب منطقی کلمات) */
+function faWrapMixed(string $text, string $faFont, string $latFont, float $pt, float $maxWidth): array {
+    $words = preg_split('/\s+/u', trim($text));
+    $words = array_values(array_filter($words, fn($w) => $w !== ''));
+    if (!$words) { return []; }
+    $spaceW = faTextWidth($latFont, $pt, ' ');
+    $lines = []; $cur = []; $curWidth = 0.0;
+    foreach ($words as $w) {
+        $font = faIsArabicWord($w) ? $faFont : $latFont;
+        $ww = faTextWidth($font, $pt, $w);
+        $addWidth = $cur ? ($curWidth + $spaceW + $ww) : $ww;
+        if ($cur && $addWidth > $maxWidth) {
+            $lines[] = implode(' ', $cur);
+            $cur = [$w]; $curWidth = $ww;
+        } else {
+            $cur[] = $w; $curWidth = $addWidth;
+        }
+    }
+    if ($cur) { $lines[] = implode(' ', $cur); }
+    return $lines;
+}
+/** کوتاه‌کردن رشته به حداکثر N نویسهٔ چندبایتی، با سه‌نقطه در صورت بریدن */
+function mbTruncate(string $s, int $max): string {
+    return mb_strlen($s, 'UTF-8') > $max ? (mb_substr($s, 0, $max, 'UTF-8') . '…') : $s;
+}
+
 /** نوشتن متن با مبدأ گوشهٔ بالا-چپ و ارتفاع تقریبی $px پیکسل.
  *  اگر TTF موجود بود از FreeType (واضح) وگرنه از فونت بیت‌مپ بزرگ‌شده استفاده می‌کند. */
 function cardText($img, string $text, int $x, int $y, int $px, int $color, bool $bold = false, string $align = 'left'): void {
@@ -1177,7 +1269,7 @@ function roundedRectOutline($img, int $x0, int $y0, int $x1, int $y1, int $r, in
 
 /** نمودار سطحی (خط + سایهٔ گرادیانی زیر آن + هالهٔ نقطهٔ آخر) در مستطیل مشخص.
  *  $rgb سه‌تایی رنگ لهجه برای ساخت گرادیان محو. */
-function drawAreaChart($img, array $series, int $x0, int $y0, int $x1, int $y1, int $line, int $fill, array $rgb = null): void {
+function drawAreaChart($img, array $series, int $x0, int $y0, int $x1, int $y1, int $line, int $fill, array $rgb = null, int $scale = 1): void {
     $series = array_values(array_filter($series, fn($v) => is_numeric($v) && $v > 0));
     $n = count($series);
     if ($n < 2) { return; }
@@ -1216,23 +1308,25 @@ function drawAreaChart($img, array $series, int $x0, int $y0, int $x1, int $y1, 
         filledPoly($img, $poly, $fill);
     }
     // خط اصلی
-    imagesetthickness($img, 3);
+    imagesetthickness($img, 3 * $scale);
     for ($i = 1; $i < $n; $i++) { imageline($img, $pts[$i-1][0], $pts[$i-1][1], $pts[$i][0], $pts[$i][1], $line); }
     imagesetthickness($img, 1);
     // هالهٔ نقطهٔ آخر
     $last = $pts[$n - 1];
     if ($rgb) {
         $halo = imagecolorallocatealpha($img, $rgb[0], $rgb[1], $rgb[2], 96);
-        imagefilledellipse($img, $last[0], $last[1], 22, 22, $halo);
+        imagefilledellipse($img, $last[0], $last[1], 22 * $scale, 22 * $scale, $halo);
     }
-    imagefilledellipse($img, $last[0], $last[1], 12, 12, $line);
+    imagefilledellipse($img, $last[0], $last[1], 12 * $scale, 12 * $scale, $line);
 }
 
 /** کارت مدرن دلار/طلا: $asset='usd'|'gold' ، $priceToman قیمت کل ، $series سری تاریخی تومان. */
 function renderRialCard(string $asset, float $priceToman, array $series, array $meta = []): ?string {
     if (!function_exists('imagecreatetruecolor')) { return null; }
+    $SS = 3; // سوپرسمپل: رسم در ابعاد بزرگ‌تر و کوچک‌سازی نرم در پایان برای لبه‌های صاف (رفع پیکسلی‌بودن)
     $W = 900; $H = 520;
-    $img = imagecreatetruecolor($W, $H);
+    $Wp = $W * $SS; $Hp = $H * $SS;
+    $img = imagecreatetruecolor($Wp, $Hp);
     imagealphablending($img, true); imagesavealpha($img, true);
 
     $isGold = ($asset === 'gold');
@@ -1241,13 +1335,13 @@ function renderRialCard(string $asset, float $priceToman, array $series, array $
     // پس‌زمینهٔ گرادیانی عمودی با ته‌رنگ لهجه
     $bgTop = $isGold ? [46, 35, 13] : [9, 26, 38];
     $bgBot = $isGold ? [17, 13, 5]  : [5, 10, 16];
-    for ($y = 0; $y < $H; $y++) {
-        $t = $y / ($H - 1);
+    for ($y = 0; $y < $Hp; $y++) {
+        $t = $y / ($Hp - 1);
         $c = imagecolorallocate($img,
             (int)round($bgTop[0] + ($bgBot[0] - $bgTop[0]) * $t),
             (int)round($bgTop[1] + ($bgBot[1] - $bgTop[1]) * $t),
             (int)round($bgTop[2] + ($bgBot[2] - $bgTop[2]) * $t));
-        imageline($img, 0, $y, $W, $y, $c);
+        imageline($img, 0, $y, $Wp, $y, $c);
     }
 
     $accent     = imagecolorallocate($img, $acc[0], $acc[1], $acc[2]);
@@ -1255,61 +1349,63 @@ function renderRialCard(string $asset, float $priceToman, array $series, array $
     $white  = imagecolorallocate($img, 245, 248, 251);
     $muted  = imagecolorallocate($img, 150, 161, 176);
     $faint  = imagecolorallocatealpha($img, 255, 255, 255, 118);
-    $green  = imagecolorallocate($img, 55, 214, 122);
-    $red    = imagecolorallocate($img, 235, 92, 78);
     $panel  = imagecolorallocatealpha($img, 255, 255, 255, 121); // پنل شیشه‌ای بسیار محو
     $chipBg = imagecolorallocatealpha($img, $acc[0], $acc[1], $acc[2], 112);
 
     // پنل داخلی گردگوشه + قاب لهجه‌ای نازک
-    roundedRect($img, 22, 22, $W - 22, $H - 22, 30, $panel);
-    roundedRectOutline($img, 22, 22, $W - 22, $H - 22, 30, $faint);
+    roundedRect($img, 22 * $SS, 22 * $SS, $Wp - 22 * $SS, $Hp - 22 * $SS, 30 * $SS, $panel);
+    roundedRectOutline($img, 22 * $SS, 22 * $SS, $Wp - 22 * $SS, $Hp - 22 * $SS, 30 * $SS, $faint);
     // نوار لهجه‌ای بالای پنل
-    imagefilledrectangle($img, 22, 22, $W - 22, 28, $accent);
+    imagefilledrectangle($img, 22 * $SS, 22 * $SS, $Wp - 22 * $SS, 28 * $SS, $accent);
 
-    $padX = 52;
+    $padX = 52 * $SS;
 
     // واترمارک بزرگ و محو نماد دارایی
     $wm = imagecolorallocatealpha($img, $acc[0], $acc[1], $acc[2], 118);
-    cardText($img, $isGold ? 'AU' : '$', $W - 150, 250, 240, $wm, true, 'center');
+    cardText($img, $isGold ? 'AU' : '$', $Wp - 150 * $SS, 250 * $SS, 240 * $SS, $wm, true, 'center');
 
     // نمودار سطحی نیمهٔ پایین (با گرادیان و هاله)
-    $chartTop = 300; $chartBot = $H - 70;
+    $chartTop = 300 * $SS; $chartBot = $Hp - 70 * $SS;
     // خطوط راهنمای افقی محو
     for ($i = 1; $i <= 3; $i++) {
         $gy = (int)round($chartTop + ($chartBot - $chartTop) * $i / 4);
-        imageline($img, $padX, $gy, $W - $padX, $gy, $faint);
+        imageline($img, $padX, $gy, $Wp - $padX, $gy, $faint);
     }
-    drawAreaChart($img, $series, $padX, $chartTop, $W - $padX, $chartBot, $accent, $accentSoft, $acc);
+    drawAreaChart($img, $series, $padX, $chartTop, $Wp - $padX, $chartBot, $accent, $accentSoft, $acc, $SS);
 
     // چیپ برچسب دارایی (بالا-راست) داخل پیل
     $label = $isGold ? 'GOLD · 18K' : 'USD';
-    pill($img, $W - $padX, 52, $label, $chipBg, $white, 28, 'right');
-    cardText($img, 'IRT', $W - $padX, 100, 20, $muted, false, 'right');
+    pill($img, $Wp - $padX, 52 * $SS, $label, $chipBg, $white, 28 * $SS, 'right');
+    cardText($img, 'IRT', $Wp - $padX, 100 * $SS, 20 * $SS, $muted, false, 'right');
 
     // مقدار (بالا-چپ)
     $qty = (float)($meta['qty'] ?? 1);
     $qtyStr = rtrim(rtrim(number_format($qty, 4, '.', ''), '0'), '.');
-    cardText($img, ($isGold ? '⚖ ' . $qtyStr . ' g' : '× ' . $qtyStr), $padX, 52, 26, $accent, true, 'left');
+    cardText($img, ($isGold ? '⚖ ' . $qtyStr . ' g' : '× ' . $qtyStr), $padX, 52 * $SS, 26 * $SS, $accent, true, 'left');
 
     // قیمت بزرگ (تومان)
-    cardText($img, number_format(round($priceToman)), $padX, 122, 88, $white, true, 'left');
-    cardText($img, 'TOMAN', $padX + 4, 224, 22, $muted, false, 'left');
+    cardText($img, number_format(round($priceToman)), $padX, 122 * $SS, 88 * $SS, $white, true, 'left');
+    cardText($img, 'TOMAN', $padX + 4 * $SS, 224 * $SS, 22 * $SS, $muted, false, 'left');
 
     // نشان تغییر داخل پیل رنگی
     $dp = (float)($meta['dp'] ?? 0);
     $up = (($meta['dt'] ?? 'high') !== 'low');
     $badgeBg = imagecolorallocatealpha($img, $up ? 55 : 235, $up ? 214 : 92, $up ? 122 : 78, 96);
-    pill($img, $padX, 260, ($up ? '▲ +' : '▼ −') . number_format(abs($dp), 2) . '%', $badgeBg, $white, 26, 'left');
+    pill($img, $padX, 260 * $SS, ($up ? '▲ +' : '▼ −') . number_format(abs($dp), 2) . '%', $badgeBg, $white, 26 * $SS, 'left');
 
     // فوتر
-    cardText($img, '@' . BOT_USERNAME, $padX, $H - 46, 22, $muted, false, 'left');
+    cardText($img, '@' . BOT_USERNAME, $padX, $Hp - 46 * $SS, 22 * $SS, $muted, false, 'left');
     $ts = time();
     [$jy, $jm, $jd] = gregorianToJalali((int)date('Y', $ts), (int)date('n', $ts), (int)date('j', $ts));
-    cardText($img, sprintf('%04d/%02d/%02d  %s', $jy, $jm, $jd, date('H:i', $ts)), $W - $padX, $H - 46, 22, $muted, false, 'right');
+    cardText($img, sprintf('%04d/%02d/%02d  %s', $jy, $jm, $jd, date('H:i', $ts)), $Wp - $padX, $Hp - 46 * $SS, 22 * $SS, $muted, false, 'right');
+
+    $out = imagecreatetruecolor($W, $H);
+    imagecopyresampled($out, $img, 0, 0, 0, 0, $W, $H, $Wp, $Hp);
+    imagedestroy($img);
 
     $tmp = tempnam(sys_get_temp_dir(), 'rial') . '.png';
-    imagepng($img, $tmp);
-    imagedestroy($img);
+    imagepng($out, $tmp);
+    imagedestroy($out);
     return is_file($tmp) ? $tmp : null;
 }
 
@@ -2312,57 +2408,124 @@ function buildNewsCard(array $items): string {
     $t .= priceQuote();
     return $t;
 }
+/** نسخهٔ رنگی برچسب تأثیر خبر (بدون ایموجی، برای رسم داخل تصویر GD) + رنگ پس‌زمینه */
+function newsImpactColored(string $title, string $desc): array {
+    $label = trim(preg_replace('/[\x{1F300}-\x{1FAFF}\x{2600}-\x{27BF}]/u', '', newsImpact($title, $desc)));
+    if (mb_strpos($label, 'بالا') !== false)      { $color = [235, 87, 87]; }
+    elseif (mb_strpos($label, 'متوسط') !== false) { $color = [242, 190, 66]; }
+    else                                          { $color = [110, 150, 220]; }
+    return [$label, $color];
+}
 /**
- * بنر تصویری خفن برای اخبار (سبک مدرن تیره، مشابه ربات‌های حرفه‌ای). عمداً فقط از متن
- * لاتین/عددی داخل تصویر استفاده می‌شود چون فونت‌های GD روی هاست‌های اشتراکی معمولاً حروف
- * فارسی/عربی را به‌درستی نمی‌چسبانند (shaping) و نتیجه بهم‌ریخته می‌شود؛ خود عناوین خبر
- * (فارسی) به‌صورت متن HTML تمیز در پیام بعدی ارسال می‌شوند.
+ * تصویر خفن اخبار: برخلاف نسخهٔ قبلی، عناوین واقعی خبر با فونت فارسی داخل خود تصویر تایپ
+ * می‌شوند (نه فقط در کپشن). این کار با یافتن الگوی «معکوس‌کردن ترتیب کلمات» ممکن شده: GD به
+ * کمک فونت Noto Sans Arabic حروف فارسی مجاور را خودش به‌درستی می‌چسباند، فقط ترتیب کلمات را
+ * معکوس نمی‌کند؛ پس فقط ترتیب کلمات (نه حروف داخل هر کلمه) معکوس می‌شود [faDrawLine].
+ * اگر فونت فارسی در fonts/ موجود نباشد null برمی‌گرداند و caller باید به کارت متنی برگردد.
  */
-function renderNewsBanner(int $count): ?string {
+function renderNewsImage(array $items): ?string {
     if (!function_exists('imagecreatetruecolor')) { return null; }
-    $W = 900; $H = 420;
-    $img = imagecreatetruecolor($W, $H);
+    $faFont = findFaTtf(false); $faFontB = findFaTtf(true);
+    $latFont = findTtf(false); $latFontB = findTtf(true);
+    if (!$faFont || !$faFontB || !$latFont || !$latFontB) { return null; }
+
+    $items = array_slice($items, 0, 4);
+    $n = max(1, count($items));
+    $SS = 3; // سوپرسمپل برای لبه‌های صاف و بدون‌پیکسل
+    $W = 1000; $rowH = 190; $headerH = 150; $footerH = 70;
+    $H = $headerH + $n * $rowH + $footerH;
+    $Wp = $W * $SS; $Hp = $H * $SS;
+
+    $img = imagecreatetruecolor($Wp, $Hp);
     imagealphablending($img, true); imagesavealpha($img, true);
 
-    $bgTop = [46, 14, 66]; $bgBot = [8, 5, 18];
-    for ($y = 0; $y < $H; $y++) {
-        $t = $y / ($H - 1);
+    $bgTop = [40, 14, 62]; $bgBot = [7, 5, 16];
+    for ($y = 0; $y < $Hp; $y++) {
+        $t = $y / ($Hp - 1);
         $c = imagecolorallocate($img,
             (int)round($bgTop[0] + ($bgBot[0] - $bgTop[0]) * $t),
             (int)round($bgTop[1] + ($bgBot[1] - $bgTop[1]) * $t),
             (int)round($bgTop[2] + ($bgBot[2] - $bgTop[2]) * $t));
-        imageline($img, 0, $y, $W, $y, $c);
+        imageline($img, 0, $y, $Wp, $y, $c);
     }
     $accent = imagecolorallocate($img, 255, 111, 97);
     $white  = imagecolorallocate($img, 245, 248, 251);
-    $muted  = imagecolorallocate($img, 197, 188, 214);
+    $muted  = imagecolorallocate($img, 190, 180, 210);
     $faint  = imagecolorallocatealpha($img, 255, 255, 255, 120);
     $panel  = imagecolorallocatealpha($img, 255, 255, 255, 123);
+    $sepCol = imagecolorallocatealpha($img, 255, 255, 255, 105);
     $liveBg = imagecolorallocatealpha($img, 255, 60, 60, 60);
-    $cntBg  = imagecolorallocatealpha($img, 255, 111, 97, 70);
 
-    roundedRect($img, 22, 22, $W - 22, $H - 22, 30, $panel);
-    roundedRectOutline($img, 22, 22, $W - 22, $H - 22, 30, $faint);
-    imagefilledrectangle($img, 22, 22, $W - 22, 28, $accent);
+    roundedRect($img, 22 * $SS, 22 * $SS, $Wp - 22 * $SS, $Hp - 22 * $SS, 30 * $SS, $panel);
+    roundedRectOutline($img, 22 * $SS, 22 * $SS, $Wp - 22 * $SS, $Hp - 22 * $SS, 30 * $SS, $faint);
+    imagefilledrectangle($img, 22 * $SS, 22 * $SS, $Wp - 22 * $SS, 28 * $SS, $accent);
 
-    pill($img, 52, 52, '● LIVE', $liveBg, $white, 20, 'left');
-    cardText($img, 'CRYPTO NEWS', 52, 128, 56, $white, true, 'left');
-    cardText($img, 'Digital Currency Market Updates', 54, 202, 22, $muted, false, 'left');
-    pill($img, $W - 52, 52, $count . ' HEADLINES', $cntBg, $white, 22, 'right');
+    $padX = 52 * $SS;
+    pill($img, $padX, 50 * $SS, '● LIVE', $liveBg, $white, 18 * $SS, 'left');
+    faDrawLine($img, 'اخبار داغ ارز دیجیتال', $faFontB, $latFontB, $Wp - $padX, 100 * $SS, 40 * $SS * 0.7, $white);
+    cardText($img, 'CRYPTO NEWS UPDATE', $padX, 116 * $SS, 18 * $SS, $muted, false, 'left');
+
+    $y = $headerH * $SS;
+    foreach ($items as $idx => $it) {
+        if ($idx > 0) { imageline($img, $padX, $y, $Wp - $padX, $y, $sepCol); }
+
+        // ابتدا شکستن خط عنوان محاسبه می‌شود تا ارتفاع واقعی محتوا بدانیم و بلوک را در وسط
+        // فضای ردیف (rowH) عمودی وسط‌چین کنیم (ریتم یکنواخت برای تیترهای کوتاه/بلند).
+        $lines = faWrapMixed($it['title'], $faFontB, $latFontB, 30 * $SS * 0.7, $Wp - 2 * $padX);
+        $lines = array_slice($lines, 0, 2);
+        $badgeH = 34 * $SS;
+        $contentH = $badgeH + 16 * $SS + count($lines) * 44 * $SS + 14 * $SS + 24 * $SS;
+        $rowTop = $y + max(20 * $SS, (int)(($rowH * $SS - $contentH) / 2));
+
+        [$impactLabel, $impactColor] = newsImpactColored($it['title'], $it['desc']);
+        $badgeBg = imagecolorallocatealpha($img, $impactColor[0], $impactColor[1], $impactColor[2], 70);
+        $bw = faTextWidth($faFont, 16 * $SS * 0.7, $impactLabel) + 28 * $SS;
+        roundedRect($img, (int)($Wp - $padX - $bw), $rowTop, $Wp - $padX, $rowTop + $badgeH, (int)($badgeH / 2), $badgeBg);
+        faDrawLine($img, $impactLabel, $faFont, $latFont, $Wp - $padX - 14 * $SS, $rowTop + $badgeH - 10 * $SS, 16 * $SS * 0.7, $white);
+
+        $rowTop += $badgeH + 16 * $SS;
+        foreach ($lines as $li => $line) {
+            faDrawLine($img, $line, $faFontB, $latFontB, $Wp - $padX, $rowTop + $li * 44 * $SS, 30 * $SS * 0.7, $white);
+        }
+        $rowTop += count($lines) * 44 * $SS + 14 * $SS;
+
+        faDrawLine($img, newsTehranTime($it['pubDate']), $faFont, $latFont, $Wp - $padX, $rowTop, 18 * $SS * 0.7, $muted);
+
+        $y += $rowH * $SS;
+    }
 
     $ts = time();
-    cardText($img, date('d F Y — H:i', $ts) . ' (Tehran)', 52, $H - 58, 20, $muted, false, 'left');
-    cardText($img, '@' . BOT_USERNAME, $W - 52, $H - 58, 20, $muted, false, 'right');
+    [$jy, $jm, $jd] = gregorianToJalali((int)date('Y', $ts), (int)date('n', $ts), (int)date('j', $ts));
+    cardText($img, sprintf('%04d/%02d/%02d %s (Tehran)', $jy, $jm, $jd, date('H:i', $ts)), $padX, $Hp - 50 * $SS, 18 * $SS, $muted, false, 'left');
+    cardText($img, '@' . BOT_USERNAME, $Wp - $padX, $Hp - 50 * $SS, 18 * $SS, $muted, false, 'right');
 
-    $tmp = tempnam(sys_get_temp_dir(), 'news') . '.png';
-    imagepng($img, $tmp);
+    $out = imagecreatetruecolor($W, $H);
+    imagecopyresampled($out, $img, 0, 0, 0, 0, $W, $H, $Wp, $Hp);
     imagedestroy($img);
+
+    $tmp = tempnam(sys_get_temp_dir(), 'newsimg') . '.png';
+    imagepng($out, $tmp);
+    imagedestroy($out);
     return is_file($tmp) ? $tmp : null;
+}
+/** کیبورد لینک هر خبر (یک دکمه به‌ازای هر تیتر) + دکمهٔ سبز افزودن به گروه */
+function newsKeyboard(array $items): array {
+    $rows = [];
+    foreach ($items as $i => $it) {
+        $rows[] = [btnUrl('🔗 ' . mbTruncate($it['title'], 38), $it['link'], 'primary')];
+    }
+    $rows[] = [addToGroupBtnGreen()];
+    return ikb($rows);
 }
 function sendNewsCard($chatId, $replyTo = null): void {
     $items = fetchNews(5);
-    $img = renderNewsBanner(count($items));
-    if ($img) { sendPhotoFile($chatId, $img, '📰 <b>آخرین اخبار داغ ارز دیجیتال</b>', null, $replyTo); @unlink($img); }
+    $img = renderNewsImage($items);
+    if ($img) {
+        sendPhotoFile($chatId, $img, '', $items ? newsKeyboard($items) : addGroupKeyboardGreen(), $replyTo);
+        @unlink($img);
+        return;
+    }
+    // نبود فونت فارسی (fonts/persian.ttf) → برگشت به کارت متنی معمولی، بدون کرش
     sendMessage($chatId, buildNewsCard($items), addGroupKeyboardGreen(), $replyTo);
 }
 
@@ -2468,32 +2631,34 @@ function fngGaugeColor(float $frac): array {
  *  (محدودیت shaping فارسی در GD)؛ جزئیات فارسی در کپشن پیام می‌آید. */
 function renderFearGreedGauge(int $value, string $labelEn): ?string {
     if (!function_exists('imagecreatetruecolor')) { return null; }
+    $SS = 3; // سوپرسمپل: رسم در ابعاد بزرگ‌تر و کوچک‌سازی نرم در پایان برای لبه‌های صاف (رفع پیکسلی‌بودن)
     $W = 900; $H = 620;
-    $img = imagecreatetruecolor($W, $H);
+    $Wp = $W * $SS; $Hp = $H * $SS;
+    $img = imagecreatetruecolor($Wp, $Hp);
     imagealphablending($img, true); imagesavealpha($img, true);
 
     $bgTop = [12, 16, 26]; $bgBot = [4, 6, 12];
-    for ($y = 0; $y < $H; $y++) {
-        $t = $y / ($H - 1);
+    for ($y = 0; $y < $Hp; $y++) {
+        $t = $y / ($Hp - 1);
         $c = imagecolorallocate($img,
             (int)round($bgTop[0] + ($bgBot[0] - $bgTop[0]) * $t),
             (int)round($bgTop[1] + ($bgBot[1] - $bgTop[1]) * $t),
             (int)round($bgTop[2] + ($bgBot[2] - $bgTop[2]) * $t));
-        imageline($img, 0, $y, $W, $y, $c);
+        imageline($img, 0, $y, $Wp, $y, $c);
     }
     $white = imagecolorallocate($img, 245, 248, 251);
     $muted = imagecolorallocate($img, 150, 161, 176);
     $faint = imagecolorallocatealpha($img, 255, 255, 255, 120);
     $panel = imagecolorallocatealpha($img, 255, 255, 255, 123);
 
-    roundedRect($img, 22, 22, $W - 22, $H - 22, 30, $panel);
-    roundedRectOutline($img, 22, 22, $W - 22, $H - 22, 30, $faint);
+    roundedRect($img, 22 * $SS, 22 * $SS, $Wp - 22 * $SS, $Hp - 22 * $SS, 30 * $SS, $panel);
+    roundedRectOutline($img, 22 * $SS, 22 * $SS, $Wp - 22 * $SS, $Hp - 22 * $SS, 30 * $SS, $faint);
 
-    cardText($img, 'Fear & Greed Index', (int)($W / 2), 44, 36, $white, true, 'center');
-    cardText($img, strtoupper($labelEn), (int)($W / 2), 92, 22, $muted, false, 'center');
+    cardText($img, 'Fear & Greed Index', (int)($Wp / 2), 44 * $SS, 36 * $SS, $white, true, 'center');
+    cardText($img, strtoupper($labelEn), (int)($Wp / 2), 92 * $SS, 22 * $SS, $muted, false, 'center');
 
-    $cx = (int)($W / 2); $cy = 430; $rOuter = 260; $rInner = 200;
-    $segments = 120;
+    $cx = (int)($Wp / 2); $cy = 430 * $SS; $rOuter = 260 * $SS; $rInner = 200 * $SS;
+    $segments = 160;
     for ($i = 0; $i < $segments; $i++) {
         $f0 = $i / $segments; $f1 = ($i + 1) / $segments;
         $a0 = 180 + $f0 * 180; $a1 = 180 + $f1 * 180;
@@ -2502,7 +2667,7 @@ function renderFearGreedGauge(int $value, string $labelEn): ?string {
         imagefilledarc($img, $cx, $cy, $rOuter * 2, $rOuter * 2, (int)round($a0), (int)round($a1) + 1, $col, IMG_ARC_PIE);
     }
     // برش حلقه: پانچ نیم‌دایرهٔ داخلی با رنگ نزدیک به پس‌زمینهٔ همان ارتفاع تا حلقه (نه دیسک توپر) دیده شود
-    $holeT = $cy / ($H - 1);
+    $holeT = $cy / ($Hp - 1);
     $holeCol = imagecolorallocate($img,
         (int)round($bgTop[0] + ($bgBot[0] - $bgTop[0]) * $holeT),
         (int)round($bgTop[1] + ($bgBot[1] - $bgTop[1]) * $holeT),
@@ -2512,23 +2677,27 @@ function renderFearGreedGauge(int $value, string $labelEn): ?string {
     // عقربه
     $angleDeg = 180 + (max(0, min(100, $value)) / 100) * 180;
     $angleRad = deg2rad($angleDeg);
-    $needleLen = $rInner - 20;
+    $needleLen = $rInner - 20 * $SS;
     $nx = $cx + (int)round(cos($angleRad) * $needleLen);
     $ny = $cy + (int)round(sin($angleRad) * $needleLen);
-    imagesetthickness($img, 6);
+    imagesetthickness($img, 6 * $SS);
     imageline($img, $cx, $cy, $nx, $ny, $white);
     imagesetthickness($img, 1);
-    imagefilledellipse($img, $cx, $cy, 24, 24, $white);
+    imagefilledellipse($img, $cx, $cy, 24 * $SS, 24 * $SS, $white);
 
-    cardText($img, (string)$value, $cx, $cy + 36, 76, $white, true, 'center');
+    cardText($img, (string)$value, $cx, $cy + 36 * $SS, 76 * $SS, $white, true, 'center');
 
     $ts = time();
-    cardText($img, date('d F Y', $ts), $cx, $H - 58, 22, $muted, false, 'center');
-    cardText($img, '@' . BOT_USERNAME, $W - 52, $H - 46, 20, $muted, false, 'right');
+    cardText($img, date('d F Y', $ts), $cx, $Hp - 58 * $SS, 22 * $SS, $muted, false, 'center');
+    cardText($img, '@' . BOT_USERNAME, $Wp - 52 * $SS, $Hp - 46 * $SS, 20 * $SS, $muted, false, 'right');
+
+    $out = imagecreatetruecolor($W, $H);
+    imagecopyresampled($out, $img, 0, 0, 0, 0, $W, $H, $Wp, $Hp);
+    imagedestroy($img);
 
     $tmp = tempnam(sys_get_temp_dir(), 'fng') . '.png';
-    imagepng($img, $tmp);
-    imagedestroy($img);
+    imagepng($out, $tmp);
+    imagedestroy($out);
     return is_file($tmp) ? $tmp : null;
 }
 function buildFearGreedCaption(array $d, ?array $hist = null): string {
