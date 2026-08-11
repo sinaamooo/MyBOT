@@ -426,6 +426,13 @@ function clearState($chatId): void {
 // ==========================================================================
 // 3) هلپرهای تلگرام
 // ==========================================================================
+/**
+ * اگر هاست به api.telegram.org مستقیم دسترسی نداشته باشد (فیلترینگ تلگرام — خیلی از هاست‌های
+ * ایرانی این مشکل را دارند: اتصال TCP برقرار می‌شود ولی هندشیک TLS معلق می‌ماند تا تایم‌اوت)،
+ * از پنل ادمین می‌توانید یک پروکسی HTTP/SOCKS5 ست کنید (مثل <code>socks5://ip:port</code> یا
+ * <code>http://user:pass@ip:port</code>) تا همهٔ درخواست‌های تلگرام از آن رد شوند.
+ */
+function tgProxy(): string { return trim((string) getSetting('tg_proxy', '')); }
 function tgApi(string $method, array $params = []) {
     $url = 'https://api.telegram.org/bot' . BOT_TOKEN . '/' . $method;
     $hasFile = false;
@@ -442,6 +449,8 @@ function tgApi(string $method, array $params = []) {
         CURLOPT_CONNECTTIMEOUT => 10,
         CURLOPT_TIMEOUT        => 40,
     ]);
+    $proxy = tgProxy();
+    if ($proxy !== '') { curl_setopt($ch, CURLOPT_PROXY, $proxy); }
     $res = curl_exec($ch);
     $err = curl_error($ch);
     curl_close($ch);
@@ -506,6 +515,10 @@ function answerCallback($cbId, string $text = '', bool $alert = false) {
 function deleteMessage($chatId, $messageId) {
     return tgApi('deleteMessage', ['chat_id' => $chatId, 'message_id' => $messageId]);
 }
+/**
+ * ارسال عکس؛ اگر ارسال عکس ناموفق بود (مثلاً به‌خاطر تایم‌اوت شبکه/فیلترینگ)، به‌جای سکوت کامل
+ * کپشن را به‌صورت پیام متنی می‌فرستد — تا کاربر حداقل خود اطلاعات را دریافت کند.
+ */
 function sendPhotoFile($chatId, string $filePath, string $caption = '', $keyboard = null, $replyTo = null) {
     $p = [
         'chat_id' => $chatId,
@@ -521,8 +534,10 @@ function sendPhotoFile($chatId, string $filePath, string $caption = '', $keyboar
         $p['caption'] = stripPremiumEmoji($caption);
         $r = tgApi('sendPhoto', $p);
     }
+    if (!$r || empty($r['ok'])) { return sendMessage($chatId, $caption, $keyboard, $replyTo); }
     return $r;
 }
+/** ویرایش عکس پیام؛ اگر ناموفق بود (تایم‌اوت/فیلترینگ)، حداقل متن پیام را ویرایش می‌کند. */
 function editPhotoMedia($chatId, $messageId, string $filePath, string $caption, $keyboard) {
     $send = function (string $cap) use ($chatId, $messageId, $filePath, $keyboard) {
         $media = ['type' => 'photo', 'media' => 'attach://chart', 'caption' => $cap, 'parse_mode' => 'HTML'];
@@ -538,6 +553,7 @@ function editPhotoMedia($chatId, $messageId, string $filePath, string $caption, 
     if (isCustomEmojiError($r) && $caption !== stripPremiumEmoji($caption)) {
         $r = $send(stripPremiumEmoji($caption));
     }
+    if (!$r || empty($r['ok'])) { return editMessageText($chatId, $messageId, $caption, $keyboard); }
     return $r;
 }
 function copyMessage($toChat, $fromChat, $messageId, $keyboard = null) {
@@ -1275,16 +1291,16 @@ function sendConversionCard($chatId, float $qty, string $base, $replyTo = null):
 }
 
 /**
- * کیبورد تایم‌فریم چارت. $showIcon: فقط در اولین ارسال کارت (قبل از هرگونه تغییر چارت) ایموجی
- * پریمیوم ویژهٔ «tfinfo» روی دکمه‌ها نشان داده می‌شود؛ به‌محض تعویض تایم‌فریم (چارت تغییر کرد)
- * کیبورد بعدی بدون این ایموجی ساخته می‌شود (محو می‌شود).
+ * کیبورد تایم‌فریم چارت — فقط متن، بدون ایموجی روی دکمه‌ها (روی برخی کلاینت‌ها آیکون ایموجی
+ * پریمیوم دکمه‌های شیشه‌ای درست نمایش داده نمی‌شد، پس حذف شد). آرگومان $showIcon نگه داشته
+ * شده تا فراخوانی‌های موجود بدون تغییر کار کنند ولی دیگر اثری ندارد.
  */
 function timeframeKeyboard(string $base, string $active, bool $showIcon = false): array {
-    $mk = function (string $tf) use ($base, $active, $showIcon) {
+    $mk = function (string $tf) use ($base, $active) {
         $label = btnLabel('btn_tf_' . $tf);
         $style = ($tf === $active) ? 'success' : 'primary';
         if ($tf === $active) { $label = "• $label •"; }
-        return btn($label, "tf:$base:$tf", $style, $showIcon ? 'tfinfo' : null);
+        return btn($label, "tf:$base:$tf", $style);
     };
     $rows = [
         [$mk('15m'), $mk('30m'), $mk('1h')],
@@ -2314,6 +2330,7 @@ function adminHomeKeyboard(): array {
         [btn('✏️ ویرایش متن‌های ربات', 'ap:tpl', 'primary')],
         [btn('🔘 برچسب دکمه‌ها', 'ap:btn', 'primary')],
         [btn('🔌 مدیریت APIها', 'ap:api', 'primary'), btn('🎨 رنگ چارت', 'ap:chartcolor', 'primary')],
+        [btn('🌐 پروکسی تلگرام', 'ap:tgproxy', 'primary')],
         [btn(emo('bell') . ' پیام همگانی', 'ap:bc', 'primary', 'bell')],
         [btn(emo('admin') . ' ادمین‌ها', 'ap:admins', 'primary', 'admin'),
          btn('🔗 جوین اجباری', 'ap:fj', 'primary')],
@@ -3819,6 +3836,19 @@ function routeState($chatId, $userId, array $state, array $msg, string $text): b
             sendMessage($chatId, pemo('ok') . " آدرس «" . h(apiRegistry()[$key][0]) . "» بروزرسانی شد.", ikb([[backBtn('ap:api', 'primary')]]));
             return true;
 
+        case 'set_tgproxy':
+            if (!isGlobalAdmin($userId)) { clearState($chatId); return true; }
+            $val = trim($text);
+            if ($val !== '' && !preg_match('~^(https?|socks5h?)://~i', $val)) {
+                sendMessage($chatId, emo('no') . " فرمت پروکسی نامعتبر است. با <code>http://</code>, <code>https://</code> یا <code>socks5://</code> شروع کنید. برای حذف پروکسی، فقط یک خط خالی یا «-» بفرستید.");
+                return true;
+            }
+            if ($val === '-') { $val = ''; }
+            setSetting('tg_proxy', $val);
+            clearState($chatId);
+            sendMessage($chatId, pemo('ok') . " پروکسی تلگرام " . ($val !== '' ? 'ذخیره شد.' : 'حذف شد.'), ikb([[backBtn('ap:home', 'primary')]]));
+            return true;
+
         case 'set_chartcolor':
             if (!isGlobalAdmin($userId)) { clearState($chatId); return true; }
             $field = (string)$state['data'];
@@ -4020,6 +4050,30 @@ function handleAdminCallback($chatId, $msgId, $userId, string $data, $cbId): voi
         return;
     }
 
+    // پروکسی تلگرام (برای هاست‌هایی که به api.telegram.org مستقیم دسترسی ندارند)
+    if ($data === 'ap:tgproxy') {
+        $cur = tgProxy();
+        setState($chatId, 'set_tgproxy');
+        $txt = "🌐 <b>پروکسی تلگرام</b>\n" .
+            "اگر ربات روی هاستی است که اتصال مستقیمش به api.telegram.org قطع/فیلتر است " .
+            "(علامتش: خطای «Operation timed out» در لاگ برای setWebhook/getMe/sendPhoto)، " .
+            "یک پروکسی HTTP یا SOCKS5 اینجا بفرستید تا همهٔ درخواست‌های تلگرام از آن رد شود.\n\n" .
+            "فرمت‌های مجاز:\n<code>http://ip:port</code>\n<code>http://user:pass@ip:port</code>\n<code>socks5://ip:port</code>\n\n" .
+            "مقدار فعلی: <code>" . h($cur !== '' ? $cur : '— (خالی، بدون پروکسی)') . "</code>";
+        $rows = [];
+        if ($cur !== '') { $rows[] = [btn('حذف پروکسی', 'ap:tgproxyclear', 'danger')]; }
+        $rows[] = [btn('انصراف', 'ap:home', 'danger')];
+        editMessageText($chatId, $msgId, $txt, ikb($rows));
+        answerCallback($cbId);
+        return;
+    }
+    if ($data === 'ap:tgproxyclear') {
+        setSetting('tg_proxy', '');
+        showAdminPanel($chatId, $msgId);
+        answerCallback($cbId, 'پروکسی حذف شد.');
+        return;
+    }
+
     if ($data === 'ap:quote') {
         $new = getSetting('quote_mode', '0') === '1' ? '0' : '1';
         setSetting('quote_mode', $new);
@@ -4186,6 +4240,18 @@ function runSetup(): void {
         echo "<pre>" . h(json_encode($r, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) . "</pre>";
         return;
     }
+    // ست‌کردن/حذف پروکسی تلگرام از طریق مرورگر (بدون نیاز به وبهوک فعال — برای وقتی که هاست
+    // اصلاً به api.telegram.org دسترسی مستقیم ندارد و ادمین نمی‌تواند پیام به ربات بدهد).
+    if ($mode === 'proxy') {
+        $proxy = trim((string)($_GET['proxy'] ?? ''));
+        if ($proxy !== '' && $proxy !== '-' && !preg_match('~^(https?|socks5h?)://~i', $proxy)) {
+            echo "پروکسی نامعتبر است. باید با http:// ، https:// یا socks5:// شروع شود.";
+            return;
+        }
+        setSetting('tg_proxy', $proxy === '-' ? '' : $proxy);
+        echo "پروکسی تلگرام " . ($proxy !== '' && $proxy !== '-' ? "ذخیره شد: " . h($proxy) : "حذف شد") . "\nحالا دوباره <code>?setup=1&key=...</code> را باز کنید.";
+        return;
+    }
     // ست‌کردن وبهوک
     $url = selfUrl();
     $r = tgApi('setWebhook', [
@@ -4201,7 +4267,15 @@ function runSetup(): void {
     echo "<p><b>آدرس وبهوک:</b> " . h($url) . "</p>";
     echo "<p><b>setWebhook:</b> <pre>" . h(json_encode($r, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) . "</pre></p>";
     echo "<p><b>getMe:</b> <pre>" . h(json_encode($me, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) . "</pre></p>";
-    echo (!empty($r['ok']) ? "<h3 style='color:green'>✅ آماده است!</h3>" : "<h3 style='color:red'>❌ خطا در ست‌کردن وبهوک</h3>");
+    if (empty($r['ok']) || empty($me['ok'])) {
+        echo "<h3 style='color:red'>❌ خطا در ست‌کردن وبهوک</h3>";
+        echo "<p>اگر پاسخ‌ها خالی/null هستند یا در لاگ خطای «Operation timed out» می‌بینید، یعنی این هاست " .
+             "به api.telegram.org دسترسی مستقیم ندارد (فیلترینگ). یک پروکسی HTTP/SOCKS5 تهیه کنید و از این آدرس ست کنید:</p>" .
+             "<pre>" . h($url) . "?setup=proxy&key=" . h(WEBHOOK_SECRET) . "&proxy=socks5://IP:PORT</pre>" .
+             "<p>بعد دوباره همین صفحهٔ setup=1 را باز کنید.</p>";
+    } else {
+        echo "<h3 style='color:green'>✅ آماده است!</h3>";
+    }
     echo "</div>";
 }
 
