@@ -1059,8 +1059,17 @@ function cryptoCompareKlines(string $base, string $interval, int $limit = 70): ?
 }
 /** دریافت کندل با زنجیرهٔ پشتیبان (بایننس → CryptoCompare) تا چارت تقریباً همیشه در دسترس باشد */
 /** کندل از MEXC — API این صرافی هم‌فرمت با بایننس است (همان مسیر/فیلدها/تایم‌فریم‌ها) */
+/**
+ * MEXC رشتهٔ تایم‌فریم یک‌ساعته را «60m» می‌نویسد نه «1h» (بر خلاف بایننس). بدون این تبدیل،
+ * درخواست کندل ۱ساعته/۳ساعته (که از ۱ساعته ساخته می‌شود) برای هر نمادی که فقط در MEXC باشد
+ * (نه بایننس) با اینتروال نامعتبر رد می‌شد و چارت خالی می‌ماند (دیده‌شده در دیباگ‌لاگ: 1h/3h
+ * روی چند ارز chart=no می‌داد ولی 1d همان ارزها کار می‌کرد، چون 1d رشته‌اش در هر دو صرافی یکسان است).
+ */
+function mexcIntervalStr(string $interval): string {
+    return $interval === '1h' ? '60m' : $interval;
+}
 function mexcKlinesRaw(string $symbol, string $interval, int $limit): ?array {
-    $j = httpGet(apiBase('mexc', 'https://api.mexc.com') . '/api/v3/klines?symbol=' . urlencode($symbol) . '&interval=' . urlencode($interval) . '&limit=' . $limit, 12);
+    $j = httpGet(apiBase('mexc', 'https://api.mexc.com') . '/api/v3/klines?symbol=' . urlencode($symbol) . '&interval=' . urlencode(mexcIntervalStr($interval)) . '&limit=' . $limit, 12);
     if (!$j) { return null; }
     $d = json_decode($j, true);
     return isValidKlineList($d) ? $d : null;
