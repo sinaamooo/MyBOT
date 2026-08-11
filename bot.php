@@ -5,12 +5,11 @@
  *   - پرایس‌چکر متصل به Binance (بدون محدودیت ارز) + قیمت تومانی Nobitex
  *   - عکس چارت شمعی (GD) + دکمه‌های شیشه‌ای رنگی تغییر تایم‌فریم
  *   - پنل ادمین کامل (آمار، تعداد گروه‌ها، متن استارت، همگانی، جوین اجباری، مدیریت ادمین)
- *   - مدیریت کامل گروه (قفل‌ها، خوش‌آمد/خداحافظی، ضدفلاد، فیلتر، اخطار/سکوت/بن/اخراج)
  *   - ابزارهای ترون (اطلاعات تراکنش، موجودی ولت، انتقال‌های TRC20) + ولت چندشبکه‌ای تون/بی‌ان‌بی
  *     با ایموجی اختصاصی هر شبکه و اعتبارسنجی محلی آدرس ترون (Base58Check، بدون وابستگی به API خارجی)
  *   - ایموجی و دکمه‌های رنگی + نقل‌قول (blockquote) با تاریخ شمسی
  *   - قالب‌های خفن قیمت دلار/طلای بازار آزاد (tgju) با نشان تغییرات و دامنهٔ سقف/کف
- *   - اخبار روز ارز دیجیتال با /News (RSS)، شاخص ترس و طمع (CoinMarketCap/alternative.me) با کلمهٔ «شاخص»
+ *   - شاخص ترس و طمع (CoinMarketCap/alternative.me) با کلمهٔ «شاخص»
  *   - نقشهٔ لیکویدیتی کوین‌گلس با «لیکویدی <ارز>» یا /liquidy
  *   - تحلیل — پست‌های تحلیلی کامیونیتی TradingView با «تحلیل <ارز>» (دکمه‌های تحلیل بعدی/قبلی)
  *   - پنل ادمین: ویرایش کامل متن‌های ربات/برچسب دکمه‌ها/APIها/رنگ چارت بدون نیاز به ویرایش سورس
@@ -193,8 +192,6 @@ const CMC_API_KEY = '';
 // با دادهٔ عمومی فیوچرز بایننس (سقف/کف نقدینگی از پرایس‌اکشن + فاندینگ‌ریت + نسبت لانگ/شورت)
 // کار می‌کند. اگر این کلید را پر کنید، به‌جای برآورد رایگان از دادهٔ دقیق‌تر Coinglass استفاده می‌شود.
 const COINGLASS_API_KEY = '';
-// فید RSS اخبار ارز دیجیتال (منبع: ارز دیجیتال / ArzDigital)
-const NEWS_RSS_URL = 'https://arzdigital.com/feed/';
 
 // ایموجی اختصاصی هر شبکه در چکر ولت
 const CHAIN_EMOJI = [
@@ -269,31 +266,6 @@ function initDatabase(): void {
             is_active INTEGER DEFAULT 1,
             joined_at TEXT DEFAULT (datetime('now'))
         )",
-        "CREATE TABLE IF NOT EXISTS group_settings(
-            chat_id INTEGER PRIMARY KEY,
-            welcome_text TEXT, goodbye_text TEXT,
-            welcome_on INTEGER DEFAULT 0, goodbye_on INTEGER DEFAULT 0,
-            antiflood_on INTEGER DEFAULT 0, flood_limit INTEGER DEFAULT 6, flood_secs INTEGER DEFAULT 5,
-            warn_limit INTEGER DEFAULT 3, warn_action TEXT DEFAULT 'mute',
-            price_on INTEGER DEFAULT 1, rules TEXT, welcome_reply INTEGER DEFAULT 0
-        )",
-        "CREATE TABLE IF NOT EXISTS locks(
-            chat_id INTEGER, lock_type TEXT,
-            PRIMARY KEY(chat_id, lock_type)
-        )",
-        "CREATE TABLE IF NOT EXISTS warns(
-            chat_id INTEGER, user_id INTEGER, count INTEGER DEFAULT 0,
-            updated_at TEXT DEFAULT (datetime('now')),
-            PRIMARY KEY(chat_id, user_id)
-        )",
-        "CREATE TABLE IF NOT EXISTS filters(
-            chat_id INTEGER, word TEXT,
-            PRIMARY KEY(chat_id, word)
-        )",
-        "CREATE TABLE IF NOT EXISTS flood(
-            chat_id INTEGER, user_id INTEGER, cnt INTEGER DEFAULT 0, ts INTEGER DEFAULT 0,
-            PRIMARY KEY(chat_id, user_id)
-        )",
         "CREATE TABLE IF NOT EXISTS force_join(
             channel TEXT PRIMARY KEY, title TEXT, is_active INTEGER DEFAULT 1
         )",
@@ -313,8 +285,6 @@ function initDatabase(): void {
         )",
     ];
     foreach ($sql as $q) { db()->exec($q); }
-    // مهاجرت سبک برای دیتابیس‌های ساخته‌شده با نسخهٔ قدیمی‌تر (ستون‌های جدید)
-    try { db()->exec("ALTER TABLE group_settings ADD COLUMN welcome_reply INTEGER DEFAULT 0"); } catch (Throwable $e) {}
 
     // ادمین‌های اولیه
     foreach (SUPER_ADMIN_IDS as $sid) {
@@ -399,11 +369,9 @@ function templateRegistry(): array {
         'tpl_dollar'       => 'کارت دلار بازار آزاد',
         'tpl_gold'         => 'کارت طلای ۱۸ عیار',
         'tpl_date'         => 'کارت تاریخ و ساعت',
-        'tpl_news'         => 'کارت اخبار',
         'tpl_feargreed'    => 'کپشن شاخص ترس و طمع',
         'tpl_liquidity'    => 'کپشن لیکویدیتی',
         'tpl_analysis'     => 'کپشن تحلیل تریدینگ‌ویو',
-        'tpl_welcome'      => 'پیام خوش‌آمدگویی گروه (پیش‌فرض سراسری)',
     ];
 }
 /** مقدار فعلی یک قالب: ذخیره‌شده در دیتابیس، وگرنه پیش‌فرض کد */
@@ -433,7 +401,6 @@ function apiRegistry(): array {
         'tronscan'      => ['Tronscan', 'https://apilist.tronscanapi.com'],
         'toncenter'     => ['TON Center', 'https://toncenter.com'],
         'tradingview'   => ['TradingView (تحلیل)', 'https://www.tradingview.com'],
-        'news_rss'      => ['فید اخبار RSS', NEWS_RSS_URL],
     ];
 }
 
@@ -629,35 +596,9 @@ function copyMessage($toChat, $fromChat, $messageId, $keyboard = null) {
     return tgApi('copyMessage', $p);
 }
 
-// مدیریت اعضا
-function restrictMember($chatId, $userId, array $perms, $until = 0) {
-    return tgApi('restrictChatMember', [
-        'chat_id' => $chatId, 'user_id' => $userId,
-        'permissions' => $perms, 'until_date' => $until,
-    ]);
-}
-function banMember($chatId, $userId, $until = 0) {
-    return tgApi('banChatMember', ['chat_id' => $chatId, 'user_id' => $userId, 'until_date' => $until]);
-}
-function unbanMember($chatId, $userId) {
-    return tgApi('unbanChatMember', ['chat_id' => $chatId, 'user_id' => $userId, 'only_if_banned' => true]);
-}
-function promoteMember($chatId, $userId, bool $on = true) {
-    return tgApi('promoteChatMember', [
-        'chat_id' => $chatId, 'user_id' => $userId,
-        'can_manage_chat' => $on, 'can_delete_messages' => $on, 'can_restrict_members' => $on,
-        'can_pin_messages' => $on, 'can_invite_users' => $on,
-    ]);
-}
-function getChatMember($chatId, $userId) {
-    return tgApi('getChatMember', ['chat_id' => $chatId, 'user_id' => $userId]);
-}
 function getChatMemberCount($chatId) {
     $r = tgApi('getChatMemberCount', ['chat_id' => $chatId]);
     return ($r && !empty($r['ok'])) ? (int)$r['result'] : 0;
-}
-function pinMessage($chatId, $messageId) {
-    return tgApi('pinChatMessage', ['chat_id' => $chatId, 'message_id' => $messageId, 'disable_notification' => true]);
 }
 
 // سازنده کیبورد اینلاین
@@ -722,20 +663,6 @@ function isGlobalAdmin($userId): bool {
     $st->execute([$userId]);
     return (bool)$st->fetch();
 }
-function isGroupAdmin($chatId, $userId): bool {
-    static $cache = [];
-    if (in_array((int)$userId, SUPER_ADMIN_IDS, true)) { return true; }
-    $key = $chatId . ':' . $userId;
-    if (isset($cache[$key])) { return $cache[$key]; }
-    $r = getChatMember($chatId, $userId);
-    $ok = false;
-    if ($r && !empty($r['ok'])) {
-        $status = $r['result']['status'] ?? '';
-        $ok = in_array($status, ['administrator', 'creator'], true);
-    }
-    return $cache[$key] = $ok;
-}
-
 // ==========================================================================
 // ثبت کاربر/گروه
 // ==========================================================================
@@ -753,30 +680,6 @@ function setGroupActive($chatId, int $active): void {
     $st = db()->prepare("UPDATE groups SET is_active=? WHERE chat_id=?");
     $st->execute([$active, $chatId]);
 }
-function ensureGroupSettings($chatId): array {
-    $st = db()->prepare("SELECT * FROM group_settings WHERE chat_id=?");
-    $st->execute([$chatId]);
-    $r = $st->fetch();
-    if (!$r) {
-        db()->prepare("INSERT INTO group_settings(chat_id) VALUES(?)")->execute([$chatId]);
-        $st->execute([$chatId]);
-        $r = $st->fetch();
-    }
-    return $r ?: [];
-}
-function updateGroupSetting($chatId, string $col, $val): void {
-    $allowed = ['welcome_text','goodbye_text','welcome_on','goodbye_on','antiflood_on',
-                'flood_limit','flood_secs','warn_limit','warn_action','price_on','rules','welcome_reply'];
-    if (!in_array($col, $allowed, true)) { return; }
-    ensureGroupSettings($chatId);
-    $st = db()->prepare("UPDATE group_settings SET $col=? WHERE chat_id=?");
-    $st->execute([$val, $chatId]);
-}
-function groupPriceOn($chatId): bool {
-    $s = ensureGroupSettings($chatId);
-    return (int)($s['price_on'] ?? 1) === 1;
-}
-
 // ==========================================================================
 // 4) ماژول قیمت (Binance + Nobitex + چارت)
 // ==========================================================================
@@ -2040,160 +1943,12 @@ function sendGoldCard($chatId, float $qty = 1.0, $replyTo = null): void {
 }
 
 // ==========================================================================
-// 5) مدیریت گروه
+// 5) گروه — دستورات اطلاعاتی
 // ==========================================================================
-function lockLabels(): array {
-    return [
-        'link'     => '🔗 لینک',
-        'forward'  => '↪️ فوروارد',
-        'sticker'  => '🎯 استیکر',
-        'photo'    => '🖼 عکس',
-        'video'    => '🎬 ویدیو',
-        'gif'      => '🎞 گیف',
-        'voice'    => '🎙 ویس',
-        'audio'    => '🎵 موزیک',
-        'document' => '📎 فایل',
-        'mention'  => '👤 منشن',
-        'username' => '🆔 یوزرنیم',
-        'viabot'   => '🤖 ربات اینلاین',
-        'poll'     => '📊 نظرسنجی',
-        'emoji'    => '😀 ایموجی پریمیوم',
-        'contact'  => '📇 مخاطب',
-        'location' => '📍 موقعیت',
-    ];
-}
-function lockPersianNames(): array {
-    return [
-        'لینک'=>'link','فوروارد'=>'forward','استیکر'=>'sticker','عکس'=>'photo','ویدیو'=>'video','فیلم'=>'video',
-        'گیف'=>'gif','ویس'=>'voice','موزیک'=>'audio','فایل'=>'document','منشن'=>'mention','یوزرنیم'=>'username',
-        'ربات'=>'viabot','نظرسنجی'=>'poll','ایموجی'=>'emoji','مخاطب'=>'contact','موقعیت'=>'location','لوکیشن'=>'location',
-    ];
-}
-function lockList($chatId): array {
-    static $cache = [];
-    if (isset($cache[$chatId])) { return $cache[$chatId]; }
-    $st = db()->prepare("SELECT lock_type FROM locks WHERE chat_id=?");
-    $st->execute([$chatId]);
-    $out = [];
-    foreach ($st->fetchAll() as $r) { $out[$r['lock_type']] = 1; }
-    return $cache[$chatId] = $out;
-}
-function isLocked($chatId, string $type): bool {
-    $l = lockList($chatId);
-    return isset($l[$type]);
-}
-function setLock($chatId, string $type, bool $on): void {
-    if ($on) {
-        db()->prepare("INSERT OR IGNORE INTO locks(chat_id,lock_type) VALUES(?,?)")->execute([$chatId, $type]);
-    } else {
-        db()->prepare("DELETE FROM locks WHERE chat_id=? AND lock_type=?")->execute([$chatId, $type]);
-    }
-}
-
-function msgHasEntityType(array $msg, string $type): bool {
-    foreach (['entities', 'caption_entities'] as $ek) {
-        if (!empty($msg[$ek])) {
-            foreach ($msg[$ek] as $e) { if (($e['type'] ?? '') === $type) { return true; } }
-        }
-    }
-    return false;
-}
-function msgViolatesLock(array $msg, string $type): bool {
-    $text = $msg['text'] ?? ($msg['caption'] ?? '');
-    switch ($type) {
-        case 'link':
-            if (msgHasEntityType($msg, 'url') || msgHasEntityType($msg, 'text_link')) { return true; }
-            return (bool)preg_match('~(https?://|www\.|t\.me/|telegram\.me/|@[A-Za-z0-9_]{4,})~i', $text);
-        case 'forward':
-            return isset($msg['forward_origin']) || isset($msg['forward_from']) ||
-                   isset($msg['forward_from_chat']) || isset($msg['forward_sender_name']);
-        case 'sticker':  return isset($msg['sticker']);
-        case 'photo':    return isset($msg['photo']);
-        case 'video':    return isset($msg['video']) || isset($msg['video_note']);
-        case 'gif':      return isset($msg['animation']);
-        case 'voice':    return isset($msg['voice']);
-        case 'audio':    return isset($msg['audio']);
-        case 'document': return isset($msg['document']) && !isset($msg['animation']);
-        case 'mention':  return msgHasEntityType($msg, 'mention') || msgHasEntityType($msg, 'text_mention');
-        case 'username': return (bool)preg_match('/@[A-Za-z0-9_]{4,}/', $text);
-        case 'viabot':   return isset($msg['via_bot']);
-        case 'poll':     return isset($msg['poll']);
-        case 'emoji':    return msgHasEntityType($msg, 'custom_emoji');
-        case 'contact':  return isset($msg['contact']);
-        case 'location': return isset($msg['location']) || isset($msg['venue']);
-    }
-    return false;
-}
-function enforceLocks($chatId, array $msg): bool {
-    $locks = lockList($chatId);
-    if (!$locks) { return false; }
-    foreach (array_keys($locks) as $t) {
-        if (msgViolatesLock($msg, $t)) {
-            deleteMessage($chatId, $msg['message_id']);
-            return true;
-        }
-    }
-    return false;
-}
-function enforceFlood($chatId, array $msg): bool {
-    $s = ensureGroupSettings($chatId);
-    if ((int)($s['antiflood_on'] ?? 0) !== 1) { return false; }
-    $uid = $msg['from']['id'];
-    $limit = (int)($s['flood_limit'] ?? 6);
-    $secs  = (int)($s['flood_secs'] ?? 5);
-    $now = time();
-    $st = db()->prepare("SELECT cnt, ts FROM flood WHERE chat_id=? AND user_id=?");
-    $st->execute([$chatId, $uid]);
-    $row = $st->fetch();
-    if (!$row || ($now - (int)$row['ts']) > $secs) {
-        db()->prepare("INSERT INTO flood(chat_id,user_id,cnt,ts) VALUES(?,?,1,?)
-                       ON CONFLICT(chat_id,user_id) DO UPDATE SET cnt=1, ts=?")->execute([$chatId, $uid, $now, $now]);
-        return false;
-    }
-    $cnt = (int)$row['cnt'] + 1;
-    db()->prepare("UPDATE flood SET cnt=? WHERE chat_id=? AND user_id=?")->execute([$cnt, $chatId, $uid]);
-    if ($cnt > $limit) {
-        // سکوت ۲ دقیقه‌ای + حذف
-        restrictMember($chatId, $uid, ['can_send_messages' => false], $now + 120);
-        deleteMessage($chatId, $msg['message_id']);
-        db()->prepare("UPDATE flood SET cnt=0, ts=? WHERE chat_id=? AND user_id=?")->execute([$now, $chatId, $uid]);
-        sendMessage($chatId, pemo('shield') . " کاربر به دلیل فلاد ۲ دقیقه سکوت شد.");
-        return true;
-    }
-    return false;
-}
-function enforceFilters($chatId, array $msg): bool {
-    $text = $msg['text'] ?? ($msg['caption'] ?? '');
-    if ($text === '') { return false; }
-    $st = db()->prepare("SELECT word FROM filters WHERE chat_id=?");
-    $st->execute([$chatId]);
-    $rows = $st->fetchAll();
-    if (!$rows) { return false; }
-    $low = mb_strtolower($text);
-    foreach ($rows as $r) {
-        if (mb_strpos($low, mb_strtolower($r['word'])) !== false) {
-            deleteMessage($chatId, $msg['message_id']);
-            return true;
-        }
-    }
-    return false;
-}
-
-function mentionUser(array $u): string {
-    $name = trim(($u['first_name'] ?? '') . ' ' . ($u['last_name'] ?? ''));
-    if ($name === '') { $name = 'کاربر'; }
-    return '<a href="tg://user?id=' . $u['id'] . '">' . h($name) . '</a>';
-}
-
-/** پردازش دستورات مدیریتی گروه. اگر true برگرداند یعنی پیام مصرف شد. */
-function handleGroupCommand($chatId, array $msg, string $text, bool $isAdmin): bool {
-    $reply = $msg['reply_to_message'] ?? null;
-    $target = $reply['from'] ?? null;
+/** دستورات اطلاعاتی گروه (شاخص ترس‌وطمع/لیست ارزها/لیکویدیتی) — بدون نیاز به ادمین. */
+function handleGroupInfoCommand($chatId, string $text): bool {
     $lower = mb_strtolower($text);
     $first = preg_split('/\s+/u', $text)[0] ?? $text;
-
-    // اخبار / شاخص ترس‌وطمع / لیست ارزها / لیکویدیتی
-    if ($lower === '/news' || strpos($lower, '/news@') === 0) { sendNewsCard($chatId); return true; }
     if ($lower === '/feargreed' || $lower === '/fng') { sendFearGreedCard($chatId); return true; }
     if ($first === '/list' || strpos(mb_strtolower($first), '/list@') === 0) { sendSupportedList($chatId); return true; }
     if ($first === '/liquidy' || $first === '/liquidity' || strpos(mb_strtolower($first), '/liquidy@') === 0) {
@@ -2202,255 +1957,19 @@ function handleGroupCommand($chatId, array $msg, string $text, bool $isAdmin): b
         sendLiquidityCard($chatId, $liqBase);
         return true;
     }
-
-    // پنل تنظیمات گروه
-    if (in_array($lower, ['پنل', 'تنظیمات', 'settings', '/settings', '/panel'], true)) {
-        if (!$isAdmin) { return true; }
-        sendMessage($chatId, pemo('shield') . " <b>پنل مدیریت گروه</b>\nبرای روشن/خاموش کردن هر گزینه ضربه بزنید:", groupSettingsKeyboard($chatId));
-        return true;
-    }
-    // قوانین
-    if (in_array($lower, ['قوانین', 'rules', '/rules'], true)) {
-        $s = ensureGroupSettings($chatId);
-        $r = trim((string)($s['rules'] ?? ''));
-        sendMessage($chatId, $r !== '' ? (pemo('star') . " <b>قوانین گروه</b>\n" . quoteExpandable(h($r))) : "قوانینی ثبت نشده است.");
-        return true;
-    }
-    // ثبت قوانین: «تنظیم قوانین متن...»
-    if (mb_strpos($text, 'تنظیم قوانین') === 0) {
-        if (!$isAdmin) { return true; }
-        $r = trim(mb_substr($text, mb_strlen('تنظیم قوانین')));
-        updateGroupSetting($chatId, 'rules', $r);
-        sendMessage($chatId, pemo('ok') . " قوانین ثبت شد.");
-        return true;
-    }
-    // قفل/بازکردن با نام فارسی: «قفل لینک» / «باز کردن لینک»
-    if (preg_match('/^(قفل|باز کردن|بازکردن|باز)\s+(\S+)/u', $text, $m)) {
-        if (!$isAdmin) { return true; }
-        $names = lockPersianNames();
-        $key = $names[$m[2]] ?? null;
-        if ($key) {
-            $on = ($m[1] === 'قفل');
-            setLock($chatId, $key, $on);
-            sendMessage($chatId, ($on ? pemo('lock') . " قفل شد: " : pemo('unlock') . " باز شد: ") . lockLabels()[$key]);
-            return true;
-        }
-    }
-
-    // دستورات نیازمند ریپلای (بن/اخراج/سکوت/آزاد/اخطار/سنجاق/ترفیع/تنزل)
-    if (in_array($lower, ['اخطار','warn','/warn','بن','ban','/ban','اخراج','kick','/kick','سکوت','mute','/mute',
-                          'آزاد','unmute','/unmute','حذف اخطار','سنجاق','pin','/pin','ترفیع','promote','تنزل','demote'], true)
-        || in_array($first, ['اخطار','warn','بن','ban','اخراج','kick','سکوت','mute','آزاد','unmute','سنجاق','pin','ترفیع','promote','تنزل','demote'], true)) {
-
-        // آیدی بدون نیاز به ادمین
-        if (!$isAdmin) { return true; }
-        if (!$reply || !$target) {
-            sendMessage($chatId, emo('no') . " روی پیام کاربر موردنظر ریپلای کنید.");
-            return true;
-        }
-        $tid = $target['id'];
-        if (isGroupAdmin($chatId, $tid)) {
-            sendMessage($chatId, emo('no') . " این کاربر ادمین است.");
-            return true;
-        }
-        // بن
-        if (in_array($first, ['بن','ban'], true) || in_array($lower, ['بن','ban','/ban'], true)) {
-            banMember($chatId, $tid);
-            sendMessage($chatId, pemo('shield') . " " . mentionUser($target) . " از گروه بن شد.");
-            return true;
-        }
-        // اخراج (بن و آنبن)
-        if (in_array($first, ['اخراج','kick'], true)) {
-            banMember($chatId, $tid); unbanMember($chatId, $tid);
-            sendMessage($chatId, pemo('shield') . " " . mentionUser($target) . " اخراج شد.");
-            return true;
-        }
-        // سکوت [دقیقه]
-        if (in_array($first, ['سکوت','mute'], true)) {
-            $parts = preg_split('/\s+/u', $text);
-            $min = isset($parts[1]) && is_numeric($parts[1]) ? (int)$parts[1] : 0;
-            $until = $min > 0 ? time() + $min * 60 : 0;
-            restrictMember($chatId, $tid, [
-                'can_send_messages' => false, 'can_send_audios' => false, 'can_send_documents' => false,
-                'can_send_photos' => false, 'can_send_videos' => false, 'can_send_other_messages' => false,
-            ], $until);
-            $suffix = $min > 0 ? " به مدت $min دقیقه" : "";
-            sendMessage($chatId, pemo('lock') . " " . mentionUser($target) . " سکوت شد$suffix.");
-            return true;
-        }
-        // آزاد
-        if (in_array($first, ['آزاد','unmute'], true)) {
-            restrictMember($chatId, $tid, [
-                'can_send_messages' => true, 'can_send_audios' => true, 'can_send_documents' => true,
-                'can_send_photos' => true, 'can_send_videos' => true, 'can_send_other_messages' => true,
-                'can_add_web_page_previews' => true, 'can_send_polls' => true,
-            ]);
-            sendMessage($chatId, pemo('unlock') . " " . mentionUser($target) . " آزاد شد.");
-            return true;
-        }
-        // اخطار
-        if (in_array($first, ['اخطار','warn'], true)) {
-            return doWarn($chatId, $target, $isAdmin);
-        }
-        // سنجاق
-        if (in_array($first, ['سنجاق','pin'], true)) {
-            pinMessage($chatId, $reply['message_id']);
-            sendMessage($chatId, pemo('star') . " پیام سنجاق شد.");
-            return true;
-        }
-        // ترفیع
-        if (in_array($first, ['ترفیع','promote'], true)) {
-            promoteMember($chatId, $tid, true);
-            sendMessage($chatId, pemo('admin') . " " . mentionUser($target) . " ادمین شد.");
-            return true;
-        }
-        // تنزل
-        if (in_array($first, ['تنزل','demote'], true)) {
-            promoteMember($chatId, $tid, false);
-            sendMessage($chatId, pemo('ok') . " " . mentionUser($target) . " تنزل یافت.");
-            return true;
-        }
-    }
-
-    // حذف اخطار
-    if (in_array($lower, ['حذف اخطار','unwarn','رفع اخطار'], true)) {
-        if (!$isAdmin) { return true; }
-        if (!$reply || !$target) { sendMessage($chatId, emo('no') . " روی پیام کاربر ریپلای کنید."); return true; }
-        db()->prepare("UPDATE warns SET count=MAX(0,count-1) WHERE chat_id=? AND user_id=?")->execute([$chatId, $target['id']]);
-        sendMessage($chatId, pemo('ok') . " یک اخطار حذف شد.");
-        return true;
-    }
-    // حذف پیام ریپلای‌شده
-    if (in_array($lower, ['حذف','del','/del'], true)) {
-        if (!$isAdmin) { return true; }
-        if ($reply) { deleteMessage($chatId, $reply['message_id']); }
-        deleteMessage($chatId, $msg['message_id']);
-        return true;
-    }
-    // آیدی
-    if (in_array($lower, ['ایدی','آیدی','id','/id'], true)) {
-        $u = $target ?: $msg['from'];
-        sendMessage($chatId, pemo('people') . " آیدی " . mentionUser($u) . ": <code>" . $u['id'] . "</code>");
-        return true;
-    }
     return false;
 }
 
-function doWarn($chatId, array $target, bool $isAdmin): bool {
-    $tid = $target['id'];
-    $s = ensureGroupSettings($chatId);
-    $limit = (int)($s['warn_limit'] ?? 3);
-    $action = $s['warn_action'] ?? 'mute';
-    db()->prepare("INSERT INTO warns(chat_id,user_id,count) VALUES(?,?,1)
-                   ON CONFLICT(chat_id,user_id) DO UPDATE SET count=count+1, updated_at=datetime('now')")->execute([$chatId, $tid]);
-    $st = db()->prepare("SELECT count FROM warns WHERE chat_id=? AND user_id=?");
-    $st->execute([$chatId, $tid]);
-    $cnt = (int)($st->fetch()['count'] ?? 1);
-    if ($cnt >= $limit) {
-        if ($action === 'ban') {
-            banMember($chatId, $tid);
-            sendMessage($chatId, pemo('shield') . " " . mentionUser($target) . " به دلیل $limit اخطار بن شد.");
-        } else {
-            restrictMember($chatId, $tid, ['can_send_messages' => false]);
-            sendMessage($chatId, pemo('lock') . " " . mentionUser($target) . " به دلیل $limit اخطار سکوت شد.");
-        }
-        db()->prepare("UPDATE warns SET count=0 WHERE chat_id=? AND user_id=?")->execute([$chatId, $tid]);
-    } else {
-        sendMessage($chatId, pemo('bell') . " اخطار به " . mentionUser($target) . " ($cnt از $limit)");
-    }
-    return true;
-}
-
-/** نام فارسیِ بدون ایموجی هر قفل (برای پنل مدیریت گروه که فقط باید متنی باشد) */
-function lockLabelsPlain(): array {
-    return [
-        'link' => 'لینک', 'forward' => 'فوروارد', 'sticker' => 'استیکر', 'photo' => 'عکس',
-        'video' => 'ویدیو', 'gif' => 'گیف', 'voice' => 'ویس', 'audio' => 'موزیک',
-        'document' => 'فایل', 'mention' => 'منشن', 'username' => 'یوزرنیم', 'viabot' => 'ربات اینلاین',
-        'poll' => 'نظرسنجی', 'emoji' => 'ایموجی پریمیوم', 'contact' => 'مخاطب', 'location' => 'موقعیت',
-    ];
-}
-/** پنل مدیریت گروه — فقط متن، بدون هیچ ایموجی (نه یونیکد و نه پریمیوم) روی دکمه‌ها.
- *  همیشه مستقیم از دیتابیس می‌خواند (نه از کش استاتیک lockList) تا بعد از هر تغییر تازه باشد. */
-function groupSettingsKeyboard($chatId): array {
-    $st = db()->prepare("SELECT lock_type FROM locks WHERE chat_id=?");
-    $st->execute([$chatId]);
-    $locks = [];
-    foreach ($st->fetchAll() as $r) { $locks[$r['lock_type']] = 1; }
-    $s = ensureGroupSettings($chatId);
-    $rows = [];
-    $tmp = [];
-    foreach (lockLabelsPlain() as $key => $lbl) {
-        $on = isset($locks[$key]);
-        $tmp[] = btn(($on ? 'قفل: ' : 'باز: ') . $lbl, "gs:lock:$key", $on ? 'success' : 'danger');
-        if (count($tmp) === 2) { $rows[] = $tmp; $tmp = []; }
-    }
-    if ($tmp) { $rows[] = $tmp; }
-    $wc = (int)($s['welcome_on'] ?? 0);
-    $wr = (int)($s['welcome_reply'] ?? 0);
-    $af = (int)($s['antiflood_on'] ?? 0);
-    $pr = (int)($s['price_on'] ?? 1);
-    $rows[] = [
-        btn('خوش‌آمد: ' . ($wc ? 'روشن' : 'خاموش'), 'gs:welcome', $wc ? 'success' : 'danger'),
-        btn('ضدفلاد: ' . ($af ? 'روشن' : 'خاموش'), 'gs:flood', $af ? 'success' : 'danger'),
-    ];
-    $rows[] = [
-        btn('قیمت‌گیری: ' . ($pr ? 'روشن' : 'خاموش'), 'gs:price', $pr ? 'success' : 'danger'),
-        btn('پاک‌سازی قفل‌ها', 'gs:clearlocks', 'primary'),
-    ];
-    $rows[] = [
-        btn('ریپلای خوش‌آمد: ' . ($wr ? 'روشن' : 'خاموش'), 'gs:welcomereply', $wr ? 'success' : 'danger'),
-        btn('ویرایش پیام خوش‌آمد', 'gs:welcometext', 'primary'),
-    ];
-    $rows[] = [btn('بستن', 'x', 'danger')];
-    return ikb($rows);
-}
-/** نگهداشته‌شده برای سازگاری با فراخوانی‌های قبلی؛ اکنون معادل groupSettingsKeyboard است. */
-function freshGroupSettingsKeyboard($chatId): array { return groupSettingsKeyboard($chatId); }
-
-const DEFAULT_TPL_WELCOME = "{{pe:wave}} خوش آمدی {name} عزیز به {group}!";
-// اعضای جدید / خروج
-/**
- * پیام خوش‌آمدگویی: از قالب اختصاصی همان گروه (اگر تنظیم شده) وگرنه قالب سراسری پنل ادمین
- * (tpl_welcome) وگرنه پیش‌فرض کد استفاده می‌کند — پس هم از پنل ادمین (سراسری) و هم از پنل
- * مدیریت گروه (اختصاصی) قابل‌ویرایش است و از {{pe:key}} و {{quote}} پشتیبانی می‌کند.
- * اگر «ریپلای روی پیام کاربر» در تنظیمات گروه روشن باشد، روی پیام سرویسی ورود عضو ریپلای می‌شود.
- */
-function handleNewMembers($chatId, array $chat, array $members, $serviceMsgId = null): void {
+/** پیام کوتاه وقتی ربات به یک گروه اضافه می‌شود. */
+function handleNewMembers($chatId, array $chat, array $members): void {
     $meBot = false;
     foreach ($members as $m) {
         if (!empty($m['is_bot']) && ($m['username'] ?? '') !== '' && isBotSelf($m)) { $meBot = true; }
     }
     registerGroup($chat);
-    ensureGroupSettings($chatId);
     if ($meBot) {
-        sendMessage($chatId, pemo('wave') . " سلام! من اضافه شدم.\nبرای مدیریت، مرا <b>ادمین</b> کنید و <code>پنل</code> را بفرستید.\nاعضا می‌توانند نماد ارز (مثل <code>btc</code>) بفرستند تا قیمت بگیرند.");
-        return;
+        sendMessage($chatId, pemo('wave') . " سلام! من اضافه شدم.\nاعضا می‌توانند نماد ارز (مثل <code>btc</code>) بفرستند تا قیمت بگیرند.");
     }
-    $s = ensureGroupSettings($chatId);
-    if ((int)($s['welcome_on'] ?? 0) !== 1) { return; }
-    $tpl = trim((string)($s['welcome_text'] ?? ''));
-    if ($tpl === '') { $tpl = getTemplate('tpl_welcome', DEFAULT_TPL_WELCOME); }
-    $count = getChatMemberCount($chatId);
-    $replyTo = ((int)($s['welcome_reply'] ?? 0) === 1) ? $serviceMsgId : null;
-    foreach ($members as $m) {
-        if (isBotSelf($m)) { continue; }
-        $txt = renderTemplate($tpl, [
-            '{name}'  => mentionUser($m),
-            '{group}' => h($chat['title'] ?? ''),
-            '{count}' => (string)$count,
-        ]);
-        $txt .= "\n" . quoteBlock(pe('date') . ' ' . jalaliDateLine());
-        sendMessage($chatId, $txt, null, $replyTo);
-    }
-}
-function handleLeftMember($chatId, array $member): void {
-    $s = ensureGroupSettings($chatId);
-    if ((int)($s['goodbye_on'] ?? 0) !== 1) { return; }
-    if (isBotSelf($member)) { return; }
-    $tpl = trim((string)($s['goodbye_text'] ?? ''));
-    if ($tpl === '') { $tpl = pemo('wave') . " {name} گروه را ترک کرد."; }
-    sendMessage($chatId, strtr($tpl, ['{name}' => mentionUser($member)]));
 }
 function isBotSelf(array $u): bool {
     static $selfId = null;
@@ -3003,189 +2522,8 @@ function sendWalletCard($chatId, string $chain, string $address, $replyTo = null
 }
 
 // ==========================================================================
-// 7‑ب) قابلیت‌های جدید: اخبار / شاخص ترس‌وطمع / لیکویدیتی / گیفت پورتال / تحلیل AI
+// 7‑ب) قابلیت‌های جدید: شاخص ترس‌وطمع / لیکویدیتی / تحلیل
 // ==========================================================================
-
-// --------------------------------------------------------------------------
-// اخبار روز ارز دیجیتال (RSS)
-// --------------------------------------------------------------------------
-/** پارسر سبک RSS با ریجکس (بدون وابستگی به افزونهٔ SimpleXML/DOM، برای سازگاری با هاست‌های اشتراکی) */
-function rssTag(string $block, string $tag): string {
-    if (!preg_match('/<' . $tag . '\b[^>]*>(.*?)<\/' . $tag . '>/is', $block, $m)) { return ''; }
-    $v = trim($m[1]);
-    if (preg_match('/^<!\[CDATA\[(.*)\]\]>$/is', $v, $c)) { $v = trim($c[1]); }
-    return trim(html_entity_decode(strip_tags($v), ENT_QUOTES, 'UTF-8'));
-}
-function parseRssItems(string $xml, int $limit = 5): array {
-    $items = [];
-    if (!preg_match_all('/<item\b[^>]*>(.*?)<\/item>/is', $xml, $m)) { return []; }
-    foreach ($m[1] as $block) {
-        if (count($items) >= $limit) { break; }
-        $title = rssTag($block, 'title');
-        $link  = rssTag($block, 'link');
-        if ($title === '' || $link === '') { continue; }
-        $items[] = ['title' => $title, 'link' => $link, 'pubDate' => rssTag($block, 'pubDate'), 'desc' => rssTag($block, 'description')];
-    }
-    return $items;
-}
-function fetchNews(int $limit = 5): array {
-    $xml = httpGet(apiBase('news_rss', NEWS_RSS_URL), 15);
-    return $xml ? parseRssItems($xml, $limit) : [];
-}
-/** تخمین میزان تأثیرگذاری خبر بر بازار بر اساس کلیدواژه‌های حساس (بدون نیاز به API پولی) */
-function newsImpact(string $title, string $desc): string {
-    $text = mb_strtolower($title . ' ' . $desc, 'UTF-8');
-    $high = ['sec','etf','فدرال رزرو','نرخ بهره','هک','ممنوعیت','قانون','رگولات','هالوینگ','halving',
-             'حمله','بحران','ورشکست','سقوط','ریزش','رکورد','بلک‌راک','blackrock','cme'];
-    foreach ($high as $k) { if (mb_strpos($text, $k) !== false) { return '🔥 تأثیر بالا'; } }
-    $mid = ['صرافی','exchange','آپدیت','بروزرسانی','آپگرید','همکاری','سرمایه‌گذاری','لیست شدن','لیستینگ'];
-    foreach ($mid as $k) { if (mb_strpos($text, $k) !== false) { return '📊 تأثیر متوسط'; } }
-    return '📰 خبری';
-}
-/** تبدیل pubDate خبر (RFC2822) به ساعت/تاریخ تهران؛ در نبود تاریخ معتبر، اکنون را برمی‌گرداند */
-function newsTehranTime(string $pubDate): string {
-    $ts = $pubDate !== '' ? strtotime($pubDate) : false;
-    if ($ts === false) { $ts = time(); }
-    [$jy, $jm, $jd] = gregorianToJalali((int)date('Y', $ts), (int)date('n', $ts), (int)date('j', $ts));
-    return date('H:i', $ts) . ' — ' . sprintf('%04d/%02d/%02d', $jy, $jm, $jd);
-}
-const DEFAULT_TPL_NEWS = "🔸 <b>{title}</b>\n┨≡ {impact}\n┚≡ {{pe:clock}} {time} (تهران)\n🔗 <a href=\"{link}\">مشاهده خبر کامل</a>\n";
-function buildNewsCard(array $items): string {
-    $t = "📰 ✨ <b>اخبار داغ ارز دیجیتال</b> ✨ 📰\n\n";
-    if (!$items) {
-        $t .= emo('no') . " در حال حاضر خبری دریافت نشد؛ کمی بعد دوباره تلاش کنید.";
-        return $t;
-    }
-    $tpl = getTemplate('tpl_news', DEFAULT_TPL_NEWS);
-    foreach ($items as $it) {
-        $t .= renderTemplate($tpl, [
-            '{title}' => h($it['title']), '{impact}' => newsImpact($it['title'], $it['desc']),
-            '{time}' => newsTehranTime($it['pubDate']), '{link}' => h($it['link']),
-        ]) . "\n";
-    }
-    $t .= priceQuote();
-    return $t;
-}
-/** نسخهٔ رنگی برچسب تأثیر خبر (بدون ایموجی، برای رسم داخل تصویر GD) + رنگ پس‌زمینه */
-function newsImpactColored(string $title, string $desc): array {
-    $label = trim(preg_replace('/[\x{1F300}-\x{1FAFF}\x{2600}-\x{27BF}]/u', '', newsImpact($title, $desc)));
-    if (mb_strpos($label, 'بالا') !== false)      { $color = [235, 87, 87]; }
-    elseif (mb_strpos($label, 'متوسط') !== false) { $color = [242, 190, 66]; }
-    else                                          { $color = [110, 150, 220]; }
-    return [$label, $color];
-}
-/**
- * تصویر خفن اخبار: برخلاف نسخهٔ قبلی، عناوین واقعی خبر با فونت فارسی داخل خود تصویر تایپ
- * می‌شوند (نه فقط در کپشن). این کار با یافتن الگوی «معکوس‌کردن ترتیب کلمات» ممکن شده: GD به
- * کمک فونت فارسی وزیرمتن حروف فارسی مجاور را خودش به‌درستی می‌چسباند، فقط ترتیب کلمات را
- * معکوس نمی‌کند؛ پس فقط ترتیب کلمات (نه حروف داخل هر کلمه) معکوس می‌شود [faDrawLine].
- * اگر فونت فارسی در fonts/ موجود نباشد null برمی‌گرداند و caller باید به کارت متنی برگردد.
- */
-function renderNewsImage(array $items): ?string {
-    if (!function_exists('imagecreatetruecolor')) { return null; }
-    $faFont = findFaTtf(false); $faFontB = findFaTtf(true);
-    $latFont = findTtf(false); $latFontB = findTtf(true);
-    if (!$faFont || !$faFontB || !$latFont || !$latFontB) { return null; }
-
-    $items = array_slice($items, 0, 4);
-    $n = max(1, count($items));
-    $SS = 3; // سوپرسمپل برای لبه‌های صاف و بدون‌پیکسل
-    $W = 1000; $rowH = 190; $headerH = 150; $footerH = 70;
-    $H = $headerH + $n * $rowH + $footerH;
-    $Wp = $W * $SS; $Hp = $H * $SS;
-
-    $img = imagecreatetruecolor($Wp, $Hp);
-    imagealphablending($img, true); imagesavealpha($img, true);
-
-    $bgTop = [40, 14, 62]; $bgBot = [7, 5, 16];
-    for ($y = 0; $y < $Hp; $y++) {
-        $t = $y / ($Hp - 1);
-        $c = imagecolorallocate($img,
-            (int)round($bgTop[0] + ($bgBot[0] - $bgTop[0]) * $t),
-            (int)round($bgTop[1] + ($bgBot[1] - $bgTop[1]) * $t),
-            (int)round($bgTop[2] + ($bgBot[2] - $bgTop[2]) * $t));
-        imageline($img, 0, $y, $Wp, $y, $c);
-    }
-    $accent = imagecolorallocate($img, 255, 111, 97);
-    $white  = imagecolorallocate($img, 245, 248, 251);
-    $muted  = imagecolorallocate($img, 190, 180, 210);
-    $faint  = imagecolorallocatealpha($img, 255, 255, 255, 120);
-    $panel  = imagecolorallocatealpha($img, 255, 255, 255, 123);
-    $sepCol = imagecolorallocatealpha($img, 255, 255, 255, 105);
-    $liveBg = imagecolorallocatealpha($img, 255, 60, 60, 60);
-
-    roundedRect($img, 22 * $SS, 22 * $SS, $Wp - 22 * $SS, $Hp - 22 * $SS, 30 * $SS, $panel);
-    roundedRectOutline($img, 22 * $SS, 22 * $SS, $Wp - 22 * $SS, $Hp - 22 * $SS, 30 * $SS, $faint);
-    imagefilledrectangle($img, 22 * $SS, 22 * $SS, $Wp - 22 * $SS, 28 * $SS, $accent);
-
-    $padX = 52 * $SS;
-    pill($img, $padX, 50 * $SS, '● LIVE', $liveBg, $white, 18 * $SS, 'left');
-    faDrawLine($img, 'اخبار داغ ارز دیجیتال', $faFontB, $latFontB, $Wp - $padX, 100 * $SS, 40 * $SS * 0.7, $white);
-    cardText($img, 'CRYPTO NEWS UPDATE', $padX, 116 * $SS, 18 * $SS, $muted, false, 'left');
-
-    $y = $headerH * $SS;
-    foreach ($items as $idx => $it) {
-        if ($idx > 0) { imageline($img, $padX, $y, $Wp - $padX, $y, $sepCol); }
-
-        // ابتدا شکستن خط عنوان محاسبه می‌شود تا ارتفاع واقعی محتوا بدانیم و بلوک را در وسط
-        // فضای ردیف (rowH) عمودی وسط‌چین کنیم (ریتم یکنواخت برای تیترهای کوتاه/بلند).
-        $lines = faWrapMixed($it['title'], $faFontB, $latFontB, 30 * $SS * 0.7, $Wp - 2 * $padX);
-        $lines = array_slice($lines, 0, 2);
-        $badgeH = 34 * $SS;
-        $contentH = $badgeH + 16 * $SS + count($lines) * 44 * $SS + 14 * $SS + 24 * $SS;
-        $rowTop = $y + max(20 * $SS, (int)(($rowH * $SS - $contentH) / 2));
-
-        [$impactLabel, $impactColor] = newsImpactColored($it['title'], $it['desc']);
-        $badgeBg = imagecolorallocatealpha($img, $impactColor[0], $impactColor[1], $impactColor[2], 70);
-        $bw = faTextWidth($faFont, 16 * $SS * 0.7, $impactLabel) + 28 * $SS;
-        roundedRect($img, (int)($Wp - $padX - $bw), $rowTop, $Wp - $padX, $rowTop + $badgeH, (int)($badgeH / 2), $badgeBg);
-        faDrawLine($img, $impactLabel, $faFont, $latFont, $Wp - $padX - 14 * $SS, $rowTop + $badgeH - 10 * $SS, 16 * $SS * 0.7, $white);
-
-        $rowTop += $badgeH + 16 * $SS;
-        foreach ($lines as $li => $line) {
-            faDrawLine($img, $line, $faFontB, $latFontB, $Wp - $padX, $rowTop + $li * 44 * $SS, 30 * $SS * 0.7, $white);
-        }
-        $rowTop += count($lines) * 44 * $SS + 14 * $SS;
-
-        faDrawLine($img, newsTehranTime($it['pubDate']), $faFont, $latFont, $Wp - $padX, $rowTop, 18 * $SS * 0.7, $muted);
-
-        $y += $rowH * $SS;
-    }
-
-    $ts = time();
-    [$jy, $jm, $jd] = gregorianToJalali((int)date('Y', $ts), (int)date('n', $ts), (int)date('j', $ts));
-    cardText($img, sprintf('%04d/%02d/%02d %s (Tehran)', $jy, $jm, $jd, date('H:i', $ts)), $padX, $Hp - 50 * $SS, 18 * $SS, $muted, false, 'left');
-    cardText($img, '@' . BOT_USERNAME, $Wp - $padX, $Hp - 50 * $SS, 18 * $SS, $muted, false, 'right');
-
-    $out = imagecreatetruecolor($W, $H);
-    imagecopyresampled($out, $img, 0, 0, 0, 0, $W, $H, $Wp, $Hp);
-    imagedestroy($img);
-
-    $tmp = tempnam(sys_get_temp_dir(), 'newsimg') . '.png';
-    imagepng($out, $tmp);
-    imagedestroy($out);
-    return is_file($tmp) ? $tmp : null;
-}
-/** کیبورد لینک هر خبر (یک دکمه به‌ازای هر تیتر) + دکمهٔ سبز افزودن به گروه */
-function newsKeyboard(array $items): array {
-    $rows = [];
-    foreach ($items as $i => $it) {
-        $rows[] = [btnUrl('🔗 ' . mbTruncate($it['title'], 38), $it['link'], 'primary')];
-    }
-    $rows[] = [addToGroupBtnGreen()];
-    return ikb($rows);
-}
-function sendNewsCard($chatId, $replyTo = null): void {
-    $items = fetchNews(5);
-    $img = renderNewsImage($items);
-    if ($img) {
-        sendPhotoFile($chatId, $img, '', $items ? newsKeyboard($items) : addGroupKeyboardGreen(), $replyTo);
-        @unlink($img);
-        return;
-    }
-    // نبود فونت فارسی (fonts/persian.ttf) → برگشت به کارت متنی معمولی، بدون کرش
-    sendMessage($chatId, buildNewsCard($items), addGroupKeyboardGreen(), $replyTo);
-}
 
 // --------------------------------------------------------------------------
 // شاخص ترس و طمع (Fear & Greed Index)
@@ -3799,10 +3137,6 @@ function handlePrivate(array $msg, $chatId, ?array $from): void {
             sendDateCard($chatId);
             return;
         }
-        if ($cmd === '/news') {
-            sendNewsCard($chatId);
-            return;
-        }
         if ($cmd === '/feargreed' || $cmd === '/fng') {
             sendFearGreedCard($chatId);
             return;
@@ -3899,7 +3233,6 @@ function helpText(): string {
         "• زیر چارت، دکمه‌های تغییر تایم‌فریم است.\n" .
         "• آدرس ولت (ترون / تون / بی‌ان‌بی) یا هش تراکنش را بفرستید تا خودکار بررسی شود.\n" .
         "• تاریخ و ساعت: کلمه <code>تاریخ</code> را بفرستید.\n" .
-        "• اخبار روز ارز دیجیتال: <code>/News</code>\n" .
         "• شاخص ترس و طمع بازار: کلمهٔ <code>شاخص</code> را بفرستید.\n" .
         "• نقشهٔ لیکویدیتی: <code>لیکویدی بیت کوین</code> یا <code>/liquidy btc</code>\n" .
         "• تحلیل کامیونیتی TradingView: <code>تحلیل بیت کوین</code>\n" .
@@ -3970,13 +3303,6 @@ function routeState($chatId, $userId, array $state, array $msg, string $text): b
             sendMessage($chatId, $r['text'], $r['kb']);
             return true;
 
-        case 'group_welcome_text':
-            if (!isGroupAdmin($chatId, $userId)) { clearState($chatId); return true; }
-            updateGroupSetting($chatId, 'welcome_text', $text);
-            clearState($chatId);
-            sendMessage($chatId, pemo('ok') . " پیام خوش‌آمدگویی بروزرسانی شد.", freshGroupSettingsKeyboard($chatId));
-            return true;
-
         case 'set_tpl':
             if (!isGlobalAdmin($userId)) { clearState($chatId); return true; }
             $key = (string)$state['data'];
@@ -4041,38 +3367,18 @@ function routeState($chatId, $userId, array $state, array $msg, string $text): b
 }
 
 function handleGroup(array $msg, array $chat, $chatId): void {
-    // پیام‌های سرویسی
-    if (isset($msg['new_chat_members'])) { handleNewMembers($chatId, $chat, $msg['new_chat_members'], $msg['message_id'] ?? null); return; }
-    if (isset($msg['left_chat_member']))  { handleLeftMember($chatId, $msg['left_chat_member']); return; }
+    // پیام سرویسی: عضو جدید (شامل خود ربات)
+    if (isset($msg['new_chat_members'])) { handleNewMembers($chatId, $chat, $msg['new_chat_members']); return; }
 
     $from = $msg['from'] ?? null;
     if (!$from) { return; }
     registerGroup($chat, $from['id']);
-    ensureGroupSettings($chatId);
-    $userId = $from['id'];
-    $isAdmin = isGroupAdmin($chatId, $userId);
-
-    // فرم چندمرحله‌ای پنل مدیریت گروه (مثل ویرایش پیام خوش‌آمدگویی) در حال تکمیل توسط ادمین
-    if ($isAdmin) {
-        $state = getState($chatId);
-        $pendingText = trim($msg['text'] ?? '');
-        if ($state && ($state['step'] ?? '') === 'group_welcome_text' && $pendingText !== '') {
-            if (routeState($chatId, $userId, $state, $msg, $pendingText)) { return; }
-        }
-    }
-
-    // اعمال قوانین (فقط برای غیرادمین‌ها)
-    if (!$isAdmin) {
-        if (enforceLocks($chatId, $msg)) { return; }
-        if (enforceFlood($chatId, $msg)) { return; }
-        if (enforceFilters($chatId, $msg)) { return; }
-    }
 
     $text = trim($msg['text'] ?? ($msg['caption'] ?? ''));
     if ($text === '') { return; }
 
-    // دستورات مدیریتی
-    if (handleGroupCommand($chatId, $msg, $text, $isAdmin)) { return; }
+    // دستورات اطلاعاتی (شاخص/لیست/لیکویدیتی)
+    if (handleGroupInfoCommand($chatId, $text)) { return; }
 
     // ابزارهای خودکار: تاریخ / ولت ترون / هش تراکنش / تبدیل مقدار
     $replyTo = $msg['message_id'] ?? null;
@@ -4080,7 +3386,7 @@ function handleGroup(array $msg, array $chat, $chatId): void {
 
     // قیمت‌گیری با نماد
     $base = normalizeSymbol($text);
-    if ($base !== null && groupPriceOn($chatId)) {
+    if ($base !== null) {
         if ($base === 'USDT') { sendUsdtCard($chatId, null, $replyTo); return; }
         if (isValidBase($base)) { sendPriceCard($chatId, $base, '30m', null, null, $replyTo); }
     }
@@ -4153,12 +3459,6 @@ function handleCallback(array $cb): void {
     if (strpos($data, 'ap:') === 0) {
         if (!isGlobalAdmin($userId)) { answerCallback($cbId, 'دسترسی ندارید.', true); return; }
         handleAdminCallback($chatId, $msgId, $userId, $data, $cbId);
-        return;
-    }
-    // تنظیمات گروه
-    if (strpos($data, 'gs:') === 0) {
-        if (!isGroupAdmin($chatId, $userId)) { answerCallback($cbId, 'فقط ادمین گروه.', true); return; }
-        handleGroupSettingsCallback($chatId, $msgId, $data, $cbId);
         return;
     }
 
@@ -4300,69 +3600,6 @@ function handleAdminCallback($chatId, $msgId, $userId, string $data, $cbId): voi
         db()->prepare("DELETE FROM force_join WHERE channel=?")->execute([$ch]);
         showForceJoin($chatId, $msgId);
         answerCallback($cbId, 'حذف شد.');
-        return;
-    }
-    answerCallback($cbId);
-}
-
-function handleGroupSettingsCallback($chatId, $msgId, string $data, $cbId): void {
-    if (strpos($data, 'gs:lock:') === 0) {
-        $key = substr($data, strlen('gs:lock:'));
-        $now = isLocked($chatId, $key);
-        setLock($chatId, $key, !$now);
-        // بازخوانی کش
-        editMessageReplyMarkup($chatId, $msgId, freshGroupSettingsKeyboard($chatId));
-        answerCallback($cbId, ($now ? 'باز شد' : 'قفل شد'));
-        return;
-    }
-    if ($data === 'gs:welcome') {
-        $s = ensureGroupSettings($chatId);
-        updateGroupSetting($chatId, 'welcome_on', (int)($s['welcome_on'] ?? 0) ? 0 : 1);
-        editMessageReplyMarkup($chatId, $msgId, freshGroupSettingsKeyboard($chatId));
-        answerCallback($cbId);
-        return;
-    }
-    if ($data === 'gs:flood') {
-        $s = ensureGroupSettings($chatId);
-        updateGroupSetting($chatId, 'antiflood_on', (int)($s['antiflood_on'] ?? 0) ? 0 : 1);
-        editMessageReplyMarkup($chatId, $msgId, freshGroupSettingsKeyboard($chatId));
-        answerCallback($cbId);
-        return;
-    }
-    if ($data === 'gs:price') {
-        $s = ensureGroupSettings($chatId);
-        updateGroupSetting($chatId, 'price_on', (int)($s['price_on'] ?? 1) ? 0 : 1);
-        editMessageReplyMarkup($chatId, $msgId, freshGroupSettingsKeyboard($chatId));
-        answerCallback($cbId);
-        return;
-    }
-    if ($data === 'gs:clearlocks') {
-        db()->prepare("DELETE FROM locks WHERE chat_id=?")->execute([$chatId]);
-        editMessageReplyMarkup($chatId, $msgId, freshGroupSettingsKeyboard($chatId));
-        answerCallback($cbId, 'همه قفل‌ها باز شد.');
-        return;
-    }
-    if ($data === 'gs:welcomereply') {
-        $s = ensureGroupSettings($chatId);
-        updateGroupSetting($chatId, 'welcome_reply', (int)($s['welcome_reply'] ?? 0) ? 0 : 1);
-        editMessageReplyMarkup($chatId, $msgId, freshGroupSettingsKeyboard($chatId));
-        answerCallback($cbId);
-        return;
-    }
-    if ($data === 'gs:welcometext') {
-        setState($chatId, 'group_welcome_text');
-        $help = "متن جدید پیام خوش‌آمدگویی را بفرستید.\n" .
-            "جای‌گذاری‌های مجاز: <code>{name}</code> عضو، <code>{group}</code> نام گروه، <code>{count}</code> تعداد اعضا.\n" .
-            "برای ایموجی پریمیوم: <code>{{pe:wave}}</code> (کلیدهای بیشتر در پنل ادمین → راهنمای ایموجی).\n" .
-            "برای نقل‌قول: <code>{{quote}}متن{{/quote}}</code>";
-        sendMessage($chatId, pemo('wave') . " " . $help, ikb([[btn('انصراف', 'gs:home', 'danger')]]));
-        answerCallback($cbId);
-        return;
-    }
-    if ($data === 'gs:home') {
-        clearState($chatId);
-        editMessageText($chatId, $msgId, 'پنل مدیریت گروه:', freshGroupSettingsKeyboard($chatId));
-        answerCallback($cbId);
         return;
     }
     answerCallback($cbId);
