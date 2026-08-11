@@ -169,8 +169,6 @@ const COINGLASS_API_KEY = '';
 const AI_API_KEY   = '';
 const AI_API_URL   = 'https://api.groq.com/openai/v1/chat/completions';
 const AI_MODEL     = 'llama-3.3-70b-versatile';
-// فید RSS اخبار ارز دیجیتال (منبع: ارز دیجیتال / ArzDigital)
-const NEWS_RSS_URL = 'https://arzdigital.com/feed/';
 
 // ایموجی اختصاصی هر شبکه در چکر ولت
 const CHAIN_EMOJI = [
@@ -330,6 +328,25 @@ function setBotText(string $k, string $v): void {
                          ON CONFLICT(text_key) DO UPDATE SET text_value=excluded.text_value");
     $st->execute([$k, $v]);
 }
+function deleteBotText(string $k): void {
+    $st = db()->prepare("DELETE FROM texts WHERE text_key=?");
+    $st->execute([$k]);
+}
+
+/** فهرست قالب‌های قابل‌ویرایش پیام‌های ربات از پنل ادمین، بدون نیاز به ویرایش سورس.
+ *  هر قالب یک متن HTML (با پشتیبانی کامل بولد/کوت/ایموجی پریمیوم — دقیقاً همان‌طور که در
+ *  تلگرام تایپ می‌شود) با نگه‌دارنده‌های {var} است که هنگام ارسال با مقدار واقعی جایگزین می‌شود. */
+const TPL_DEFS = [
+    'price'      => ['label' => 'پرایس چکر (کارت اصلی قیمت ارز)', 'vars' => ['name', 'base', 'price', 'toman', 'change', 'high', 'low', 'volume']],
+    'dollar'     => ['label' => 'نرخ دلار', 'vars' => ['toman', 'qty', 'change', 'high', 'low', 'date']],
+    'gold'       => ['label' => 'نرخ طلای ۱۸ عیار', 'vars' => ['qty', 'toman', 'usd', 'change', 'high', 'low', 'date']],
+    'wallet'     => ['label' => 'ولت چکر', 'vars' => ['chain', 'chain_fa', 'address', 'usd', 'toman', 'date']],
+    'conversion' => ['label' => 'تبدیل قیمت', 'vars' => ['name', 'base', 'qty', 'usd', 'stars', 'toman']],
+    'date'       => ['label' => 'تاریخ و ساعت', 'vars' => ['time', 'jalali', 'hijri', 'gregorian']],
+    'fng'        => ['label' => 'شاخص ترس و طمع', 'vars' => ['value', 'status', 'yesterday', 'week_avg', 'month_avg']],
+    'analysis'   => ['label' => 'تحلیل هوشمند SMC', 'vars' => ['name', 'base', 'timeframe', 'analysis']],
+    'news'       => ['label' => 'اخبار (/News)', 'vars' => ['date']],
+];
 
 // ---- ماشین حالت (فرم‌های چندمرحله‌ای) ----
 function setState($chatId, string $step, $data = ''): void {
@@ -528,6 +545,84 @@ function quoteBlock(string $inner): string { return "<blockquote>$inner</blockqu
 function maybeQuote(string $text): string {
     if (getSetting('quote_mode', '0') === '1') { return quoteBlock($text); }
     return $text;
+}
+
+/** تگ باز/بسته HTML معادل هر نوع موجودیت پیام تلگرام؛ null یعنی این نوع فقط متن ساده است
+ *  (مثل mention/hashtag/url که خودشان از دل متن خوانا هستند و نیازی به تگ ندارند). */
+function entityTagFor(array $e): ?array {
+    switch ($e['type'] ?? '') {
+        case 'bold': return ['<b>', '</b>'];
+        case 'italic': return ['<i>', '</i>'];
+        case 'underline': return ['<u>', '</u>'];
+        case 'strikethrough': return ['<s>', '</s>'];
+        case 'spoiler': return ['<tg-spoiler>', '</tg-spoiler>'];
+        case 'code': return ['<code>', '</code>'];
+        case 'pre':
+            $lang = $e['language'] ?? '';
+            return $lang !== '' ? ['<pre><code class="language-' . h($lang) . '">', '</code></pre>'] : ['<pre>', '</pre>'];
+        case 'text_link': return [isset($e['url']) ? '<a href="' . h($e['url']) . '">' : '', isset($e['url']) ? '</a>' : ''];
+        case 'blockquote': return ['<blockquote>', '</blockquote>'];
+        case 'expandable_blockquote': return ['<blockquote expandable>', '</blockquote>'];
+        case 'custom_emoji': return [isset($e['custom_emoji_id']) ? '<tg-emoji emoji-id="' . h($e['custom_emoji_id']) . '">' : '', isset($e['custom_emoji_id']) ? '</tg-emoji>' : ''];
+        default: return null;
+    }
+}
+/**
+ * متن خام پیام + موجودیت‌های آن (که تلگرام برای بولد/ایتالیک/کوت/ایموجی پریمیوم و... می‌فرستد)
+ * را به HTML معادل (همان‌چیزی که parse_mode=HTML قبول می‌کند) تبدیل می‌کند. این یعنی ادمین برای
+ * ویرایش قالب‌های پیام کافی‌ست از دکمه‌های فرمت‌بندی خود تلگرام (بولد/کوت/...) و پنل ایموجی
+ * پریمیوم استفاده کند — نیازی به نوشتن دستی تگ HTML نیست.
+ * توجه: افست/طول موجودیت‌ها در واحد UTF-16 است، نه بایت/کدپوینت — این تابع دقیقاً با همان واحد
+ * کار می‌کند تا با ایموجی‌های خارج از BMP (که جفت جانشین ۲تایی‌اند) هم درست کار کند.
+ */
+function entitiesToHtml(string $text, array $entities): string {
+    if (!$entities) { return h($text); }
+    $utf16 = mb_convert_encoding($text, 'UTF-16BE', 'UTF-8');
+    $unitCount = intdiv(strlen($utf16), 2);
+
+    $ents = array_values(array_filter($entities, fn($e) => entityTagFor($e) !== null));
+    usort($ents, function ($a, $b) {
+        if ($a['offset'] !== $b['offset']) { return $a['offset'] <=> $b['offset']; }
+        return $b['length'] <=> $a['length']; // هم‌شروع‌ها: بیرونی‌تر (طولانی‌تر) اول باز شود
+    });
+
+    $out = '';
+    $stack = []; // موجودیت‌های باز، برای بستن صحیح تودرتو (LIFO بر اساس نقطهٔ پایان)
+    $idx = 0; $n = count($ents);
+    for ($u = 0; $u <= $unitCount; $u++) {
+        while ($stack && $stack[count($stack) - 1]['end'] === $u) {
+            $out .= array_pop($stack)['close'];
+        }
+        while ($idx < $n && $ents[$idx]['offset'] === $u) {
+            $e = $ents[$idx]; $idx++;
+            [$open, $close] = entityTagFor($e);
+            $out .= $open;
+            $stack[] = ['end' => $e['offset'] + $e['length'], 'close' => $close];
+        }
+        if ($u < $unitCount) {
+            $unit = substr($utf16, $u * 2, 2);
+            $hi = (ord($unit[0]) << 8) | ord($unit[1]);
+            if ($hi >= 0xD800 && $hi <= 0xDBFF && $u + 1 < $unitCount) {
+                $unit .= substr($utf16, ($u + 1) * 2, 2);
+                $u++;
+            }
+            $out .= h(mb_convert_encoding($unit, 'UTF-8', 'UTF-16BE'));
+        }
+    }
+    while ($stack) { $out .= array_pop($stack)['close']; }
+    return $out;
+}
+/** متن HTML نهایی یک پیام ورودی (برای ذخیره به‌عنوان قالب) — ترکیب text/caption با entities آن */
+function msgToHtml(array $msg): string {
+    $text = $msg['text'] ?? $msg['caption'] ?? '';
+    $entities = $msg['entities'] ?? $msg['caption_entities'] ?? [];
+    return entitiesToHtml($text, $entities);
+}
+/** جایگزینی نگهدارنده‌های {name} در قالب سفارشی؛ نگهدارنده‌های ناشناخته دست‌نخورده می‌مانند. */
+function fillTemplate(string $tpl, array $vars): string {
+    return preg_replace_callback('/\{(\w+)\}/', function ($m) use ($vars) {
+        return array_key_exists($m[1], $vars) ? (string)$vars[$m[1]] : $m[0];
+    }, $tpl);
 }
 
 // ==========================================================================
@@ -1113,12 +1208,22 @@ function sendDateCard($chatId, $replyTo = null): void {
     [$jy,$jm,$jd] = gregorianToJalali((int)date('Y',$ts),(int)date('n',$ts),(int)date('j',$ts));
     [$hy,$hm,$hd] = gregorianToHijri((int)date('Y',$ts),(int)date('n',$ts),(int)date('j',$ts));
 
-    $t  = "🗓 <b>ساعت و تاریخ :</b>\n\n";
-    $t .= "▪️ ساعت : \n └─  <b>" . date('H:i:s', $ts) . "</b>\n\n";
-    $t .= "▪️ تاریخ امروز : \n └─  <b>{$wd} {$jd} {$jmn[$jm]} {$jy}</b>\n\n";
-    $t .= "▪️ تاریخ قمری : \n └─  <b>{$hd} {$hmn[$hm]} {$hy}</b>\n\n";
-    $t .= "▪️ تاریخ میلادی : \n └─  <b>" . date('d F Y', $ts) . "</b>";
-    sendMessage($chatId, $t, null, $replyTo);
+    $tpl = getBotText('tpl_date');
+    if ($tpl !== null) {
+        $t = fillTemplate($tpl, [
+            'time' => date('H:i:s', $ts),
+            'jalali' => "{$wd} {$jd} {$jmn[$jm]} {$jy}",
+            'hijri' => "{$hd} {$hmn[$hm]} {$hy}",
+            'gregorian' => date('d F Y', $ts),
+        ]);
+    } else {
+        $t  = "🗓 <b>ساعت و تاریخ :</b>\n\n";
+        $t .= "▪️ ساعت : \n └─  <b>" . date('H:i:s', $ts) . "</b>\n\n";
+        $t .= "▪️ تاریخ امروز : \n └─  <b>{$wd} {$jd} {$jmn[$jm]} {$jy}</b>\n\n";
+        $t .= "▪️ تاریخ قمری : \n └─  <b>{$hd} {$hmn[$hm]} {$hy}</b>\n\n";
+        $t .= "▪️ تاریخ میلادی : \n └─  <b>" . date('d F Y', $ts) . "</b>";
+    }
+    sendMessage($chatId, $t, addGroupKeyboard(), $replyTo);
 }
 
 /** کارت تبدیل مقدار ارز → دلار/استارز/تومان */
@@ -1137,6 +1242,16 @@ function sendConversionCard($chatId, float $qty, string $base, $replyTo = null):
     $stars = STAR_USD > 0 ? $usd / STAR_USD : 0;
     $qStr  = rtrim(rtrim(number_format($qty, 6, '.', ','), '0'), '.');
 
+    $tpl = getBotText('tpl_conversion');
+    if ($tpl !== null) {
+        $t = fillTemplate($tpl, [
+            'name' => $name, 'base' => $base, 'qty' => $qStr,
+            'usd' => fmtBig($usd) . ' $', 'stars' => number_format($stars),
+            'toman' => $toman !== null ? number_format(round($toman)) . ' تومان' : '—',
+        ]);
+        sendMessage($chatId, $t, addGroupKeyboard(), $replyTo);
+        return;
+    }
     $t  = pe('cv_coin') . " ارز {$name} | {$base}\n\n";
     $t .= "┓━━❲ تعداد {$qStr} ❳\n";
     $t .= "┨≡" . pe('cv_usd') . " دلار: " . fmtBig($usd) . " $\n";
@@ -1173,6 +1288,16 @@ function buildPriceCaption(string $base, array $d): string {
     $tmU   = tomanFor($base, $price);
     $toman = $tmU !== null ? number_format(round($tmU)) . ' تومان' : '—';
 
+    $tpl = getBotText('tpl_price');
+    if ($tpl !== null) {
+        return fillTemplate($tpl, [
+            'name' => $name, 'base' => $base,
+            'price' => fmtPrice($price) . ' $', 'toman' => $toman,
+            'change' => $sign . number_format($chg, 2) . '%',
+            'high' => fmtPrice($high) . ' $', 'low' => fmtPrice($low) . ' $',
+            'volume' => fmtBig($vol) . ' $',
+        ]);
+    }
     $t  = "💎 ارز {$name} - {$base} " . pe('coin') . "\n\n";
     $t .= "┓━━❲ قیمت لحظه ای ❳\n";
     $t .= "┨≡" . pe('usd') . " دلار: " . fmtPrice($price) . " $\n";
@@ -1374,11 +1499,6 @@ function faWrapMixed(string $text, string $faFont, string $latFont, float $pt, f
     if ($cur) { $lines[] = implode(' ', $cur); }
     return $lines;
 }
-/** کوتاه‌کردن رشته به حداکثر N نویسهٔ چندبایتی، با سه‌نقطه در صورت بریدن */
-function mbTruncate(string $s, int $max): string {
-    return mb_strlen($s, 'UTF-8') > $max ? (mb_substr($s, 0, $max, 'UTF-8') . '…') : $s;
-}
-
 /** نوشتن متن با مبدأ گوشهٔ بالا-چپ و ارتفاع تقریبی $px پیکسل.
  *  اگر TTF موجود بود از FreeType (واضح) وگرنه از فونت بیت‌مپ بزرگ‌شده استفاده می‌کند. */
 function cardText($img, string $text, int $x, int $y, int $px, int $color, bool $bold = false, string $align = 'left'): void {
@@ -1687,6 +1807,16 @@ function buildDollarCaption(float $qty, float $priceToman, array $meta = []): st
     $up    = (($meta['dt'] ?? 'high') !== 'low');
     $arrow = pe('mark') . ($up ? ' ▲' : ' ▼');
 
+    $tpl = getBotText('tpl_dollar');
+    if ($tpl !== null) {
+        return fillTemplate($tpl, [
+            'toman' => number_format(round($priceToman)) . ' تومان', 'qty' => $qtyStr,
+            'change' => ($up ? '+' : '-') . number_format(abs($dp), 2) . '%',
+            'high' => isset($meta['high']) ? number_format(round($meta['high'])) . ' تومان' : '—',
+            'low'  => isset($meta['low'])  ? number_format(round($meta['low']))  . ' تومان' : '—',
+            'date' => jalaliDateLine(),
+        ]);
+    }
     $t  = "💵 <b>نرخ دلار آمریکا</b> " . pe('r_usd') . "\n\n";
     $t .= "┓━━❲ نرخ لحظه‌ای ❳\n";
     $t .= "┨≡ " . pe('r_toman') . " تومان: <b>" . number_format(round($priceToman)) . "</b> تومان\n";
@@ -1708,6 +1838,17 @@ function buildGoldCaption(float $qty, float $priceToman, float $usdValue, array 
     $up    = (($meta['dt'] ?? 'high') !== 'low');
     $arrow = pe('mark') . ($up ? ' ▲' : ' ▼');
 
+    $tpl = getBotText('tpl_gold');
+    if ($tpl !== null) {
+        return fillTemplate($tpl, [
+            'qty' => $qtyStr, 'toman' => number_format(round($priceToman)) . ' تومان',
+            'usd' => '$' . number_format($usdValue, 2),
+            'change' => ($up ? '+' : '-') . number_format(abs($dp), 2) . '%',
+            'high' => isset($meta['high']) ? number_format(round($meta['high'])) . ' تومان' : '—',
+            'low'  => isset($meta['low'])  ? number_format(round($meta['low']))  . ' تومان' : '—',
+            'date' => jalaliDateLine(),
+        ]);
+    }
     $t  = "🥇 <b>طلای ۱۸ عیار</b> " . pe('mark') . "\n\n";
     $t .= "┓━━❲ نرخ لحظه‌ای ❳\n";
     $t .= "┨≡ " . pe('g_qty') . " وزن: <b>{$qtyStr}</b> گرم\n";
@@ -2177,11 +2318,39 @@ function adminHomeKeyboard(): array {
         [btn(emo('chart') . ' آمار', 'ap:stats', 'primary', 'chart')],
         [btn(emo('star') . ' متن استارت', 'ap:start', 'primary', 'star'),
          btn(($q ? '✅' : '❌') . ' حالت نقل‌قول', 'ap:quote', $q ? 'success' : 'danger')],
+        [btn('✏️ ویرایش پیام‌ها', 'ap:tpl', 'primary')],
+        [btn('🔑 کلیدهای API', 'ap:keys', 'primary'), btn('🎨 رنگ چارت', 'ap:chartcolor', 'primary')],
         [btn(emo('bell') . ' پیام همگانی', 'ap:bc', 'primary', 'bell')],
         [btn(emo('admin') . ' ادمین‌ها', 'ap:admins', 'primary', 'admin'),
          btn('🔗 جوین اجباری', 'ap:fj', 'primary')],
         [btn(emo('no') . ' بستن', 'x', 'danger', 'no')],
     ]);
+}
+/** فهرست قالب‌های قابل‌ویرایش پیام؛ هرکدام وضعیت سفارشی/پیش‌فرض را نشان می‌دهد */
+function showTemplateList($chatId, $editMsgId): void {
+    $txt = "✏️ <b>ویرایش پیام‌های ربات</b>\nیک بخش را برای ویرایش قالب پیامش انتخاب کنید:";
+    $rows = [];
+    foreach (TPL_DEFS as $key => $def) {
+        $custom = getBotText("tpl_$key") !== null;
+        $rows[] = [btn(($custom ? '✅ ' : '▫️ ') . $def['label'], "ap:tpl:$key", $custom ? 'success' : 'primary')];
+    }
+    $rows[] = [btn(emo('back') . ' بازگشت', 'ap:home', 'primary', 'back')];
+    editMessageText($chatId, $editMsgId, $txt, ikb($rows));
+}
+/** جزئیات یک قالب: راهنمای نگه‌دارنده‌ها + دکمهٔ ویرایش/بازگردانی */
+function showTemplateDetail($chatId, $editMsgId, string $key): void {
+    $def = TPL_DEFS[$key] ?? null;
+    if (!$def) { showTemplateList($chatId, $editMsgId); return; }
+    $custom = getBotText("tpl_$key");
+    $varsList = implode('، ', array_map(fn($v) => "<code>{{$v}}</code>", $def['vars']));
+    $txt  = "✏️ <b>" . h($def['label']) . "</b>\n\n";
+    $txt .= "وضعیت: " . ($custom !== null ? '✅ سفارشی' : '▫️ پیش‌فرض') . "\n\n";
+    $txt .= "نگه‌دارنده‌های قابل استفاده در متن:\n" . $varsList . "\n\n";
+    $txt .= "برای ویرایش، دکمهٔ زیر را بزنید و پیام جدید را با فرمت دلخواه (بولد، کوت، ایموجی پریمیوم — دقیقاً همان‌طور که در تلگرام تایپ می‌کنید) به‌همراه نگه‌دارنده‌های بالا ارسال کنید.";
+    $rows = [[btn('✏️ ویرایش', "ap:tpledit:$key", 'success')]];
+    if ($custom !== null) { $rows[] = [btn('♻️ بازگردانی پیش‌فرض', "ap:tplreset:$key", 'danger')]; }
+    $rows[] = [btn(emo('back') . ' بازگشت', 'ap:tpl', 'primary', 'back')];
+    editMessageText($chatId, $editMsgId, $txt, ikb($rows));
 }
 function showAdminPanel($chatId, $editMsgId = null): void {
     $txt = pemo('shield') . " <b>پنل مدیریت ربات</b>\nیکی از گزینه‌ها را انتخاب کنید:";
@@ -2527,6 +2696,15 @@ function buildWalletCaption(string $chain, string $chainFa, string $address, flo
     $chainPeKey = ['tron' => 'w_tron', 'ton' => 'w_ton', 'bnb' => 'w_bnb'][$chain] ?? null;
     $chainIcon = $chainPeKey ? pe($chainPeKey) : (CHAIN_EMOJI[$chain] ?? '🔷');
 
+    $tpl = getBotText('tpl_wallet');
+    if ($tpl !== null) {
+        return fillTemplate($tpl, [
+            'chain' => $chainIcon . ' ' . h($chainFa), 'chain_fa' => h($chainFa),
+            'address' => '<code>' . h($address) . '</code>',
+            'usd' => $usdStr . ' $', 'toman' => $tmnStr,
+            'date' => "$clock | $shamsi",
+        ]);
+    }
     $out  = pe('w_info') . " اطلاعات ولت " . $chainIcon . " " . h($chainFa) . "\n\n";
     $out .= "┓━━❲ " . pe('w_bal') . "موجودی ولت ❳\n";
     $out .= "┨≡ " . pe('w_usd') . " دلار: <b>$usdStr</b> $\n";
@@ -2566,182 +2744,20 @@ function sendWalletCard($chatId, string $chain, string $address, $replyTo = null
 // ==========================================================================
 
 // --------------------------------------------------------------------------
-// اخبار روز ارز دیجیتال (RSS)
+// اخبار روز ارز دیجیتال — کاملاً دستی: بدون واکشی خودکار، ادمین متن را از پنل تنظیم می‌کند
+// (به‌جای RSS خودکار که ممکن بود ناقص/بی‌ربط باشد؛ اکنون محتوا کاملاً دست ادمین است).
 // --------------------------------------------------------------------------
-/** پارسر سبک RSS با ریجکس (بدون وابستگی به افزونهٔ SimpleXML/DOM، برای سازگاری با هاست‌های اشتراکی) */
-function rssTag(string $block, string $tag): string {
-    if (!preg_match('/<' . $tag . '\b[^>]*>(.*?)<\/' . $tag . '>/is', $block, $m)) { return ''; }
-    $v = trim($m[1]);
-    if (preg_match('/^<!\[CDATA\[(.*)\]\]>$/is', $v, $c)) { $v = trim($c[1]); }
-    return trim(html_entity_decode(strip_tags($v), ENT_QUOTES, 'UTF-8'));
-}
-function parseRssItems(string $xml, int $limit = 5): array {
-    $items = [];
-    if (!preg_match_all('/<item\b[^>]*>(.*?)<\/item>/is', $xml, $m)) { return []; }
-    foreach ($m[1] as $block) {
-        if (count($items) >= $limit) { break; }
-        $title = rssTag($block, 'title');
-        $link  = rssTag($block, 'link');
-        if ($title === '' || $link === '') { continue; }
-        $items[] = ['title' => $title, 'link' => $link, 'pubDate' => rssTag($block, 'pubDate'), 'desc' => rssTag($block, 'description')];
-    }
-    return $items;
-}
-function fetchNews(int $limit = 5): array {
-    $xml = httpGet(NEWS_RSS_URL, 15);
-    return $xml ? parseRssItems($xml, $limit) : [];
-}
-/** تخمین میزان تأثیرگذاری خبر بر بازار بر اساس کلیدواژه‌های حساس (بدون نیاز به API پولی) */
-function newsImpact(string $title, string $desc): string {
-    $text = mb_strtolower($title . ' ' . $desc, 'UTF-8');
-    $high = ['sec','etf','فدرال رزرو','نرخ بهره','هک','ممنوعیت','قانون','رگولات','هالوینگ','halving',
-             'حمله','بحران','ورشکست','سقوط','ریزش','رکورد','بلک‌راک','blackrock','cme'];
-    foreach ($high as $k) { if (mb_strpos($text, $k) !== false) { return '🔥 تأثیر بالا'; } }
-    $mid = ['صرافی','exchange','آپدیت','بروزرسانی','آپگرید','همکاری','سرمایه‌گذاری','لیست شدن','لیستینگ'];
-    foreach ($mid as $k) { if (mb_strpos($text, $k) !== false) { return '📊 تأثیر متوسط'; } }
-    return '📰 خبری';
-}
-/** تبدیل pubDate خبر (RFC2822) به ساعت/تاریخ تهران؛ در نبود تاریخ معتبر، اکنون را برمی‌گرداند */
-function newsTehranTime(string $pubDate): string {
-    $ts = $pubDate !== '' ? strtotime($pubDate) : false;
-    if ($ts === false) { $ts = time(); }
-    [$jy, $jm, $jd] = gregorianToJalali((int)date('Y', $ts), (int)date('n', $ts), (int)date('j', $ts));
-    return date('H:i', $ts) . ' — ' . sprintf('%04d/%02d/%02d', $jy, $jm, $jd);
-}
-function buildNewsCard(array $items): string {
-    $t = "📰 ✨ <b>اخبار داغ ارز دیجیتال</b> ✨ 📰\n\n";
-    if (!$items) {
-        $t .= emo('no') . " در حال حاضر خبری دریافت نشد؛ کمی بعد دوباره تلاش کنید.";
-        return $t;
-    }
-    foreach ($items as $it) {
-        $t .= "🔸 <b>" . h($it['title']) . "</b>\n";
-        $t .= "┨≡ " . newsImpact($it['title'], $it['desc']) . "\n";
-        $t .= "┚≡ 🕐 " . newsTehranTime($it['pubDate']) . " (تهران)\n";
-        $t .= "🔗 <a href=\"" . h($it['link']) . "\">مشاهده خبر کامل</a>\n\n";
-    }
-    $t .= priceQuote();
-    return $t;
-}
-/** نسخهٔ رنگی برچسب تأثیر خبر (بدون ایموجی، برای رسم داخل تصویر GD) + رنگ پس‌زمینه */
-function newsImpactColored(string $title, string $desc): array {
-    $label = trim(preg_replace('/[\x{1F300}-\x{1FAFF}\x{2600}-\x{27BF}]/u', '', newsImpact($title, $desc)));
-    if (mb_strpos($label, 'بالا') !== false)      { $color = [235, 87, 87]; }
-    elseif (mb_strpos($label, 'متوسط') !== false) { $color = [242, 190, 66]; }
-    else                                          { $color = [110, 150, 220]; }
-    return [$label, $color];
-}
-/**
- * تصویر خفن اخبار: برخلاف نسخهٔ قبلی، عناوین واقعی خبر با فونت فارسی داخل خود تصویر تایپ
- * می‌شوند (نه فقط در کپشن). این کار با یافتن الگوی «معکوس‌کردن ترتیب کلمات» ممکن شده: GD به
- * کمک فونت فارسی وزیرمتن حروف فارسی مجاور را خودش به‌درستی می‌چسباند، فقط ترتیب کلمات را
- * معکوس نمی‌کند؛ پس فقط ترتیب کلمات (نه حروف داخل هر کلمه) معکوس می‌شود [faDrawLine].
- * اگر فونت فارسی در fonts/ موجود نباشد null برمی‌گرداند و caller باید به کارت متنی برگردد.
- */
-function renderNewsImage(array $items): ?string {
-    if (!function_exists('imagecreatetruecolor') || !function_exists('imagettftext')) { return null; }
-    $faFont = findFaTtf(false); $faFontB = findFaTtf(true);
-    $latFont = findTtf(false); $latFontB = findTtf(true);
-    if (!$faFont || !$faFontB || !$latFont || !$latFontB) { return null; }
-
-    $items = array_slice($items, 0, 4);
-    $n = max(1, count($items));
-    $SS = 3; // سوپرسمپل برای لبه‌های صاف و بدون‌پیکسل
-    $W = 1000; $rowH = 190; $headerH = 150; $footerH = 70;
-    $H = $headerH + $n * $rowH + $footerH;
-    $Wp = $W * $SS; $Hp = $H * $SS;
-
-    $img = imagecreatetruecolor($Wp, $Hp);
-    imagealphablending($img, true); imagesavealpha($img, true);
-
-    $bgTop = [40, 14, 62]; $bgBot = [7, 5, 16];
-    for ($y = 0; $y < $Hp; $y++) {
-        $t = $y / ($Hp - 1);
-        $c = imagecolorallocate($img,
-            (int)round($bgTop[0] + ($bgBot[0] - $bgTop[0]) * $t),
-            (int)round($bgTop[1] + ($bgBot[1] - $bgTop[1]) * $t),
-            (int)round($bgTop[2] + ($bgBot[2] - $bgTop[2]) * $t));
-        imageline($img, 0, $y, $Wp, $y, $c);
-    }
-    $accent = imagecolorallocate($img, 255, 111, 97);
-    $white  = imagecolorallocate($img, 245, 248, 251);
-    $muted  = imagecolorallocate($img, 190, 180, 210);
-    $faint  = imagecolorallocatealpha($img, 255, 255, 255, 120);
-    $panel  = imagecolorallocatealpha($img, 255, 255, 255, 123);
-    $sepCol = imagecolorallocatealpha($img, 255, 255, 255, 105);
-    $liveBg = imagecolorallocatealpha($img, 255, 60, 60, 60);
-
-    roundedRect($img, 22 * $SS, 22 * $SS, $Wp - 22 * $SS, $Hp - 22 * $SS, 30 * $SS, $panel);
-    roundedRectOutline($img, 22 * $SS, 22 * $SS, $Wp - 22 * $SS, $Hp - 22 * $SS, 30 * $SS, $faint);
-    imagefilledrectangle($img, 22 * $SS, 22 * $SS, $Wp - 22 * $SS, 28 * $SS, $accent);
-
-    $padX = 52 * $SS;
-    pill($img, $padX, 50 * $SS, '● LIVE', $liveBg, $white, 18 * $SS, 'left');
-    faDrawLine($img, 'اخبار داغ ارز دیجیتال', $faFontB, $latFontB, $Wp - $padX, 100 * $SS, 40 * $SS * 0.7, $white);
-    cardText($img, 'CRYPTO NEWS UPDATE', $padX, 116 * $SS, 18 * $SS, $muted, false, 'left');
-
-    $y = $headerH * $SS;
-    foreach ($items as $idx => $it) {
-        if ($idx > 0) { imageline($img, $padX, $y, $Wp - $padX, $y, $sepCol); }
-
-        // ابتدا شکستن خط عنوان محاسبه می‌شود تا ارتفاع واقعی محتوا بدانیم و بلوک را در وسط
-        // فضای ردیف (rowH) عمودی وسط‌چین کنیم (ریتم یکنواخت برای تیترهای کوتاه/بلند).
-        $lines = faWrapMixed($it['title'], $faFontB, $latFontB, 30 * $SS * 0.7, $Wp - 2 * $padX);
-        $lines = array_slice($lines, 0, 2);
-        $badgeH = 34 * $SS;
-        $contentH = $badgeH + 16 * $SS + count($lines) * 44 * $SS + 14 * $SS + 24 * $SS;
-        $rowTop = $y + max(20 * $SS, (int)(($rowH * $SS - $contentH) / 2));
-
-        [$impactLabel, $impactColor] = newsImpactColored($it['title'], $it['desc']);
-        $badgeBg = imagecolorallocatealpha($img, $impactColor[0], $impactColor[1], $impactColor[2], 70);
-        $bw = faTextWidth($faFont, 16 * $SS * 0.7, $impactLabel) + 28 * $SS;
-        roundedRect($img, (int)($Wp - $padX - $bw), $rowTop, $Wp - $padX, $rowTop + $badgeH, (int)($badgeH / 2), $badgeBg);
-        faDrawLine($img, $impactLabel, $faFont, $latFont, $Wp - $padX - 14 * $SS, $rowTop + $badgeH - 10 * $SS, 16 * $SS * 0.7, $white);
-
-        $rowTop += $badgeH + 16 * $SS;
-        foreach ($lines as $li => $line) {
-            faDrawLine($img, $line, $faFontB, $latFontB, $Wp - $padX, $rowTop + $li * 44 * $SS, 30 * $SS * 0.7, $white);
-        }
-        $rowTop += count($lines) * 44 * $SS + 14 * $SS;
-
-        faDrawLine($img, newsTehranTime($it['pubDate']), $faFont, $latFont, $Wp - $padX, $rowTop, 18 * $SS * 0.7, $muted);
-
-        $y += $rowH * $SS;
-    }
-
+function sendNewsCard($chatId, $replyTo = null): void {
+    $tpl = getBotText('tpl_news');
     $ts = time();
     [$jy, $jm, $jd] = gregorianToJalali((int)date('Y', $ts), (int)date('n', $ts), (int)date('j', $ts));
-    cardText($img, sprintf('%04d/%02d/%02d %s (Tehran)', $jy, $jm, $jd, date('H:i', $ts)), $padX, $Hp - 50 * $SS, 18 * $SS, $muted, false, 'left');
-    cardText($img, '@' . BOT_USERNAME, $Wp - $padX, $Hp - 50 * $SS, 18 * $SS, $muted, false, 'right');
-
-    $out = imagecreatetruecolor($W, $H);
-    imagecopyresampled($out, $img, 0, 0, 0, 0, $W, $H, $Wp, $Hp);
-    imagedestroy($img);
-
-    $tmp = tempnam(sys_get_temp_dir(), 'newsimg') . '.png';
-    imagepng($out, $tmp);
-    imagedestroy($out);
-    return is_file($tmp) ? $tmp : null;
-}
-/** کیبورد لینک هر خبر (یک دکمه به‌ازای هر تیتر) + دکمهٔ سبز افزودن به گروه */
-function newsKeyboard(array $items): array {
-    $rows = [];
-    foreach ($items as $i => $it) {
-        $rows[] = [btnUrl('🔗 ' . mbTruncate($it['title'], 38), $it['link'], 'primary')];
+    $date = sprintf('%04d/%02d/%02d %s', $jy, $jm, $jd, date('H:i', $ts));
+    if ($tpl !== null) {
+        $t = fillTemplate($tpl, ['date' => $date]);
+    } else {
+        $t = "📰 <b>اخبار داغ ارز دیجیتال</b>\n\n" . emo('no') . " هنوز خبری از طریق پنل ادمین تنظیم نشده است.";
     }
-    $rows[] = [addToGroupBtnGreen()];
-    return ikb($rows);
-}
-function sendNewsCard($chatId, $replyTo = null): void {
-    $items = fetchNews(5);
-    $img = renderNewsImage($items);
-    if ($img) {
-        sendPhotoFile($chatId, $img, '', $items ? newsKeyboard($items) : addGroupKeyboardGreen(), $replyTo);
-        @unlink($img);
-        return;
-    }
-    // نبود فونت فارسی (fonts/persian.ttf) → برگشت به کارت متنی معمولی، بدون کرش
-    sendMessage($chatId, buildNewsCard($items), addGroupKeyboardGreen(), $replyTo);
+    sendMessage($chatId, $t, addGroupKeyboardGreen(), $replyTo);
 }
 
 // --------------------------------------------------------------------------
@@ -2991,6 +3007,13 @@ function renderFearGreedGauge(int $value, string $labelEn, ?array $hist = null):
 }
 function buildFearGreedCaption(array $d, ?array $hist = null): string {
     $v = (int)$d['value'];
+    $tpl = getBotText('tpl_fng');
+    if ($tpl !== null) {
+        return fillTemplate($tpl, [
+            'value' => (string)$v, 'status' => fngLabelFa($v),
+            'yesterday' => $hist['yesterday'] ?? '—', 'week_avg' => $hist['week_avg'] ?? '—', 'month_avg' => $hist['month_avg'] ?? '—',
+        ]);
+    }
     $t  = "🧭 ✨ <b>شاخص ترس و طمع بازار کریپتو</b> ✨ 🧭\n\n";
     $t .= "┓━━❲ وضعیت امروز ❳\n";
     $t .= "┨≡ " . fngEmoji($v) . " عدد شاخص: <b>{$v} / 100</b>\n";
@@ -3210,6 +3233,13 @@ function callAiApi(string $prompt): ?string {
 }
 function buildAiAnalysisCaption(string $base, string $tf, string $analysis): string {
     $tfLabel = AI_TF_LABELS[$tf] ?? $tf;
+    $tpl = getBotText('tpl_analysis');
+    if ($tpl !== null) {
+        return fillTemplate($tpl, [
+            'name' => coinName($base), 'base' => $base, 'timeframe' => $tfLabel,
+            'analysis' => quoteExpandable(h($analysis)),
+        ]);
+    }
     $t  = "🧠 ✨ <b>تحلیل هوشمند " . h(coinName($base)) . " ({$base})</b> ✨\n";
     $t .= "⏱ تایم‌فریم: <b>{$tfLabel}</b>\n\n";
     $t .= quoteExpandable(h($analysis));
@@ -3423,10 +3453,19 @@ function routeState($chatId, $userId, array $state, array $msg, string $text): b
     switch ($step) {
         case 'set_start':
             if (!isGlobalAdmin($userId)) { clearState($chatId); return true; }
-            setBotText('start', $text);
+            setBotText('start', msgToHtml($msg));
             clearState($chatId);
             sendMessage($chatId, pemo('ok') . " متن استارت بروزرسانی شد.");
             sendStart($chatId, $userId);
+            return true;
+
+        case 'set_tpl':
+            if (!isGlobalAdmin($userId)) { clearState($chatId); return true; }
+            $key = $state['data'] ?? '';
+            if (!isset(TPL_DEFS[$key])) { clearState($chatId); return true; }
+            setBotText("tpl_$key", msgToHtml($msg));
+            clearState($chatId);
+            sendMessage($chatId, pemo('ok') . " قالب «" . h(TPL_DEFS[$key]['label']) . "» بروزرسانی شد.");
             return true;
 
         case 'broadcast':
@@ -3605,6 +3644,32 @@ function handleAdminCallback($chatId, $msgId, $userId, string $data, $cbId): voi
     if ($data === 'ap:stats')  { showStats($chatId, $msgId); answerCallback($cbId); return; }
     if ($data === 'ap:admins') { showAdminsList($chatId, $msgId); answerCallback($cbId); return; }
     if ($data === 'ap:fj')     { showForceJoin($chatId, $msgId); answerCallback($cbId); return; }
+    if ($data === 'ap:tpl')    { showTemplateList($chatId, $msgId); answerCallback($cbId); return; }
+
+    if (strpos($data, 'ap:tpl:') === 0) {
+        $key = substr($data, strlen('ap:tpl:'));
+        showTemplateDetail($chatId, $msgId, $key);
+        answerCallback($cbId);
+        return;
+    }
+    if (strpos($data, 'ap:tpledit:') === 0) {
+        $key = substr($data, strlen('ap:tpledit:'));
+        if (!isset(TPL_DEFS[$key])) { answerCallback($cbId, 'نامعتبر.', true); return; }
+        setState($chatId, 'set_tpl', $key);
+        $varsList = implode('، ', array_map(fn($v) => "<code>{{$v}}</code>", TPL_DEFS[$key]['vars']));
+        editMessageText($chatId, $msgId,
+            "✏️ پیام جدید را ارسال کنید (بولد/کوت/ایموجی پریمیوم مجاز است).\nنگه‌دارنده‌ها: " . $varsList,
+            ikb([[btn(emo('back') . ' انصراف', "ap:tpl:$key", 'danger', 'back')]]));
+        answerCallback($cbId);
+        return;
+    }
+    if (strpos($data, 'ap:tplreset:') === 0) {
+        $key = substr($data, strlen('ap:tplreset:'));
+        if (isset(TPL_DEFS[$key])) { deleteBotText("tpl_$key"); }
+        showTemplateDetail($chatId, $msgId, $key);
+        answerCallback($cbId, 'به حالت پیش‌فرض بازگشت.');
+        return;
+    }
 
     if ($data === 'ap:quote') {
         $new = getSetting('quote_mode', '0') === '1' ? '0' : '1';
@@ -3615,7 +3680,7 @@ function handleAdminCallback($chatId, $msgId, $userId, string $data, $cbId): voi
     }
     if ($data === 'ap:start') {
         setState($chatId, 'set_start');
-        editMessageText($chatId, $msgId, pemo('star') . " متن جدید استارت را ارسال کنید (HTML مجاز است):", ikb([[btn(emo('back') . ' انصراف', 'ap:home', 'danger', 'back')]]));
+        editMessageText($chatId, $msgId, pemo('star') . " متن جدید استارت را ارسال کنید (بولد/کوت/ایموجی پریمیوم مجاز است):", ikb([[btn(emo('back') . ' انصراف', 'ap:home', 'danger', 'back')]]));
         answerCallback($cbId);
         return;
     }
