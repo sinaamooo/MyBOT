@@ -1937,22 +1937,22 @@ function sendGoldCard($chatId, float $qty = 1.0, $replyTo = null): void {
 // ==========================================================================
 function lockLabels(): array {
     return [
-        'link'     => '🔗 لینک',
-        'forward'  => '↪️ فوروارد',
-        'sticker'  => '🎯 استیکر',
-        'photo'    => '🖼 عکس',
-        'video'    => '🎬 ویدیو',
-        'gif'      => '🎞 گیف',
-        'voice'    => '🎙 ویس',
-        'audio'    => '🎵 موزیک',
-        'document' => '📎 فایل',
-        'mention'  => '👤 منشن',
-        'username' => '🆔 یوزرنیم',
-        'viabot'   => '🤖 ربات اینلاین',
-        'poll'     => '📊 نظرسنجی',
-        'emoji'    => '😀 ایموجی پریمیوم',
-        'contact'  => '📇 مخاطب',
-        'location' => '📍 موقعیت',
+        'link'     => 'لینک',
+        'forward'  => 'فوروارد',
+        'sticker'  => 'استیکر',
+        'photo'    => 'عکس',
+        'video'    => 'ویدیو',
+        'gif'      => 'گیف',
+        'voice'    => 'ویس',
+        'audio'    => 'موزیک',
+        'document' => 'فایل',
+        'mention'  => 'منشن',
+        'username' => 'یوزرنیم',
+        'viabot'   => 'ربات اینلاین',
+        'poll'     => 'نظرسنجی',
+        'emoji'    => 'ایموجی پریمیوم',
+        'contact'  => 'مخاطب',
+        'location' => 'موقعیت',
     ];
 }
 function lockPersianNames(): array {
@@ -2099,7 +2099,7 @@ function handleGroupCommand($chatId, array $msg, string $text, bool $isAdmin): b
     // پنل تنظیمات گروه
     if (in_array($lower, ['پنل', 'تنظیمات', 'settings', '/settings', '/panel'], true)) {
         if (!$isAdmin) { return true; }
-        sendMessage($chatId, pemo('shield') . " <b>پنل مدیریت گروه</b>\nبرای روشن/خاموش کردن هر گزینه ضربه بزنید:", groupSettingsKeyboard($chatId));
+        sendMessage($chatId, "<b>پنل مدیریت گروه</b>\nبرای روشن/خاموش کردن هر گزینه ضربه بزنید:", groupSettingsKeyboard($chatId));
         return true;
     }
     // قوانین
@@ -2255,32 +2255,7 @@ function doWarn($chatId, array $target, bool $isAdmin): bool {
 }
 
 function groupSettingsKeyboard($chatId): array {
-    $s = ensureGroupSettings($chatId);
-    $rows = [];
-    // قفل‌ها (۲ در هر ردیف)
-    $labels = lockLabels();
-    $tmp = [];
-    foreach ($labels as $key => $lbl) {
-        $on = isLocked($chatId, $key);
-        $mark = $on ? '🔒' : '🔓';
-        $tmp[] = btn("$mark $lbl", "gs:lock:$key", $on ? 'success' : 'danger');
-        if (count($tmp) === 2) { $rows[] = $tmp; $tmp = []; }
-    }
-    if ($tmp) { $rows[] = $tmp; }
-    // قابلیت‌ها
-    $wc = (int)($s['welcome_on'] ?? 0);
-    $af = (int)($s['antiflood_on'] ?? 0);
-    $pr = (int)($s['price_on'] ?? 1);
-    $rows[] = [
-        btn(($wc ? '✅' : '❌') . ' خوش‌آمد', 'gs:welcome', $wc ? 'success' : 'danger'),
-        btn(($af ? '✅' : '❌') . ' ضدفلاد', 'gs:flood', $af ? 'success' : 'danger'),
-    ];
-    $rows[] = [
-        btn(($pr ? '✅' : '❌') . ' قیمت‌گیری', 'gs:price', $pr ? 'success' : 'danger'),
-        btn('🚫 پاک‌سازی قفل‌ها', 'gs:clearlocks', 'primary'),
-    ];
-    $rows[] = [btn(emo('no') . ' بستن', 'x', 'danger', 'no')];
-    return ikb($rows);
+    return freshGroupSettingsKeyboard($chatId);
 }
 
 // اعضای جدید / خروج
@@ -2298,7 +2273,7 @@ function handleNewMembers($chatId, array $chat, array $members): void {
     $s = ensureGroupSettings($chatId);
     if ((int)($s['welcome_on'] ?? 0) !== 1) { return; }
     $tpl = trim((string)($s['welcome_text'] ?? ''));
-    if ($tpl === '') { $tpl = pemo('wave') . " خوش آمدی {name} عزیز به {group}!"; }
+    if ($tpl === '') { $tpl = pemo('wave') . " خوش آمدی {name} عزیز به {group}!\n" . quoteBlock(pe('w_date') . " {date}"); }
     $count = getChatMemberCount($chatId);
     foreach ($members as $m) {
         if (isBotSelf($m)) { continue; }
@@ -2306,6 +2281,7 @@ function handleNewMembers($chatId, array $chat, array $members): void {
             '{name}'  => mentionUser($m),
             '{group}' => h($chat['title'] ?? ''),
             '{count}' => (string)$count,
+            '{date}'  => jalaliDateLine(),
         ]);
         sendMessage($chatId, $txt);
     }
@@ -3629,6 +3605,20 @@ function handleGroup(array $msg, array $chat, $chatId): void {
     $userId = $from['id'];
     $isAdmin = isGroupAdmin($chatId, $userId);
 
+    // ورودی متنی در انتظار (مثلاً ویرایش متن خوش‌آمدگویی) — فقط از سمت ادمین گروه
+    if ($isAdmin) {
+        $state = getState($chatId);
+        if ($state && $state['step'] === 'set_welcome') {
+            clearState($chatId);
+            $txt = trim($msg['text'] ?? '');
+            if ($txt !== '') {
+                updateGroupSetting($chatId, 'welcome_text', msgToHtml($msg));
+                sendMessage($chatId, pemo('ok') . ' متن خوش‌آمدگویی بروزرسانی شد.');
+            }
+            return;
+        }
+    }
+
     // اعمال قوانین (فقط برای غیرادمین‌ها)
     if (!$isAdmin) {
         if (enforceLocks($chatId, $msg)) { return; }
@@ -3887,6 +3877,12 @@ function handleGroupSettingsCallback($chatId, $msgId, string $data, $cbId): void
         answerCallback($cbId, 'همه قفل‌ها باز شد.');
         return;
     }
+    if ($data === 'gs:welcometext') {
+        setState($chatId, 'set_welcome');
+        sendMessage($chatId, "متن جدید خوش‌آمدگویی را در همین گروه ارسال کنید (بولد/کوت/ایموجی پریمیوم مجاز است).\nنگه‌دارنده‌ها: <code>{name}</code>، <code>{group}</code>، <code>{count}</code>، <code>{date}</code>");
+        answerCallback($cbId);
+        return;
+    }
     answerCallback($cbId);
 }
 /** ساخت کیبورد تنظیمات با کش تازه (بعد از تغییر) */
@@ -3901,8 +3897,7 @@ function freshGroupSettingsKeyboard($chatId): array {
     $tmp = [];
     foreach (lockLabels() as $key => $lbl) {
         $on = isset($locks[$key]);
-        $mark = $on ? '🔒' : '🔓';
-        $tmp[] = btn("$mark $lbl", "gs:lock:$key", $on ? 'success' : 'danger');
+        $tmp[] = btn(($on ? 'قفل: ' : 'باز: ') . $lbl, "gs:lock:$key", $on ? 'success' : 'danger');
         if (count($tmp) === 2) { $rows[] = $tmp; $tmp = []; }
     }
     if ($tmp) { $rows[] = $tmp; }
@@ -3910,14 +3905,15 @@ function freshGroupSettingsKeyboard($chatId): array {
     $af = (int)($s['antiflood_on'] ?? 0);
     $pr = (int)($s['price_on'] ?? 1);
     $rows[] = [
-        btn(($wc ? '✅' : '❌') . ' خوش‌آمد', 'gs:welcome', $wc ? 'success' : 'danger'),
-        btn(($af ? '✅' : '❌') . ' ضدفلاد', 'gs:flood', $af ? 'success' : 'danger'),
+        btn('خوش‌آمد: ' . ($wc ? 'فعال' : 'غیرفعال'), 'gs:welcome', $wc ? 'success' : 'danger'),
+        btn('ضدفلاد: ' . ($af ? 'فعال' : 'غیرفعال'), 'gs:flood', $af ? 'success' : 'danger'),
     ];
+    if ($wc) { $rows[] = [btn('ویرایش متن خوش‌آمد', 'gs:welcometext', 'primary')]; }
     $rows[] = [
-        btn(($pr ? '✅' : '❌') . ' قیمت‌گیری', 'gs:price', $pr ? 'success' : 'danger'),
-        btn('🚫 پاک‌سازی قفل‌ها', 'gs:clearlocks', 'primary'),
+        btn('قیمت‌گیری: ' . ($pr ? 'فعال' : 'غیرفعال'), 'gs:price', $pr ? 'success' : 'danger'),
+        btn('پاک‌سازی قفل‌ها', 'gs:clearlocks', 'primary'),
     ];
-    $rows[] = [btn(emo('no') . ' بستن', 'x', 'danger', 'no')];
+    $rows[] = [btn('بستن', 'x', 'danger')];
     return ikb($rows);
 }
 
