@@ -2627,7 +2627,7 @@ function newsImpactColored(string $title, string $desc): array {
  * اگر فونت فارسی در fonts/ موجود نباشد null برمی‌گرداند و caller باید به کارت متنی برگردد.
  */
 function renderNewsImage(array $items): ?string {
-    if (!function_exists('imagecreatetruecolor')) { return null; }
+    if (!function_exists('imagecreatetruecolor') || !function_exists('imagettftext')) { return null; }
     $faFont = findFaTtf(false); $faFontB = findFaTtf(true);
     $latFont = findTtf(false); $latFontB = findTtf(true);
     if (!$faFont || !$faFontB || !$latFont || !$latFontB) { return null; }
@@ -2833,7 +2833,7 @@ function fngGaugeColor(float $frac): array {
 /** رندر تصویر گِیج (سرعت‌سنج) شاخص ترس‌وطمع، سبک مدرن تیره. متن داخل تصویر عمداً لاتین است
  *  (محدودیت shaping فارسی در GD)؛ جزئیات فارسی در کپشن پیام می‌آید. */
 function renderFearGreedGauge(int $value, string $labelEn): ?string {
-    if (!function_exists('imagecreatetruecolor')) { return null; }
+    if (!function_exists('imagecreatetruecolor') || !function_exists('imagettftext')) { return null; }
     $SS = 3; // سوپرسمپل: رسم در ابعاد بزرگ‌تر و کوچک‌سازی نرم در پایان برای لبه‌های صاف (رفع پیکسلی‌بودن)
     $W = 900; $H = 620;
     $Wp = $W * $SS; $Hp = $H * $SS;
