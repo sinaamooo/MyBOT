@@ -26,9 +26,15 @@ final class Scoring
         $obZones = !empty($params['indicator_smc_ob_enabled'])
             ? OrderBlocks::detect($indexedByTf[Config::TIMEFRAME_SETUP])
             : ['bullish' => [], 'bearish' => []];
+        $fvgZones = !empty($params['indicator_fvg_enabled'])
+            ? FairValueGap::detect($indexedByTf[Config::TIMEFRAME_SETUP])
+            : ['bullish' => [], 'bearish' => []];
+        $liquidityPools = !empty($params['indicator_liquidity_enabled'])
+            ? Liquidity::detectPools($entryIdx)
+            : ['buyside' => [], 'sellside' => []];
 
-        [$longScore, $longReasons] = self::scoreSide($indexedByTf, $pa, $obZones, $params, true);
-        [$shortScore, $shortReasons] = self::scoreSide($indexedByTf, $pa, $obZones, $params, false);
+        [$longScore, $longReasons] = self::scoreSide($indexedByTf, $pa, $obZones, $fvgZones, $liquidityPools, $params, true);
+        [$shortScore, $shortReasons] = self::scoreSide($indexedByTf, $pa, $obZones, $fvgZones, $liquidityPools, $params, false);
 
         $regime = MarketRegime::detect($indexedByTf[Config::TIMEFRAME_SETUP], $params);
         $trend = Trend::detect($indexedByTf[Config::TIMEFRAME_TREND], $params);
@@ -96,8 +102,15 @@ final class Scoring
     }
 
     /** @return array{0: float, 1: string[]} [score, reasons] */
-    private static function scoreSide(array $indexedByTf, array $pa, array $obZones, array $params, bool $bullish): array
-    {
+    private static function scoreSide(
+        array $indexedByTf,
+        array $pa,
+        array $obZones,
+        array $fvgZones,
+        array $liquidityPools,
+        array $params,
+        bool $bullish
+    ): array {
         $reasons = [];
         $total = 0.0;
 
@@ -118,6 +131,8 @@ final class Scoring
         $wPa = (float) $params['score_weight_price_action'];
         $wHtf = (float) $params['score_weight_htf'];
         $wSmcOb = (float) $params['score_weight_smc_ob'];
+        $wFvg = (float) $params['score_weight_fvg'];
+        $wLiquidity = (float) $params['score_weight_liquidity'];
 
         // 1) Trend (4H)
         $trend = Trend::detect($trendIdx, $params);
@@ -240,7 +255,25 @@ final class Scoring
             }
         }
 
-        $maxScore = $wTrend + $wEma + $wRsi + $wMacd + $wAdx + $wVolume + $wPa + $wHtf + $wSmcOb;
+        // 10) ICT/SMC Fair Value Gap retest (15M)
+        if (!empty($params['indicator_fvg_enabled'])) {
+            $fvg = FairValueGap::evaluate($fvgZones, $setupIdx, $bullish);
+            if ($fvg['hit']) {
+                $total += $wFvg;
+                $reasons[] = $fvg['reason'];
+            }
+        }
+
+        // 11) ICT/SMC liquidity sweep (5M)
+        if (!empty($params['indicator_liquidity_enabled'])) {
+            $sweep = Liquidity::detectSweep($liquidityPools, $entryIdx, $bullish);
+            if ($sweep['hit']) {
+                $total += $wLiquidity;
+                $reasons[] = $sweep['reason'];
+            }
+        }
+
+        $maxScore = $wTrend + $wEma + $wRsi + $wMacd + $wAdx + $wVolume + $wPa + $wHtf + $wSmcOb + $wFvg + $wLiquidity;
         $raw = self::clamp($total, $maxScore);
         $normalized = $maxScore > 0 ? ($raw / $maxScore) * 100.0 : 0.0;
         return [$normalized, $reasons];
