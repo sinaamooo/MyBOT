@@ -4,12 +4,21 @@ from aiogram import Bot
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from app.core.logging_config import get_logger
+from config import settings
 
 logger = get_logger("publisher")
 
+_TRADINGVIEW_PREFIX = {
+    "mexc": "MEXC",
+    "kucoinfutures": "KUCOIN",
+    "binanceusdm": "BINANCE",
+    "binance": "BINANCE",
+}
+
 
 def build_signal_keyboard(symbol: str, signal_id: int) -> InlineKeyboardMarkup:
-    chart_url = f"https://www.tradingview.com/chart/?symbol=BINANCE%3A{symbol}.P"
+    prefix = _TRADINGVIEW_PREFIX.get(settings.exchange_id.strip().lower(), settings.exchange_id.upper())
+    chart_url = f"https://www.tradingview.com/chart/?symbol={prefix}%3A{symbol}.P"
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [

@@ -1,7 +1,8 @@
 # Telegram Crypto Futures Signal Bot
 
-A modular, async, production-oriented Telegram bot that scans Binance USDT-M
-Futures, scores LONG/SHORT setups with a weighted multi-indicator system,
+A modular, async, production-oriented Telegram bot that scans USDT-M
+Futures (MEXC by default - no geo-restrictions; KuCoin/Binance also
+supported via config), scores LONG/SHORT setups with a weighted multi-indicator system,
 computes ATR-based Stop Loss / Take Profit levels and a suggested leverage,
 publishes clean signals to a Telegram channel, and then monitors the trade
 automatically (TP1/TP2/TP3, Risk-Free, Trailing Stop, Stop Loss) - all
@@ -17,7 +18,7 @@ controllable from a full Telegram Admin Panel.
 ## Architecture
 
 ```
-Market Data (Binance Futures, public) ──▶ Indicator Engine ──▶ Scoring Engine ──▶ Risk Engine
+Market Data (MEXC Futures, public) ──▶ Indicator Engine ──▶ Scoring Engine ──▶ Risk Engine
                                                                         │
                                                                         ▼
                                                                  Quality Gates
@@ -52,7 +53,7 @@ config.py                  # env-based Settings (secrets) + TRADING_DEFAULTS (ed
 main.py                    # entrypoint - wires everything and starts polling
 
 app/core/                  # database engine, ORM models, enums, logging setup
-app/market/                # ccxt Binance Futures wrapper + multi-timeframe data fetcher
+app/market/                # ccxt Futures exchange wrapper (MEXC default) + multi-timeframe data fetcher
 app/analysis/               # indicators, trend, price action, S/R, market regime, scoring, risk
 app/signals/                # signal generator, formatter, publisher, scanner, trade monitor, backtester
 app/services/                # settings/signal/user/admin/symbol/log/statistics services (DB access layer)
@@ -95,7 +96,7 @@ high-volatility conditions.
 - Python 3.11+
 - A Telegram bot token (via [@BotFather](https://t.me/BotFather))
 - A Telegram channel where the bot is an **admin** (so it can post)
-- (Optional) Binance API key/secret - not required for public market data
+- (Optional) Exchange API key/secret - not required for public market data
 
 ## Setup (Linux / macOS)
 
@@ -131,8 +132,11 @@ python main.py
    posting once) - looks like `-100xxxxxxxxxx`.
 3. **ADMIN_IDS** - your numeric Telegram user ID(s), comma-separated. Only
    these users (or ones added later via the Admins panel) can open `/admin`.
-4. **BINANCE_API_KEY / BINANCE_API_SECRET** - optional; the bot works on
-   public market data alone.
+4. **EXCHANGE_ID** - which ccxt futures exchange to use. Defaults to `mexc`
+   (public API has no geo-restrictions, so it works from regions where
+   Binance is blocked, e.g. Iran). Other supported values: `kucoinfutures`,
+   `binanceusdm`. **EXCHANGE_API_KEY / EXCHANGE_API_SECRET** are optional -
+   the bot works on public market data alone.
 5. **DATABASE_URL** - defaults to a local SQLite file
    (`sqlite+aiosqlite:///./data/bot.db`). Swap for a `postgresql+asyncpg://...`
    URL later if you need Postgres - the ORM layer (SQLAlchemy async) already

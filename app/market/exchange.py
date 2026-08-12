@@ -23,8 +23,22 @@ _retry_policy = retry(
 )
 
 
+# Exchange-specific ccxt options needed to reach USDT-M linear perpetual
+# swap markets. Dedicated futures classes (kucoinfutures, binanceusdm) don't
+# need a defaultType; unified multi-market classes (mexc, binance) do.
+_EXCHANGE_OPTIONS: dict[str, dict[str, str]] = {
+    "mexc": {"defaultType": "swap"},
+    "binance": {"defaultType": "future"},
+}
+
+
 class ExchangeService:
-    """Thin, resilient wrapper around ccxt's Binance USDT-M Futures client.
+    """Thin, resilient wrapper around a ccxt USDT-M Futures client.
+
+    The exchange is chosen via EXCHANGE_ID in .env (default: mexc - public
+    data works with no geo-restrictions from most regions, including where
+    Binance's API is blocked). Any ccxt exchange id that offers linear
+    USDT-margined perpetual swaps works: mexc, kucoinfutures, binanceusdm, ...
 
     Only public market-data endpoints are used for signal generation, so the
     bot works even without API keys. Keys (if provided) are only used for
@@ -32,12 +46,21 @@ class ExchangeService:
     """
 
     def __init__(self, ohlcv_cache_ttl: float = 15.0, max_concurrency: int = 5) -> None:
-        config: dict[str, Any] = {"enableRateLimit": True, "options": {"defaultType": "future"}}
-        if settings.binance_api_key and settings.binance_api_secret:
-            config["apiKey"] = settings.binance_api_key
-            config["secret"] = settings.binance_api_secret
+        exchange_id = settings.exchange_id.strip().lower()
+        if not hasattr(ccxt, exchange_id):
+            raise ValueError(f"Unknown EXCHANGE_ID '{exchange_id}' - must be a valid ccxt exchange id (e.g. mexc, kucoinfutures, binanceusdm)")
 
-        self._exchange = ccxt.binanceusdm(config)
+        exchange_class = getattr(ccxt, exchange_id)
+        config: dict[str, Any] = {"enableRateLimit": True}
+        options = _EXCHANGE_OPTIONS.get(exchange_id)
+        if options:
+            config["options"] = options
+        if settings.exchange_api_key and settings.exchange_api_secret:
+            config["apiKey"] = settings.exchange_api_key
+            config["secret"] = settings.exchange_api_secret
+
+        self._exchange_id = exchange_id
+        self._exchange = exchange_class(config)
         self._semaphore = asyncio.Semaphore(max_concurrency)
         self._ohlcv_cache: dict[tuple[str, str], tuple[float, pd.DataFrame]] = {}
         self._ohlcv_cache_ttl = ohlcv_cache_ttl
@@ -56,7 +79,7 @@ class ExchangeService:
                 if market.get("swap") and market.get("quote") == "USDT" and market.get("linear"):
                     self._symbol_map[market["id"]] = unified
             self._markets_loaded = True
-            logger.info("Loaded %d USDT-M futures markets from Binance", len(self._symbol_map))
+            logger.info("Loaded %d USDT-M futures markets from %s", len(self._symbol_map), self._exchange_id)
 
     def to_unified(self, raw_symbol: str) -> str:
         """'BTCUSDT' -> 'BTC/USDT:USDT' (ccxt unified futures symbol)."""

@@ -26,8 +26,9 @@ class Settings(BaseSettings):
     telegram_channel_id: str = Field(alias="TELEGRAM_CHANNEL_ID")
     admin_ids: str = Field(default="", alias="ADMIN_IDS")
 
-    binance_api_key: str = Field(default="", alias="BINANCE_API_KEY")
-    binance_api_secret: str = Field(default="", alias="BINANCE_API_SECRET")
+    exchange_id: str = Field(default="mexc", alias="EXCHANGE_ID")
+    exchange_api_key: str = Field(default="", alias="EXCHANGE_API_KEY")
+    exchange_api_secret: str = Field(default="", alias="EXCHANGE_API_SECRET")
 
     database_url: str = Field(default="sqlite+aiosqlite:///./data/bot.db", alias="DATABASE_URL")
 
