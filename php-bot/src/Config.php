@@ -258,12 +258,24 @@ final class Config
             'premium_emoji_signal_id' => '',
             'premium_emoji_pump_id' => '',
 
+            // --- Daily good-morning / good-night channel messages (checked once
+            // per minute by cron/monitor.php against notification_timezone) ---
+            'notification_timezone' => 'Asia/Tehran',
+            'morning_message_enabled' => false,
+            'morning_message_time' => '08:00',
+            'morning_message_text' => "☀️ صبح بخیر به همه معامله‌گران عزیز!\n\nروزی پر از سیگنال‌های خوب و سود در پیش داشته باشید. مراقب سرمایه‌تون باشید 💪",
+            'night_message_enabled' => false,
+            'night_message_time' => '23:00',
+            'night_message_text' => "🌙 شب بخیر!\n\nامیدواریم امروز روز خوبی تو بازار داشتید. استراحت کنید، فردا با انرژی بیشتر برمی‌گردیم 🌟",
+
             // --- Operational state (not strategy knobs, but PHP has no long-lived
             // process to hold these in memory like the Python version's Scanner
             // object did - persisted here via the same key/value settings store) ---
             'last_scan_at' => '',
             'next_scan_at' => '',
             'last_scan_error' => '',
+            'last_morning_sent_date' => '',
+            'last_night_sent_date' => '',
         ];
     }
 }

@@ -14,6 +14,12 @@ final class Keyboards
         return ['inline_keyboard' => $rows];
     }
 
+    private static function truncateForButton(string $value): string
+    {
+        $flat = str_replace(["\n", "\r"], ' ', $value);
+        return mb_strlen($flat, 'UTF-8') > 30 ? mb_substr($flat, 0, 30, 'UTF-8') . '…' : $flat;
+    }
+
     private static function backRow(string $target = 'root'): array
     {
         return [['text' => '⬅️ بازگشت', 'callback_data' => "menu:{$target}"]];
@@ -209,6 +215,15 @@ final class Keyboards
                 ['امتیاز جایزه', 'pump_score_bonus'],
                 ['بازه شتاب (کندل)', 'pump_momentum_lookback'],
             ],
+            'daily_messages' => [
+                ['منطقه زمانی', 'notification_timezone'],
+                ['پیام صبح‌بخیر فعال', 'morning_message_enabled'],
+                ['ساعت صبح‌بخیر (HH:MM)', 'morning_message_time'],
+                ['متن صبح‌بخیر', 'morning_message_text'],
+                ['پیام شب‌بخیر فعال', 'night_message_enabled'],
+                ['ساعت شب‌بخیر (HH:MM)', 'night_message_time'],
+                ['متن شب‌بخیر', 'night_message_text'],
+            ],
         ];
     }
 
@@ -222,6 +237,7 @@ final class Keyboards
             'monitoring' => '👁 مانیتورینگ',
             'discovery' => '🪙 کشف ارز',
             'pump' => '🚀 شکارچی پامپ',
+            'daily_messages' => '☀️ پیام‌های روزانه',
         ];
     }
 
@@ -246,7 +262,8 @@ final class Keyboards
                 $display = $value ? '🟢 روشن' : '🔴 خاموش';
                 $rows[] = [['text' => "{$label}: {$display}", 'callback_data' => "set:bool:{$key}"]];
             } else {
-                $rows[] = [['text' => "{$label}: {$value}", 'callback_data' => "set:edit:{$key}"]];
+                $display = is_string($value) ? self::truncateForButton($value) : (string) $value;
+                $rows[] = [['text' => "{$label}: {$display}", 'callback_data' => "set:edit:{$key}"]];
             }
         }
         $rows[] = [['text' => '⬅️ بازگشت', 'callback_data' => 'menu:settings']];

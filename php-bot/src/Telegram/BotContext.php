@@ -6,6 +6,7 @@ namespace App\Telegram;
 
 use App\Exchange\MexcClient;
 use App\Signals\Backtester;
+use App\Signals\DailyMessenger;
 use App\Signals\Monitor;
 use App\Signals\Scanner;
 use App\Signals\SignalGenerator;
@@ -21,6 +22,7 @@ final class BotContext
         public readonly Scanner $scanner,
         public readonly Monitor $monitor,
         public readonly Backtester $backtester,
+        public readonly DailyMessenger $dailyMessenger,
     ) {
     }
 }

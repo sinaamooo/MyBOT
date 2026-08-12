@@ -54,11 +54,12 @@ final class SettingsHandler
     {
         $category = self::categoryFor($key);
         $current = SettingsService::get($key);
+        $prompt = SettingsService::valueType($key) === 'string' ? 'متن جدید را بفرستید:' : 'مقدار عددی جدید را بفرستید:';
         AdminStateService::set($userId, 'setting_edit', ['key' => $key, 'category' => $category]);
         $ctx->telegram->editMessageText(
             $chatId,
             $messageId,
-            "مقدار فعلی <b>{$key}</b>: {$current}\n\nمقدار عددی جدید را بفرستید:",
+            "مقدار فعلی <b>{$key}</b>:\n<code>" . htmlspecialchars((string) $current) . "</code>\n\n{$prompt}",
             Keyboards::cancel('settings')
         );
     }

@@ -7,6 +7,7 @@ namespace App;
 use App\Exchange\MexcClient;
 use App\Market\MarketDataService;
 use App\Signals\Backtester;
+use App\Signals\DailyMessenger;
 use App\Signals\Monitor;
 use App\Signals\Publisher;
 use App\Signals\Scanner;
@@ -27,7 +28,8 @@ final class AppFactory
         $scanner = new Scanner($engine, $publisher);
         $monitor = new Monitor($exchange, $publisher);
         $backtester = new Backtester($exchange);
+        $dailyMessenger = new DailyMessenger($publisher);
 
-        return new BotContext($telegram, $exchange, $engine, $scanner, $monitor, $backtester);
+        return new BotContext($telegram, $exchange, $engine, $scanner, $monitor, $backtester, $dailyMessenger);
     }
 }

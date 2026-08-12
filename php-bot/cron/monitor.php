@@ -15,5 +15,6 @@ set_time_limit(120);
 $ctx = AppFactory::buildContext();
 $params = SettingsService::getAll();
 $ctx->monitor->checkOnce($params);
+$ctx->dailyMessenger->checkOnce($params);
 
 echo '[' . date('c') . "] Monitor check complete\n";
