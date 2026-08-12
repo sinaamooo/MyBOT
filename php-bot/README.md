@@ -130,17 +130,23 @@ outside `public_html` (or you keep this whole project outside
 Two common options on cPanel:
 
 - **Simplest**: put the whole `crypto-signal-bot` folder directly under
-  `public_html/crypto-signal-bot/`. Then the webhook URL is
-  `https://yourdomain.com/crypto-signal-bot/public/webhook.php`. Everything
-  outside `public/` (including `.env`, `src/`, `logs/`) is still not
-  directly executable by a browser since it's just PHP source with no HTML
-  entrypoint, but for stricter isolation prefer the option below.
+  `public_html/crypto-signal-bot/` (or straight in `public_html/` itself).
+  Then the webhook URL is
+  `https://yourdomain.com/crypto-signal-bot/public/webhook.php` (or
+  `https://yourdomain.com/public/webhook.php` if uploaded to the
+  `public_html` root). The included `.htaccess` files block direct web
+  access to everything except `public/` - so `.env` and
+  `data/bot.sqlite` (your signals/settings) aren't downloadable by anyone
+  who guesses the URL, even though they're physically inside `public_html`.
+  This relies on Apache/LiteSpeed honoring `.htaccess`, which is the
+  default on essentially all cPanel hosts; if yours is one of the rare
+  nginx-only setups, use the stricter option below instead.
 - **Stricter**: put the project outside `public_html` (e.g.
   `~/crypto-signal-bot`) and create an **Addon Domain / Alias / Subdomain**
   in cPanel whose document root points straight at
   `~/crypto-signal-bot/public`. Then the webhook URL is just
   `https://bot.yourdomain.com/webhook.php`, and `.env`/`src/`/`sql/` are
-  completely outside the web root.
+  completely outside the web root (belt-and-suspenders on top of the `.htaccess`).
 
 Either way, update `TELEGRAM_WEBHOOK_URL` in `.env` to match.
 

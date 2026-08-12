@@ -1,0 +1,14 @@
+# Blocks direct web access to the whole project. Only public/ (see
+# public/.htaccess, which re-opens access for that subfolder) should be
+# reachable over HTTP - this matters most when the project is uploaded
+# straight into public_html instead of a document root that only points at
+# public/, since .env and the SQLite database (data/bot.sqlite, which holds
+# your signals/settings) would otherwise be downloadable by anyone who knows
+# the URL.
+<IfModule mod_authz_core.c>
+    Require all denied
+</IfModule>
+<IfModule !mod_authz_core.c>
+    Order Deny,Allow
+    Deny from all
+</IfModule>

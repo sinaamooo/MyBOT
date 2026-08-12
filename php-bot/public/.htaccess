@@ -1,0 +1,9 @@
+# Re-opens web access for this folder only (the parent .htaccess denies
+# everything by default). webhook.php needs to be reachable by Telegram.
+<IfModule mod_authz_core.c>
+    Require all granted
+</IfModule>
+<IfModule !mod_authz_core.c>
+    Order Allow,Deny
+    Allow from all
+</IfModule>
