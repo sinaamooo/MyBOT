@@ -9,7 +9,7 @@ use App\Telegram\Keyboards;
 
 final class MenuHandler
 {
-    public const TITLE = "🖥 <b>Admin Panel</b>\n\nSelect a section:";
+    public const TITLE = "🖥 <b>پنل مدیریت</b>\n\nیک بخش را انتخاب کنید:";
 
     public static function root(int $chatId, BotContext $ctx): void
     {

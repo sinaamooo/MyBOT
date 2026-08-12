@@ -19,7 +19,7 @@ final class SignalControlHandler
     {
         $params = SettingsService::getAll();
         $enabled = !empty($params['signals_enabled']);
-        $text = "📡 <b>Signal Control</b>\n\nSignals: " . ($enabled ? '🟢 ENABLED' : '🔴 DISABLED');
+        $text = "📡 <b>کنترل سیگنال</b>\n\nسیگنال‌ها: " . ($enabled ? '🟢 فعال' : '🔴 غیرفعال');
         $ctx->telegram->editMessageText($chatId, $messageId, $text, Keyboards::signalControl($enabled));
     }
 
@@ -32,7 +32,7 @@ final class SignalControlHandler
     public static function startManual(string $side, int $chatId, int $messageId, int $userId, BotContext $ctx): void
     {
         AdminStateService::set($userId, 'manual_signal_symbol', ['side' => $side]);
-        $ctx->telegram->editMessageText($chatId, $messageId, "Send the symbol for a manual {$side} signal (e.g. BTCUSDT):", Keyboards::cancel('signal_control'));
+        $ctx->telegram->editMessageText($chatId, $messageId, "نماد را برای سیگنال دستی {$side} بفرستید (مثلاً BTCUSDT):", Keyboards::cancel('signal_control'));
     }
 
     public static function receiveManualSymbol(int $chatId, int $userId, string $text, array $context, BotContext $ctx): void
@@ -44,11 +44,11 @@ final class SignalControlHandler
         $params = SettingsService::getAll();
         $candidate = $ctx->engine->manualCandidate($symbol, $side, $params);
         if ($candidate === null) {
-            $ctx->telegram->sendMessage($chatId, "Could not fetch market data for {$symbol}.");
+            $ctx->telegram->sendMessage($chatId, "دریافت داده بازار برای {$symbol} ممکن نشد.");
             return;
         }
         $ctx->scanner->publishCandidate($candidate, $params, isManual: true);
-        $ctx->telegram->sendMessage($chatId, "✅ Manual {$side} signal published for {$symbol}.");
+        $ctx->telegram->sendMessage($chatId, "✅ سیگنال دستی {$side} برای {$symbol} منتشر شد.");
     }
 
     public static function test(int $chatId, ?int $messageId, BotContext $ctx): void
@@ -59,19 +59,19 @@ final class SignalControlHandler
 
         $candidate = $ctx->engine->manualCandidate($symbol, 'LONG', $params);
         if ($candidate === null) {
-            $ctx->telegram->sendMessage($chatId, "Failed to fetch market data for {$symbol}.");
+            $ctx->telegram->sendMessage($chatId, "دریافت داده بازار برای {$symbol} ممکن نشد.");
             return;
         }
         $ctx->scanner->publishCandidate($candidate, $params, isTest: true);
-        $ctx->telegram->sendMessage($chatId, 'Test signal sent ✅');
+        $ctx->telegram->sendMessage($chatId, 'سیگنال تستی ارسال شد ✅');
     }
 
     public static function showActive(int $chatId, int $messageId, BotContext $ctx): void
     {
         $signals = SignalService::getActive();
         $text = $signals === []
-            ? "📋 <b>Active Signals</b>\n\nNo active signals."
-            : "📋 <b>Active Signals</b>\n\nTap one for details.";
+            ? "📋 <b>سیگنال‌های فعال</b>\n\nسیگنال فعالی وجود ندارد."
+            : "📋 <b>سیگنال‌های فعال</b>\n\nبرای جزئیات روی یکی بزنید.";
         $ctx->telegram->editMessageText($chatId, $messageId, $text, Keyboards::activeSignals($signals));
     }
 
@@ -79,18 +79,18 @@ final class SignalControlHandler
     {
         $signal = SignalService::get($signalId);
         if ($signal === null) {
-            $ctx->telegram->answerCallbackQuery('', 'Not found', true);
+            $ctx->telegram->answerCallbackQuery('', 'یافت نشد', true);
             return;
         }
         $reasons = $signal['reasons'] ? json_decode((string) $signal['reasons'], true) : [];
         $currentSl = $signal['current_sl'] ?? $signal['stop_loss'];
         $text = "🪙 {$signal['symbol']}  {$signal['side']}\n"
-            . "Status: {$signal['status']}\n"
-            . "Score: " . round((float) $signal['score']) . "%  Risk: {$signal['risk_score']}  RR 1:{$signal['rr']}\n\n"
-            . "Entry: {$signal['entry']}\nSL: {$currentSl}\n"
+            . "وضعیت: {$signal['status']}\n"
+            . "امتیاز: " . round((float) $signal['score']) . "%  ریسک: {$signal['risk_score']}  ریسک‌ریوارد 1:{$signal['rr']}\n\n"
+            . "ورود: {$signal['entry']}\nحد ضرر: {$currentSl}\n"
             . "TP1: {$signal['tp1']}  TP2: {$signal['tp2']}  TP3: {$signal['tp3']}\n"
-            . "Leverage: {$signal['leverage']}x\n\n"
-            . "Reasons:\n" . implode("\n", array_map(fn($r) => "• {$r}", $reasons));
+            . "اهرم: {$signal['leverage']}x\n\n"
+            . "دلایل:\n" . implode("\n", array_map(fn($r) => "• {$r}", $reasons));
         $ctx->telegram->editMessageText($chatId, $messageId, $text, Keyboards::signalDetail($signal));
     }
 

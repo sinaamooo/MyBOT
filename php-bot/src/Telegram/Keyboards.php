@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Telegram;
 
+/** All visible button labels are Persian; callback_data values stay in
+ * English (protocol detail, never shown to the user). */
 final class Keyboards
 {
     /** @return array<string, mixed> */
@@ -14,38 +16,38 @@ final class Keyboards
 
     private static function backRow(string $target = 'root'): array
     {
-        return [['text' => '⬅️ Back', 'callback_data' => "menu:{$target}"]];
+        return [['text' => '⬅️ بازگشت', 'callback_data' => "menu:{$target}"]];
     }
 
     public static function mainMenu(): array
     {
         return self::kb([
-            [['text' => '🖥 Dashboard', 'callback_data' => 'menu:dashboard']],
-            [['text' => '📡 Signal Control', 'callback_data' => 'menu:signal_control']],
+            [['text' => '🖥 داشبورد', 'callback_data' => 'menu:dashboard']],
+            [['text' => '📡 کنترل سیگنال', 'callback_data' => 'menu:signal_control']],
             [
-                ['text' => '🪙 Symbols', 'callback_data' => 'menu:symbols'],
-                ['text' => '📊 Indicators', 'callback_data' => 'menu:indicators'],
+                ['text' => '🪙 ارزها', 'callback_data' => 'menu:symbols'],
+                ['text' => '📊 اندیکاتورها', 'callback_data' => 'menu:indicators'],
             ],
             [
-                ['text' => '⚙️ Settings', 'callback_data' => 'menu:settings'],
-                ['text' => '📈 Statistics', 'callback_data' => 'menu:statistics'],
+                ['text' => '⚙️ تنظیمات', 'callback_data' => 'menu:settings'],
+                ['text' => '📈 آمار', 'callback_data' => 'menu:statistics'],
             ],
             [
-                ['text' => '📋 Active Signals', 'callback_data' => 'menu:active'],
-                ['text' => '🗂 Signal History', 'callback_data' => 'menu:history'],
+                ['text' => '📋 سیگنال‌های فعال', 'callback_data' => 'menu:active'],
+                ['text' => '🗂 تاریخچه سیگنال‌ها', 'callback_data' => 'menu:history'],
             ],
             [
-                ['text' => '📝 Message Templates', 'callback_data' => 'menu:templates'],
-                ['text' => '🧪 Backtest', 'callback_data' => 'menu:backtest'],
+                ['text' => '📝 قالب پیام', 'callback_data' => 'menu:templates'],
+                ['text' => '🧪 بک‌تست', 'callback_data' => 'menu:backtest'],
             ],
             [
-                ['text' => '👥 Users', 'callback_data' => 'menu:users'],
-                ['text' => '🔐 Admins', 'callback_data' => 'menu:admins'],
+                ['text' => '👥 کاربران', 'callback_data' => 'menu:users'],
+                ['text' => '🔐 ادمین‌ها', 'callback_data' => 'menu:admins'],
             ],
-            [['text' => '📜 Logs', 'callback_data' => 'menu:logs']],
+            [['text' => '📜 لاگ‌ها', 'callback_data' => 'menu:logs']],
             [
-                ['text' => '🔄 Restart Scanner', 'callback_data' => 'scanner:restart'],
-                ['text' => '⛔ Stop Scanner', 'callback_data' => 'scanner:stop'],
+                ['text' => '🔄 ری‌استارت اسکنر', 'callback_data' => 'scanner:restart'],
+                ['text' => '⛔ توقف اسکنر', 'callback_data' => 'scanner:stop'],
             ],
         ]);
     }
@@ -53,11 +55,11 @@ final class Keyboards
     public static function dashboard(bool $running): array
     {
         $toggle = $running
-            ? ['text' => '⛔ Stop Scanner', 'callback_data' => 'scanner:stop']
-            : ['text' => '▶️ Start Scanner', 'callback_data' => 'scanner:start'];
+            ? ['text' => '⛔ توقف اسکنر', 'callback_data' => 'scanner:stop']
+            : ['text' => '▶️ روشن کردن اسکنر', 'callback_data' => 'scanner:start'];
         return self::kb([
-            [$toggle, ['text' => '🔄 Restart', 'callback_data' => 'scanner:restart']],
-            [['text' => '🔃 Refresh', 'callback_data' => 'menu:dashboard']],
+            [$toggle, ['text' => '🔄 ری‌استارت', 'callback_data' => 'scanner:restart']],
+            [['text' => '🔃 تازه‌سازی', 'callback_data' => 'menu:dashboard']],
             self::backRow(),
         ]);
     }
@@ -65,15 +67,15 @@ final class Keyboards
     public static function signalControl(bool $signalsEnabled): array
     {
         $toggle = $signalsEnabled
-            ? ['text' => '🔴 Disable Signals', 'callback_data' => 'signals:disable']
-            : ['text' => '🟢 Enable Signals', 'callback_data' => 'signals:enable'];
+            ? ['text' => '🔴 غیرفعال کردن سیگنال‌ها', 'callback_data' => 'signals:disable']
+            : ['text' => '🟢 فعال کردن سیگنال‌ها', 'callback_data' => 'signals:enable'];
         return self::kb([
             [$toggle],
             [
-                ['text' => '🟢 Manual LONG', 'callback_data' => 'signals:manual:LONG'],
-                ['text' => '🔴 Manual SHORT', 'callback_data' => 'signals:manual:SHORT'],
+                ['text' => '🟢 سیگنال دستی LONG', 'callback_data' => 'signals:manual:LONG'],
+                ['text' => '🔴 سیگنال دستی SHORT', 'callback_data' => 'signals:manual:SHORT'],
             ],
-            [['text' => '🧪 Send Test Signal', 'callback_data' => 'signals:test']],
+            [['text' => '🧪 ارسال سیگنال تستی', 'callback_data' => 'signals:test']],
             self::backRow(),
         ]);
     }
@@ -91,17 +93,17 @@ final class Keyboards
         }
         $nav = [];
         if ($page > 0) {
-            $nav[] = ['text' => '⬅️ Prev', 'callback_data' => 'sym:page:' . ($page - 1)];
+            $nav[] = ['text' => '⬅️ قبلی', 'callback_data' => 'sym:page:' . ($page - 1)];
         }
         if ($hasMore) {
-            $nav[] = ['text' => 'Next ➡️', 'callback_data' => 'sym:page:' . ($page + 1)];
+            $nav[] = ['text' => 'بعدی ➡️', 'callback_data' => 'sym:page:' . ($page + 1)];
         }
         if ($nav !== []) {
             $rows[] = $nav;
         }
         $rows[] = [
-            ['text' => '➕ Add Symbol', 'callback_data' => 'sym:add'],
-            ['text' => '🔄 Sync Top-N by Volume', 'callback_data' => 'sym:sync'],
+            ['text' => '➕ افزودن ارز', 'callback_data' => 'sym:add'],
+            ['text' => '🔄 همگام‌سازی Top-N بر اساس حجم', 'callback_data' => 'sym:sync'],
         ];
         $rows[] = self::backRow();
         return self::kb($rows);
@@ -115,8 +117,8 @@ final class Keyboards
             ['RSI', 'indicator_rsi_enabled'],
             ['MACD', 'indicator_macd_enabled'],
             ['ADX', 'indicator_adx_enabled'],
-            ['Volume', 'indicator_volume_enabled'],
-            ['Bollinger', 'indicator_bollinger_enabled'],
+            ['حجم معاملات', 'indicator_volume_enabled'],
+            ['بولینگر باند', 'indicator_bollinger_enabled'],
         ];
         $rows = [];
         foreach ($flags as [$label, $key]) {
@@ -132,56 +134,56 @@ final class Keyboards
     {
         return [
             'scoring' => [
-                ['Min Score (LONG/SHORT)', 'min_score'],
-                ['Watchlist Min Score', 'watchlist_min_score'],
-                ['Min ADX', 'min_adx'],
-                ['Volume Confirm Multiplier', 'volume_confirm_multiplier'],
-                ['Weight: Trend', 'score_weight_trend'],
-                ['Weight: EMA', 'score_weight_ema'],
-                ['Weight: RSI', 'score_weight_rsi'],
-                ['Weight: MACD', 'score_weight_macd'],
-                ['Weight: ADX', 'score_weight_adx'],
-                ['Weight: Volume', 'score_weight_volume'],
-                ['Weight: Price Action', 'score_weight_price_action'],
-                ['Weight: HTF Confirm', 'score_weight_htf'],
+                ['حداقل امتیاز (LONG/SHORT)', 'min_score'],
+                ['حداقل امتیاز واچ‌لیست', 'watchlist_min_score'],
+                ['حداقل ADX', 'min_adx'],
+                ['ضریب تأیید حجم', 'volume_confirm_multiplier'],
+                ['وزن: روند', 'score_weight_trend'],
+                ['وزن: EMA', 'score_weight_ema'],
+                ['وزن: RSI', 'score_weight_rsi'],
+                ['وزن: MACD', 'score_weight_macd'],
+                ['وزن: ADX', 'score_weight_adx'],
+                ['وزن: حجم', 'score_weight_volume'],
+                ['وزن: پرایس اکشن', 'score_weight_price_action'],
+                ['وزن: تأیید تایم‌فریم بالاتر', 'score_weight_htf'],
             ],
             'risk' => [
-                ['ATR SL Multiplier', 'atr_sl_multiplier'],
-                ['TP1 R Multiple', 'tp1_r_multiple'],
-                ['TP2 R Multiple', 'tp2_r_multiple'],
-                ['TP3 R Multiple', 'tp3_r_multiple'],
-                ['Min Risk/Reward', 'min_rr'],
+                ['ضریب ATR برای استاپ', 'atr_sl_multiplier'],
+                ['ضریب ریسک TP1', 'tp1_r_multiple'],
+                ['ضریب ریسک TP2', 'tp2_r_multiple'],
+                ['ضریب ریسک TP3', 'tp3_r_multiple'],
+                ['حداقل ریسک به ریوارد', 'min_rr'],
             ],
             'leverage' => [
-                ['Low-Volatility Max', 'leverage_low_vol_max'],
-                ['Medium-Volatility Max', 'leverage_medium_vol_max'],
-                ['High-Volatility Max', 'leverage_high_vol_max'],
-                ['Absolute Floor', 'leverage_absolute_min'],
-                ['Absolute Ceiling', 'leverage_absolute_max'],
-                ['Low-Vol ATR% Threshold', 'leverage_low_vol_atr_pct'],
-                ['Medium-Vol ATR% Threshold', 'leverage_medium_vol_atr_pct'],
+                ['حداکثر اهرم - نوسان کم', 'leverage_low_vol_max'],
+                ['حداکثر اهرم - نوسان متوسط', 'leverage_medium_vol_max'],
+                ['حداکثر اهرم - نوسان زیاد', 'leverage_high_vol_max'],
+                ['کف مطلق اهرم', 'leverage_absolute_min'],
+                ['سقف مطلق اهرم', 'leverage_absolute_max'],
+                ['آستانه ATR% نوسان کم', 'leverage_low_vol_atr_pct'],
+                ['آستانه ATR% نوسان متوسط', 'leverage_medium_vol_atr_pct'],
             ],
             'scanner' => [
-                ['Scan Interval (seconds)', 'scan_interval_seconds'],
-                ['Signal Cooldown (seconds)', 'signal_cooldown_seconds'],
-                ['Max Active Signals', 'max_active_signals'],
-                ['Max Daily Signals', 'max_daily_signals'],
-                ['Max Daily Loss % (0=off)', 'max_daily_loss_percent'],
+                ['فاصله اسکن (ثانیه)', 'scan_interval_seconds'],
+                ['کول‌داون سیگنال (ثانیه)', 'signal_cooldown_seconds'],
+                ['حداکثر سیگنال فعال', 'max_active_signals'],
+                ['حداکثر سیگنال روزانه', 'max_daily_signals'],
+                ['حداکثر ضرر روزانه % (۰=خاموش)', 'max_daily_loss_percent'],
             ],
             'monitoring' => [
-                ['Monitor Interval (seconds)', 'monitor_interval_seconds'],
-                ['Risk Free Enabled', 'risk_free_enabled'],
-                ['Trailing Stop Enabled', 'trailing_stop_enabled'],
+                ['فاصله مانیتور (ثانیه)', 'monitor_interval_seconds'],
+                ['ریسک‌فری فعال', 'risk_free_enabled'],
+                ['تریلینگ استاپ فعال', 'trailing_stop_enabled'],
             ],
             'discovery' => [
-                ['Auto-Sync Symbols Enabled', 'symbol_auto_sync_enabled'],
-                ['Top-N by Volume', 'symbol_top_n'],
+                ['همگام‌سازی خودکار ارزها', 'symbol_auto_sync_enabled'],
+                ['Top-N بر اساس حجم', 'symbol_top_n'],
             ],
             'pump' => [
-                ['Pump Hunter Enabled', 'pump_hunter_enabled'],
-                ['Volume Multiplier', 'pump_volume_multiplier'],
-                ['Score Bonus', 'pump_score_bonus'],
-                ['Momentum Lookback (candles)', 'pump_momentum_lookback'],
+                ['شکارچی پامپ فعال', 'pump_hunter_enabled'],
+                ['ضریب حجم', 'pump_volume_multiplier'],
+                ['امتیاز جایزه', 'pump_score_bonus'],
+                ['بازه شتاب (کندل)', 'pump_momentum_lookback'],
             ],
         ];
     }
@@ -189,13 +191,13 @@ final class Keyboards
     public static function categoryTitles(): array
     {
         return [
-            'scoring' => '🎯 Scoring & Thresholds',
-            'risk' => '🛡 Risk (SL/TP/RR)',
-            'leverage' => '⚡ Leverage Tiers',
-            'scanner' => '🔁 Scanner & Cooldown',
-            'monitoring' => '👁 Monitoring',
-            'discovery' => '🪙 Symbol Discovery',
-            'pump' => '🚀 Pump Hunter',
+            'scoring' => '🎯 امتیازدهی و آستانه‌ها',
+            'risk' => '🛡 ریسک (استاپ/تارگت/ریسک‌ریوارد)',
+            'leverage' => '⚡ سطوح اهرم',
+            'scanner' => '🔁 اسکنر و کول‌داون',
+            'monitoring' => '👁 مانیتورینگ',
+            'discovery' => '🪙 کشف ارز',
+            'pump' => '🚀 شکارچی پامپ',
         ];
     }
 
@@ -217,19 +219,19 @@ final class Keyboards
         foreach (self::settingsCategories()[$category] as [$label, $key]) {
             $value = $params[$key] ?? null;
             if (is_bool($value)) {
-                $display = $value ? '🟢 ON' : '🔴 OFF';
+                $display = $value ? '🟢 روشن' : '🔴 خاموش';
                 $rows[] = [['text' => "{$label}: {$display}", 'callback_data' => "set:bool:{$key}"]];
             } else {
                 $rows[] = [['text' => "{$label}: {$value}", 'callback_data' => "set:edit:{$key}"]];
             }
         }
-        $rows[] = [['text' => '⬅️ Back', 'callback_data' => 'menu:settings']];
+        $rows[] = [['text' => '⬅️ بازگشت', 'callback_data' => 'menu:settings']];
         return self::kb($rows);
     }
 
     public static function statistics(): array
     {
-        return self::kb([[['text' => '🔃 Refresh', 'callback_data' => 'menu:statistics']], self::backRow()]);
+        return self::kb([[['text' => '🔃 تازه‌سازی', 'callback_data' => 'menu:statistics']], self::backRow()]);
     }
 
     /** @param array<int, array<string, mixed>> $signals */
@@ -248,10 +250,10 @@ final class Keyboards
     {
         return self::kb([
             [
-                ['text' => '❌ Cancel', 'callback_data' => "sig:cancel:{$signal['id']}"],
-                ['text' => '🔒 Close Now', 'callback_data' => "sig:close:{$signal['id']}"],
+                ['text' => '❌ لغو', 'callback_data' => "sig:cancel:{$signal['id']}"],
+                ['text' => '🔒 بستن همین الان', 'callback_data' => "sig:close:{$signal['id']}"],
             ],
-            [['text' => '⬅️ Back', 'callback_data' => 'menu:active']],
+            [['text' => '⬅️ بازگشت', 'callback_data' => 'menu:active']],
         ]);
     }
 
@@ -265,10 +267,10 @@ final class Keyboards
         }
         $nav = [];
         if ($page > 0) {
-            $nav[] = ['text' => '⬅️ Prev', 'callback_data' => 'hist:page:' . ($page - 1)];
+            $nav[] = ['text' => '⬅️ قبلی', 'callback_data' => 'hist:page:' . ($page - 1)];
         }
         if (count($signals) === 10) {
-            $nav[] = ['text' => 'Next ➡️', 'callback_data' => 'hist:page:' . ($page + 1)];
+            $nav[] = ['text' => 'بعدی ➡️', 'callback_data' => 'hist:page:' . ($page + 1)];
         }
         if ($nav !== []) {
             $rows[] = $nav;
@@ -280,8 +282,8 @@ final class Keyboards
     public static function templates(): array
     {
         return self::kb([
-            [['text' => '✏️ Edit Signal Template', 'callback_data' => 'tpl:edit']],
-            [['text' => '♻️ Reset to Default', 'callback_data' => 'tpl:reset']],
+            [['text' => '✏️ ویرایش قالب سیگنال', 'callback_data' => 'tpl:edit']],
+            [['text' => '♻️ بازگشت به پیش‌فرض', 'callback_data' => 'tpl:reset']],
             self::backRow(),
         ]);
     }
@@ -290,10 +292,10 @@ final class Keyboards
     {
         $nav = [];
         if ($page > 0) {
-            $nav[] = ['text' => '⬅️ Prev', 'callback_data' => 'usr:page:' . ($page - 1)];
+            $nav[] = ['text' => '⬅️ قبلی', 'callback_data' => 'usr:page:' . ($page - 1)];
         }
         if ($hasMore) {
-            $nav[] = ['text' => 'Next ➡️', 'callback_data' => 'usr:page:' . ($page + 1)];
+            $nav[] = ['text' => 'بعدی ➡️', 'callback_data' => 'usr:page:' . ($page + 1)];
         }
         $rows = $nav !== [] ? [$nav] : [];
         $rows[] = self::backRow();
@@ -308,19 +310,19 @@ final class Keyboards
             $label = $a['label'] ?: $a['telegram_id'];
             $rows[] = [['text' => "🔐 {$label}", 'callback_data' => "adm:remove:{$a['telegram_id']}"]];
         }
-        $rows[] = [['text' => '➕ Add Admin', 'callback_data' => 'adm:add']];
+        $rows[] = [['text' => '➕ افزودن ادمین', 'callback_data' => 'adm:add']];
         $rows[] = self::backRow();
         return self::kb($rows);
     }
 
     public static function logs(): array
     {
-        return self::kb([[['text' => '🔃 Refresh', 'callback_data' => 'menu:logs']], self::backRow()]);
+        return self::kb([[['text' => '🔃 تازه‌سازی', 'callback_data' => 'menu:logs']], self::backRow()]);
     }
 
     public static function backtest(): array
     {
-        return self::kb([[['text' => '▶️ Run Backtest', 'callback_data' => 'bt:start']], self::backRow()]);
+        return self::kb([[['text' => '▶️ اجرای بک‌تست', 'callback_data' => 'bt:start']], self::backRow()]);
     }
 
     public static function cancel(string $target = 'root'): array

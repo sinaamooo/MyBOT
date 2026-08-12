@@ -21,8 +21,8 @@ final class SymbolsHandler
         $pageOfSymbols = SymbolService::listPage(self::PAGE_SIZE, $page * self::PAGE_SIZE);
         $hasMore = ($page + 1) * self::PAGE_SIZE < $total;
 
-        $text = "🪙 <b>Symbols</b> ({$total} total)\n\n"
-            . 'Tap a symbol to enable/disable it, 🗑 to remove it.'
+        $text = "🪙 <b>ارزها</b> (مجموع: {$total})\n\n"
+            . 'برای فعال/غیرفعال کردن یک ارز روش بزنید، 🗑 برای حذف.'
             . ($note !== '' ? "\n\n{$note}" : '');
 
         $ctx->telegram->editMessageText($chatId, $messageId, $text, Keyboards::symbols($pageOfSymbols, $page, $hasMore, $total));
@@ -56,7 +56,7 @@ final class SymbolsHandler
     public static function startAdd(int $chatId, int $messageId, int $userId, BotContext $ctx): void
     {
         AdminStateService::set($userId, 'symbol_add');
-        $ctx->telegram->editMessageText($chatId, $messageId, 'Send the symbol to add (e.g. PEPEUSDT):', Keyboards::cancel('symbols'));
+        $ctx->telegram->editMessageText($chatId, $messageId, 'نماد را برای افزودن بفرستید (مثلاً PEPEUSDT):', Keyboards::cancel('symbols'));
     }
 
     public static function receiveNewSymbol(int $chatId, int $userId, string $text, BotContext $ctx): void
@@ -67,7 +67,7 @@ final class SymbolsHandler
 
         $total = SymbolService::count();
         $pageOfSymbols = SymbolService::listPage(self::PAGE_SIZE, 0);
-        $ctx->telegram->sendMessage($chatId, "✅ {$symbol} added.", Keyboards::symbols($pageOfSymbols, 0, $total > self::PAGE_SIZE, $total));
+        $ctx->telegram->sendMessage($chatId, "✅ {$symbol} اضافه شد.", Keyboards::symbols($pageOfSymbols, 0, $total > self::PAGE_SIZE, $total));
     }
 
     /** Fetches Top-N USDT-M perpetuals by 24h volume from MEXC and adds any not already tracked. */
@@ -78,12 +78,12 @@ final class SymbolsHandler
             $ranked = $ctx->exchange->listUsdtTickersRankedByVolume();
         } catch (\Throwable $e) {
             LogService::log('ERROR', 'symbols', 'Top-N sync failed: ' . $e->getMessage());
-            self::render(0, $chatId, $messageId, $ctx, "⚠️ Sync failed: {$e->getMessage()}");
+            self::render(0, $chatId, $messageId, $ctx, "⚠️ همگام‌سازی ناموفق بود: {$e->getMessage()}");
             return;
         }
 
         $added = SymbolService::syncTopByVolume($ranked, $topN);
         LogService::log('INFO', 'symbols', "Top-{$topN} sync added {$added} new symbol(s)");
-        self::render(0, $chatId, $messageId, $ctx, "🔄 Synced top {$topN} by volume - added {$added} new symbol(s).");
+        self::render(0, $chatId, $messageId, $ctx, "🔄 Top-{$topN} بر اساس حجم همگام‌سازی شد - {$added} ارز جدید اضافه شد.");
     }
 }

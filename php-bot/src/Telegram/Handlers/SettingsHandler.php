@@ -17,7 +17,7 @@ final class SettingsHandler
     public static function showIndicators(int $chatId, int $messageId, BotContext $ctx): void
     {
         $params = SettingsService::getAll();
-        $ctx->telegram->editMessageText($chatId, $messageId, "📊 <b>Indicators</b>\n\nToggle indicators on/off:", Keyboards::indicators($params));
+        $ctx->telegram->editMessageText($chatId, $messageId, "📊 <b>اندیکاتورها</b>\n\nهر اندیکاتور را روشن/خاموش کنید:", Keyboards::indicators($params));
     }
 
     public static function toggleIndicator(string $key, int $chatId, int $messageId, BotContext $ctx): void
@@ -30,7 +30,7 @@ final class SettingsHandler
     // -- Settings menu ----------------------------------------------------
     public static function showMenu(int $chatId, int $messageId, BotContext $ctx): void
     {
-        $ctx->telegram->editMessageText($chatId, $messageId, "⚙️ <b>Settings</b>\n\nChoose a category:", Keyboards::settingsMenu());
+        $ctx->telegram->editMessageText($chatId, $messageId, "⚙️ <b>تنظیمات</b>\n\nیک دسته را انتخاب کنید:", Keyboards::settingsMenu());
     }
 
     public static function showCategory(string $category, int $chatId, int $messageId, BotContext $ctx): void
@@ -58,7 +58,7 @@ final class SettingsHandler
         $ctx->telegram->editMessageText(
             $chatId,
             $messageId,
-            "Current value of <b>{$key}</b>: {$current}\n\nSend the new numeric value:",
+            "مقدار فعلی <b>{$key}</b>: {$current}\n\nمقدار عددی جدید را بفرستید:",
             Keyboards::cancel('settings')
         );
     }
@@ -79,7 +79,7 @@ final class SettingsHandler
         };
 
         if ($parsed === null) {
-            $ctx->telegram->sendMessage($chatId, "Invalid value for a {$valueType}. Try again or press Back.");
+            $ctx->telegram->sendMessage($chatId, "مقدار نامعتبر است (نوع مورد نیاز: {$valueType}). دوباره تلاش کنید یا بازگشت را بزنید.");
             return;
         }
 
@@ -108,7 +108,7 @@ final class SettingsHandler
         $ctx->telegram->editMessageText(
             $chatId,
             $messageId,
-            "📝 <b>Message Templates</b>\n\nCurrent template:\n<code>" . htmlspecialchars((string) $template) . '</code>',
+            "📝 <b>قالب پیام</b>\n\nقالب فعلی:\n<code>" . htmlspecialchars((string) $template) . '</code>',
             Keyboards::templates()
         );
     }
@@ -120,7 +120,7 @@ final class SettingsHandler
         $ctx->telegram->editMessageText(
             $chatId,
             $messageId,
-            "Send the new signal template. Use these placeholders:\n{$placeholders}",
+            "قالب جدید سیگنال را بفرستید. از این متغیرها استفاده کنید:\n{$placeholders}",
             Keyboards::cancel('templates')
         );
     }
@@ -129,11 +129,11 @@ final class SettingsHandler
     {
         AdminStateService::clear($userId);
         if (!Formatter::validateSignalTemplate($text)) {
-            $ctx->telegram->sendMessage($chatId, 'Template has an invalid/unknown placeholder. Not saved.');
+            $ctx->telegram->sendMessage($chatId, '⚠️ قالب شامل یک متغیر نامعتبر/ناشناخته است. ذخیره نشد.');
             return;
         }
         SettingsService::set('signal_message_template', $text);
-        $ctx->telegram->sendMessage($chatId, '✅ Template saved.', Keyboards::templates());
+        $ctx->telegram->sendMessage($chatId, '✅ قالب ذخیره شد.', Keyboards::templates());
     }
 
     public static function resetTemplate(int $chatId, int $messageId, BotContext $ctx): void
@@ -142,7 +142,7 @@ final class SettingsHandler
         $ctx->telegram->editMessageText(
             $chatId,
             $messageId,
-            "📝 <b>Message Templates</b>\n\nCurrent template:\n<code>" . htmlspecialchars(Config::defaultSignalMessageTemplate()) . '</code>',
+            "📝 <b>قالب پیام</b>\n\nقالب فعلی:\n<code>" . htmlspecialchars(Config::defaultSignalMessageTemplate()) . '</code>',
             Keyboards::templates()
         );
     }

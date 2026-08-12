@@ -25,25 +25,25 @@ final class DashboardHandler
         $stats = SignalService::dashboardStats();
         $params = SettingsService::getAll();
         $running = !empty($params['scanner_running']);
-        $icon = $running ? '🟢 RUNNING' : '🔴 STOPPED';
+        $icon = $running ? '🟢 در حال اجرا' : '🔴 متوقف';
 
-        return "🖥 <b>Dashboard</b>\n\n"
-            . "Bot Status: 🟢 ONLINE\n"
-            . "Scanner: {$icon}\n"
-            . 'Last Scan: ' . ($params['last_scan_at'] ?: '-') . "\n"
-            . 'Next Scan: ' . ($params['next_scan_at'] ?: '-') . "\n"
-            . (!empty($params['last_scan_error']) ? "⚠️ Last error: {$params['last_scan_error']}\n" : '')
+        return "🖥 <b>داشبورد</b>\n\n"
+            . "وضعیت ربات: 🟢 آنلاین\n"
+            . "اسکنر: {$icon}\n"
+            . 'آخرین اسکن: ' . ($params['last_scan_at'] ?: '-') . "\n"
+            . 'اسکن بعدی: ' . ($params['next_scan_at'] ?: '-') . "\n"
+            . (!empty($params['last_scan_error']) ? "⚠️ آخرین خطا: {$params['last_scan_error']}\n" : '')
             . "\n"
-            . "Total Signals: {$stats['total_signals']}\n"
-            . "Active Signals: {$stats['active_signals']}\n"
-            . "Today Signals: {$stats['today_signals']}\n"
-            . "Winning Signals: {$stats['winning_signals']}\n"
-            . "Stopped Signals: {$stats['stopped_signals']}\n\n"
+            . "کل سیگنال‌ها: {$stats['total_signals']}\n"
+            . "سیگنال‌های فعال: {$stats['active_signals']}\n"
+            . "سیگنال‌های امروز: {$stats['today_signals']}\n"
+            . "سیگنال‌های برنده: {$stats['winning_signals']}\n"
+            . "سیگنال‌های استاپ‌خورده: {$stats['stopped_signals']}\n\n"
             . "TP1: {$stats['tp1_count']}  TP2: {$stats['tp2_count']}  TP3: {$stats['tp3_count']}\n"
-            . "Risk Free: {$stats['risk_free_count']}\n\n"
-            . "Win Rate: {$stats['win_rate']}%\n"
-            . "Average R:R: 1:{$stats['avg_rr']}\n"
-            . "Average Score: {$stats['avg_score']}%";
+            . "ریسک‌فری: {$stats['risk_free_count']}\n\n"
+            . "نرخ برد: {$stats['win_rate']}%\n"
+            . "میانگین ریسک‌ریوارد: 1:{$stats['avg_rr']}\n"
+            . "میانگین امتیاز: {$stats['avg_score']}%";
     }
 
     public static function show(int $chatId, int $messageId, BotContext $ctx): void
@@ -69,13 +69,13 @@ final class DashboardHandler
     {
         SettingsService::set('scanner_running', true);
         LogService::log('INFO', 'scanner', 'Scanner marked running (/start_scanner)');
-        $ctx->telegram->sendMessage($chatId, 'Scanner: RUNNING', Keyboards::mainMenu());
+        $ctx->telegram->sendMessage($chatId, 'اسکنر: در حال اجرا 🟢', Keyboards::mainMenu());
     }
 
     public static function stopScannerCmd(int $chatId, BotContext $ctx): void
     {
         SettingsService::set('scanner_running', false);
         LogService::log('INFO', 'scanner', 'Scanner stopped (/stop_scanner)');
-        $ctx->telegram->sendMessage($chatId, 'Scanner: STOPPED', Keyboards::mainMenu());
+        $ctx->telegram->sendMessage($chatId, 'اسکنر: متوقف شد 🔴', Keyboards::mainMenu());
     }
 }

@@ -30,7 +30,7 @@ final class UsersHandler
         $total = UserService::count();
         $users = UserService::list(self::PAGE_SIZE, $page * self::PAGE_SIZE);
         $lines = array_map(fn($u) => "• {$u['first_name']} (@{$u['username']}) - {$u['telegram_id']}", $users);
-        $text = "👥 <b>Users</b> ({$total} total)\n\n" . ($lines !== [] ? implode("\n", $lines) : 'No users yet.');
+        $text = "👥 <b>کاربران</b> (مجموع: {$total})\n\n" . ($lines !== [] ? implode("\n", $lines) : 'هنوز کاربری وجود ندارد.');
         $hasMore = ($page + 1) * self::PAGE_SIZE < $total;
         $ctx->telegram->editMessageText($chatId, $messageId, $text, Keyboards::users($page, $hasMore));
     }
@@ -39,14 +39,14 @@ final class UsersHandler
     public static function showAdmins(int $chatId, int $messageId, BotContext $ctx): void
     {
         $admins = AdminService::list();
-        $text = "🔐 <b>Admins</b>\n\nTap to remove.\n\n(Env-configured ADMIN_IDS are not shown here and cannot be removed via panel.)";
+        $text = "🔐 <b>ادمین‌ها</b>\n\nبرای حذف روی هرکدام بزنید.\n\n(شناسه‌های تنظیم‌شده در ADMIN_IDS اینجا نمایش داده نمی‌شوند و از طریق پنل قابل حذف نیستند.)";
         $ctx->telegram->editMessageText($chatId, $messageId, $text, Keyboards::admins($admins));
     }
 
     public static function startAddAdmin(int $chatId, int $messageId, int $userId, BotContext $ctx): void
     {
         AdminStateService::set($userId, 'admin_add');
-        $ctx->telegram->editMessageText($chatId, $messageId, 'Send the Telegram numeric ID of the new admin:', Keyboards::cancel('admins'));
+        $ctx->telegram->editMessageText($chatId, $messageId, 'شناسه عددی تلگرام ادمین جدید را بفرستید:', Keyboards::cancel('admins'));
     }
 
     public static function receiveNewAdmin(int $chatId, int $userId, string $text, BotContext $ctx): void
@@ -54,20 +54,20 @@ final class UsersHandler
         AdminStateService::clear($userId);
         $trimmed = trim($text);
         if (!ctype_digit(ltrim($trimmed, '-'))) {
-            $ctx->telegram->sendMessage($chatId, "That doesn't look like a numeric Telegram ID.");
+            $ctx->telegram->sendMessage($chatId, 'این یک شناسه عددی معتبر تلگرام به نظر نمی‌رسد.');
             return;
         }
         $newAdminId = (int) $trimmed;
         AdminService::add($newAdminId, null, $userId);
         $admins = AdminService::list();
-        $ctx->telegram->sendMessage($chatId, "✅ Added admin {$newAdminId}.", Keyboards::admins($admins));
+        $ctx->telegram->sendMessage($chatId, "✅ ادمین {$newAdminId} اضافه شد.", Keyboards::admins($admins));
     }
 
     public static function removeAdmin(int $telegramId, int $chatId, int $messageId, BotContext $ctx): void
     {
         AdminService::remove($telegramId);
         $admins = AdminService::list();
-        $ctx->telegram->editMessageText($chatId, $messageId, "🔐 <b>Admins</b>\n\nTap to remove.", Keyboards::admins($admins));
+        $ctx->telegram->editMessageText($chatId, $messageId, "🔐 <b>ادمین‌ها</b>\n\nبرای حذف روی هرکدام بزنید.", Keyboards::admins($admins));
     }
 
     // -- Logs ---------------------------------------------------------------------
@@ -75,10 +75,10 @@ final class UsersHandler
     {
         $logs = LogService::recent(20);
         if ($logs === []) {
-            $text = "📜 <b>Logs</b>\n\nNo logs yet.";
+            $text = "📜 <b>لاگ‌ها</b>\n\nهنوز لاگی وجود ندارد.";
         } else {
             $lines = array_map(fn($l) => "[{$l['level']}] {$l['source']}: {$l['message']}", $logs);
-            $text = "📜 <b>Logs</b> (latest 20)\n\n" . implode("\n", $lines);
+            $text = "📜 <b>لاگ‌ها</b> (۲۰ مورد آخر)\n\n" . implode("\n", $lines);
         }
         $ctx->telegram->editMessageText($chatId, $messageId, mb_substr($text, 0, 4000), Keyboards::logs());
     }

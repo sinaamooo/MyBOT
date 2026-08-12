@@ -148,7 +148,7 @@ final class UpdateHandler
         }
 
         if (!AdminService::isAdmin($userId)) {
-            $this->ctx->telegram->answerCallbackQuery($callbackId, '⛔ Access denied', true);
+            $this->ctx->telegram->answerCallbackQuery($callbackId, '⛔ دسترسی غیرمجاز', true);
             return;
         }
 
