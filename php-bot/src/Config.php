@@ -92,6 +92,18 @@ final class Config
         ];
     }
 
+    /**
+     * The dedicated Major-coins track (see Scanner::runScanPass) - scanned
+     * separately from the altcoin/hunter track, with its own risk settings,
+     * regardless of what's in the Symbols panel's enabled list.
+     *
+     * @return string[]
+     */
+    public static function majorSymbols(): array
+    {
+        return ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'];
+    }
+
     public const TIMEFRAME_TREND = '4h';
     public const TIMEFRAME_CONFIRM = '1h';
     public const TIMEFRAME_SETUP = '15m';
@@ -203,12 +215,33 @@ final class Config
             'high_volatility_score_buffer' => 10,
             'low_volatility_atr_pct' => 0.008,
 
-            // --- Risk / SL / TP ---
+            // --- Risk / SL / TP (this is the Altcoin/Hunter track's risk config -
+            // the Major track (BTC/ETH/SOL) has its own independent copy below) ---
+            'risk_mode' => 'atr',            // 'atr' or 'percent'
             'atr_sl_multiplier' => 1.5,
             'tp1_r_multiple' => 1.0,
             'tp2_r_multiple' => 2.0,
             'tp3_r_multiple' => 3.0,
+            'risk_sl_percent' => 4.0,        // used only when risk_mode = 'percent'
+            'risk_tp1_percent' => 3.0,
+            'risk_tp2_percent' => 6.0,
+            'risk_tp3_percent' => 10.0,
             'min_rr' => 1.5,
+
+            // --- Major-coins track (BTC/ETH/SOL only - see Config::majorSymbols) -
+            // scanned and risk-managed completely separately from the altcoin/
+            // hunter track above; defaults mirror the altcoin track's numbers but
+            // are meant to be tightened independently since majors move less. ---
+            'major_track_enabled' => true,
+            'major_risk_mode' => 'atr',
+            'major_atr_sl_multiplier' => 1.5,
+            'major_tp1_r_multiple' => 1.0,
+            'major_tp2_r_multiple' => 2.0,
+            'major_tp3_r_multiple' => 3.0,
+            'major_risk_sl_percent' => 1.5,
+            'major_risk_tp1_percent' => 2.0,
+            'major_risk_tp2_percent' => 3.5,
+            'major_risk_tp3_percent' => 5.0,
 
             // --- Leverage suggestion (three independent tiers by ATR% volatility -
             // NEVER auto-executed, shown as a suggestion only. High leverage does

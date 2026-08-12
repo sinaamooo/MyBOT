@@ -178,11 +178,28 @@ final class Keyboards
                 ['وزن: ساختار بازار BOS/CHoCH', 'score_weight_structure'],
             ],
             'risk' => [
+                ['حالت ریسک (ATR/درصدی)', 'risk_mode'],
                 ['ضریب ATR برای استاپ', 'atr_sl_multiplier'],
                 ['ضریب ریسک TP1', 'tp1_r_multiple'],
                 ['ضریب ریسک TP2', 'tp2_r_multiple'],
                 ['ضریب ریسک TP3', 'tp3_r_multiple'],
+                ['درصد استاپ (حالت درصدی)', 'risk_sl_percent'],
+                ['درصد TP1 (حالت درصدی)', 'risk_tp1_percent'],
+                ['درصد TP2 (حالت درصدی)', 'risk_tp2_percent'],
+                ['درصد TP3 (حالت درصدی)', 'risk_tp3_percent'],
                 ['حداقل ریسک به ریوارد', 'min_rr'],
+            ],
+            'major' => [
+                ['بخش میجور فعال', 'major_track_enabled'],
+                ['حالت ریسک میجور (ATR/درصدی)', 'major_risk_mode'],
+                ['ضریب ATR استاپ میجور', 'major_atr_sl_multiplier'],
+                ['ضریب ریسک TP1 میجور', 'major_tp1_r_multiple'],
+                ['ضریب ریسک TP2 میجور', 'major_tp2_r_multiple'],
+                ['ضریب ریسک TP3 میجور', 'major_tp3_r_multiple'],
+                ['درصد استاپ میجور (حالت درصدی)', 'major_risk_sl_percent'],
+                ['درصد TP1 میجور (حالت درصدی)', 'major_risk_tp1_percent'],
+                ['درصد TP2 میجور (حالت درصدی)', 'major_risk_tp2_percent'],
+                ['درصد TP3 میجور (حالت درصدی)', 'major_risk_tp3_percent'],
             ],
             'leverage' => [
                 ['حداکثر اهرم - نوسان کم', 'leverage_low_vol_max'],
@@ -231,7 +248,8 @@ final class Keyboards
     {
         return [
             'scoring' => '🎯 امتیازدهی و آستانه‌ها',
-            'risk' => '🛡 ریسک (استاپ/تارگت/ریسک‌ریوارد)',
+            'risk' => '🛡 ریسک - آلت‌کوین (استاپ/تارگت/ریسک‌ریوارد)',
+            'major' => '👑 بخش میجور (بیت‌کوین/اتریوم/سولانا)',
             'leverage' => '⚡ سطوح اهرم',
             'scanner' => '🔁 اسکنر و کول‌داون',
             'monitoring' => '👁 مانیتورینگ',
@@ -252,13 +270,18 @@ final class Keyboards
         return self::kb($rows);
     }
 
+    private const RISK_MODE_KEYS = ['risk_mode', 'major_risk_mode'];
+
     /** @param array<string, mixed> $params */
     public static function settingsCategory(string $category, array $params): array
     {
         $rows = [];
         foreach (self::settingsCategories()[$category] as [$label, $key]) {
             $value = $params[$key] ?? null;
-            if (is_bool($value)) {
+            if (in_array($key, self::RISK_MODE_KEYS, true)) {
+                $display = $value === 'percent' ? '٪ درصدی' : '📐 ATR';
+                $rows[] = [['text' => "{$label}: {$display}", 'callback_data' => "set:mode:{$key}"]];
+            } elseif (is_bool($value)) {
                 $display = $value ? '🟢 روشن' : '🔴 خاموش';
                 $rows[] = [['text' => "{$label}: {$display}", 'callback_data' => "set:bool:{$key}"]];
             } else {

@@ -50,6 +50,17 @@ final class SettingsHandler
         $ctx->telegram->editMessageText($chatId, $messageId, "⚙️ <b>{$title}</b>", Keyboards::settingsCategory($category, $params));
     }
 
+    public static function toggleRiskMode(string $key, int $chatId, int $messageId, BotContext $ctx): void
+    {
+        $params = SettingsService::getAll();
+        $current = (string) ($params[$key] ?? 'atr');
+        SettingsService::set($key, $current === 'percent' ? 'atr' : 'percent');
+        $params = SettingsService::getAll(true);
+        $category = self::categoryFor($key);
+        $title = Keyboards::categoryTitles()[$category] ?? $category;
+        $ctx->telegram->editMessageText($chatId, $messageId, "⚙️ <b>{$title}</b>", Keyboards::settingsCategory($category, $params));
+    }
+
     public static function startEdit(string $key, int $chatId, int $messageId, int $userId, BotContext $ctx): void
     {
         $category = self::categoryFor($key);

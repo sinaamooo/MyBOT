@@ -240,6 +240,7 @@ final class UpdateHandler
                 'cat' => SettingsHandler::showCategory($parts[2] ?? 'scoring', $chatId, $messageId, $this->ctx),
                 'bool' => SettingsHandler::toggleBool($parts[2] ?? '', $chatId, $messageId, $this->ctx),
                 'edit' => SettingsHandler::startEdit($parts[2] ?? '', $chatId, $messageId, $userId, $this->ctx),
+                'mode' => SettingsHandler::toggleRiskMode($parts[2] ?? '', $chatId, $messageId, $this->ctx),
                 default => null,
             };
             return;

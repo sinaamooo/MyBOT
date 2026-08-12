@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Signals;
 
+use App\Config;
 use App\Services\LogService;
 use App\Services\SettingsService;
 use App\Services\SignalService;
@@ -52,11 +53,26 @@ final class Scanner
         SettingsService::set('next_scan_at', $nextScan);
     }
 
+    /**
+     * Runs the Major-coins track (BTC/ETH/SOL only, own risk settings) and
+     * the Altcoin/Hunter track (Symbols panel list minus the majors, so
+     * they're never scanned or signalled twice) as two independent passes.
+     */
     private function runScanPass(array $params): void
     {
-        $symbols = SymbolService::listEnabled();
         $todayStart = gmdate('Y-m-d 00:00:00');
 
+        if (!empty($params['major_track_enabled'])) {
+            $this->scanSymbols(Config::majorSymbols(), self::majorTrackParams($params), $todayStart);
+        }
+
+        $altSymbols = array_values(array_diff(SymbolService::listEnabled(), Config::majorSymbols()));
+        $this->scanSymbols($altSymbols, $params, $todayStart);
+    }
+
+    /** @param string[] $symbols */
+    private function scanSymbols(array $symbols, array $params, string $todayStart): void
+    {
         foreach ($symbols as $symbol) {
             if (SignalService::countActive() >= (int) $params['max_active_signals']) {
                 LogService::log('INFO', 'scanner', "Max active signals ({$params['max_active_signals']}) reached, stopping scan pass");
@@ -91,6 +107,21 @@ final class Scanner
 
             $this->publishCandidate($analysis['candidate'], $params);
         }
+    }
+
+    /** Remaps the Major track's dedicated settings onto the generic risk keys Risk::calculate() reads. */
+    private static function majorTrackParams(array $params): array
+    {
+        $params['risk_mode'] = $params['major_risk_mode'];
+        $params['atr_sl_multiplier'] = $params['major_atr_sl_multiplier'];
+        $params['tp1_r_multiple'] = $params['major_tp1_r_multiple'];
+        $params['tp2_r_multiple'] = $params['major_tp2_r_multiple'];
+        $params['tp3_r_multiple'] = $params['major_tp3_r_multiple'];
+        $params['risk_sl_percent'] = $params['major_risk_sl_percent'];
+        $params['risk_tp1_percent'] = $params['major_risk_tp1_percent'];
+        $params['risk_tp2_percent'] = $params['major_risk_tp2_percent'];
+        $params['risk_tp3_percent'] = $params['major_risk_tp3_percent'];
+        return $params;
     }
 
     /** @return array{signal_id: int, published: bool} */

@@ -18,13 +18,23 @@ final class Risk
      */
     public static function calculate(float $entry, string $side, float $atr, array $params, ?array $srLevels = null): array
     {
-        $slDistance = $atr * (float) $params['atr_sl_multiplier'];
+        if (($params['risk_mode'] ?? 'atr') === 'percent') {
+            $slDistance = $entry * ((float) $params['risk_sl_percent'] / 100);
+            $tp1Distance = $entry * ((float) $params['risk_tp1_percent'] / 100);
+            $tp2Distance = $entry * ((float) $params['risk_tp2_percent'] / 100);
+            $tp3Distance = $entry * ((float) $params['risk_tp3_percent'] / 100);
+        } else {
+            $slDistance = $atr * (float) $params['atr_sl_multiplier'];
+            $tp1Distance = $slDistance * (float) $params['tp1_r_multiple'];
+            $tp2Distance = $slDistance * (float) $params['tp2_r_multiple'];
+            $tp3Distance = $slDistance * (float) $params['tp3_r_multiple'];
+        }
 
         if ($side === 'LONG') {
             $stopLoss = $entry - $slDistance;
-            $tp1 = $entry + $slDistance * (float) $params['tp1_r_multiple'];
-            $tp2 = $entry + $slDistance * (float) $params['tp2_r_multiple'];
-            $tp3 = $entry + $slDistance * (float) $params['tp3_r_multiple'];
+            $tp1 = $entry + $tp1Distance;
+            $tp2 = $entry + $tp2Distance;
+            $tp3 = $entry + $tp3Distance;
             if ($srLevels !== null) {
                 $tp1 = SupportResistance::adjustTargetForLevels($tp1, 'LONG', $entry, $srLevels);
                 $tp2 = SupportResistance::adjustTargetForLevels($tp2, 'LONG', $entry, $srLevels);
@@ -32,9 +42,9 @@ final class Risk
             }
         } else {
             $stopLoss = $entry + $slDistance;
-            $tp1 = $entry - $slDistance * (float) $params['tp1_r_multiple'];
-            $tp2 = $entry - $slDistance * (float) $params['tp2_r_multiple'];
-            $tp3 = $entry - $slDistance * (float) $params['tp3_r_multiple'];
+            $tp1 = $entry - $tp1Distance;
+            $tp2 = $entry - $tp2Distance;
+            $tp3 = $entry - $tp3Distance;
             if ($srLevels !== null) {
                 $tp1 = SupportResistance::adjustTargetForLevels($tp1, 'SHORT', $entry, $srLevels);
                 $tp2 = SupportResistance::adjustTargetForLevels($tp2, 'SHORT', $entry, $srLevels);
