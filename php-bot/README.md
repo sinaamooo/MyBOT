@@ -44,7 +44,8 @@ cron/scanner.php           # cPanel Cron Job #1 (every ~4 min)
 cron/monitor.php           # cPanel Cron Job #2 (every ~1 min)
 cron/test_exchange.php     # manual connectivity check after deploy
 
-sql/schema.sql             # MySQL schema - import once via phpMyAdmin
+sql/schema_sqlite.sql      # SQLite schema - auto-applied on first run (default database)
+sql/schema.sql             # MySQL schema - only needed if DB_DRIVER=mysql (import once via phpMyAdmin)
 
 src/Config.php             # .env loader + strategy defaults (mirrors config.py)
 src/Database.php           # PDO/MySQL connection
@@ -64,24 +65,34 @@ See the Python README for the full scoring table; it applies unchanged here.
 
 ## Requirements
 
-- PHP 8.1+ with `pdo_mysql` and `curl` extensions (standard on virtually
-  every cPanel host)
-- A MySQL database (cPanel → MySQL Databases)
+- PHP 8.1+ with `pdo_sqlite` (default database, on by default on virtually
+  every host) and `curl` extensions
 - A domain with **HTTPS** (cPanel's free AutoSSL/Let's Encrypt is enough) -
   required for the Telegram webhook
 - SSH/Terminal access (to run the one-off setup scripts and cron)
 - A Telegram bot token, and the bot added as **admin** in your channel
 
+## Database: SQLite by default - nothing to create
+
+Unlike a typical PHP app, this does **not** require creating a MySQL
+database. By default (`DB_DRIVER=sqlite` in `.env`) it stores everything in
+a single file, `data/bot.sqlite`, created automatically the first time the
+app runs (webhook or cron, whichever fires first) - no phpMyAdmin, no
+import step. Just make sure the `data/` folder is writable by PHP, which
+it is by default since it's inside your own home directory.
+
+If you'd rather use MySQL (e.g. you already run several sites off one
+shared database, or expect heavy write volume), set `DB_DRIVER=mysql` and
+fill in `DB_HOST`/`DB_NAME`/`DB_USER`/`DB_PASS`; create the database via
+cPanel → MySQL Databases and import `sql/schema.sql` via phpMyAdmin once.
+Everything else about the bot behaves identically either way.
+
 ## Setup
 
-### 1. Upload & database
+### 1. Upload
 
 Upload this whole folder to your hosting (e.g. `~/crypto-signal-bot`,
 outside or inside `public_html` - see the webhook path note below).
-
-In cPanel → **MySQL Databases**: create a database and a user, add the
-user to the database with all privileges. Then in **phpMyAdmin**, select
-that database and run `sql/schema.sql` (Import tab, or paste into SQL tab).
 
 ### 2. `.env`
 
@@ -101,14 +112,13 @@ ADMIN_IDS=your_numeric_telegram_id
 TELEGRAM_WEBHOOK_SECRET=<run: php -r "echo bin2hex(random_bytes(20));">
 TELEGRAM_WEBHOOK_URL=https://yourdomain.com/crypto-signal-bot/public/webhook.php
 
-DB_HOST=localhost
-DB_PORT=3306
-DB_NAME=cpaneluser_cryptobot
-DB_USER=cpaneluser_botuser
-DB_PASS=...
+DB_DRIVER=sqlite
+DB_PATH=data/bot.sqlite
 
 EXCHANGE_ID=mexc
 ```
+
+(Leave the MySQL block below it untouched/empty unless you set `DB_DRIVER=mysql`.)
 
 `EXCHANGE_API_KEY`/`EXCHANGE_API_SECRET` can stay empty - only public
 market data is used. `.env` is not web-accessible as long as it sits
@@ -189,7 +199,7 @@ Public commands: `/start /help /status /signals /stats`. Admin commands:
 
 ## Test scenario
 
-1. Import `sql/schema.sql`, fill `.env`, run `setup_webhook.php set`.
+1. Fill `.env` (SQLite needs no import step), run `setup_webhook.php set`.
 2. `/admin` → 📡 Signal Control → 🧪 Send Test Signal - confirms Telegram
    connectivity, formatting, buttons, and DB writes immediately (no cron wait).
 3. `/admin` → 🖥 Dashboard → ▶️ Start Scanner.
