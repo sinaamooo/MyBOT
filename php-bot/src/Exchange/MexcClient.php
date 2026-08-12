@@ -159,6 +159,15 @@ final class MexcClient
         return $this->detailCache[$symbolId];
     }
 
+    /** Minimum spacing between outbound requests, in seconds. A single scan
+     * pass makes ~5 requests per symbol with no other pacing, and MEXC will
+     * start returning code 510 ("Requests are too frequent") without it. */
+    private const MIN_REQUEST_INTERVAL = 0.2;
+    private static float $lastRequestAt = 0.0;
+
+    /** MEXC error codes/messages worth retrying instead of failing immediately. */
+    private const RATE_LIMIT_CODES = [510];
+
     /**
      * @param array<string, mixed> $params
      * @return array<string, mixed>
@@ -170,11 +179,14 @@ final class MexcClient
             $url .= '?' . http_build_query($params);
         }
 
+        $maxAttempts = 5;
         $attempts = 0;
         $lastError = null;
 
-        while ($attempts < 3) {
+        while ($attempts < $maxAttempts) {
             $attempts++;
+            self::throttle();
+
             $ch = curl_init($url);
             curl_setopt_array($ch, [
                 CURLOPT_CUSTOMREQUEST => $method,
@@ -192,7 +204,7 @@ final class MexcClient
 
             if ($errno !== 0) {
                 $lastError = "cURL error ({$errno}): {$error}";
-                usleep((int) (300000 * $attempts)); // 0.3s, 0.6s, 0.9s backoff
+                usleep((int) (300000 * $attempts)); // 0.3s, 0.6s, 0.9s, ... backoff
                 continue;
             }
             if ($httpCode >= 500) {
@@ -209,6 +221,14 @@ final class MexcClient
                 throw new \RuntimeException("MEXC API returned invalid JSON for {$path}: " . substr((string) $body, 0, 300));
             }
             if (array_key_exists('success', $decoded) && $decoded['success'] !== true) {
+                $code = $decoded['code'] ?? null;
+                $message = (string) ($decoded['message'] ?? '');
+                $isRateLimit = in_array($code, self::RATE_LIMIT_CODES, true) || stripos($message, 'frequent') !== false;
+                if ($isRateLimit) {
+                    $lastError = "rate limited (code {$code}: {$message})";
+                    usleep((int) (700000 * $attempts)); // 0.7s, 1.4s, 2.1s, ... - MEXC rate limit windows are short but real
+                    continue;
+                }
                 throw new \RuntimeException("MEXC API reported failure for {$path}: " . substr((string) $body, 0, 300));
             }
             return $decoded;
@@ -216,5 +236,15 @@ final class MexcClient
 
         Logger::bot('ERROR', "MEXC request failed after {$attempts} attempts ({$path}): {$lastError}");
         throw new \RuntimeException("MEXC request failed: {$lastError}");
+    }
+
+    private static function throttle(): void
+    {
+        $elapsed = microtime(true) - self::$lastRequestAt;
+        $wait = self::MIN_REQUEST_INTERVAL - $elapsed;
+        if ($wait > 0) {
+            usleep((int) ($wait * 1_000_000));
+        }
+        self::$lastRequestAt = microtime(true);
     }
 }
