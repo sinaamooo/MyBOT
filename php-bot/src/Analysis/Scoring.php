@@ -32,9 +32,12 @@ final class Scoring
         $liquidityPools = !empty($params['indicator_liquidity_enabled'])
             ? Liquidity::detectPools($entryIdx)
             : ['buyside' => [], 'sellside' => []];
+        $structure = !empty($params['indicator_structure_enabled'])
+            ? MarketStructure::detect($indexedByTf[Config::TIMEFRAME_SETUP])
+            : ['bias' => 'NEUTRAL', 'last_break' => 'NONE', 'last_break_index' => null];
 
-        [$longScore, $longReasons] = self::scoreSide($indexedByTf, $pa, $obZones, $fvgZones, $liquidityPools, $params, true);
-        [$shortScore, $shortReasons] = self::scoreSide($indexedByTf, $pa, $obZones, $fvgZones, $liquidityPools, $params, false);
+        [$longScore, $longReasons] = self::scoreSide($indexedByTf, $pa, $obZones, $fvgZones, $liquidityPools, $structure, $params, true);
+        [$shortScore, $shortReasons] = self::scoreSide($indexedByTf, $pa, $obZones, $fvgZones, $liquidityPools, $structure, $params, false);
 
         $regime = MarketRegime::detect($indexedByTf[Config::TIMEFRAME_SETUP], $params);
         $trend = Trend::detect($indexedByTf[Config::TIMEFRAME_TREND], $params);
@@ -108,6 +111,7 @@ final class Scoring
         array $obZones,
         array $fvgZones,
         array $liquidityPools,
+        array $structure,
         array $params,
         bool $bullish
     ): array {
@@ -133,6 +137,7 @@ final class Scoring
         $wSmcOb = (float) $params['score_weight_smc_ob'];
         $wFvg = (float) $params['score_weight_fvg'];
         $wLiquidity = (float) $params['score_weight_liquidity'];
+        $wStructure = (float) $params['score_weight_structure'];
 
         // 1) Trend (4H)
         $trend = Trend::detect($trendIdx, $params);
@@ -273,7 +278,16 @@ final class Scoring
             }
         }
 
-        $maxScore = $wTrend + $wEma + $wRsi + $wMacd + $wAdx + $wVolume + $wPa + $wHtf + $wSmcOb + $wFvg + $wLiquidity;
+        // 12) ICT/SMC market structure BOS/CHoCH (15M)
+        if (!empty($params['indicator_structure_enabled'])) {
+            $struct = MarketStructure::evaluate($structure, $setupIdx, $bullish);
+            if ($struct['hit']) {
+                $total += $wStructure;
+                $reasons[] = $struct['reason'];
+            }
+        }
+
+        $maxScore = $wTrend + $wEma + $wRsi + $wMacd + $wAdx + $wVolume + $wPa + $wHtf + $wSmcOb + $wFvg + $wLiquidity + $wStructure;
         $raw = self::clamp($total, $maxScore);
         $normalized = $maxScore > 0 ? ($raw / $maxScore) * 100.0 : 0.0;
         return [$normalized, $reasons];

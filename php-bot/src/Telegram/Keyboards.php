@@ -122,6 +122,7 @@ final class Keyboards
             ['اوردر بلاک / بریکر بلاک (ICT-SMC)', 'indicator_smc_ob_enabled'],
             ['شکاف ارزش منصفانه FVG (ICT-SMC)', 'indicator_fvg_enabled'],
             ['نقدینگی / شکار استاپ (ICT-SMC)', 'indicator_liquidity_enabled'],
+            ['ساختار بازار BOS/CHoCH (ICT-SMC)', 'indicator_structure_enabled'],
         ];
         $rows = [];
         foreach ($flags as [$label, $key]) {
@@ -152,6 +153,7 @@ final class Keyboards
                 ['وزن: اوردر بلاک/بریکر بلاک', 'score_weight_smc_ob'],
                 ['وزن: FVG', 'score_weight_fvg'],
                 ['وزن: نقدینگی/شکار استاپ', 'score_weight_liquidity'],
+                ['وزن: ساختار بازار BOS/CHoCH', 'score_weight_structure'],
             ],
             'risk' => [
                 ['ضریب ATR برای استاپ', 'atr_sl_multiplier'],
