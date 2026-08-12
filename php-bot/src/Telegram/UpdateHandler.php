@@ -75,7 +75,8 @@ final class UpdateHandler
                 AdminStateService::clear($userId);
                 return;
             }
-            $this->routeState($chatId, $userId, $text, $state);
+            $entities = is_array($message['entities'] ?? null) ? $message['entities'] : [];
+            $this->routeState($chatId, $userId, $text, $entities, $state);
         }
     }
 
@@ -111,8 +112,8 @@ final class UpdateHandler
         }
     }
 
-    /** @param array{state:string, context:array<string,mixed>} $state */
-    private function routeState(int $chatId, int $userId, string $text, array $state): void
+    /** @param array{state:string, context:array<string,mixed>} $state @param array<int, array<string,mixed>> $entities */
+    private function routeState(int $chatId, int $userId, string $text, array $entities, array $state): void
     {
         $context = $state['context'];
         match ($state['state']) {
@@ -122,6 +123,7 @@ final class UpdateHandler
             'template_edit' => SettingsHandler::receiveTemplate($chatId, $userId, $text, $this->ctx),
             'admin_add' => UsersHandler::receiveNewAdmin($chatId, $userId, $text, $this->ctx),
             'backtest_input' => BacktestHandler::run($chatId, $userId, $text, $this->ctx),
+            'premium_emoji_capture' => SettingsHandler::receivePremiumEmoji($chatId, $userId, $entities, $context, $this->ctx),
             default => AdminStateService::clear($userId),
         };
     }
@@ -181,6 +183,16 @@ final class UpdateHandler
                 'users' => UsersHandler::showUsers($chatId, $messageId, $this->ctx),
                 'admins' => UsersHandler::showAdmins($chatId, $messageId, $this->ctx),
                 'logs' => UsersHandler::showLogs($chatId, $messageId, $this->ctx),
+                'premium_emoji' => SettingsHandler::showPremiumEmoji($chatId, $messageId, $this->ctx),
+                default => null,
+            };
+            return;
+        }
+
+        if ($prefix === 'pe') {
+            match ($parts[1] ?? '') {
+                'toggle' => SettingsHandler::togglePremiumEmoji($chatId, $messageId, $this->ctx),
+                'set' => SettingsHandler::startCapturePremiumEmoji($parts[2] ?? 'signal', $chatId, $messageId, $userId, $this->ctx),
                 default => null,
             };
             return;

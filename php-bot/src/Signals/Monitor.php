@@ -8,6 +8,7 @@ use App\Database;
 use App\Exchange\MexcClient;
 use App\Services\LogService;
 use App\Services\SignalService;
+use App\Support\Num;
 
 /**
  * Watches every ACTIVE/TP1/TP2/RISK_FREE signal and reacts to price: TP
@@ -60,27 +61,27 @@ final class Monitor
             if ($label === 'TP3') {
                 SignalService::update((int) $signal['id'], ['tp3_hit_at' => $now]);
                 SignalService::close((int) $signal['id'], 'TP3', $price);
-                $this->publisher->publishUpdate(Formatter::formatUpdateMessage('TP3', $signal['symbol'], $signal['side'], $price));
+                $this->publisher->publishUpdate(Formatter::formatUpdateMessage('TP3', $signal['symbol'], $signal['side'], $price), self::replyId($signal));
                 LogService::log('INFO', 'signals', "{$signal['symbol']} {$signal['side']} TP3 hit - trade completed");
                 return;
             }
 
             $status = $label === 'TP1' ? 'TP1' : 'TP2';
             SignalService::update((int) $signal['id'], ["{$field}_hit_at" => $now, 'status' => $status]);
-            $this->publisher->publishUpdate(Formatter::formatUpdateMessage($label, $signal['symbol'], $signal['side'], $price));
+            $this->publisher->publishUpdate(Formatter::formatUpdateMessage($label, $signal['symbol'], $signal['side'], $price), self::replyId($signal));
             LogService::log('INFO', 'signals', "{$signal['symbol']} {$signal['side']} {$label} hit @ {$price}");
             $signal["{$field}_hit_at"] = $now;
 
             if ($label === 'TP1' && (!empty($params['risk_free_enabled']) || !empty($params['trailing_stop_enabled'])) && $signal['risk_free_at'] === null) {
                 SignalService::update((int) $signal['id'], ['current_sl' => $signal['entry'], 'risk_free_at' => $now, 'status' => 'RISK_FREE']);
-                $this->publisher->publishUpdate(Formatter::formatUpdateMessage('RISK_FREE', $signal['symbol'], $signal['side']));
+                $this->publisher->publishUpdate(Formatter::formatUpdateMessage('RISK_FREE', $signal['symbol'], $signal['side']), self::replyId($signal));
                 LogService::log('INFO', 'signals', "{$signal['symbol']} {$signal['side']} moved to risk-free (SL -> entry)");
                 $signal['current_sl'] = $signal['entry'];
             }
 
             if ($label === 'TP2' && !empty($params['trailing_stop_enabled'])) {
                 SignalService::update((int) $signal['id'], ['current_sl' => $signal['tp1']]);
-                $this->publisher->publishUpdate(Formatter::formatUpdateMessage('TRAILING_STOP', $signal['symbol'], $signal['side'], (float) $signal['tp1']));
+                $this->publisher->publishUpdate(Formatter::formatUpdateMessage('TRAILING_STOP', $signal['symbol'], $signal['side'], (float) $signal['tp1']), self::replyId($signal));
                 LogService::log('INFO', 'signals', "{$signal['symbol']} {$signal['side']} trailing stop -> TP1");
                 $signal['current_sl'] = $signal['tp1'];
             }
@@ -90,7 +91,7 @@ final class Monitor
         $slHit = $isLong ? $price <= $currentSl : $price >= $currentSl;
         if ($slHit) {
             SignalService::close((int) $signal['id'], 'STOPPED', $price);
-            $this->publisher->publishUpdate(Formatter::formatUpdateMessage('STOPPED', $signal['symbol'], $signal['side'], $price));
+            $this->publisher->publishUpdate(Formatter::formatUpdateMessage('STOPPED', $signal['symbol'], $signal['side'], $price), self::replyId($signal));
             LogService::log('INFO', 'signals', "{$signal['symbol']} {$signal['side']} stop loss hit @ {$price}");
         }
     }
@@ -105,7 +106,7 @@ final class Monitor
         $ticker = $this->exchange->getTicker($signal['symbol']);
         $price = (float) $ticker['last'];
         $closed = SignalService::close($signalId, 'COMPLETED', $price);
-        $this->publisher->publishUpdate("⚪️ بسته شد (دستی)\n\n{$signal['symbol']} {$signal['side']}\nقیمت بسته شدن: {$price}");
+        $this->publisher->publishUpdate("⚪️ بسته شد (دستی)\n\n{$signal['symbol']} {$signal['side']}\nقیمت بسته شدن: " . Num::price($price), self::replyId($signal));
         LogService::log('INFO', 'signals', "{$signal['symbol']}#{$signalId} manually closed @ {$price}");
         return $closed;
     }
@@ -116,9 +117,15 @@ final class Monitor
         SignalService::update($signalId, ['status' => 'CANCELLED', 'closed_at' => Database::now()]);
         $signal = SignalService::get($signalId);
         if ($signal !== null) {
-            $this->publisher->publishUpdate(Formatter::formatUpdateMessage('CANCELLED', $signal['symbol'], $signal['side']));
+            $this->publisher->publishUpdate(Formatter::formatUpdateMessage('CANCELLED', $signal['symbol'], $signal['side']), self::replyId($signal));
             LogService::log('INFO', 'signals', "{$signal['symbol']}#{$signalId} cancelled");
         }
         return $signal;
+    }
+
+    /** @param array<string, mixed> $signal */
+    private static function replyId(array $signal): ?int
+    {
+        return !empty($signal['channel_message_id']) ? (int) $signal['channel_message_id'] : null;
     }
 }

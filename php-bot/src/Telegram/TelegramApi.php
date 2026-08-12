@@ -21,23 +21,29 @@ final class TelegramApi
     }
 
     /** @return array<string, mixed>|null message object on success */
-    public function sendMessage(int|string $chatId, string $text, ?array $replyMarkup = null): ?array
+    public function sendMessage(int|string $chatId, string $text, ?array $replyMarkup = null, ?int $replyToMessageId = null): ?array
     {
         $params = ['chat_id' => $chatId, 'text' => $text, 'parse_mode' => 'HTML'];
         if ($replyMarkup !== null) {
             $params['reply_markup'] = $replyMarkup;
+        }
+        if ($replyToMessageId !== null) {
+            $params['reply_parameters'] = ['message_id' => $replyToMessageId, 'allow_sending_without_reply' => true];
         }
         $result = $this->call('sendMessage', $params);
         return $result['result'] ?? null;
     }
 
     /** Uploads a local file as a photo (multipart/form-data, not the JSON call() path). @return array<string, mixed>|null */
-    public function sendPhoto(int|string $chatId, string $filePath, ?string $caption = null): ?array
+    public function sendPhoto(int|string $chatId, string $filePath, ?string $caption = null, ?int $replyToMessageId = null): ?array
     {
         $fields = ['chat_id' => (string) $chatId, 'photo' => new \CURLFile($filePath)];
         if ($caption !== null && $caption !== '') {
             $fields['caption'] = $caption;
             $fields['parse_mode'] = 'HTML';
+        }
+        if ($replyToMessageId !== null) {
+            $fields['reply_parameters'] = json_encode(['message_id' => $replyToMessageId, 'allow_sending_without_reply' => true]);
         }
 
         $ch = curl_init($this->baseUrl . 'sendPhoto');

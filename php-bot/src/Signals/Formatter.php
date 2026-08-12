@@ -41,6 +41,27 @@ final class Formatter
         return self::QUOTES[array_rand(self::QUOTES)];
     }
 
+    /**
+     * Renders a premium/custom emoji via Telegram's <tg-emoji> HTML tag when
+     * enabled and configured for this slot, falling back to a plain emoji
+     * otherwise - including when the bot owner's account has no Telegram
+     * Premium, since Telegram would otherwise reject the whole message.
+     *
+     * @param array<string, mixed> $params
+     */
+    public static function premiumEmoji(array $params, string $slot, string $fallback): string
+    {
+        if (empty($params['premium_emoji_enabled'])) {
+            return $fallback;
+        }
+        $key = $slot === 'pump' ? 'premium_emoji_pump_id' : 'premium_emoji_signal_id';
+        $id = (string) ($params[$key] ?? '');
+        if ($id === '') {
+            return $fallback;
+        }
+        return '<tg-emoji emoji-id="' . htmlspecialchars($id, ENT_QUOTES) . '">' . $fallback . '</tg-emoji>';
+    }
+
     /** @param array<string, mixed> $data */
     public static function formatSignalMessage(string $template, array $data): string
     {
@@ -58,7 +79,7 @@ final class Formatter
     /** @return string[] */
     public static function knownSignalPlaceholders(): array
     {
-        return ['symbol', 'side', 'side_emoji', 'score', 'entry', 'stop_loss', 'tp1', 'tp2', 'tp3', 'leverage', 'rr', 'timeframe', 'trend', 'regime', 'quote'];
+        return ['symbol', 'side', 'side_emoji', 'score', 'entry', 'stop_loss', 'tp1', 'tp2', 'tp3', 'leverage', 'rr', 'timeframe', 'trend', 'regime', 'quote', 'header_emoji'];
     }
 
     /** Rejects a template that references a placeholder we don't provide (e.g. a typo). */

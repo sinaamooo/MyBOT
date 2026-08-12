@@ -44,11 +44,27 @@ final class Keyboards
                 ['text' => '👥 کاربران', 'callback_data' => 'menu:users'],
                 ['text' => '🔐 ادمین‌ها', 'callback_data' => 'menu:admins'],
             ],
-            [['text' => '📜 لاگ‌ها', 'callback_data' => 'menu:logs']],
+            [
+                ['text' => '📜 لاگ‌ها', 'callback_data' => 'menu:logs'],
+                ['text' => '🌟 ایموجی پرمیوم', 'callback_data' => 'menu:premium_emoji'],
+            ],
             [
                 ['text' => '🔄 ری‌استارت اسکنر', 'callback_data' => 'scanner:restart'],
                 ['text' => '⛔ توقف اسکنر', 'callback_data' => 'scanner:stop'],
             ],
+        ]);
+    }
+
+    /** @param array<string, mixed> $params */
+    public static function premiumEmoji(array $params = []): array
+    {
+        $enabled = !empty($params['premium_emoji_enabled']);
+        $toggleLabel = $enabled ? '🟢 روشن (بزن تا خاموش شه)' : '🔴 خاموش (بزن تا روشن شه)';
+        return self::kb([
+            [['text' => $toggleLabel, 'callback_data' => 'pe:toggle']],
+            [['text' => '🚨 تنظیم ایموجی هدر سیگنال', 'callback_data' => 'pe:set:signal']],
+            [['text' => '🚀 تنظیم ایموجی شکارچی پامپ', 'callback_data' => 'pe:set:pump']],
+            self::backRow(),
         ]);
     }
 

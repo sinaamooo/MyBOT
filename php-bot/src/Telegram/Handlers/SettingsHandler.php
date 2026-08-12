@@ -161,4 +161,67 @@ final class SettingsHandler
             Keyboards::templates(SettingsService::getAll(true))
         );
     }
+
+    // -- Premium emoji --------------------------------------------------------
+    public static function showPremiumEmoji(int $chatId, int $messageId, BotContext $ctx): void
+    {
+        $params = SettingsService::getAll();
+        $enabled = !empty($params['premium_emoji_enabled']);
+        $signalSet = !empty($params['premium_emoji_signal_id']);
+        $pumpSet = !empty($params['premium_emoji_pump_id']);
+        $text = "🌟 <b>ایموجی پرمیوم</b>\n\n"
+            . 'این قابلیت فقط وقتی کار می‌کند که اکانتی که ربات را ساخته (مالک ربات در BotFather) '
+            . "اشتراک Telegram Premium داشته باشد؛ در غیر این صورت ارسال پیام با خطا مواجه می‌شود.\n\n"
+            . 'وضعیت: ' . ($enabled ? '🟢 روشن' : '🔴 خاموش') . "\n"
+            . 'ایموجی هدر سیگنال: ' . ($signalSet ? '✅ تنظیم شده' : '— تنظیم نشده') . "\n"
+            . 'ایموجی شکارچی پامپ: ' . ($pumpSet ? '✅ تنظیم شده' : '— تنظیم نشده');
+        $ctx->telegram->editMessageText($chatId, $messageId, $text, Keyboards::premiumEmoji($params));
+    }
+
+    public static function togglePremiumEmoji(int $chatId, int $messageId, BotContext $ctx): void
+    {
+        $params = SettingsService::getAll();
+        SettingsService::set('premium_emoji_enabled', empty($params['premium_emoji_enabled']));
+        self::showPremiumEmoji($chatId, $messageId, $ctx);
+    }
+
+    public static function startCapturePremiumEmoji(string $slot, int $chatId, int $messageId, int $userId, BotContext $ctx): void
+    {
+        AdminStateService::set($userId, 'premium_emoji_capture', ['slot' => $slot]);
+        $ctx->telegram->editMessageText(
+            $chatId,
+            $messageId,
+            'یک پیام حاوی همان ایموجی سفارشی/پرمیومی که می‌خواهید را برایم بفرستید یا فوروارد کنید '
+                . '(باید خودِ اکانت شما پرمیوم داشته باشد تا آن ایموجی را داشته باشد).',
+            Keyboards::cancel('premium_emoji')
+        );
+    }
+
+    /** @param array<int, array<string, mixed>> $entities @param array<string, mixed> $context */
+    public static function receivePremiumEmoji(int $chatId, int $userId, array $entities, array $context, BotContext $ctx): void
+    {
+        AdminStateService::clear($userId);
+        $slot = $context['slot'] ?? 'signal';
+
+        $emojiId = null;
+        foreach ($entities as $entity) {
+            if (($entity['type'] ?? '') === 'custom_emoji' && isset($entity['custom_emoji_id'])) {
+                $emojiId = (string) $entity['custom_emoji_id'];
+                break;
+            }
+        }
+
+        if ($emojiId === null) {
+            $ctx->telegram->sendMessage(
+                $chatId,
+                '⚠️ ایموجی سفارشی/پرمیومی در پیام شما پیدا نشد. لطفاً پیامی که خودِ آن ایموجی پرمیوم داخلش هست را بفرستید یا فوروارد کنید، نه یک ایموجی معمولی.'
+            );
+            return;
+        }
+
+        $key = $slot === 'pump' ? 'premium_emoji_pump_id' : 'premium_emoji_signal_id';
+        SettingsService::set($key, $emojiId);
+        $params = SettingsService::getAll(true);
+        $ctx->telegram->sendMessage($chatId, '✅ ایموجی ذخیره شد.', Keyboards::premiumEmoji($params));
+    }
 }

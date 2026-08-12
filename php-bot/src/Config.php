@@ -106,7 +106,7 @@ final class Config
     public static function defaultSignalMessageTemplate(): string
     {
         return "━━━━━━━━━━━━━━\n"
-            . "🚨 سیگنال جدید فیوچرز\n\n"
+            . "{header_emoji} سیگنال جدید فیوچرز\n\n"
             . "🪙 {symbol}\n"
             . "{side_emoji} {side}\n\n"
             . "📊 اطمینان: {score}%\n\n"
@@ -251,6 +251,12 @@ final class Config
             'signal_message_template' => self::defaultSignalMessageTemplate(),
             'signal_quote_enabled' => true,
             'signal_card_enabled' => true,
+
+            // --- Premium/custom emoji (requires the bot owner's account to have
+            // Telegram Premium - see the Premium Emoji panel screen) ---
+            'premium_emoji_enabled' => false,
+            'premium_emoji_signal_id' => '',
+            'premium_emoji_pump_id' => '',
 
             // --- Operational state (not strategy knobs, but PHP has no long-lived
             // process to hold these in memory like the Python version's Scanner
