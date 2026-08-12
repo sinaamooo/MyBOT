@@ -35,6 +35,49 @@ final class SymbolService
         return Database::connection()->query('SELECT * FROM symbols ORDER BY symbol')->fetchAll();
     }
 
+    public static function count(): int
+    {
+        return (int) Database::connection()->query('SELECT COUNT(*) c FROM symbols')->fetch()['c'];
+    }
+
+    /** @return array<int, array<string, mixed>> */
+    public static function listPage(int $limit, int $offset): array
+    {
+        $stmt = Database::connection()->prepare('SELECT * FROM symbols ORDER BY symbol LIMIT :l OFFSET :o');
+        $stmt->bindValue(':l', $limit, \PDO::PARAM_INT);
+        $stmt->bindValue(':o', $offset, \PDO::PARAM_INT);
+        $stmt->execute();
+        return $stmt->fetchAll();
+    }
+
+    /**
+     * Adds (and enables) the top-N USDT-M perpetual symbols by 24h quote
+     * volume, as reported by the exchange. Purely additive - never removes
+     * or disables a symbol the admin already configured.
+     *
+     * @param array<int, array{symbol:string, quote_volume:float}> $ranked already sorted, highest volume first
+     * @return int how many new symbols were added
+     */
+    public static function syncTopByVolume(array $ranked, int $topN): int
+    {
+        $pdo = Database::connection();
+        $existing = array_column($pdo->query('SELECT symbol FROM symbols')->fetchAll(), 'symbol');
+        $existingSet = array_flip($existing);
+
+        $added = 0;
+        foreach (array_slice($ranked, 0, $topN) as $row) {
+            $symbol = $row['symbol'];
+            if (isset($existingSet[$symbol])) {
+                continue;
+            }
+            $stmt = $pdo->prepare('INSERT INTO symbols (symbol, enabled, added_at) VALUES (:s, 1, :now)');
+            $stmt->execute(['s' => $symbol, 'now' => Database::now()]);
+            $existingSet[$symbol] = true;
+            $added++;
+        }
+        return $added;
+    }
+
     public static function addSymbol(string $symbol): void
     {
         $symbol = strtoupper(trim($symbol));

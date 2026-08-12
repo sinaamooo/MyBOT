@@ -28,6 +28,6 @@ final class AppFactory
         $monitor = new Monitor($exchange, $publisher);
         $backtester = new Backtester($exchange);
 
-        return new BotContext($telegram, $engine, $scanner, $monitor, $backtester);
+        return new BotContext($telegram, $exchange, $engine, $scanner, $monitor, $backtester);
     }
 }

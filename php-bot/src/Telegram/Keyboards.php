@@ -78,18 +78,31 @@ final class Keyboards
         ]);
     }
 
-    /** @param array<int, array<string, mixed>> $symbols */
-    public static function symbols(array $symbols): array
+    /** @param array<int, array<string, mixed>> $pageOfSymbols already-sliced page */
+    public static function symbols(array $pageOfSymbols, int $page, bool $hasMore, int $total): array
     {
         $rows = [];
-        foreach ($symbols as $s) {
+        foreach ($pageOfSymbols as $s) {
             $dot = $s['enabled'] ? '🟢' : '🔴';
             $rows[] = [
                 ['text' => "{$s['symbol']} {$dot}", 'callback_data' => "sym:toggle:{$s['symbol']}"],
                 ['text' => '🗑', 'callback_data' => "sym:remove:{$s['symbol']}"],
             ];
         }
-        $rows[] = [['text' => '➕ Add Symbol', 'callback_data' => 'sym:add']];
+        $nav = [];
+        if ($page > 0) {
+            $nav[] = ['text' => '⬅️ Prev', 'callback_data' => 'sym:page:' . ($page - 1)];
+        }
+        if ($hasMore) {
+            $nav[] = ['text' => 'Next ➡️', 'callback_data' => 'sym:page:' . ($page + 1)];
+        }
+        if ($nav !== []) {
+            $rows[] = $nav;
+        }
+        $rows[] = [
+            ['text' => '➕ Add Symbol', 'callback_data' => 'sym:add'],
+            ['text' => '🔄 Sync Top-N by Volume', 'callback_data' => 'sym:sync'],
+        ];
         $rows[] = self::backRow();
         return self::kb($rows);
     }
@@ -138,8 +151,15 @@ final class Keyboards
                 ['TP2 R Multiple', 'tp2_r_multiple'],
                 ['TP3 R Multiple', 'tp3_r_multiple'],
                 ['Min Risk/Reward', 'min_rr'],
-                ['Min Leverage', 'min_leverage'],
-                ['Max Leverage', 'max_leverage'],
+            ],
+            'leverage' => [
+                ['Low-Volatility Max', 'leverage_low_vol_max'],
+                ['Medium-Volatility Max', 'leverage_medium_vol_max'],
+                ['High-Volatility Max', 'leverage_high_vol_max'],
+                ['Absolute Floor', 'leverage_absolute_min'],
+                ['Absolute Ceiling', 'leverage_absolute_max'],
+                ['Low-Vol ATR% Threshold', 'leverage_low_vol_atr_pct'],
+                ['Medium-Vol ATR% Threshold', 'leverage_medium_vol_atr_pct'],
             ],
             'scanner' => [
                 ['Scan Interval (seconds)', 'scan_interval_seconds'],
@@ -153,6 +173,16 @@ final class Keyboards
                 ['Risk Free Enabled', 'risk_free_enabled'],
                 ['Trailing Stop Enabled', 'trailing_stop_enabled'],
             ],
+            'discovery' => [
+                ['Auto-Sync Symbols Enabled', 'symbol_auto_sync_enabled'],
+                ['Top-N by Volume', 'symbol_top_n'],
+            ],
+            'pump' => [
+                ['Pump Hunter Enabled', 'pump_hunter_enabled'],
+                ['Volume Multiplier', 'pump_volume_multiplier'],
+                ['Score Bonus', 'pump_score_bonus'],
+                ['Momentum Lookback (candles)', 'pump_momentum_lookback'],
+            ],
         ];
     }
 
@@ -160,9 +190,12 @@ final class Keyboards
     {
         return [
             'scoring' => '🎯 Scoring & Thresholds',
-            'risk' => '🛡 Risk & Leverage',
+            'risk' => '🛡 Risk (SL/TP/RR)',
+            'leverage' => '⚡ Leverage Tiers',
             'scanner' => '🔁 Scanner & Cooldown',
             'monitoring' => '👁 Monitoring',
+            'discovery' => '🪙 Symbol Discovery',
+            'pump' => '🚀 Pump Hunter',
         ];
     }
 

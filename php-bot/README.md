@@ -200,6 +200,45 @@ you to type a value" (editing a setting, adding a symbol, manual signal
 symbol entry, etc.) is tracked in the `admin_states` table instead of
 aiogram's FSM - functionally identical from the user's perspective.
 
+### Symbol Discovery (Top-N by volume)
+
+Instead of only the hardcoded default watch-list, `Settings → 🪙 Symbol
+Discovery` lets you set `symbol_top_n` (default 100) and toggle
+`symbol_auto_sync_enabled`. With auto-sync on, every `cron/scanner.php` run
+fetches all USDT-M perpetuals from MEXC, ranks them by 24h quote volume,
+and adds any of the top N not already tracked - purely additive, it never
+removes/disables a symbol you configured manually. You can also trigger a
+one-off sync any time from `Symbols → 🔄 Sync Top-N by Volume`. Larger N
+means more API calls per scan pass (~5 requests/symbol) - `cron/scanner.php`
+raises its own time limit to 600s to accommodate this, but keep an eye on
+`logs/cron.log` if you push N very high on a slow host.
+
+### Leverage tiers
+
+`Settings → ⚡ Leverage Tiers` controls the suggested (never
+auto-executed) leverage independently per volatility bucket:
+`leverage_low_vol_max` (default 150x), `leverage_medium_vol_max` (default
+60x), `leverage_high_vol_max` (default 30x), plus an absolute floor/ceiling
+safety clamp. **Leverage does not reduce risk** - it only changes the
+margin needed for a given exposure; real risk is the stop distance, which
+the risk engine already accounts for. Every published signal at 50x+
+carries an extra inline warning for this reason. Raise these numbers only
+if you understand and accept that a small adverse move fully liquidates a
+high-leverage position.
+
+### Pump Hunter
+
+`Settings → 🚀 Pump Hunter` (off by default). When enabled, a setup that
+shows a volume surge (`pump_volume_multiplier`× its recent average) *and*
+a fresh breakout of the recent range *and* accelerating momentum on the 5M
+chart gets a score bonus (`pump_score_bonus`, default +15) on top of the
+normal weighted score - it can push a borderline WATCHLIST setup over the
+publish threshold, and the published message is tagged 🚀 PUMP HUNTER. This
+never bypasses the rules-based scoring/risk engine or the hard quality
+gates - it's strictly an additive bonus, so it's most useful for surfacing
+early-breakout setups the standard trend-following weights would otherwise
+rank as "watchlist" rather than "signal."
+
 Public commands: `/start /help /status /signals /stats`. Admin commands:
 `/admin /start_scanner /stop_scanner /test_signal`.
 

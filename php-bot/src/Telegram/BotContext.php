@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Telegram;
 
+use App\Exchange\MexcClient;
 use App\Signals\Backtester;
 use App\Signals\Monitor;
 use App\Signals\Scanner;
@@ -15,6 +16,7 @@ final class BotContext
 {
     public function __construct(
         public readonly TelegramApi $telegram,
+        public readonly MexcClient $exchange,
         public readonly SignalGenerator $engine,
         public readonly Scanner $scanner,
         public readonly Monitor $monitor,

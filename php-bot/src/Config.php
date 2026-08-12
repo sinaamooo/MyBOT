@@ -200,11 +200,29 @@ final class Config
             'tp3_r_multiple' => 3.0,
             'min_rr' => 1.5,
 
-            // --- Leverage suggestion ---
-            'min_leverage' => 15,
-            'max_leverage' => 25,
+            // --- Leverage suggestion (three independent tiers by ATR% volatility -
+            // NEVER auto-executed, shown as a suggestion only. High leverage does
+            // NOT reduce risk, it only changes margin needed for a given exposure -
+            // see the disclaimer appended to every published signal.) ---
+            'leverage_absolute_min' => 5,
+            'leverage_absolute_max' => 150,
+            'leverage_low_vol_max' => 150,     // ATR% <= leverage_low_vol_atr_pct
+            'leverage_medium_vol_max' => 60,   // ATR% <= leverage_medium_vol_atr_pct
+            'leverage_high_vol_max' => 30,     // otherwise
             'leverage_low_vol_atr_pct' => 0.015,
             'leverage_medium_vol_atr_pct' => 0.035,
+
+            // --- Symbol universe (Top-N by 24h volume, synced from MEXC on demand
+            // or automatically by the scanner - see Symbols panel) ---
+            'symbol_auto_sync_enabled' => false,
+            'symbol_top_n' => 100,
+
+            // --- Pump Hunter (opt-in extra scoring bonus for volume-surge +
+            // breakout + accelerating-momentum setups, tagged 🚀 in the message) ---
+            'pump_hunter_enabled' => false,
+            'pump_volume_multiplier' => 3.0,   // last candle volume vs its MA
+            'pump_score_bonus' => 15,
+            'pump_momentum_lookback' => 3,     // candles to measure EMA acceleration over
 
             // --- Monitoring ---
             'monitor_interval_seconds' => 60,

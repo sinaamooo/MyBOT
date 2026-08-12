@@ -42,11 +42,23 @@ final class Scoring
         if ($displayLong >= $displayShort) {
             $side = 'LONG';
             $score = $displayLong;
-            $reasons = $longReasons;
         } else {
             $side = 'SHORT';
             $score = $displayShort;
-            $reasons = $shortReasons;
+        }
+
+        $pumpDetected = false;
+        if (!empty($params['pump_hunter_enabled'])) {
+            $pump = PumpDetector::detect($entryIdx, $params, $side === 'LONG');
+            if ($pump['detected']) {
+                $pumpDetected = true;
+                $score = min(100.0, $score + (float) $params['pump_score_bonus']);
+                if ($side === 'LONG') {
+                    $longReasons = array_merge($longReasons, $pump['reasons']);
+                } else {
+                    $shortReasons = array_merge($shortReasons, $pump['reasons']);
+                }
+            }
         }
 
         if ($score >= $effectiveMinScore) {
@@ -69,6 +81,7 @@ final class Scoring
             'trend' => $trend,
             'regime' => $regime,
             'price_action' => $pa,
+            'pump_detected' => $pumpDetected,
         ];
     }
 

@@ -133,6 +133,15 @@ final class Scanner
             'regime' => $candidate['regime'],
         ]);
 
+        if ($candidate['leverage'] >= 50) {
+            $text .= "\n\n⚠️ HIGH LEVERAGE ({$candidate['leverage']}X): a small adverse move can liquidate the "
+                . 'full position. Leverage changes margin required, not risk - always size your position by '
+                . 'stop distance, never by leverage alone.';
+        }
+
+        if (!empty($candidate['pump_detected'])) {
+            $text = "🚀 <b>PUMP HUNTER</b> (volume surge + breakout + acceleration)\n\n" . $text;
+        }
         if ($isTest) {
             $text = "🧪 <b>TEST SIGNAL</b> (not a real trade)\n\n" . $text;
         } elseif ($isManual) {

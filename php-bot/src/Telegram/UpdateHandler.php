@@ -210,11 +210,14 @@ final class UpdateHandler
         }
 
         if ($prefix === 'sym') {
+            $action = $parts[1] ?? '';
             $symbol = $parts[2] ?? '';
-            match ($parts[1] ?? '') {
+            match ($action) {
                 'toggle' => SymbolsHandler::toggle($symbol, $chatId, $messageId, $this->ctx),
                 'remove' => SymbolsHandler::remove($symbol, $chatId, $messageId, $this->ctx),
                 'add' => SymbolsHandler::startAdd($chatId, $messageId, $userId, $this->ctx),
+                'sync' => SymbolsHandler::sync($chatId, $messageId, $this->ctx),
+                'page' => SymbolsHandler::paginate((int) $symbol, $chatId, $messageId, $this->ctx),
                 default => null,
             };
             return;

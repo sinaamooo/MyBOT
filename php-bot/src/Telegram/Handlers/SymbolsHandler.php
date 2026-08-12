@@ -5,26 +5,37 @@ declare(strict_types=1);
 namespace App\Telegram\Handlers;
 
 use App\Services\AdminStateService;
+use App\Services\LogService;
+use App\Services\SettingsService;
 use App\Services\SymbolService;
 use App\Telegram\BotContext;
 use App\Telegram\Keyboards;
 
 final class SymbolsHandler
 {
-    private static function render(int $chatId, int $messageId, BotContext $ctx): void
+    private const PAGE_SIZE = 20;
+
+    private static function render(int $page, int $chatId, int $messageId, BotContext $ctx, string $note = ''): void
     {
-        $symbols = SymbolService::listAll();
-        $ctx->telegram->editMessageText(
-            $chatId,
-            $messageId,
-            "🪙 <b>Symbols</b>\n\nTap a symbol to enable/disable it, 🗑 to remove it.",
-            Keyboards::symbols($symbols)
-        );
+        $total = SymbolService::count();
+        $pageOfSymbols = SymbolService::listPage(self::PAGE_SIZE, $page * self::PAGE_SIZE);
+        $hasMore = ($page + 1) * self::PAGE_SIZE < $total;
+
+        $text = "🪙 <b>Symbols</b> ({$total} total)\n\n"
+            . 'Tap a symbol to enable/disable it, 🗑 to remove it.'
+            . ($note !== '' ? "\n\n{$note}" : '');
+
+        $ctx->telegram->editMessageText($chatId, $messageId, $text, Keyboards::symbols($pageOfSymbols, $page, $hasMore, $total));
     }
 
     public static function show(int $chatId, int $messageId, BotContext $ctx): void
     {
-        self::render($chatId, $messageId, $ctx);
+        self::render(0, $chatId, $messageId, $ctx);
+    }
+
+    public static function paginate(int $page, int $chatId, int $messageId, BotContext $ctx): void
+    {
+        self::render($page, $chatId, $messageId, $ctx);
     }
 
     public static function toggle(string $symbol, int $chatId, int $messageId, BotContext $ctx): void
@@ -33,13 +44,13 @@ final class SymbolsHandler
         if ($current !== []) {
             SymbolService::setEnabled($symbol, !$current[0]['enabled']);
         }
-        self::render($chatId, $messageId, $ctx);
+        self::render(0, $chatId, $messageId, $ctx);
     }
 
     public static function remove(string $symbol, int $chatId, int $messageId, BotContext $ctx): void
     {
         SymbolService::removeSymbol($symbol);
-        self::render($chatId, $messageId, $ctx);
+        self::render(0, $chatId, $messageId, $ctx);
     }
 
     public static function startAdd(int $chatId, int $messageId, int $userId, BotContext $ctx): void
@@ -53,7 +64,26 @@ final class SymbolsHandler
         AdminStateService::clear($userId);
         $symbol = strtoupper(trim($text));
         SymbolService::addSymbol($symbol);
-        $symbols = SymbolService::listAll();
-        $ctx->telegram->sendMessage($chatId, "✅ {$symbol} added.", Keyboards::symbols($symbols));
+
+        $total = SymbolService::count();
+        $pageOfSymbols = SymbolService::listPage(self::PAGE_SIZE, 0);
+        $ctx->telegram->sendMessage($chatId, "✅ {$symbol} added.", Keyboards::symbols($pageOfSymbols, 0, $total > self::PAGE_SIZE, $total));
+    }
+
+    /** Fetches Top-N USDT-M perpetuals by 24h volume from MEXC and adds any not already tracked. */
+    public static function sync(int $chatId, int $messageId, BotContext $ctx): void
+    {
+        $topN = (int) SettingsService::get('symbol_top_n');
+        try {
+            $ranked = $ctx->exchange->listUsdtTickersRankedByVolume();
+        } catch (\Throwable $e) {
+            LogService::log('ERROR', 'symbols', 'Top-N sync failed: ' . $e->getMessage());
+            self::render(0, $chatId, $messageId, $ctx, "⚠️ Sync failed: {$e->getMessage()}");
+            return;
+        }
+
+        $added = SymbolService::syncTopByVolume($ranked, $topN);
+        LogService::log('INFO', 'symbols', "Top-{$topN} sync added {$added} new symbol(s)");
+        self::render(0, $chatId, $messageId, $ctx, "🔄 Synced top {$topN} by volume - added {$added} new symbol(s).");
     }
 }

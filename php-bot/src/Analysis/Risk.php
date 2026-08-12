@@ -48,16 +48,18 @@ final class Risk
 
         $atrPct = $entry != 0.0 ? $atr / $entry : 0.0;
         if ($atrPct <= (float) $params['leverage_low_vol_atr_pct']) {
-            $leverage = (int) $params['max_leverage'];
+            $leverage = (int) $params['leverage_low_vol_max'];
             $riskScore = 'LOW';
         } elseif ($atrPct <= (float) $params['leverage_medium_vol_atr_pct']) {
-            $leverage = (int) round(((int) $params['min_leverage'] + (int) $params['max_leverage']) / 2);
+            $leverage = (int) $params['leverage_medium_vol_max'];
             $riskScore = 'MEDIUM';
         } else {
-            $leverage = (int) $params['min_leverage'];
+            $leverage = (int) $params['leverage_high_vol_max'];
             $riskScore = 'HIGH';
         }
-        $leverage = max((int) $params['min_leverage'], min((int) $params['max_leverage'], $leverage));
+        // Safety clamp against nonsensical admin-entered values - never below the
+        // absolute floor or above the absolute ceiling regardless of tier settings.
+        $leverage = max((int) $params['leverage_absolute_min'], min((int) $params['leverage_absolute_max'], $leverage));
 
         return [
             'stop_loss' => $stopLoss,

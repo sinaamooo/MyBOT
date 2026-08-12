@@ -131,6 +131,38 @@ final class MexcClient
         ];
     }
 
+    /**
+     * All active USDT-M perpetual symbols, ranked by 24h quote volume
+     * (highest first) - used to auto-discover a Top-N watch-list instead of
+     * a hardcoded symbol set. One request regardless of how many contracts
+     * MEXC lists.
+     *
+     * @return array<int, array{symbol:string, quote_volume:float}>
+     */
+    public function listUsdtTickersRankedByVolume(): array
+    {
+        $response = $this->request('GET', '/api/v1/contract/ticker', []);
+        $data = $response['data'] ?? null;
+        if (!is_array($data)) {
+            throw new \RuntimeException('Unexpected ticker-list response shape');
+        }
+
+        $ranked = [];
+        foreach ($data as $row) {
+            $symbolId = (string) ($row['symbol'] ?? '');
+            if (!str_ends_with($symbolId, '_USDT')) {
+                continue;
+            }
+            $ranked[] = [
+                'symbol' => str_replace('_', '', $symbolId),
+                'quote_volume' => isset($row['amount24']) ? (float) $row['amount24'] : 0.0,
+            ];
+        }
+
+        usort($ranked, fn($a, $b) => $b['quote_volume'] <=> $a['quote_volume']);
+        return $ranked;
+    }
+
     public function getPricePrecision(string $symbol): int
     {
         $detail = $this->getContractDetail($symbol);

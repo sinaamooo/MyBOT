@@ -82,7 +82,7 @@ final class SignalGenerator
         }
 
         $reasons = $scoring['side'] === 'LONG' ? $scoring['long_reasons'] : $scoring['short_reasons'];
-        $candidate = $this->buildCandidate($symbol, $scoring['side'], $snapshot['price'], $risk, $scoring['score'], $reasons, $scoring['trend'], $scoring['regime']);
+        $candidate = $this->buildCandidate($symbol, $scoring['side'], $snapshot['price'], $risk, $scoring['score'], $reasons, $scoring['trend'], $scoring['regime'], $scoring['pump_detected']);
 
         return ['scoring' => $scoring, 'candidate' => $candidate, 'snapshot' => $snapshot];
     }
@@ -110,11 +110,11 @@ final class SignalGenerator
         $reasons = $side === 'LONG' ? $scoring['long_reasons'] : $scoring['short_reasons'];
         $reasons[] = 'Manual override by admin';
 
-        return $this->buildCandidate($symbol, $side, $snapshot['price'], $risk, $score, $reasons, $scoring['trend'], $scoring['regime']);
+        return $this->buildCandidate($symbol, $side, $snapshot['price'], $risk, $score, $reasons, $scoring['trend'], $scoring['regime'], $scoring['pump_detected']);
     }
 
     /** @return array<string, mixed> */
-    private function buildCandidate(string $symbol, string $side, float $price, array $risk, float $score, array $reasons, string $trend, string $regime): array
+    private function buildCandidate(string $symbol, string $side, float $price, array $risk, float $score, array $reasons, string $trend, string $regime, bool $pumpDetected = false): array
     {
         $decimals = $this->exchange->getPricePrecision($symbol);
         $round = fn(float $v) => round($v, $decimals);
@@ -135,6 +135,7 @@ final class SignalGenerator
             'regime' => $regime,
             'timeframe' => strtoupper(Config::TIMEFRAME_ENTRY) . ' / ' . strtoupper(Config::TIMEFRAME_SETUP),
             'reasons' => $reasons,
+            'pump_detected' => $pumpDetected,
         ];
     }
 }
