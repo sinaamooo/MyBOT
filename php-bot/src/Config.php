@@ -106,23 +106,25 @@ final class Config
     public static function defaultSignalMessageTemplate(): string
     {
         return "━━━━━━━━━━━━━━\n"
-            . "🚨 NEW FUTURES SIGNAL\n\n"
+            . "🚨 سیگنال جدید فیوچرز\n\n"
             . "🪙 {symbol}\n"
             . "{side_emoji} {side}\n\n"
-            . "📊 Confidence: {score}%\n\n"
-            . "🎯 Entry:\n{entry}\n\n"
-            . "🛑 Stop Loss:\n{stop_loss}\n\n"
+            . "📊 اطمینان: {score}%\n\n"
+            . "🎯 ورود:\n{entry}\n\n"
+            . "🛑 حد ضرر:\n{stop_loss}\n\n"
             . "🎯 TP1:\n{tp1}\n"
             . "🎯 TP2:\n{tp2}\n"
             . "🎯 TP3:\n{tp3}\n\n"
-            . "⚡ Suggested Leverage:\n{leverage}X\n\n"
-            . "📈 Risk/Reward:\n1 : {rr}\n\n"
-            . "⏱ Timeframe:\n{timeframe}\n\n"
-            . "📊 Trend:\n{trend}\n"
-            . "🌐 Market Regime:\n{regime}\n"
+            . "⚡ اهرم پیشنهادی:\n{leverage}X\n\n"
+            . "📈 ریسک/ریوارد:\n1 : {rr}\n\n"
+            . "⏱ تایم‌فریم:\n{timeframe}\n\n"
+            . "📊 روند:\n{trend}\n"
+            . "🌐 رژیم بازار:\n{regime}\n"
             . "━━━━━━━━━━━━━━\n\n"
-            . "⚠️ Educational / Signal Only\n"
-            . "Manage Risk Carefully\n"
+            . "💬 {quote}\n"
+            . "━━━━━━━━━━━━━━\n\n"
+            . "⚠️ فقط جنبه آموزشی/سیگنال دارد\n"
+            . "ریسک خودتان را با دقت مدیریت کنید\n"
             . "━━━━━━━━━━━━━━";
     }
 
@@ -239,6 +241,7 @@ final class Config
 
             // --- Message template ---
             'signal_message_template' => self::defaultSignalMessageTemplate(),
+            'signal_quote_enabled' => true,
 
             // --- Operational state (not strategy knobs, but PHP has no long-lived
             // process to hold these in memory like the Python version's Scanner

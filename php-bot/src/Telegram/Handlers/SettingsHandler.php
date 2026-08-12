@@ -104,13 +104,21 @@ final class SettingsHandler
     // -- Message templates --------------------------------------------------
     public static function showTemplates(int $chatId, int $messageId, BotContext $ctx): void
     {
-        $template = SettingsService::get('signal_message_template');
+        $params = SettingsService::getAll();
+        $template = $params['signal_message_template'];
         $ctx->telegram->editMessageText(
             $chatId,
             $messageId,
             "📝 <b>قالب پیام</b>\n\nقالب فعلی:\n<code>" . htmlspecialchars((string) $template) . '</code>',
-            Keyboards::templates()
+            Keyboards::templates($params)
         );
+    }
+
+    public static function toggleQuote(int $chatId, int $messageId, BotContext $ctx): void
+    {
+        $params = SettingsService::getAll();
+        SettingsService::set('signal_quote_enabled', empty($params['signal_quote_enabled']));
+        self::showTemplates($chatId, $messageId, $ctx);
     }
 
     public static function startEditTemplate(int $chatId, int $messageId, int $userId, BotContext $ctx): void
@@ -133,7 +141,7 @@ final class SettingsHandler
             return;
         }
         SettingsService::set('signal_message_template', $text);
-        $ctx->telegram->sendMessage($chatId, '✅ قالب ذخیره شد.', Keyboards::templates());
+        $ctx->telegram->sendMessage($chatId, '✅ قالب ذخیره شد.', Keyboards::templates(SettingsService::getAll(true)));
     }
 
     public static function resetTemplate(int $chatId, int $messageId, BotContext $ctx): void
@@ -143,7 +151,7 @@ final class SettingsHandler
             $chatId,
             $messageId,
             "📝 <b>قالب پیام</b>\n\nقالب فعلی:\n<code>" . htmlspecialchars(Config::defaultSignalMessageTemplate()) . '</code>',
-            Keyboards::templates()
+            Keyboards::templates(SettingsService::getAll(true))
         );
     }
 }

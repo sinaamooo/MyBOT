@@ -81,27 +81,4 @@ final class StartHandler
     {
         $ctx->telegram->sendMessage($chatId, '⛔ دسترسی رد شد. این پنل فقط برای ادمین‌هاست.');
     }
-
-    public static function sigDetails(string $callbackQueryId, int $userId, int $signalId, BotContext $ctx): void
-    {
-        $signal = SignalService::get($signalId);
-        if ($signal === null) {
-            $ctx->telegram->answerCallbackQuery($callbackQueryId, 'سیگنال یافت نشد.', true);
-            return;
-        }
-        $reasons = $signal['reasons'] ? json_decode((string) $signal['reasons'], true) : [];
-        $text = "📋 {$signal['symbol']} {$signal['side']}\n"
-            . "امتیاز: " . round((float) $signal['score']) . "%  |  ریسک: {$signal['risk_score']}  |  ریسک‌ریوارد 1:{$signal['rr']}\n"
-            . "ورود: {$signal['entry']}\nحد ضرر: {$signal['stop_loss']}\n"
-            . "TP1: {$signal['tp1']}  TP2: {$signal['tp2']}  TP3: {$signal['tp3']}\n"
-            . "وضعیت: {$signal['status']}\n\n"
-            . "دلایل:\n" . implode("\n", array_map(fn($r) => "• {$r}", $reasons));
-
-        $sent = $ctx->telegram->sendMessage($userId, $text);
-        if ($sent !== null) {
-            $ctx->telegram->answerCallbackQuery($callbackQueryId, 'به پیام خصوصی شما ارسال شد ✅');
-        } else {
-            $ctx->telegram->answerCallbackQuery($callbackQueryId, mb_substr($text, 0, 200), true);
-        }
-    }
 }

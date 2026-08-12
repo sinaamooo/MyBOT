@@ -105,7 +105,7 @@ final class Monitor
         $ticker = $this->exchange->getTicker($signal['symbol']);
         $price = (float) $ticker['last'];
         $closed = SignalService::close($signalId, 'COMPLETED', $price);
-        $this->publisher->publishUpdate("⚪️ MANUALLY CLOSED\n\n{$signal['symbol']} {$signal['side']}\nClose price: {$price}");
+        $this->publisher->publishUpdate("⚪️ بسته شد (دستی)\n\n{$signal['symbol']} {$signal['side']}\nقیمت بسته شدن: {$price}");
         LogService::log('INFO', 'signals', "{$signal['symbol']}#{$signalId} manually closed @ {$price}");
         return $closed;
     }

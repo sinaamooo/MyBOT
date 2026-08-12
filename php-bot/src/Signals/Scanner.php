@@ -131,24 +131,25 @@ final class Scanner
             'timeframe' => $candidate['timeframe'],
             'trend' => $candidate['trend'],
             'regime' => $candidate['regime'],
+            'quote' => !empty($params['signal_quote_enabled']) ? Formatter::randomQuote() : '',
         ]);
 
         if ($candidate['leverage'] >= 50) {
-            $text .= "\n\n⚠️ HIGH LEVERAGE ({$candidate['leverage']}X): a small adverse move can liquidate the "
-                . 'full position. Leverage changes margin required, not risk - always size your position by '
-                . 'stop distance, never by leverage alone.';
+            $text .= "\n\n⚠️ اهرم بالا ({$candidate['leverage']}X): یک حرکت کوچک خلاف جهت می‌تواند کل پوزیشن را لیکویید کند. "
+                . 'اهرم فقط مارجین لازم را تغییر می‌دهد نه ریسک را - همیشه حجم پوزیشن را بر اساس فاصله حد ضرر تنظیم کن، '
+                . 'نه صرفاً بر اساس اهرم.';
         }
 
         if (!empty($candidate['pump_detected'])) {
-            $text = "🚀 <b>PUMP HUNTER</b> (volume surge + breakout + acceleration)\n\n" . $text;
+            $text = "🚀 <b>شکارچی پامپ</b> (جهش حجم + شکست + شتاب مومنتوم)\n\n" . $text;
         }
         if ($isTest) {
-            $text = "🧪 <b>TEST SIGNAL</b> (not a real trade)\n\n" . $text;
+            $text = "🧪 <b>سیگنال تستی</b> (معامله واقعی نیست)\n\n" . $text;
         } elseif ($isManual) {
-            $text = "👤 <b>MANUAL SIGNAL</b> (admin override)\n\n" . $text;
+            $text = "👤 <b>سیگنال دستی</b> (اورراید ادمین)\n\n" . $text;
         }
 
-        $messageId = $this->publisher->publishSignal($text, $candidate['symbol'], $signalId);
+        $messageId = $this->publisher->publishSignal($text);
 
         if ($messageId === null) {
             LogService::log('ERROR', 'scanner', "Failed to publish signal for {$candidate['symbol']}, kept PENDING");

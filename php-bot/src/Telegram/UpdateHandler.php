@@ -140,13 +140,6 @@ final class UpdateHandler
 
         UserService::register($userId, $from['username'] ?? null, $from['first_name'] ?? null);
 
-        // Public callback: the "Details" button on channel signal posts is visible to everyone.
-        if (str_starts_with($data, 'sig_details:')) {
-            $signalId = (int) explode(':', $data, 2)[1];
-            StartHandler::sigDetails($callbackId, $userId, $signalId, $this->ctx);
-            return;
-        }
-
         if (!AdminService::isAdmin($userId)) {
             $this->ctx->telegram->answerCallbackQuery($callbackId, '⛔ دسترسی غیرمجاز', true);
             return;
@@ -260,6 +253,7 @@ final class UpdateHandler
             match ($parts[1] ?? '') {
                 'edit' => SettingsHandler::startEditTemplate($chatId, $messageId, $userId, $this->ctx),
                 'reset' => SettingsHandler::resetTemplate($chatId, $messageId, $this->ctx),
+                'toggle_quote' => SettingsHandler::toggleQuote($chatId, $messageId, $this->ctx),
                 default => null,
             };
             return;

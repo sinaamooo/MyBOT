@@ -279,10 +279,14 @@ final class Keyboards
         return self::kb($rows);
     }
 
-    public static function templates(): array
+    /** @param array<string, mixed> $params */
+    public static function templates(array $params = []): array
     {
+        $quoteOn = !empty($params['signal_quote_enabled']);
+        $quoteLabel = $quoteOn ? '💬 نقل‌قول انگیزشی: 🟢 روشن' : '💬 نقل‌قول انگیزشی: 🔴 خاموش';
         return self::kb([
             [['text' => '✏️ ویرایش قالب سیگنال', 'callback_data' => 'tpl:edit']],
+            [['text' => $quoteLabel, 'callback_data' => 'tpl:toggle_quote']],
             [['text' => '♻️ بازگشت به پیش‌فرض', 'callback_data' => 'tpl:reset']],
             self::backRow(),
         ]);

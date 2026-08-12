@@ -9,14 +9,35 @@ final class Formatter
     private const SIDE_EMOJI = ['LONG' => '🟢', 'SHORT' => '🔴'];
 
     private const UPDATE_TEMPLATES = [
-        'TP1' => "✅ {symbol} {side}\n\nTP1 HIT 🎯\n\nProfit Target 1 reached.\nPrice: {price}",
-        'TP2' => "🔥 TP2 HIT\n\n{symbol} {side}\n\nProfit Target 2 reached.\nPrice: {price}",
-        'TP3' => "🏆 TP3 HIT\n\n{symbol} {side}\n\nTrade Completed.\nPrice: {price}",
-        'STOPPED' => "❌ STOP LOSS HIT\n\n{symbol} {side}\n\nTrade Closed.\nPrice: {price}",
-        'RISK_FREE' => "🛡 RISK FREE\n\n{symbol} {side}\n\nSL → ENTRY\nOriginal SL protected.",
-        'TRAILING_STOP' => "🔧 TRAILING STOP UPDATED\n\n{symbol} {side}\n\nNew SL: {price}",
-        'CANCELLED' => "⚪️ SIGNAL CANCELLED\n\n{symbol} {side}",
+        'TP1' => "✅ {symbol} {side}\n\nTP1 زده شد 🎯\n\nهدف سود اول محقق شد.\nقیمت: {price}",
+        'TP2' => "🔥 TP2 زده شد\n\n{symbol} {side}\n\nهدف سود دوم محقق شد.\nقیمت: {price}",
+        'TP3' => "🏆 TP3 زده شد\n\n{symbol} {side}\n\nمعامله تکمیل شد.\nقیمت: {price}",
+        'STOPPED' => "❌ حد ضرر خورد\n\n{symbol} {side}\n\nمعامله بسته شد.\nقیمت: {price}",
+        'RISK_FREE' => "🛡 ریسک‌فری\n\n{symbol} {side}\n\nحد ضرر → نقطه ورود\nحد ضرر اولیه محافظت شد.",
+        'TRAILING_STOP' => "🔧 تریلینگ استاپ به‌روزرسانی شد\n\n{symbol} {side}\n\nحد ضرر جدید: {price}",
+        'CANCELLED' => "⚪️ سیگنال لغو شد\n\n{symbol} {side}",
     ];
+
+    /** Persian motivational/discipline quotes for the {quote} template placeholder. */
+    private const QUOTES = [
+        'صبر و انضباط، سرمایه اصلی یک معامله‌گر است.',
+        'ریسک را مدیریت کن، سود خودش می‌آید.',
+        'بازار همیشه هست؛ سرمایه‌ات را حفظ کن تا فردا هم باشی.',
+        'یک معامله بد، پایان راه نیست؛ نداشتن مدیریت ریسک هست.',
+        'حد ضرر رعایت نشده، یک ضرر ساده را به فاجعه تبدیل می‌کند.',
+        'در بازارهای مالی، بازنده‌ها عجله دارند و برنده‌ها صبر.',
+        'اهرم بالا فقط ریسک را بزرگ‌تر می‌کند، نه سود تضمینی را.',
+        'نظم در اجرا، مهم‌تر از دقت در تحلیل است.',
+        'هیچ سیگنالی ۱۰۰٪ قطعی نیست؛ همیشه ریسک خود را کنترل کن.',
+        'معامله‌گر حرفه‌ای، ضررهایش را کوچک و سودهایش را بزرگ نگه می‌دارد.',
+        'قبل از ورود به معامله، نقطه خروج را بشناس.',
+        'ثبات در رعایت قوانین، از هر استراتژی مهم‌تر است.',
+    ];
+
+    public static function randomQuote(): string
+    {
+        return self::QUOTES[array_rand(self::QUOTES)];
+    }
 
     /** @param array<string, mixed> $data */
     public static function formatSignalMessage(string $template, array $data): string
@@ -34,7 +55,7 @@ final class Formatter
     /** @return string[] */
     public static function knownSignalPlaceholders(): array
     {
-        return ['symbol', 'side', 'side_emoji', 'score', 'entry', 'stop_loss', 'tp1', 'tp2', 'tp3', 'leverage', 'rr', 'timeframe', 'trend', 'regime'];
+        return ['symbol', 'side', 'side_emoji', 'score', 'entry', 'stop_loss', 'tp1', 'tp2', 'tp3', 'leverage', 'rr', 'timeframe', 'trend', 'regime', 'quote'];
     }
 
     /** Rejects a template that references a placeholder we don't provide (e.g. a typo). */
