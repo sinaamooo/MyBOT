@@ -250,6 +250,7 @@ final class Config
             // --- Message template ---
             'signal_message_template' => self::defaultSignalMessageTemplate(),
             'signal_quote_enabled' => true,
+            'signal_card_enabled' => true,
 
             // --- Operational state (not strategy knobs, but PHP has no long-lived
             // process to hold these in memory like the Python version's Scanner

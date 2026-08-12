@@ -254,6 +254,7 @@ final class UpdateHandler
                 'edit' => SettingsHandler::startEditTemplate($chatId, $messageId, $userId, $this->ctx),
                 'reset' => SettingsHandler::resetTemplate($chatId, $messageId, $this->ctx),
                 'toggle_quote' => SettingsHandler::toggleQuote($chatId, $messageId, $this->ctx),
+                'toggle_card' => SettingsHandler::toggleCard($chatId, $messageId, $this->ctx),
                 default => null,
             };
             return;

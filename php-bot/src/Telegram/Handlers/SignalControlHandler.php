@@ -8,6 +8,7 @@ use App\Services\AdminStateService;
 use App\Services\SettingsService;
 use App\Services\SignalService;
 use App\Services\SymbolService;
+use App\Support\Num;
 use App\Telegram\BotContext;
 use App\Telegram\Keyboards;
 
@@ -83,12 +84,12 @@ final class SignalControlHandler
             return;
         }
         $reasons = $signal['reasons'] ? json_decode((string) $signal['reasons'], true) : [];
-        $currentSl = $signal['current_sl'] ?? $signal['stop_loss'];
+        $currentSl = Num::price((float) ($signal['current_sl'] ?? $signal['stop_loss']));
         $text = "🪙 {$signal['symbol']}  {$signal['side']}\n"
             . "وضعیت: {$signal['status']}\n"
             . "امتیاز: " . round((float) $signal['score']) . "%  ریسک: {$signal['risk_score']}  ریسک‌ریوارد 1:{$signal['rr']}\n\n"
-            . "ورود: {$signal['entry']}\nحد ضرر: {$currentSl}\n"
-            . "TP1: {$signal['tp1']}  TP2: {$signal['tp2']}  TP3: {$signal['tp3']}\n"
+            . 'ورود: ' . Num::price((float) $signal['entry']) . "\nحد ضرر: {$currentSl}\n"
+            . 'TP1: ' . Num::price((float) $signal['tp1']) . '  TP2: ' . Num::price((float) $signal['tp2']) . '  TP3: ' . Num::price((float) $signal['tp3']) . "\n"
             . "اهرم: {$signal['leverage']}x\n\n"
             . "دلایل:\n" . implode("\n", array_map(fn($r) => "• {$r}", $reasons));
         $ctx->telegram->editMessageText($chatId, $messageId, $text, Keyboards::signalDetail($signal));

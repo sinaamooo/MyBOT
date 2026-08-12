@@ -31,6 +31,42 @@ final class TelegramApi
         return $result['result'] ?? null;
     }
 
+    /** Uploads a local file as a photo (multipart/form-data, not the JSON call() path). @return array<string, mixed>|null */
+    public function sendPhoto(int|string $chatId, string $filePath, ?string $caption = null): ?array
+    {
+        $fields = ['chat_id' => (string) $chatId, 'photo' => new \CURLFile($filePath)];
+        if ($caption !== null && $caption !== '') {
+            $fields['caption'] = $caption;
+            $fields['parse_mode'] = 'HTML';
+        }
+
+        $ch = curl_init($this->baseUrl . 'sendPhoto');
+        curl_setopt_array($ch, [
+            CURLOPT_POST => true,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_CONNECTTIMEOUT => 8,
+            CURLOPT_TIMEOUT => 20,
+            CURLOPT_POSTFIELDS => $fields,
+        ]);
+        $body = curl_exec($ch);
+        $errno = curl_errno($ch);
+        $error = curl_error($ch);
+        curl_close($ch);
+
+        if ($errno !== 0) {
+            Logger::bot('ERROR', "Telegram API cURL error on sendPhoto: {$error}");
+            return null;
+        }
+
+        $decoded = json_decode((string) $body, true);
+        if (!is_array($decoded) || ($decoded['ok'] ?? false) !== true) {
+            $desc = is_array($decoded) ? ($decoded['description'] ?? 'unknown error') : 'invalid JSON';
+            Logger::bot('WARNING', "Telegram API sendPhoto failed: {$desc}");
+            return null;
+        }
+        return $decoded['result'] ?? null;
+    }
+
     public function editMessageText(int|string $chatId, int $messageId, string $text, ?array $replyMarkup = null): bool
     {
         $params = ['chat_id' => $chatId, 'message_id' => $messageId, 'text' => $text, 'parse_mode' => 'HTML'];

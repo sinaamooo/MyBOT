@@ -8,6 +8,7 @@ use App\Services\LogService;
 use App\Services\SettingsService;
 use App\Services\SignalService;
 use App\Services\SymbolService;
+use App\Support\Num;
 
 /**
  * Single scan pass: Scan Market -> Analyze -> Score -> Filter -> Risk Check
@@ -121,11 +122,11 @@ final class Scanner
             'symbol' => $candidate['symbol'],
             'side' => $candidate['side'],
             'score' => (int) round($candidate['score']),
-            'entry' => $candidate['entry'],
-            'stop_loss' => $candidate['stop_loss'],
-            'tp1' => $candidate['tp1'],
-            'tp2' => $candidate['tp2'],
-            'tp3' => $candidate['tp3'],
+            'entry' => Num::price((float) $candidate['entry']),
+            'stop_loss' => Num::price((float) $candidate['stop_loss']),
+            'tp1' => Num::price((float) $candidate['tp1']),
+            'tp2' => Num::price((float) $candidate['tp2']),
+            'tp3' => Num::price((float) $candidate['tp3']),
             'leverage' => $candidate['leverage'],
             'rr' => $candidate['rr'],
             'timeframe' => $candidate['timeframe'],
@@ -149,7 +150,8 @@ final class Scanner
             $text = "👤 <b>سیگنال دستی</b> (اورراید ادمین)\n\n" . $text;
         }
 
-        $messageId = $this->publisher->publishSignal($text);
+        $cardPath = !empty($params['signal_card_enabled']) ? SignalCard::generate($candidate) : null;
+        $messageId = $this->publisher->publishSignal($text, $cardPath);
 
         if ($messageId === null) {
             LogService::log('ERROR', 'scanner', "Failed to publish signal for {$candidate['symbol']}, kept PENDING");

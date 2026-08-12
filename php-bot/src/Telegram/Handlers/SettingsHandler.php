@@ -121,6 +121,13 @@ final class SettingsHandler
         self::showTemplates($chatId, $messageId, $ctx);
     }
 
+    public static function toggleCard(int $chatId, int $messageId, BotContext $ctx): void
+    {
+        $params = SettingsService::getAll();
+        SettingsService::set('signal_card_enabled', empty($params['signal_card_enabled']));
+        self::showTemplates($chatId, $messageId, $ctx);
+    }
+
     public static function startEditTemplate(int $chatId, int $messageId, int $userId, BotContext $ctx): void
     {
         AdminStateService::set($userId, 'template_edit');

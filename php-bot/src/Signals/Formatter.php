@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Signals;
 
+use App\Support\Num;
+
 final class Formatter
 {
     private const SIDE_EMOJI = ['LONG' => '🟢', 'SHORT' => '🔴'];
@@ -49,7 +51,8 @@ final class Formatter
     public static function formatUpdateMessage(string $updateType, string $symbol, string $side, ?float $price = null): string
     {
         $template = self::UPDATE_TEMPLATES[$updateType] ?? '{symbol} {side}: ' . $updateType;
-        return self::render($template, ['symbol' => $symbol, 'side' => $side, 'price' => $price]);
+        $priceText = $price !== null ? Num::price($price) : '';
+        return self::render($template, ['symbol' => $symbol, 'side' => $side, 'price' => $priceText]);
     }
 
     /** @return string[] */

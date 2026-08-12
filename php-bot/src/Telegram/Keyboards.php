@@ -292,9 +292,12 @@ final class Keyboards
     {
         $quoteOn = !empty($params['signal_quote_enabled']);
         $quoteLabel = $quoteOn ? '💬 نقل‌قول انگیزشی: 🟢 روشن' : '💬 نقل‌قول انگیزشی: 🔴 خاموش';
+        $cardOn = !empty($params['signal_card_enabled']);
+        $cardLabel = $cardOn ? '🖼 کارت تصویری رنک: 🟢 روشن' : '🖼 کارت تصویری رنک: 🔴 خاموش';
         return self::kb([
             [['text' => '✏️ ویرایش قالب سیگنال', 'callback_data' => 'tpl:edit']],
             [['text' => $quoteLabel, 'callback_data' => 'tpl:toggle_quote']],
+            [['text' => $cardLabel, 'callback_data' => 'tpl:toggle_card']],
             [['text' => '♻️ بازگشت به پیش‌فرض', 'callback_data' => 'tpl:reset']],
             self::backRow(),
         ]);

@@ -51,10 +51,14 @@ src/Config.php             # .env loader + strategy defaults (mirrors config.py)
 src/Database.php           # PDO/MySQL connection
 src/Exchange/MexcClient.php        # cURL-only MEXC Futures public REST client
 src/Market/MarketDataService.php   # multi-timeframe snapshot
-src/Analysis/              # Indicators, Trend, PriceAction, SupportResistance, MarketRegime, Scoring, Risk
-src/Signals/                # SignalGenerator, Formatter, Publisher, Scanner, Monitor, Backtester
+src/Analysis/              # Indicators, Trend, PriceAction, SupportResistance, MarketRegime, Scoring, Risk,
+                           # OrderBlocks, FairValueGap, Liquidity, MarketStructure (ICT/SMC components)
+src/Signals/                # SignalGenerator, Formatter, Publisher, Scanner, Monitor, Backtester, SignalCard
 src/Services/                # Settings/Signal/Symbol/User/Admin/Log/Statistics/AdminState (DB access layer)
 src/Telegram/                # TelegramApi, Keyboards, BotContext, UpdateHandler, Handlers/
+src/Support/Num.php         # shared numeric formatting (e.g. never render prices in scientific notation)
+
+assets/fonts/               # bundled DejaVu Sans (freely redistributable) used by the signal rank-card image
 ```
 
 The **analysis engine** (indicators, multi-timeframe scoring, ATR risk
@@ -67,6 +71,9 @@ See the Python README for the full scoring table; it applies unchanged here.
 
 - PHP 8.1+ with `pdo_sqlite` (default database, on by default on virtually
   every host) and `curl` extensions
+- `gd` extension (with FreeType) - optional, only needed for the per-signal
+  rank-card image (`signal_card_enabled` in Message Templates); the bot
+  degrades to text-only signals automatically if it's missing
 - A domain with **HTTPS** (cPanel's free AutoSSL/Let's Encrypt is enough) -
   required for the Telegram webhook
 - SSH/Terminal access (to run the one-off setup scripts and cron)
