@@ -170,6 +170,7 @@ final class Config
             'indicator_adx_enabled' => true,
             'indicator_volume_enabled' => true,
             'indicator_bollinger_enabled' => true,
+            'indicator_smc_ob_enabled' => true,
 
             // --- Trend / filters ---
             'min_adx' => 20.0,
@@ -184,6 +185,7 @@ final class Config
             'score_weight_volume' => 10,
             'score_weight_price_action' => 10,
             'score_weight_htf' => 10,
+            'score_weight_smc_ob' => 10,
 
             // --- Score thresholds ---
             'min_score' => 75,

@@ -7,9 +7,11 @@ namespace App\Analysis;
 use App\Config;
 
 /**
- * LONG/SHORT scoring engine - eight weighted components combined into a
- * 0-100 score per side. Timeframe roles: 4H = Trend, 1H = Confirmation,
- * 15M = Setup, 5M = Entry. Ported 1:1 from the Python scoring.py.
+ * LONG/SHORT scoring engine - weighted components normalized into a 0-100
+ * score per side, so the score always stays comparable to min_score /
+ * watchlist_min_score regardless of how the admin panel's weight sliders
+ * are tuned. Timeframe roles: 4H = Trend, 1H = Confirmation, 15M = Setup,
+ * 5M = Entry.
  */
 final class Scoring
 {
@@ -21,9 +23,12 @@ final class Scoring
     {
         $entryIdx = $indexedByTf[Config::TIMEFRAME_ENTRY];
         $pa = PriceAction::detect($entryIdx);
+        $obZones = !empty($params['indicator_smc_ob_enabled'])
+            ? OrderBlocks::detect($indexedByTf[Config::TIMEFRAME_SETUP])
+            : ['bullish' => [], 'bearish' => []];
 
-        [$longScore, $longReasons] = self::scoreSide($indexedByTf, $pa, $params, true);
-        [$shortScore, $shortReasons] = self::scoreSide($indexedByTf, $pa, $params, false);
+        [$longScore, $longReasons] = self::scoreSide($indexedByTf, $pa, $obZones, $params, true);
+        [$shortScore, $shortReasons] = self::scoreSide($indexedByTf, $pa, $obZones, $params, false);
 
         $regime = MarketRegime::detect($indexedByTf[Config::TIMEFRAME_SETUP], $params);
         $trend = Trend::detect($indexedByTf[Config::TIMEFRAME_TREND], $params);
@@ -91,7 +96,7 @@ final class Scoring
     }
 
     /** @return array{0: float, 1: string[]} [score, reasons] */
-    private static function scoreSide(array $indexedByTf, array $pa, array $params, bool $bullish): array
+    private static function scoreSide(array $indexedByTf, array $pa, array $obZones, array $params, bool $bullish): array
     {
         $reasons = [];
         $total = 0.0;
@@ -112,6 +117,7 @@ final class Scoring
         $wVolume = (float) $params['score_weight_volume'];
         $wPa = (float) $params['score_weight_price_action'];
         $wHtf = (float) $params['score_weight_htf'];
+        $wSmcOb = (float) $params['score_weight_smc_ob'];
 
         // 1) Trend (4H)
         $trend = Trend::detect($trendIdx, $params);
@@ -225,7 +231,18 @@ final class Scoring
             }
         }
 
-        $maxScore = $wTrend + $wEma + $wRsi + $wMacd + $wAdx + $wVolume + $wPa + $wHtf;
-        return [self::clamp($total, $maxScore), $reasons];
+        // 9) ICT/SMC Order Blocks + Breaker Blocks (15M)
+        if (!empty($params['indicator_smc_ob_enabled'])) {
+            $ob = OrderBlocks::evaluate($obZones, $setupIdx, $bullish);
+            if ($ob['hit']) {
+                $total += $wSmcOb;
+                $reasons[] = $ob['reason'];
+            }
+        }
+
+        $maxScore = $wTrend + $wEma + $wRsi + $wMacd + $wAdx + $wVolume + $wPa + $wHtf + $wSmcOb;
+        $raw = self::clamp($total, $maxScore);
+        $normalized = $maxScore > 0 ? ($raw / $maxScore) * 100.0 : 0.0;
+        return [$normalized, $reasons];
     }
 }

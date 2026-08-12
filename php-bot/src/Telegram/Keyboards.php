@@ -119,6 +119,7 @@ final class Keyboards
             ['ADX', 'indicator_adx_enabled'],
             ['حجم معاملات', 'indicator_volume_enabled'],
             ['بولینگر باند', 'indicator_bollinger_enabled'],
+            ['اوردر بلاک / بریکر بلاک (ICT-SMC)', 'indicator_smc_ob_enabled'],
         ];
         $rows = [];
         foreach ($flags as [$label, $key]) {
@@ -146,6 +147,7 @@ final class Keyboards
                 ['وزن: حجم', 'score_weight_volume'],
                 ['وزن: پرایس اکشن', 'score_weight_price_action'],
                 ['وزن: تأیید تایم‌فریم بالاتر', 'score_weight_htf'],
+                ['وزن: اوردر بلاک/بریکر بلاک', 'score_weight_smc_ob'],
             ],
             'risk' => [
                 ['ضریب ATR برای استاپ', 'atr_sl_multiplier'],
