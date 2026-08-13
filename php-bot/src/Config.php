@@ -255,9 +255,12 @@ final class Config
             'leverage_low_vol_atr_pct' => 0.015,
             'leverage_medium_vol_atr_pct' => 0.035,
 
-            // --- Symbol universe (Top-N by 24h volume, synced from MEXC on demand
-            // or automatically by the scanner - see Symbols panel) ---
-            'symbol_auto_sync_enabled' => false,
+            // --- Symbol universe (Top-N by 24h volume, synced from MEXC every
+            // scan pass by default so the altcoin/hunter track covers the
+            // market on its own - no manual "add symbol" step required. Purely
+            // additive: never removes/disables a symbol, so manual overrides
+            // in the Symbols panel always stick.) ---
+            'symbol_auto_sync_enabled' => true,
             'symbol_top_n' => 100,
 
             // --- Pump Hunter (opt-in extra scoring bonus for volume-surge +
