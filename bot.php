@@ -78,9 +78,11 @@ const DATA_FILE = __DIR__ . '/giftix_data.json';
 const LOCK_FILE = __DIR__ . '/giftix_data.lock';
 
 const MIN_TON = 0.1;
+const MIN_TRX = 10;
 const STARS_MIN = 50;
 
 const NOBITEX_TON_STATS_URL = 'https://api.nobitex.ir/market/stats?srcCurrency=ton&dstCurrency=rls';
+const NOBITEX_TRX_STATS_URL = 'https://api.nobitex.ir/market/stats?srcCurrency=trx&dstCurrency=rls';
 const TON_PRICE_CACHE_SECONDS = 300;
 
 const REFERRAL_COMMISSION_PERCENT = 5;
@@ -104,8 +106,6 @@ const GIFTS_META = [
     'diamond'      => ['name' => 'الماس',        'emoji' => '💎', 'stars' => 100],
 ];
 
-const PRODUCT_PLACEHOLDER_NFT_TEXT = '🖼 بخش گیفت NFT (در حال تکمیل...)';
-
 /* ===================== EDITABLE TEXTS / BUTTONS METADATA ===================== */
 
 const CATEGORY_LABELS = [
@@ -114,6 +114,7 @@ const CATEGORY_LABELS = [
     'stars'      => '⭐️ استارز',
     'gift'       => '🎁 گیفت',
     'ton'        => '💱 تون',
+    'trx'        => '🚀 ترون',
     'custom_product' => '🛒 محصولات سفارشی',
     'wallet'     => '👛 شارژ کیف‌پول',
     'track'      => '📦 پیگیری سفارش',
@@ -129,13 +130,14 @@ const TEXT_CATEGORIES = [
     'stars' => ['stars_buy', 'stars_min_error', 'stars_invoice', 'stars_success', 'stars_done'],
     'gift' => ['gift_list', 'gift_comment_type', 'gift_comment_input', 'gift_invoice', 'gift_success', 'gift_done'],
     'ton' => ['ton_buy', 'ton_wallet_ask', 'ton_memo_question', 'ton_memo_input', 'ton_invoice', 'ton_success', 'ton_done'],
+    'trx' => ['trx_buy', 'trx_wallet_ask', 'trx_memo_question', 'trx_memo_input', 'trx_invoice', 'trx_success', 'trx_done'],
     'custom_product' => ['custom_product_success', 'custom_product_done'],
     'wallet' => ['wallet_increase', 'wallet', 'toman_payment', 'receipt_prompt', 'receipt_sent', 'card_details', 'approved', 'rejected', 'daily_limit_exceeded', 'daily_limit_exceeded_zero'],
     'track' => ['track', 'track_ask_code', 'track_not_found', 'order_status'],
     'support' => ['support', 'support_indirect', 'support_sent_confirm'],
     'referral' => ['referral', 'referral_notification', 'referral_reward_select', 'referral_reward_invoice', 'referral_reward_success', 'referral_reward_done'],
-    'admin_msgs' => ['admin_premium_order', 'admin_stars_order', 'admin_gift_order', 'admin_ton_order', 'admin_custom_product_order', 'admin_support_notify', 'admin_referral_reward_order', 'admin_topup_caption', 'report', 'broadcast_message'],
-    'admin_ops' => ['admin_ask_stars_price', 'admin_ask_ton_price', 'admin_ask_premium_price', 'admin_ask_gift_price', 'admin_ask_daily_limit', 'admin_ask_profit',
+    'admin_msgs' => ['admin_premium_order', 'admin_stars_order', 'admin_gift_order', 'admin_ton_order', 'admin_trx_order', 'admin_custom_product_order', 'admin_support_notify', 'admin_referral_reward_order', 'admin_topup_caption', 'report', 'broadcast_message'],
+    'admin_ops' => ['admin_ask_stars_price', 'admin_ask_ton_price', 'admin_ask_trx_price', 'admin_ask_premium_price', 'admin_ask_gift_price', 'admin_ask_daily_limit', 'admin_ask_profit',
         'admin_numeric_error', 'admin_positive_number_error', 'admin_positive_percent_error'],
 ];
 
@@ -154,6 +156,9 @@ const TEXT_PLACEHOLDERS = [
     'ton_buy' => ['{price}', '{min}'], 'ton_wallet_ask' => [], 'ton_memo_question' => [], 'ton_memo_input' => [],
     'ton_invoice' => ['{amount}', '{wallet}', '{memo}', '{price}', '{discount}', '{max_discount}', '{final}'],
     'ton_success' => ['{amount}', '{wallet}', '{price}', '{order_id}'], 'ton_done' => ['{amount}', '{wallet}', '{price}', '{order_id}'],
+    'trx_buy' => ['{price}', '{min}'], 'trx_wallet_ask' => [], 'trx_memo_question' => [], 'trx_memo_input' => [],
+    'trx_invoice' => ['{amount}', '{wallet}', '{memo}', '{price}', '{discount}', '{max_discount}', '{final}'],
+    'trx_success' => ['{amount}', '{wallet}', '{price}', '{order_id}'], 'trx_done' => ['{amount}', '{wallet}', '{price}', '{order_id}'],
     'custom_product_success' => ['{name}', '{username}', '{price}', '{order_id}'],
     'custom_product_done' => ['{name}', '{username}', '{price}', '{order_id}'],
     'wallet_increase' => [], 'wallet' => ['{balance}', '{remaining}'], 'toman_payment' => ['{remaining}'],
@@ -170,13 +175,14 @@ const TEXT_PLACEHOLDERS = [
     'admin_stars_order' => ['{user_name}', '{username_at}', '{user_id}', '{count}', '{buy_username}', '{price}', '{order_id}'],
     'admin_gift_order' => ['{user_name}', '{username_at}', '{user_id}', '{gift}', '{buy_username}', '{hide}', '{comment}', '{price}', '{order_id}'],
     'admin_ton_order' => ['{user_name}', '{username_at}', '{user_id}', '{amount}', '{wallet}', '{memo}', '{price}', '{order_id}'],
+    'admin_trx_order' => ['{user_name}', '{username_at}', '{user_id}', '{amount}', '{wallet}', '{memo}', '{price}', '{order_id}'],
     'admin_custom_product_order' => ['{user_name}', '{username_at}', '{user_id}', '{name}', '{buy_username}', '{price}', '{order_id}'],
     'admin_support_notify' => ['{user_name}', '{username_at}', '{user_id}', '{message}'],
     'admin_referral_reward_order' => ['{user_name}', '{username_at}', '{user_id}', '{gift}', '{buy_username}', '{order_id}'],
     'admin_topup_caption' => ['{user_name}', '{username_at}', '{user_id}', '{amount}', '{req_id}'],
     'report' => ['{buyer_name}', '{label}', '{emoji}', '{qty}', '{price}', '{date}', '{bot_username}'],
     'broadcast_message' => ['{text}'],
-    'admin_ask_stars_price' => [], 'admin_ask_ton_price' => ['{min_ton}'], 'admin_ask_premium_price' => ['{plan}'],
+    'admin_ask_stars_price' => [], 'admin_ask_ton_price' => ['{min_ton}'], 'admin_ask_trx_price' => ['{min_trx}'], 'admin_ask_premium_price' => ['{plan}'],
     'admin_ask_gift_price' => ['{gift}'], 'admin_ask_daily_limit' => ['{limit}'], 'admin_ask_profit' => ['{product}'],
     'admin_numeric_error' => [], 'admin_positive_number_error' => [], 'admin_positive_percent_error' => [],
 ];
@@ -215,6 +221,13 @@ const TEXT_LABELS = [
     'ton_invoice' => 'فاکتور خرید تون',
     'ton_success' => 'ثبت موفق سفارش تون',
     'ton_done' => 'تکمیل سفارش تون',
+    'trx_buy' => 'متن خرید ارز ترون',
+    'trx_wallet_ask' => 'درخواست آدرس ولت ترون',
+    'trx_memo_question' => 'سوال ممو/کامنت ولت ترون',
+    'trx_memo_input' => 'دریافت ممو/کامنت ولت ترون',
+    'trx_invoice' => 'فاکتور خرید ترون',
+    'trx_success' => 'ثبت موفق سفارش ترون',
+    'trx_done' => 'تکمیل سفارش ترون',
     'custom_product_success' => 'ثبت موفق سفارش محصول سفارشی',
     'custom_product_done' => 'تکمیل سفارش محصول سفارشی',
     'wallet_increase' => 'منوی افزایش موجودی',
@@ -244,6 +257,7 @@ const TEXT_LABELS = [
     'admin_stars_order' => 'اعلان سفارش استارز به ادمین',
     'admin_gift_order' => 'اعلان سفارش گیفت به ادمین',
     'admin_ton_order' => 'اعلان سفارش تون به ادمین',
+    'admin_trx_order' => 'اعلان سفارش ترون به ادمین',
     'admin_custom_product_order' => 'اعلان سفارش محصول سفارشی به ادمین',
     'admin_support_notify' => 'اعلان تیکت پشتیبانی به ادمین',
     'admin_referral_reward_order' => 'اعلان جایزه رفرال به ادمین',
@@ -252,6 +266,7 @@ const TEXT_LABELS = [
     'broadcast_message' => 'قالب پیام همگانی',
     'admin_ask_stars_price' => 'درخواست قیمت جدید استارز',
     'admin_ask_ton_price' => 'درخواست قیمت جدید تون',
+    'admin_ask_trx_price' => 'درخواست قیمت جدید ترون',
     'admin_ask_premium_price' => 'درخواست قیمت جدید پرمیوم',
     'admin_ask_gift_price' => 'درخواست قیمت جدید گیفت',
     'admin_ask_daily_limit' => 'درخواست سقف روزانه جدید',
@@ -269,6 +284,7 @@ const BUTTON_CATEGORIES = [
     'stars' => ['btn_stars'],
     'gift' => ['btn_gift_stars', 'btn_gift_nft', 'btn_gift_comment_free', 'btn_gift_hide_on', 'btn_gift_hide_off', 'btn_gift_comment_set', 'btn_gift_comment_del'],
     'ton' => ['btn_buy_ton', 'btn_ton_short', 'btn_ton_memo_yes', 'btn_ton_memo_skip'],
+    'trx' => ['btn_buy_trx', 'btn_trx_short', 'btn_trx_memo_yes', 'btn_trx_memo_skip'],
     'wallet' => ['btn_wallet_increase', 'btn_toman_payment', 'btn_send_receipt', 'btn_admin_approve', 'btn_admin_reject'],
     'track' => ['btn_track_have_code', 'btn_admin_done', 'btn_report_buy'],
     'support' => ['btn_support_direct', 'btn_support_indirect', 'btn_admin_reply'],
@@ -519,6 +535,67 @@ function default_texts(): array {
             "🔓 کد پیگیری سفارش: {order_id}\n\n" .
             "😊 از اعتماد و انتخاب شما سپاسگزاریم.",
 
+        'trx_buy' => "💰 خرید ارز ترون (TRX)\n\n" .
+            "✨ ارز ترون را با بهترین قیمت و تحویل مستقیم به کیف پول خود دریافت کنید.\n\n" .
+            "💎 انتقال مستقیم به ولت \n" .
+            "⚡️ انجام سریع سفارش\n" .
+            "🔒 تراکنش امن و قابل‌اعتماد\n" .
+            "🙏 پشتیبانی کامل در تمامی مراحل\n\n" .
+            "📊 قیمت هر TRX:  {price} تومان\n" .
+            "📌 حداقل سفارش: {min} TRX\n\n" .
+            "☝️ مقدار TRX موردنیاز خود را وارد کنید.\n\n" .
+            "💡 مثال: 50 یا 100",
+
+        'trx_wallet_ask' => "💼 آدرس ولت ترون ( TRON )\n\n" .
+            "⚠️ نکات مهم قبل از ارسال آدرس :\n\n" .
+            "• آدرس باید مخصوص شبکه TRON (TRC20) باشد.\n" .
+            "• آدرس را کامل و بدون فاصله یا تغییر ارسال نمایید.\n" .
+            "• مسئولیت صحت آدرس واردشده بر عهده کاربر است.\n\n" .
+            "📎 نمونه فرمت آدرس ولت ترون :\n" .
+            "T….................…9X\n\n" .
+            "🔓 لطفاً آدرس ولت ترون ( TRON ) خود را ارسال کنید :",
+
+        'trx_memo_question' => "💼 آدرس ولت ثبت شد!\n\n" .
+            "💬 یک سوال مهم:\n\n" .
+            "بعضی ولت‌های TRON (مخصوصاً کیف پول صرافی‌ها) برای دریافت درستِ ارز، نیاز به کامنت (ممو) دارن " .
+            "تا واریز به همون ولت بره و گم نشه!\n\n" .
+            "🌟 ولت شما کامنت/ممو داره؟\n" .
+            "• اگه داره، روی «بله، کامنت دارم» بزن و متن کامنت رو بفرست\n" .
+            "• اگه نداره یا مطمئن نیستی، روی «رد کردن» بزن",
+
+        'trx_memo_input' => "💬 ارسال کامنت/ممو ولت\n\n" .
+            "لطفاً متن کامنت (ممو) ولت ترون رو همینجا بفرستید " .
+            "تا دقیقاً همون برای واریز استفاده بشه.",
+
+        'trx_invoice' => "📑 فاکتور خرید ارز ترون\n\n" .
+            "💫 مقدار خرید: {amount} ترون\n" .
+            "🏦 ولت آدرس دریافتی: {wallet}\n" .
+            "💬 ممو/کامنت ولت: {memo}\n" .
+            "💰 مبلغ فاکتور:  {price} تومان\n" .
+            "🎁 کل موجودی تخفیف:  {discount} تومان\n\n" .
+            "💡 حداکثر تخفیف قابل اعمال:  {max_discount} تومان\n\n" .
+            "💳 مبلغ نهایی:  {final} تومان\n\n" .
+            "🔮 در صورتی که جزئیات بالا مورد تأیید شماست ✓ \n" .
+            "روی دکمه «تأیید ✅» کلیک کنید.",
+
+        'trx_success' => "✅ سفارش شما با موفقیت ثبت شد.\n\n" .
+            "⛏️نوع خدمات : خرید ارز ترون\n" .
+            "🔢 تعداد : {amount}\n" .
+            "📎 آدرس ولت : {wallet}\n" .
+            "💰 مبلغ پرداختی :  {price} تومان\n" .
+            "🔑 کد پیگیری سفارش : {order_id}\n\n" .
+            "⏳ سفارش شما در حال پردازش است و به‌زودی وضعیت آن از طریق ربات اطلاع‌رسانی خواهد شد.\n\n" .
+            "🙏 از اعتماد شما سپاسگزاریم.",
+
+        'trx_done' => "✅ سفارش شما با موفقیت انجام شد 🎉\n\n" .
+            "☝️اطلاعات سفارش:\n\n" .
+            "ℹ️ نوع خدمات: خرید ارز ترون\n" .
+            "👀 تعداد: {amount} TRX\n" .
+            "🔗 ولت ترون: {wallet}\n" .
+            "💳 مبلغ نهایی پرداخت شده:  {price} تومان\n" .
+            "🔓 کد پیگیری سفارش: {order_id}\n\n" .
+            "😊 از اعتماد و انتخاب شما سپاسگزاریم.",
+
         'custom_product_success' => "✅ سفارش شما با موفقیت ثبت شد!\n\n" .
             "⛏️ نوع خدمات: {name}\n" .
             "📎 یوزر دریافت‌کننده: {username}\n" .
@@ -677,6 +754,15 @@ function default_texts(): array {
             "💰 مبلغ پرداخت‌شده: {price} تومان\n" .
             "🔢 کد پیگیری: {order_id}",
 
+        'admin_trx_order' => "🛒 سفارش جدید - خرید ارز ترون\n\n" .
+            "👤 کاربر: {user_name} ({username_at})\n" .
+            "🆔 آیدی عددی: {user_id}\n" .
+            "💫 مقدار: {amount} TRX\n" .
+            "🏦 آدرس ولت:\n<code>{wallet}</code>\n" .
+            "💬 ممو: {memo}\n" .
+            "💰 مبلغ پرداخت‌شده: {price} تومان\n" .
+            "🔢 کد پیگیری: {order_id}",
+
         'admin_custom_product_order' => "🛒 سفارش جدید - {name}\n\n" .
             "👤 کاربر: {user_name} ({username_at})\n" .
             "🆔 آیدی عددی: {user_id}\n" .
@@ -714,6 +800,7 @@ function default_texts(): array {
 
         'admin_ask_stars_price' => '✏️ قیمت جدید هر ۱ استارز رو به تومان وارد کن:',
         'admin_ask_ton_price' => '✏️ قیمت جدید هر {min_ton} TON رو به تومان وارد کن:',
+        'admin_ask_trx_price' => '✏️ قیمت جدید هر {min_trx} TRX رو به تومان وارد کن:',
         'admin_ask_premium_price' => '✏️ قیمت جدید پلن {plan} ماهه رو به تومان وارد کن:',
         'admin_ask_gift_price' => '✏️ قیمت جدید {gift} رو به تومان وارد کن:',
         'admin_ask_daily_limit' => "✏️ سقف مجاز شارژ روزانه جدید رو به تومان وارد کن:\n\n(سقف فعلی: {limit} تومان)",
@@ -740,6 +827,7 @@ function default_buttons(): array {
         'btn_gift_hide_on' => '🔓 هاید کردن', 'btn_gift_hide_off' => '🔒 لغو هاید بودن',
         'btn_gift_comment_set' => '💬 تنظیم کامنت', 'btn_gift_comment_del' => '🗑 حذف کامنت',
         'btn_buy_ton' => '💱 خرید ارز تون', 'btn_ton_short' => '💱 ارز تون', 'btn_ton_memo_yes' => '✅ بله، کامنت دارم', 'btn_ton_memo_skip' => '❌ رد کردن',
+        'btn_buy_trx' => '🚀 خرید ترون', 'btn_trx_short' => '🚀 ترون', 'btn_trx_memo_yes' => '✅ بله، کامنت دارم', 'btn_trx_memo_skip' => '❌ رد کردن',
         'btn_wallet_increase' => 'افزایش موجودی', 'btn_toman_payment' => '💳 پرداخت تومانی', 'btn_send_receipt' => '📨 ارسال رسید',
         'btn_admin_approve' => '✅ تایید', 'btn_admin_reject' => '❌ رد',
         'btn_track_have_code' => '🔢 کد پیگیری محصول دارم', 'btn_admin_done' => '✅ انجام شد', 'btn_report_buy' => '🛍 حالا اقدام به خرید کن',
@@ -1083,6 +1171,11 @@ function ton_buy_text(array &$DATA): string {
     return T('ton_buy', ['{price}' => fmt($DATA['ton_price']), '{min}' => MIN_TON]);
 }
 
+function trx_buy_text(array &$DATA): string {
+    refresh_trx_price_if_stale($DATA);
+    return T('trx_buy', ['{price}' => fmt($DATA['trx_price']), '{min}' => MIN_TRX]);
+}
+
 function join_text(array &$DATA): string {
     $list = implode("\n", array_map(fn($c) => "@{$c}", $DATA['required_channels']));
     return T('join', ['{channels}' => $list]);
@@ -1119,6 +1212,19 @@ function ton_success_text($amount, $wallet, $price, $order_id): string {
 
 function ton_done_text($amount, $wallet, $price, $order_id): string {
     return T('ton_done', ['{amount}' => $amount, '{wallet}' => $wallet, '{price}' => fmt($price), '{order_id}' => $order_id]);
+}
+
+function trx_invoice_text($amount, $wallet, $memo, $price, $disc, $final): string {
+    return T('trx_invoice', ['{amount}' => $amount, '{wallet}' => $wallet, '{memo}' => $memo,
+        '{price}' => fmt($price), '{discount}' => fmt($disc), '{max_discount}' => fmt(min($disc, $price)), '{final}' => fmt($final)]);
+}
+
+function trx_success_text($amount, $wallet, $price, $order_id): string {
+    return T('trx_success', ['{amount}' => $amount, '{wallet}' => $wallet, '{price}' => fmt($price), '{order_id}' => $order_id]);
+}
+
+function trx_done_text($amount, $wallet, $price, $order_id): string {
+    return T('trx_done', ['{amount}' => $amount, '{wallet}' => $wallet, '{price}' => fmt($price), '{order_id}' => $order_id]);
 }
 
 function stars_invoice_text($count, $username, $price, $disc, $final): string {
@@ -1206,6 +1312,7 @@ function admin_support_text($user, string $message_text): string {
 function order_report_fields(array $order): array {
     if ($order['type'] === 'premium') return ['پرمیوم تلگرام', '💎', "{$order['plan']} ماهه"];
     if ($order['type'] === 'ton') return ['خرید ارز تون', '💱', "{$order['amount']} TON"];
+    if ($order['type'] === 'trx') return ['خرید ارز ترون', '🚀', "{$order['amount']} TRX"];
     if ($order['type'] === 'stars') return ['استارز تلگرام', '⭐️', "{$order['count']} 🌟"];
     if ($order['type'] === 'referral_reward') return ['جایزه رفرال', '🎁', gift_label($order['key'])];
     if ($order['type'] === 'custom_product') return [$order['name'], '🛒', '1 عدد'];
@@ -1234,6 +1341,10 @@ function order_status_text(array $order): string {
     } elseif ($type_ === 'ton') {
         $label = 'خرید ارز تون'; $emoji = '⚡️';
         $qty = "{$order['amount']} تون";
+        $extra = "🔓 آدرس ولت کاربر دریافت کننده: {$order['wallet']}";
+    } elseif ($type_ === 'trx') {
+        $label = 'خرید ارز ترون'; $emoji = '🚀';
+        $qty = "{$order['amount']} ترون";
         $extra = "🔓 آدرس ولت کاربر دریافت کننده: {$order['wallet']}";
     } elseif ($type_ === 'stars') {
         $label = 'استارز تلگرام'; $emoji = '⭐️';
@@ -1313,6 +1424,12 @@ function admin_ton_price_text(array &$DATA): string {
 }
 function admin_ask_ton_price_text(): string { return T('admin_ask_ton_price', ['{min_ton}' => MIN_TON]); }
 
+function admin_trx_price_text(array &$DATA): string {
+    $price_per_unit = (int) round($DATA['trx_price'] * MIN_TRX);
+    return "🚀 قیمت فعلی هر " . MIN_TRX . " TRX:\n\n💰 " . fmt($price_per_unit) . ' تومان';
+}
+function admin_ask_trx_price_text(): string { return T('admin_ask_trx_price', ['{min_trx}' => MIN_TRX]); }
+
 function admin_premium_price_text(array &$DATA): string {
     $p = $DATA['premium_prices'];
     return "💎 قیمت‌های فعلی پرمیوم تلگرام:\n\n" .
@@ -1364,6 +1481,19 @@ function admin_profit_ton_text(array &$DATA): string {
         "🏷 قیمت فروش ۱ TON:  " . fmt($sell) . ' تومان';
 }
 
+function admin_profit_trx_text(array &$DATA): string {
+    $pct = $DATA['profit_percent']['trx'];
+    $base = $DATA['base_trx_price'];
+    $profit_amt = (int) round($base * $pct / 100);
+    $sell = $DATA['trx_price'];
+    return "🚀 درصد سود ارز ترون\n\n" .
+        "📦 مقدار نمایشی: ۱ TRX\n" .
+        "💵 قیمت پایه ۱ TRX:  " . fmt($base) . " تومان\n" .
+        "📈 درصد سود فعلی: {$pct}٪\n" .
+        "💰 مقدار سود:  " . fmt($profit_amt) . " تومان\n" .
+        "🏷 قیمت فروش ۱ TRX:  " . fmt($sell) . ' تومان';
+}
+
 function admin_profit_gift_text(array &$DATA): string {
     $pct = $DATA['profit_percent']['gift'];
     $base_per_star = $DATA['base_stars_price'];
@@ -1393,6 +1523,12 @@ function admin_ask_profit_text(string $product_fa): string { return T('admin_ask
 
 function admin_ton_text($user, $amount, $wallet, $memo, $price, $order_id): string {
     return T('admin_ton_order', ['{user_name}' => display_name($user), '{username_at}' => username_at($user),
+        '{user_id}' => $user['id'], '{amount}' => $amount, '{wallet}' => $wallet, '{memo}' => $memo,
+        '{price}' => fmt($price), '{order_id}' => $order_id]);
+}
+
+function admin_trx_text($user, $amount, $wallet, $memo, $price, $order_id): string {
+    return T('admin_trx_order', ['{user_name}' => display_name($user), '{username_at}' => username_at($user),
         '{user_id}' => $user['id'], '{amount}' => $amount, '{wallet}' => $wallet, '{memo}' => $memo,
         '{price}' => fmt($price), '{order_id}' => $order_id]);
 }
@@ -1689,6 +1825,49 @@ function refresh_ton_price_if_stale(array &$DATA, bool $force = false): void {
     recalc_prices($DATA);
 }
 
+/* ===================== TRX PRICE (Nobitex) ===================== */
+
+// Fetches the TRX/Rial spot price from Nobitex and returns the base Toman
+// price (Rial / 10, rounded to the nearest 100 Toman), or null on failure.
+function fetch_trx_price_from_nobitex(): ?int {
+    $ch = curl_init(NOBITEX_TRX_STATS_URL);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => 8,
+        CURLOPT_CONNECTTIMEOUT => 4,
+    ]);
+    $res = curl_exec($ch);
+    if ($res === false) {
+        error_log('fetch_trx_price_from_nobitex curl error: ' . curl_error($ch));
+        curl_close($ch);
+        return null;
+    }
+    curl_close($ch);
+    $decoded = json_decode($res, true);
+    $rial = $decoded['stats']['trx-rls']['latest'] ?? null;
+    if (!is_numeric($rial)) {
+        error_log('fetch_trx_price_from_nobitex: unexpected response: ' . substr((string) $res, 0, 300));
+        return null;
+    }
+    return (int) round(((float) $rial) / 10 / 100) * 100;
+}
+
+// Lazy on-demand refresh: re-fetches only when the cache is stale (or
+// $force). Never throws - a failed fetch just keeps serving the last
+// cached base price so the purchase flow never breaks.
+function refresh_trx_price_if_stale(array &$DATA, bool $force = false): void {
+    $cache = $DATA['trx_price_cache'] ?? ['base' => $DATA['base_trx_price'], 'fetched_at' => 0];
+    if (!$force && (time() - (int) ($cache['fetched_at'] ?? 0)) < TON_PRICE_CACHE_SECONDS) return;
+    $fresh = fetch_trx_price_from_nobitex();
+    if ($fresh === null) {
+        $DATA['trx_price_cache'] = $cache; // keep last known value, just don't retry every request
+        return;
+    }
+    $DATA['trx_price_cache'] = ['base' => $fresh, 'fetched_at' => time()];
+    $DATA['base_trx_price'] = $fresh;
+    recalc_prices($DATA);
+}
+
 /* ===================== KEYBOARDS ===================== */
 
 function ikb(array $rows): array { return ['inline_keyboard' => $rows]; }
@@ -1727,7 +1906,7 @@ function product_buttons(array &$DATA): array {
     $buttons = [
         ibtn('btn_premium', 'product_premium'), ibtn('btn_stars', 'product_stars'),
         ibtn('btn_gift_stars', 'product_gift_stars'), ibtn('btn_buy_ton', 'product_buy_ton'),
-        ibtn('btn_gift_nft', 'product_gift_nft'),
+        ibtn('btn_buy_trx', 'product_buy_trx'),
     ];
     foreach ($DATA['custom_products'] as $key => $p) {
         $buttons[] = btn($p['name'], "product_custom_{$key}");
@@ -1793,6 +1972,26 @@ function ton_invoice_kb(bool $discount_applied = false): array {
     return ikb([
         [ibtn('btn_confirm', 'ton_invoice_confirm')],
         [ibtn($slug, 'ton_invoice_discount'), ibtn('btn_cancel', 'ton_invoice_cancel')],
+    ]);
+}
+
+function trx_back_kb(): array { return ikb([[ibtn('btn_back', 'back_to_products')]]); }
+function trx_wallet_back_kb(): array { return ikb([[ibtn('btn_back', 'trx_back_to_amount')]]); }
+
+function trx_memo_kb(): array {
+    return ikb([
+        [ibtn('btn_trx_memo_yes', 'trx_memo_yes')],
+        [ibtn('btn_trx_memo_skip', 'trx_memo_skip')],
+        [ibtn('btn_back', 'trx_memo_back')],
+    ]);
+}
+function trx_memo_input_kb(): array { return ikb([[ibtn('btn_back', 'trx_memo_input_back')]]); }
+
+function trx_invoice_kb(bool $discount_applied = false): array {
+    $slug = $discount_applied ? 'btn_discount_remove' : 'btn_discount_apply';
+    return ikb([
+        [ibtn('btn_confirm', 'trx_invoice_confirm')],
+        [ibtn($slug, 'trx_invoice_discount'), ibtn('btn_cancel', 'trx_invoice_cancel')],
     ]);
 }
 
@@ -2007,6 +2206,7 @@ function admin_price_menu_kb(): array {
         [ibtn('btn_stars', 'admin_price_stars')],
         [ibtn('btn_premium', 'admin_price_premium')],
         [ibtn('btn_ton_short', 'admin_price_ton')],
+        [ibtn('btn_trx_short', 'admin_price_trx')],
         [ibtn('btn_gift_stars', 'admin_price_giftstars')],
         [ibtn('btn_gift_nft', 'admin_price_giftnft')],
         [ibtn('btn_back', 'admin_panel_back')],
@@ -2017,6 +2217,8 @@ function admin_stars_price_kb(): array { return ikb([[ibtn('btn_admin_edit_price
 function admin_stars_price_ask_kb(): array { return ikb([[ibtn('btn_back', 'admin_price_stars_back')]]); }
 function admin_ton_price_kb(): array { return ikb([[ibtn('btn_admin_edit_price', 'admin_change_ton_price')], [ibtn('btn_back', 'admin_price_menu_back')]]); }
 function admin_ton_price_ask_kb(): array { return ikb([[ibtn('btn_back', 'admin_price_ton_back')]]); }
+function admin_trx_price_kb(): array { return ikb([[ibtn('btn_admin_edit_price', 'admin_change_trx_price')], [ibtn('btn_back', 'admin_price_menu_back')]]); }
+function admin_trx_price_ask_kb(): array { return ikb([[ibtn('btn_back', 'admin_price_trx_back')]]); }
 function admin_premium_price_kb(): array { return ikb([[ibtn('btn_admin_edit_price', 'admin_change_premium_price')], [ibtn('btn_back', 'admin_price_menu_back')]]); }
 
 function admin_premium_plan_select_kb(): array {
@@ -2062,6 +2264,7 @@ function admin_profit_menu_kb(): array {
     return ikb([
         [ibtn('btn_stars', 'admin_profit_stars')],
         [ibtn('btn_ton_short', 'admin_profit_ton')],
+        [ibtn('btn_trx_short', 'admin_profit_trx')],
         [ibtn('btn_gift_stars', 'admin_profit_gift')],
         [ibtn('btn_premium', 'admin_profit_premium')],
         [ibtn('btn_back', 'admin_panel_back')],
@@ -2189,14 +2392,16 @@ function default_data(): array {
         'bot_enabled' => true,
         'referral_points_enabled' => false,
         'daily_limit' => 900000,
-        'profit_percent' => ['ton' => 10, 'stars' => 8, 'gift' => 21, 'premium' => 11],
+        'profit_percent' => ['ton' => 10, 'trx' => 10, 'stars' => 8, 'gift' => 21, 'premium' => 11],
         'base_ton_price' => 298225,
+        'base_trx_price' => 9500,
         'base_stars_price' => 2637,
         'base_premium_prices' => ['3' => 1577000, '6' => 2560000, '12' => 4460000],
         'premium_prices' => ['3' => 1750000, '6' => 2841000, '12' => 4950000],
         'stars_price' => 2847,
         'gift_star_price' => 3514,
         'ton_price' => 298225,
+        'trx_price' => 9500,
         'gifts_prices' => [],
         // admin-added catalog entries, same shape as GIFTS_META/products below;
         // never overrides a built-in key - see all_gifts()/new_custom_gift_key()
@@ -2214,6 +2419,7 @@ function default_data(): array {
         // LAYOUT_GROUPS[group]['default_pattern'] - see get_layout_pattern()
         'layout' => [],
         'ton_price_cache' => ['base' => 298225, 'fetched_at' => 0],
+        'trx_price_cache' => ['base' => 9500, 'fetched_at' => 0],
     ];
     recalc_prices($data);
     return $data;
@@ -2231,6 +2437,7 @@ function recalc_prices(array &$DATA): void {
     $DATA['stars_price'] = (int) round($DATA['base_stars_price'] * (1 + $pp['stars'] / 100));
     $DATA['gift_star_price'] = (int) round($DATA['base_stars_price'] * (1 + $pp['gift'] / 100));
     $DATA['ton_price'] = (int) round($DATA['base_ton_price'] * (1 + $pp['ton'] / 100));
+    $DATA['trx_price'] = (int) round($DATA['base_trx_price'] * (1 + $pp['trx'] / 100));
     foreach ($DATA['base_premium_prices'] as $plan => $base) {
         $DATA['premium_prices'][$plan] = (int) round($base * (1 + $pp['premium'] / 100));
     }
@@ -2254,6 +2461,10 @@ function load_data(): array {
         if (!is_array($data[$k] ?? null)) $data[$k] = $defaults[$k];
     }
     if (!is_array($data['ton_price_cache'] ?? null)) $data['ton_price_cache'] = $defaults['ton_price_cache'];
+    if (!is_array($data['trx_price_cache'] ?? null)) $data['trx_price_cache'] = $defaults['trx_price_cache'];
+    // Deep-merge so a product's key added after an admin's save (e.g. 'trx')
+    // is always present, without ever dropping an admin's own edited values.
+    $data['profit_percent'] = array_replace($defaults['profit_percent'], $data['profit_percent']);
     recalc_prices($data);
     if (isset($decoded['gifts_prices']) && is_array($decoded['gifts_prices'])) {
         $known_gifts = all_gifts($data);
@@ -2263,6 +2474,7 @@ function load_data(): array {
     }
     if (isset($decoded['stars_price'])) $data['stars_price'] = $decoded['stars_price'];
     if (isset($decoded['ton_price'])) $data['ton_price'] = $decoded['ton_price'];
+    if (isset($decoded['trx_price'])) $data['trx_price'] = $decoded['trx_price'];
     if (isset($decoded['premium_prices'])) $data['premium_prices'] = array_replace($data['premium_prices'], $decoded['premium_prices']);
     return $data;
 }
@@ -2533,6 +2745,14 @@ function handle_text(array $msg, array &$DATA): void {
             send_message($chat_id, admin_ton_price_text($DATA), admin_ton_price_kb());
             return;
         }
+        if ($state === 'admin_awaiting_trx_price') {
+            $raw = str_replace(',', '', trim($text));
+            if (!ctype_digit($raw)) { send_message($chat_id, T('admin_numeric_error'), admin_trx_price_ask_kb(), 'HTML'); return; }
+            $DATA['trx_price'] = (int) round(((int) $raw) / MIN_TRX);
+            $ust['state'] = null;
+            send_message($chat_id, admin_trx_price_text($DATA), admin_trx_price_kb());
+            return;
+        }
         if ($state !== null && str_starts_with($state, 'admin_awaiting_premium_price_')) {
             $plan = substr($state, strlen('admin_awaiting_premium_price_'));
             $raw = str_replace(',', '', trim($text));
@@ -2658,7 +2878,7 @@ function handle_text(array $msg, array &$DATA): void {
             $DATA['profit_percent'][$product] = round((float) $raw, 2);
             recalc_prices($DATA);
             $ust['state'] = null;
-            $textFns = ['stars' => 'admin_profit_stars_text', 'ton' => 'admin_profit_ton_text', 'gift' => 'admin_profit_gift_text', 'premium' => 'admin_profit_premium_text'];
+            $textFns = ['stars' => 'admin_profit_stars_text', 'ton' => 'admin_profit_ton_text', 'trx' => 'admin_profit_trx_text', 'gift' => 'admin_profit_gift_text', 'premium' => 'admin_profit_premium_text'];
             $fn = $textFns[$product] ?? 'admin_profit_stars_text';
             send_message($chat_id, $fn($DATA), admin_profit_detail_kb($product));
             return;
@@ -2825,6 +3045,42 @@ function handle_text(array $msg, array &$DATA): void {
         $price = $ton['price'];
         $disc = get_user($DATA, $uid)['discount_balance'];
         send_message($chat_id, ton_invoice_text($ton['amount'], $ton['wallet'], $memo, $price, $disc, $price), ton_invoice_kb(false), 'HTML');
+        return;
+    }
+
+    if ($state === 'awaiting_trx_amount') {
+        $raw = str_replace(',', '', trim($text));
+        if (!is_numeric($raw)) { send_message($chat_id, 'لطفا عدد وارد کن. مثال: 50 یا 100'); return; }
+        $amount = (float) $raw;
+        if ($amount < MIN_TRX) { send_message($chat_id, 'حداقل سفارش ' . MIN_TRX . ' TRX است.'); return; }
+        $ust['pending_trx'] = ['amount' => $amount];
+        $ust['state'] = 'awaiting_trx_wallet';
+        send_message($chat_id, T('trx_wallet_ask'), trx_wallet_back_kb(), 'HTML');
+        return;
+    }
+
+    if ($state === 'awaiting_trx_wallet') {
+        $wallet = trim($text);
+        if (!str_starts_with($wallet, 'T') || mb_strlen($wallet) < 34) {
+            send_message($chat_id, "آدرس ولت نامعتبر به نظر می‌رسد.\nآدرس باید با T شروع شود و کامل باشد.");
+            return;
+        }
+        $ust['pending_trx']['wallet'] = $wallet;
+        $ust['state'] = null;
+        send_message($chat_id, T('trx_memo_question'), trx_memo_kb(), 'HTML');
+        return;
+    }
+
+    if ($state === 'awaiting_trx_memo') {
+        $memo = trim($text);
+        $trx = &$ust['pending_trx'];
+        $trx['memo'] = $memo;
+        $trx['price'] = (int) ($trx['amount'] * $DATA['trx_price']);
+        $trx['discount_applied'] = false;
+        $ust['state'] = null;
+        $price = $trx['price'];
+        $disc = get_user($DATA, $uid)['discount_balance'];
+        send_message($chat_id, trx_invoice_text($trx['amount'], $trx['wallet'], $memo, $price, $disc, $price), trx_invoice_kb(false), 'HTML');
         return;
     }
 
@@ -3209,6 +3465,7 @@ function handle_callback(array $cq, array &$DATA): void {
         switch ($order['type']) {
             case 'premium': $msgText = premium_done_text($order['plan'], $order['username'], $order['price'], $order_id); break;
             case 'ton': $msgText = ton_done_text($order['amount'], $order['wallet'], $order['price'], $order_id); break;
+            case 'trx': $msgText = trx_done_text($order['amount'], $order['wallet'], $order['price'], $order_id); break;
             case 'stars': $msgText = stars_done_text($order['count'], $order['username'], $order['price'], $order_id); break;
             case 'referral_reward': $msgText = referral_reward_done_text($order['key'], $order['username'], $order_id); break;
             case 'custom_product': $msgText = custom_product_done_text($order['name'], $order['username'], $order['price'], $order_id); break;
@@ -3465,8 +3722,73 @@ function handle_callback(array $cq, array &$DATA): void {
         return;
     }
 
-    /* ---- NFT gift placeholder (declared in keyboard, unimplemented upstream; wired to a "coming soon" alert like admin_price_giftnft) ---- */
-    if ($data === 'product_gift_nft') { answer_callback_query($cq['id'], PRODUCT_PLACEHOLDER_NFT_TEXT, true); return; }
+    /* ---- trx ---- */
+    if ($data === 'product_buy_trx') { $ust['state'] = 'awaiting_trx_amount'; $ust['pending_trx'] = []; edit_message_text($chat_id, $message_id, trx_buy_text($DATA), trx_back_kb(), 'HTML'); return; }
+    if ($data === 'trx_back_to_amount') { $ust['state'] = 'awaiting_trx_amount'; $ust['pending_trx'] = []; edit_message_text($chat_id, $message_id, trx_buy_text($DATA), trx_back_kb(), 'HTML'); return; }
+    if ($data === 'trx_memo_yes') { $ust['state'] = 'awaiting_trx_memo'; edit_message_text($chat_id, $message_id, T('trx_memo_input'), trx_memo_input_kb(), 'HTML'); return; }
+    if ($data === 'trx_memo_input_back') { $ust['state'] = null; edit_message_text($chat_id, $message_id, T('trx_memo_question'), trx_memo_kb(), 'HTML'); return; }
+
+    if ($data === 'trx_memo_skip') {
+        $trx = &$ust['pending_trx'];
+        $trx = $trx ?? [];
+        $amount = $trx['amount'] ?? 0;
+        $wallet = $trx['wallet'] ?? '-';
+        $trx['memo'] = 'ندارد';
+        $trx['price'] = (int) ($amount * $DATA['trx_price']);
+        $trx['discount_applied'] = false;
+        $price = $trx['price'];
+        $disc = get_user($DATA, $uid)['discount_balance'];
+        edit_message_text($chat_id, $message_id, trx_invoice_text($amount, $wallet, 'ندارد', $price, $disc, $price), trx_invoice_kb(false), 'HTML');
+        return;
+    }
+
+    if ($data === 'trx_memo_back') { $ust['state'] = 'awaiting_trx_wallet'; edit_message_text($chat_id, $message_id, T('trx_wallet_ask'), trx_wallet_back_kb(), 'HTML'); return; }
+
+    if ($data === 'trx_invoice_discount') {
+        $trx = &$ust['pending_trx'];
+        $trx = $trx ?? [];
+        $trx['discount_applied'] = empty($trx['discount_applied']);
+        $amount = $trx['amount'] ?? 0;
+        $wallet = $trx['wallet'] ?? '-';
+        $memo = $trx['memo'] ?? 'ندارد';
+        $price = $trx['price'] ?? (int) ($amount * $DATA['trx_price']);
+        $disc = get_user($DATA, $uid)['discount_balance'];
+        $final = compute_final_price($DATA, $trx, $uid);
+        edit_message_text($chat_id, $message_id, trx_invoice_text($amount, $wallet, $memo, $price, $disc, $final), trx_invoice_kb($trx['discount_applied']), 'HTML');
+        return;
+    }
+
+    if ($data === 'trx_invoice_cancel') { $ust['pending_trx'] = null; $ust['state'] = null; edit_message_text($chat_id, $message_id, T('cancelled'), null, 'HTML'); return; }
+
+    if ($data === 'trx_invoice_confirm') {
+        $trx = $ust['pending_trx'] ?? [];
+        $amount = $trx['amount'] ?? 0;
+        $wallet = $trx['wallet'] ?? '-';
+        $memo = $trx['memo'] ?? 'ندارد';
+        $price = $trx['price'] ?? (int) ($amount * $DATA['trx_price']);
+        $final = compute_final_price($DATA, $trx, $uid);
+        $u = &get_user($DATA, $uid);
+        if ($u['balance'] >= $final) {
+            $u['balance'] -= $final;
+            consume_discount_if_applied($DATA, $trx, $uid);
+            apply_referral_commission($DATA, $uid, $final);
+            $order_id = new_id();
+            push_order_history($DATA, $uid, '🚀 خرید ارز ترون - به مبلغ ' . fmt($final) . ' تومان');
+            $ust['pending_trx'] = null;
+            $DATA['orders'][$order_id] = [
+                'type' => 'trx', 'chat_id' => $chat_id, 'user_id' => $uid, 'buyer_name' => display_name($user),
+                'amount' => $amount, 'wallet' => $wallet, 'memo' => $memo, 'price' => $final, 'status' => 'pending', 'created_at' => persian_now_str(),
+            ];
+            edit_message_text($chat_id, $message_id, trx_success_text($amount, $wallet, $final, $order_id), null, 'HTML');
+            if (ADMIN_CHAT_ID) send_message(ADMIN_CHAT_ID, admin_trx_text($user, $amount, $wallet, $memo, $final, $order_id), admin_order_kb($order_id), 'HTML');
+        } else {
+            $shortfall = $final - $u['balance'];
+            $ust['topup_origin'] = 'invoice';
+            $ust['last_invoice_shortfall_price'] = $final;
+            edit_message_text($chat_id, $message_id, insufficient_text($shortfall), insufficient_kb(), 'HTML');
+        }
+        return;
+    }
 
     /* ---- custom products (generic simple purchase flow) ---- */
     if (str_starts_with($data, 'custom_product_detail_')) {
@@ -3654,12 +3976,13 @@ function handle_callback(array $cq, array &$DATA): void {
     if ($data === 'admin_profit_menu_back') { $ust['state'] = null; edit_message_text($chat_id, $message_id, admin_profit_menu_text(), admin_profit_menu_kb()); return; }
     if ($data === 'admin_profit_stars') { edit_message_text($chat_id, $message_id, admin_profit_stars_text($DATA), admin_profit_detail_kb('stars')); return; }
     if ($data === 'admin_profit_ton') { refresh_ton_price_if_stale($DATA); edit_message_text($chat_id, $message_id, admin_profit_ton_text($DATA), admin_profit_detail_kb('ton')); return; }
+    if ($data === 'admin_profit_trx') { refresh_trx_price_if_stale($DATA); edit_message_text($chat_id, $message_id, admin_profit_trx_text($DATA), admin_profit_detail_kb('trx')); return; }
     if ($data === 'admin_profit_gift') { edit_message_text($chat_id, $message_id, admin_profit_gift_text($DATA), admin_profit_detail_kb('gift')); return; }
     if ($data === 'admin_profit_premium') { edit_message_text($chat_id, $message_id, admin_profit_premium_text($DATA), admin_profit_detail_kb('premium')); return; }
 
     if (str_starts_with($data, 'admin_set_profit_')) {
         $product = substr($data, strlen('admin_set_profit_'));
-        $fa_names = ['stars' => 'استارز', 'ton' => 'تون', 'gift' => 'گیفت استارز', 'premium' => 'پرمیوم'];
+        $fa_names = ['stars' => 'استارز', 'ton' => 'تون', 'trx' => 'ترون', 'gift' => 'گیفت استارز', 'premium' => 'پرمیوم'];
         $ust['state'] = "admin_awaiting_profit_{$product}";
         edit_message_text($chat_id, $message_id, admin_ask_profit_text($fa_names[$product] ?? $product), admin_profit_ask_kb($product), 'HTML');
         return;
@@ -3716,6 +4039,10 @@ function handle_callback(array $cq, array &$DATA): void {
     if ($data === 'admin_price_ton') { refresh_ton_price_if_stale($DATA); edit_message_text($chat_id, $message_id, admin_ton_price_text($DATA), admin_ton_price_kb()); return; }
     if ($data === 'admin_change_ton_price') { $ust['state'] = 'admin_awaiting_ton_price'; edit_message_text($chat_id, $message_id, admin_ask_ton_price_text(), admin_ton_price_ask_kb(), 'HTML'); return; }
     if ($data === 'admin_price_ton_back') { $ust['state'] = null; edit_message_text($chat_id, $message_id, admin_ton_price_text($DATA), admin_ton_price_kb()); return; }
+
+    if ($data === 'admin_price_trx') { refresh_trx_price_if_stale($DATA); edit_message_text($chat_id, $message_id, admin_trx_price_text($DATA), admin_trx_price_kb()); return; }
+    if ($data === 'admin_change_trx_price') { $ust['state'] = 'admin_awaiting_trx_price'; edit_message_text($chat_id, $message_id, admin_ask_trx_price_text(), admin_trx_price_ask_kb(), 'HTML'); return; }
+    if ($data === 'admin_price_trx_back') { $ust['state'] = null; edit_message_text($chat_id, $message_id, admin_trx_price_text($DATA), admin_trx_price_kb()); return; }
 
     if ($data === 'admin_price_premium') { edit_message_text($chat_id, $message_id, admin_premium_price_text($DATA), admin_premium_price_kb()); return; }
     if ($data === 'admin_change_premium_price') { edit_message_text($chat_id, $message_id, ADMIN_PREMIUM_PLAN_SELECT_TEXT, admin_premium_plan_select_kb()); return; }
