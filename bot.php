@@ -897,7 +897,7 @@ function ibtn(string $slug, ?string $cb = null, ?string $url = null): array {
 }
 
 function rbtn_s(string $slug): array {
-    return rbtn(B($slug), BS($slug));
+    return rbtn(B($slug), BS($slug), BI($slug));
 }
 
 function resolve_menu_button(string $text): ?string {
@@ -1573,9 +1573,10 @@ function btn(string $text, ?string $cb = null, ?string $url = null, ?string $sty
     return $b;
 }
 function rkb(array $rows): array { return ['keyboard' => $rows, 'resize_keyboard' => true]; }
-function rbtn(string $text, ?string $style = null): array {
+function rbtn(string $text, ?string $style = null, ?string $icon_custom_emoji_id = null): array {
     $b = ['text' => $text];
     if ($style !== null) $b['style'] = $style;
+    if ($icon_custom_emoji_id !== null) $b['icon_custom_emoji_id'] = $icon_custom_emoji_id;
     return $b;
 }
 
