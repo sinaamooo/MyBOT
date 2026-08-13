@@ -10,6 +10,17 @@ final class Formatter
 {
     private const SIDE_EMOJI = ['LONG' => '🟢', 'SHORT' => '🔴'];
 
+    /**
+     * Telegram's supported parse_mode=HTML tags - anything else gets escaped,
+     * not stripped. Opening tags may carry a required attribute
+     * (tg-emoji/a/span); closing tags never do, so they're matched
+     * separately rather than reusing the same attribute requirement.
+     */
+    private const ALLOWED_TAG_PATTERN =
+        '<(?:b|strong|i|em|u|ins|s|strike|del|code|pre|tg-spoiler|blockquote(?:\s+expandable)?'
+        . '|span\s+class="tg-spoiler"|a\s+href="[^"]*"|tg-emoji\s+emoji-id="\d+")\s*>'
+        . '|<\/(?:b|strong|i|em|u|ins|s|strike|del|code|pre|tg-spoiler|blockquote|span|a|tg-emoji)\s*>';
+
     private const UPDATE_TEMPLATES = [
         'TP1' => "✅ {symbol} {side}\n\nTP1 زده شد 🎯\n\nهدف سود اول محقق شد.\nقیمت: {price}",
         'TP2' => "🔥 TP2 زده شد\n\n{symbol} {side}\n\nهدف سود دوم محقق شد.\nقیمت: {price}",
@@ -133,9 +144,38 @@ final class Formatter
         return self::findUnknownPlaceholders($template) === [];
     }
 
+    /**
+     * Escapes any < / > / & in $text that aren't part of one of Telegram's
+     * supported HTML tags, so a stray comparison arrow or ampersand typed
+     * into an admin template (e.g. "Entry {entry} < : [ SHORT ]") can't
+     * break parse_mode=HTML and take the whole message down with it -
+     * while genuine <b>, <blockquote>, <tg-emoji> etc. tags keep working.
+     * Applied to templates on every render, not just at save time, so a
+     * template saved before this existed gets fixed automatically too.
+     */
+    public static function sanitizeTelegramHtml(string $text): string
+    {
+        $placeholders = [];
+        $protected = preg_replace_callback(
+            '/' . self::ALLOWED_TAG_PATTERN . '/i',
+            function (array $m) use (&$placeholders): string {
+                $key = "\x00TAG" . count($placeholders) . "\x00";
+                $placeholders[$key] = $m[0];
+                return $key;
+            },
+            $text
+        );
+
+        $escaped = htmlspecialchars((string) $protected, ENT_NOQUOTES, 'UTF-8');
+
+        return strtr($escaped, $placeholders);
+    }
+
     /** @param array<string, mixed> $data */
     private static function render(string $template, array $data): string
     {
+        $template = self::sanitizeTelegramHtml($template);
+
         $lookup = [];
         foreach ($data as $key => $value) {
             $lookup[strtolower((string) $key)] = (string) $value;
