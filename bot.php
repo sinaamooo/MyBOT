@@ -125,10 +125,11 @@ const CATEGORY_LABELS = [
     'support'    => '📞 پشتیبانی',
     'referral'   => '👥 رفرال',
     'admin_msgs' => '🛠 پیام‌های ادمین',
+    'admin_ops'  => '⚙️ عملیات ادمین (قیمت/سود/سقف)',
 ];
 
 const TEXT_CATEGORIES = [
-    'welcome' => ['welcome', 'product_menu', 'join', 'join_confirmed', 'bot_off', 'trust', 'cancelled', 'ask_username', 'confirm_username', 'insufficient'],
+    'welcome' => ['welcome', 'product_menu', 'join', 'join_confirmed', 'bot_off', 'trust', 'cancelled', 'ask_username', 'confirm_username', 'insufficient', 'no_username_error'],
     'premium' => ['premium_menu', 'premium_invoice', 'premium_success', 'premium_done'],
     'stars' => ['stars_buy', 'stars_min_error', 'stars_invoice', 'stars_success', 'stars_done'],
     'gift' => ['gift_list', 'gift_comment_type', 'gift_comment_input', 'gift_invoice', 'gift_success', 'gift_done'],
@@ -138,12 +139,14 @@ const TEXT_CATEGORIES = [
     'support' => ['support', 'support_indirect', 'support_sent_confirm'],
     'referral' => ['referral', 'referral_notification', 'referral_reward_select', 'referral_reward_invoice', 'referral_reward_success', 'referral_reward_done'],
     'admin_msgs' => ['admin_premium_order', 'admin_stars_order', 'admin_gift_order', 'admin_ton_order', 'admin_support_notify', 'admin_referral_reward_order', 'admin_topup_caption', 'report', 'broadcast_message'],
+    'admin_ops' => ['admin_ask_stars_price', 'admin_ask_ton_price', 'admin_ask_premium_price', 'admin_ask_gift_price', 'admin_ask_daily_limit', 'admin_ask_profit',
+        'admin_numeric_error', 'admin_positive_number_error', 'admin_positive_percent_error'],
 ];
 
 const TEXT_PLACEHOLDERS = [
     'welcome' => [], 'product_menu' => [], 'join' => ['{channel}'], 'join_confirmed' => [], 'bot_off' => [],
     'trust' => ['{channel}'], 'cancelled' => [], 'ask_username' => [], 'confirm_username' => ['{username}'],
-    'insufficient' => ['{shortfall}'],
+    'insufficient' => ['{shortfall}'], 'no_username_error' => [],
     'premium_menu' => [], 'premium_invoice' => ['{plan}', '{price}', '{discount}', '{max_discount}', '{final}'],
     'premium_success' => ['{plan}', '{username}', '{price}', '{order_id}'], 'premium_done' => ['{plan}', '{username}', '{price}', '{order_id}'],
     'stars_buy' => ['{min}'], 'stars_min_error' => ['{min}'],
@@ -174,6 +177,9 @@ const TEXT_PLACEHOLDERS = [
     'admin_topup_caption' => ['{user_name}', '{username_at}', '{user_id}', '{amount}', '{req_id}'],
     'report' => ['{buyer_name}', '{label}', '{emoji}', '{qty}', '{price}', '{date}', '{bot_username}'],
     'broadcast_message' => ['{text}'],
+    'admin_ask_stars_price' => [], 'admin_ask_ton_price' => ['{min_ton}'], 'admin_ask_premium_price' => ['{plan}'],
+    'admin_ask_gift_price' => ['{gift}'], 'admin_ask_daily_limit' => ['{limit}'], 'admin_ask_profit' => ['{product}'],
+    'admin_numeric_error' => [], 'admin_positive_number_error' => [], 'admin_positive_percent_error' => [],
 ];
 
 const TEXT_LABELS = [
@@ -187,6 +193,7 @@ const TEXT_LABELS = [
     'ask_username' => 'درخواست یوزرنیم گیرنده',
     'confirm_username' => 'تایید یوزرنیم',
     'insufficient' => 'پیام کمبود موجودی',
+    'no_username_error' => 'خطای نبود یوزرنیم تلگرام',
     'premium_menu' => 'منوی پرمیوم',
     'premium_invoice' => 'فاکتور خرید پرمیوم',
     'premium_success' => 'ثبت موفق سفارش پرمیوم',
@@ -241,6 +248,15 @@ const TEXT_LABELS = [
     'admin_topup_caption' => 'اعلان درخواست شارژ به ادمین',
     'report' => 'گزارش خرید در کانال ریپورت',
     'broadcast_message' => 'قالب پیام همگانی',
+    'admin_ask_stars_price' => 'درخواست قیمت جدید استارز',
+    'admin_ask_ton_price' => 'درخواست قیمت جدید تون',
+    'admin_ask_premium_price' => 'درخواست قیمت جدید پرمیوم',
+    'admin_ask_gift_price' => 'درخواست قیمت جدید گیفت',
+    'admin_ask_daily_limit' => 'درخواست سقف روزانه جدید',
+    'admin_ask_profit' => 'درخواست درصد سود جدید',
+    'admin_numeric_error' => 'خطای ورودی غیرعددی',
+    'admin_positive_number_error' => 'خطای ورودی غیر مثبت',
+    'admin_positive_percent_error' => 'خطای درصد سود نامعتبر',
 ];
 
 const BUTTON_CATEGORIES = [
@@ -258,6 +274,16 @@ const BUTTON_CATEGORIES = [
     'admin_msgs' => ['btn_admin_broadcast', 'btn_admin_view_users', 'btn_admin_price_menu', 'btn_admin_profit_menu',
         'btn_admin_daily_limit', 'btn_admin_reset', 'btn_admin_reset_yes', 'btn_admin_reset_no', 'btn_admin_edit_price',
         'btn_admin_edit_daily_limit', 'btn_admin_edit_profit', 'btn_no_plain', 'btn_admin_edit_texts', 'btn_admin_edit_buttons'],
+];
+
+// Inline-keyboard groups the admin can re-chunk into 1/2/3 columns per row
+// (data.layout[group] => column count). Scoped to columns-per-row, not
+// free-form per-button drag reordering.
+const LAYOUT_GROUPS = [
+    'products'      => ['label' => '🛒 منوی محصولات', 'default' => 2],
+    'premium_plans' => ['label' => '💎 انتخاب پلن پرمیوم', 'default' => 3],
+    'gift_list'     => ['label' => '🎁 لیست گیفت‌ها', 'default' => 2],
+    'admin_panel'   => ['label' => '🛠 منوی اصلی پنل ادمین', 'default' => 1],
 ];
 
 function default_texts(): array {
@@ -304,6 +330,7 @@ function default_texts(): array {
 
         'confirm_username' => "{username}\n\n✅ آیا یوزرنیم بالا را تایید می‌کنید؟",
         'insufficient' => 'برای ادامه خرید مبلغ کمبود شما {shortfall} تومان است. یکی از روش های زیر را برای شارژ سریع انتخاب کنید:',
+        'no_username_error' => "شما در تلگرام یوزرنیم ندارید.\nلطفا یوزرنیم شخص مورد نظر را با @ ارسال کنید.",
 
         'premium_menu' => "🟪 Telegram Premium\n\n" .
             "⭐️ سطح فوق جدیدی از امکانات تلگرام را تجربه کنید.\n\n" .
@@ -658,6 +685,16 @@ function default_texts(): array {
             "📱 @{bot_username}",
 
         'broadcast_message' => "👤 پیام مدیریت به تمام کاربران\n\n{text}",
+
+        'admin_ask_stars_price' => '✏️ قیمت جدید هر ۱ استارز رو به تومان وارد کن:',
+        'admin_ask_ton_price' => '✏️ قیمت جدید هر {min_ton} TON رو به تومان وارد کن:',
+        'admin_ask_premium_price' => '✏️ قیمت جدید پلن {plan} ماهه رو به تومان وارد کن:',
+        'admin_ask_gift_price' => '✏️ قیمت جدید {gift} رو به تومان وارد کن:',
+        'admin_ask_daily_limit' => "✏️ سقف مجاز شارژ روزانه جدید رو به تومان وارد کن:\n\n(سقف فعلی: {limit} تومان)",
+        'admin_ask_profit' => '✏️ درصد سود جدید {product} رو وارد کن (فقط عدد، بدون %):',
+        'admin_numeric_error' => 'لطفا فقط عدد وارد کن.',
+        'admin_positive_number_error' => 'لطفا فقط یک عدد مثبت وارد کن.',
+        'admin_positive_percent_error' => 'لطفا فقط یک عدد مثبت وارد کن (مثال: 10).',
     ];
 }
 
@@ -930,8 +967,19 @@ function set_button_style(array &$DATA, string $slug, ?string $style): void {
     $DATA['buttons'][$slug] = $existing;
 }
 
+function set_button_icon(array &$DATA, string $slug, ?string $icon_custom_emoji_id): void {
+    $existing = $DATA['buttons'][$slug] ?? ['label' => button_default($slug), 'style' => null];
+    $existing['icon_custom_emoji_id'] = $icon_custom_emoji_id;
+    $DATA['buttons'][$slug] = $existing;
+}
+
 function reset_button(array &$DATA, string $slug): void {
     unset($DATA['buttons'][$slug]);
+}
+
+function get_layout_columns(array &$DATA, string $group, int $default): int {
+    $val = (int) ($DATA['layout'][$group] ?? $default);
+    return in_array($val, [1, 2, 3], true) ? $val : $default;
 }
 
 /* ===================== DYNAMIC TEXT HELPERS ===================== */
@@ -1097,6 +1145,14 @@ function admin_panel_text(array &$DATA): string {
         "از گزینه‌های زیر یکی رو انتخاب کن:";
 }
 
+function admin_layout_menu_text(): string { return "🧩 چیدمان دکمه‌های شیشه‌ای\n\nگروه مورد نظر رو انتخاب کن تا تعداد ستون‌هاش رو تغییر بدی:"; }
+
+function admin_layout_detail_text(array &$DATA, string $key): string {
+    $meta = LAYOUT_GROUPS[$key];
+    $cols = get_layout_columns($DATA, $key, $meta['default']);
+    return "{$meta['label']}\n\n📐 چیدمان فعلی: {$cols} دکمه در هر ردیف\n\nتعداد ستون جدید رو انتخاب کن:";
+}
+
 function broadcast_confirm_text(string $text): string { return "📢 متن زیر برای تمام کاربران ربات ارسال خواهد شد:\n\n{$text}\n\nآیا مطمئن هستید؟"; }
 function broadcast_message_text(string $text): string { return T('broadcast_message', ['{text}' => $text]); }
 function broadcast_done_text(int $success, int $fail): string { return "✅ پیام به {$success} کاربر ارسال شد.\n❌ ارسال به {$fail} کاربر ناموفق بود."; }
@@ -1115,13 +1171,13 @@ function view_users_text(array &$DATA): string {
 }
 
 function admin_stars_price_text(array &$DATA): string { return "⭐️ قیمت فعلی هر ۱ استارز:\n\n💰 " . fmt($DATA['stars_price']) . ' تومان'; }
-function admin_ask_stars_price_text(): string { return '✏️ قیمت جدید هر ۱ استارز رو به تومان وارد کن:'; }
+function admin_ask_stars_price_text(): string { return T('admin_ask_stars_price'); }
 
 function admin_ton_price_text(array &$DATA): string {
     $price_per_tenth = (int) round($DATA['ton_price'] * MIN_TON);
     return "💱 قیمت فعلی هر " . MIN_TON . " TON:\n\n💰 " . fmt($price_per_tenth) . ' تومان';
 }
-function admin_ask_ton_price_text(): string { return '✏️ قیمت جدید هر ' . MIN_TON . ' TON رو به تومان وارد کن:'; }
+function admin_ask_ton_price_text(): string { return T('admin_ask_ton_price', ['{min_ton}' => MIN_TON]); }
 
 function admin_premium_price_text(array &$DATA): string {
     $p = $DATA['premium_prices'];
@@ -1130,12 +1186,12 @@ function admin_premium_price_text(array &$DATA): string {
         "🔹 6 ماهه:  " . fmt($p['6']) . " تومان\n" .
         "🔹 12 ماهه:  " . fmt($p['12']) . ' تومان';
 }
-function admin_ask_premium_price_text(string $plan): string { return "✏️ قیمت جدید پلن {$plan} ماهه رو به تومان وارد کن:"; }
+function admin_ask_premium_price_text(string $plan): string { return T('admin_ask_premium_price', ['{plan}' => $plan]); }
 
 function admin_gift_price_detail_text(array &$DATA, string $key): string {
     return gift_label($key) . "\n\n💰 قیمت فعلی: " . fmt($DATA['gifts_prices'][$key]) . ' تومان';
 }
-function admin_ask_gift_price_text(string $key): string { return '✏️ قیمت جدید ' . gift_label($key) . ' رو به تومان وارد کن:'; }
+function admin_ask_gift_price_text(string $key): string { return T('admin_ask_gift_price', ['{gift}' => gift_label($key)]); }
 
 function admin_daily_limit_text(array &$DATA): string {
     return "⚙️ تنظیم سقف شارژ روزانه\n\n" .
@@ -1143,7 +1199,7 @@ function admin_daily_limit_text(array &$DATA): string {
         'این مقدار حداکثر شارژ هر کاربر در روز است.';
 }
 function admin_ask_daily_limit_text(array &$DATA): string {
-    return "✏️ سقف مجاز شارژ روزانه جدید رو به تومان وارد کن:\n\n(سقف فعلی: " . fmt($DATA['daily_limit']) . ' تومان)';
+    return T('admin_ask_daily_limit', ['{limit}' => fmt($DATA['daily_limit'])]);
 }
 
 function admin_profit_menu_text(): string { return "📈 تغییر درصد سود محصولات\n\nمحصول مورد نظر رو انتخاب کن:"; }
@@ -1199,7 +1255,7 @@ function admin_profit_premium_text(array &$DATA): string {
     return "💎 درصد سود پرمیوم تلگرام\n\n📈 درصد سود فعلی: {$pct}٪\n\n" . implode("\n", $lines);
 }
 
-function admin_ask_profit_text(string $product_fa): string { return "✏️ درصد سود جدید {$product_fa} رو وارد کن (فقط عدد، بدون %):"; }
+function admin_ask_profit_text(string $product_fa): string { return T('admin_ask_profit', ['{product}' => $product_fa]); }
 
 function admin_ton_text($user, $amount, $wallet, $memo, $price, $order_id): string {
     return T('admin_ton_order', ['{user_name}' => display_name($user), '{username_at}' => username_at($user),
@@ -1529,20 +1585,24 @@ function main_kb(bool $is_admin = false): array {
     return rkb($rows);
 }
 
-function product_kb(): array {
-    return ikb([
-        [ibtn('btn_premium', 'product_premium'), ibtn('btn_stars', 'product_stars')],
-        [ibtn('btn_gift_stars', 'product_gift_stars'), ibtn('btn_buy_ton', 'product_buy_ton')],
-        [ibtn('btn_gift_nft', 'product_gift_nft')],
-        [ibtn('btn_back', 'back_to_welcome')],
-    ]);
+function product_kb(array &$DATA): array {
+    $buttons = [
+        ibtn('btn_premium', 'product_premium'), ibtn('btn_stars', 'product_stars'),
+        ibtn('btn_gift_stars', 'product_gift_stars'), ibtn('btn_buy_ton', 'product_buy_ton'),
+        ibtn('btn_gift_nft', 'product_gift_nft'),
+    ];
+    $cols = get_layout_columns($DATA, 'products', LAYOUT_GROUPS['products']['default']);
+    $rows = array_chunk($buttons, $cols);
+    $rows[] = [ibtn('btn_back', 'back_to_welcome')];
+    return ikb($rows);
 }
 
-function premium_kb(): array {
-    return ikb([
-        [ibtn('btn_plan_3', 'premium_3'), ibtn('btn_plan_6', 'premium_6'), ibtn('btn_plan_12', 'premium_12')],
-        [ibtn('btn_back', 'back_to_products')],
-    ]);
+function premium_kb(array &$DATA): array {
+    $buttons = [ibtn('btn_plan_3', 'premium_3'), ibtn('btn_plan_6', 'premium_6'), ibtn('btn_plan_12', 'premium_12')];
+    $cols = get_layout_columns($DATA, 'premium_plans', LAYOUT_GROUPS['premium_plans']['default']);
+    $rows = array_chunk($buttons, $cols);
+    $rows[] = [ibtn('btn_back', 'back_to_products')];
+    return ikb($rows);
 }
 
 function ask_username_kb(): array {
@@ -1604,22 +1664,11 @@ function stars_invoice_kb(bool $discount_applied = false): array {
     ]);
 }
 
-function gift_list_kb(): array {
-    $rows = [];
-    $keys = array_keys(GIFTS_META);
-    $i = 0;
-    $n = count($keys);
-    while ($i < $n) {
-        $a = ibtn(gift_button_slug($keys[$i]), "gift_select_{$keys[$i]}");
-        if ($i + 1 < $n) {
-            $b = ibtn(gift_button_slug($keys[$i + 1]), "gift_select_{$keys[$i + 1]}");
-            $rows[] = [$a, $b];
-            $i += 2;
-        } else {
-            $rows[] = [$a];
-            $i += 1;
-        }
-    }
+function gift_list_kb(array &$DATA): array {
+    $buttons = [];
+    foreach (array_keys(GIFTS_META) as $key) $buttons[] = ibtn(gift_button_slug($key), "gift_select_{$key}");
+    $cols = get_layout_columns($DATA, 'gift_list', LAYOUT_GROUPS['gift_list']['default']);
+    $rows = array_chunk($buttons, $cols);
     $rows[] = [ibtn('btn_back', 'back_to_products')];
     return ikb($rows);
 }
@@ -1666,17 +1715,39 @@ function referral_reward_invoice_kb(): array { return ikb([[ibtn('btn_confirm', 
 function admin_panel_kb(array &$DATA): array {
     $toggle_label = $DATA['bot_enabled'] ? '🔴 خاموش کردن ربات' : '🟢 روشن کردن ربات';
     $ref_toggle_label = $DATA['referral_points_enabled'] ? '🔴 غیرفعال‌سازی جایزه دعوت' : '🟢 فعال‌سازی جایزه دعوت';
+    $buttons = [
+        btn($toggle_label, 'admin_toggle_bot'),
+        btn($ref_toggle_label, 'admin_toggle_referral_points'),
+        ibtn('btn_admin_broadcast', 'admin_broadcast'),
+        ibtn('btn_admin_view_users', 'admin_view_users'),
+        ibtn('btn_admin_price_menu', 'admin_price_menu'),
+        ibtn('btn_admin_profit_menu', 'admin_profit_menu'),
+        ibtn('btn_admin_daily_limit', 'admin_daily_limit'),
+        ibtn('btn_admin_edit_texts', 'admin_edit_texts'),
+        ibtn('btn_admin_edit_buttons', 'admin_edit_buttons'),
+        btn('🧩 چیدمان دکمه‌های شیشه‌ای', 'admin_layout_menu'),
+    ];
+    $cols = get_layout_columns($DATA, 'admin_panel', LAYOUT_GROUPS['admin_panel']['default']);
+    $rows = array_chunk($buttons, $cols);
+    // Destructive action always stays isolated on its own row, unaffected by layout.
+    $rows[] = [ibtn('btn_admin_reset', 'admin_reset_confirm')];
+    return ikb($rows);
+}
+
+function admin_layout_menu_kb(array &$DATA): array {
+    $rows = [];
+    foreach (LAYOUT_GROUPS as $key => $meta) {
+        $cols = get_layout_columns($DATA, $key, $meta['default']);
+        $rows[] = [btn("{$meta['label']} ({$cols} ستونه)", "admin_layout_pick_{$key}")];
+    }
+    $rows[] = [ibtn('btn_back', 'admin_panel_back')];
+    return ikb($rows);
+}
+
+function admin_layout_detail_kb(string $key): array {
     return ikb([
-        [btn($toggle_label, 'admin_toggle_bot')],
-        [btn($ref_toggle_label, 'admin_toggle_referral_points')],
-        [ibtn('btn_admin_broadcast', 'admin_broadcast')],
-        [ibtn('btn_admin_view_users', 'admin_view_users')],
-        [ibtn('btn_admin_price_menu', 'admin_price_menu')],
-        [ibtn('btn_admin_profit_menu', 'admin_profit_menu')],
-        [ibtn('btn_admin_daily_limit', 'admin_daily_limit')],
-        [ibtn('btn_admin_edit_texts', 'admin_edit_texts')],
-        [ibtn('btn_admin_edit_buttons', 'admin_edit_buttons')],
-        [ibtn('btn_admin_reset', 'admin_reset_confirm')],
+        [btn('1 ستونه', "admin_layout_set_{$key}_1"), btn('2 ستونه', "admin_layout_set_{$key}_2"), btn('3 ستونه', "admin_layout_set_{$key}_3")],
+        [ibtn('btn_back', 'admin_layout_menu_back')],
     ]);
 }
 
@@ -1792,8 +1863,18 @@ function admin_text_detail_kb(string $slug): array {
     return ikb([[btn('🔄 بازگردانی پیش‌فرض', "admin_text_reset_{$slug}")], [ibtn('btn_back', 'admin_text_list_back')]]);
 }
 
+// Style picker + icon controls are merged into the detail keyboard itself
+// (not just shown transiently after a label edit) so they stay reachable
+// from every entry point: pick/reset/style-change/icon-change all redraw
+// via this same function.
 function admin_button_detail_kb(string $slug): array {
-    return ikb([[btn('🔄 بازگردانی پیش‌فرض', "admin_btn_reset_{$slug}")], [ibtn('btn_back', 'admin_btn_list_back')]]);
+    $rows = admin_button_style_kb($slug)['inline_keyboard'];
+    $icon_row = [btn('🖼 ست کردن ایموجی پریمیوم', "admin_btn_icon_set_{$slug}")];
+    if (BI($slug) !== null) $icon_row[] = btn('❌ حذف ایموجی', "admin_btn_icon_clear_{$slug}");
+    $rows[] = $icon_row;
+    $rows[] = [btn('🔄 بازگردانی پیش‌فرض', "admin_btn_reset_{$slug}")];
+    $rows[] = [ibtn('btn_back', 'admin_btn_list_back')];
+    return ikb($rows);
 }
 
 function admin_text_detail_body(string $slug): string {
@@ -1807,8 +1888,21 @@ function admin_text_detail_body(string $slug): string {
 function admin_button_detail_body(string $slug): string {
     $style_names = ['primary' => 'آبی 🔵', 'success' => 'سبز 🟢', 'danger' => 'قرمز 🔴'];
     $style = $style_names[BS($slug) ?? ''] ?? 'پیش‌فرض ⚪️';
-    return "🏷 برچسب فعلی: " . B($slug) . "\n🎨 رنگ فعلی: {$style}\n\n" .
+    $icon_status = BI($slug) !== null ? 'تنظیم شده ✅' : 'تنظیم نشده ❌';
+    return "🏷 برچسب فعلی: " . B($slug) . "\n🎨 رنگ فعلی: {$style}\n🖼 ایموجی پریمیوم: {$icon_status}\n\n" .
         '✍️ برای تغییر نام، برچسب جدید رو همینجا (به صورت پیام معمولی) بفرست.';
+}
+
+function admin_button_icon_ask_body(string $slug): string {
+    return '🖼 یک پیام حاوی ایموجی پریمیوم (از اکانت پریمیوم خودت) بفرست تا به عنوان آیکون دکمه «' . B($slug) . '» تنظیم بشه.';
+}
+
+function admin_button_icon_ask_kb(string $slug): array {
+    return ikb([[ibtn('btn_back', "admin_btn_icon_ask_back_{$slug}")]]);
+}
+
+function admin_button_icon_invalid_text(): string {
+    return "❌ پیام شما هیچ ایموجی پریمیومی نداشت.\n\nلطفاً یک پیام حاوی ایموجی پریمیوم (از اکانت تلگرام پریمیوم خودت) ارسال کن.";
 }
 
 function admin_button_style_kb(string $slug): array {
@@ -1851,6 +1945,8 @@ function default_data(): array {
         // so load_data() never needs to (and must never) pre-fill these with defaults.
         'texts' => [],
         'buttons' => [],
+        // group => column count (1-3); missing group falls back to LAYOUT_GROUPS[group]['default']
+        'layout' => [],
         'ton_price_cache' => ['base' => 298225, 'fetched_at' => 0],
     ];
     recalc_prices($data);
@@ -1880,7 +1976,7 @@ function load_data(): array {
     $data = array_replace($defaults, $decoded);
     foreach (['users', 'user_names', 'orders', 'topup_requests', 'pending_referrals', 'support_tickets',
               'admin_waiting_reject', 'admin_waiting_support_reply', 'user_state', 'gifts_prices',
-              'premium_prices', 'base_premium_prices', 'profit_percent', 'texts', 'buttons'] as $k) {
+              'premium_prices', 'base_premium_prices', 'profit_percent', 'texts', 'buttons', 'layout'] as $k) {
         if (!is_array($data[$k] ?? null)) $data[$k] = $defaults[$k];
     }
     if (!is_array($data['ton_price_cache'] ?? null)) $data['ton_price_cache'] = $defaults['ton_price_cache'];
@@ -2125,7 +2221,7 @@ function handle_text(array $msg, array &$DATA): void {
         }
         if ($state === 'admin_awaiting_stars_price') {
             $raw = str_replace(',', '', trim($text));
-            if (!ctype_digit($raw)) { send_message($chat_id, 'لطفا فقط عدد وارد کن.', admin_stars_price_ask_kb()); return; }
+            if (!ctype_digit($raw)) { send_message($chat_id, T('admin_numeric_error'), admin_stars_price_ask_kb(), 'HTML'); return; }
             $DATA['stars_price'] = (int) $raw;
             $ust['state'] = null;
             send_message($chat_id, admin_stars_price_text($DATA), admin_stars_price_kb());
@@ -2133,7 +2229,7 @@ function handle_text(array $msg, array &$DATA): void {
         }
         if ($state === 'admin_awaiting_ton_price') {
             $raw = str_replace(',', '', trim($text));
-            if (!ctype_digit($raw)) { send_message($chat_id, 'لطفا فقط عدد وارد کن.', admin_ton_price_ask_kb()); return; }
+            if (!ctype_digit($raw)) { send_message($chat_id, T('admin_numeric_error'), admin_ton_price_ask_kb(), 'HTML'); return; }
             $DATA['ton_price'] = (int) round(((int) $raw) / MIN_TON);
             $ust['state'] = null;
             send_message($chat_id, admin_ton_price_text($DATA), admin_ton_price_kb());
@@ -2142,7 +2238,7 @@ function handle_text(array $msg, array &$DATA): void {
         if ($state !== null && str_starts_with($state, 'admin_awaiting_premium_price_')) {
             $plan = substr($state, strlen('admin_awaiting_premium_price_'));
             $raw = str_replace(',', '', trim($text));
-            if (!ctype_digit($raw)) { send_message($chat_id, 'لطفا فقط عدد وارد کن.', admin_premium_price_ask_kb()); return; }
+            if (!ctype_digit($raw)) { send_message($chat_id, T('admin_numeric_error'), admin_premium_price_ask_kb(), 'HTML'); return; }
             $DATA['premium_prices'][$plan] = (int) $raw;
             $ust['state'] = null;
             send_message($chat_id, admin_premium_price_text($DATA), admin_premium_price_kb());
@@ -2151,7 +2247,7 @@ function handle_text(array $msg, array &$DATA): void {
         if ($state !== null && str_starts_with($state, 'admin_awaiting_gift_price_')) {
             $key = substr($state, strlen('admin_awaiting_gift_price_'));
             $raw = str_replace(',', '', trim($text));
-            if (!ctype_digit($raw)) { send_message($chat_id, 'لطفا فقط عدد وارد کن.', admin_gift_price_ask_kb($key)); return; }
+            if (!ctype_digit($raw)) { send_message($chat_id, T('admin_numeric_error'), admin_gift_price_ask_kb($key), 'HTML'); return; }
             if (isset(GIFTS_META[$key])) $DATA['gifts_prices'][$key] = (int) $raw;
             $ust['state'] = null;
             send_message($chat_id, admin_gift_price_detail_text($DATA, $key), admin_gift_price_detail_kb($key));
@@ -2159,7 +2255,7 @@ function handle_text(array $msg, array &$DATA): void {
         }
         if ($state === 'admin_awaiting_daily_limit') {
             $raw = str_replace(',', '', trim($text));
-            if (!ctype_digit($raw) || (int) $raw <= 0) { send_message($chat_id, 'لطفا فقط یک عدد مثبت وارد کن.', admin_daily_limit_ask_kb()); return; }
+            if (!ctype_digit($raw) || (int) $raw <= 0) { send_message($chat_id, T('admin_positive_number_error'), admin_daily_limit_ask_kb(), 'HTML'); return; }
             $DATA['daily_limit'] = (int) $raw;
             $ust['state'] = null;
             send_message($chat_id, admin_daily_limit_text($DATA), admin_daily_limit_kb());
@@ -2169,7 +2265,7 @@ function handle_text(array $msg, array &$DATA): void {
             $product = substr($state, strlen('admin_awaiting_profit_'));
             $raw = trim(str_replace([',', '%'], '', $text));
             if (!preg_match('/^\d+(\.\d+)?$/', $raw) || (float) $raw < 0) {
-                send_message($chat_id, 'لطفا فقط یک عدد مثبت وارد کن (مثال: 10).', admin_profit_ask_kb($product));
+                send_message($chat_id, T('admin_positive_percent_error'), admin_profit_ask_kb($product), 'HTML');
                 return;
             }
             $DATA['profit_percent'][$product] = round((float) $raw, 2);
@@ -2196,7 +2292,22 @@ function handle_text(array $msg, array &$DATA): void {
             if (!in_array($slug, all_button_slugs(), true)) { send_message($chat_id, 'این دکمه پیدا نشد.', admin_back_kb()); return; }
             $entities = capture_entities($msg);
             apply_button_edit($DATA, $slug, $text, $entities);
-            send_message($chat_id, "✅ نام دکمه «{$slug}» به «" . B($slug) . "» تغییر کرد.\n\nاگه بخوای می‌تونی رنگ این دکمه رو هم تنظیم کنی:", admin_button_style_kb($slug));
+            send_message($chat_id, "✅ نام دکمه «{$slug}» به «" . B($slug) . "» تغییر کرد.");
+            send_message($chat_id, admin_button_detail_body($slug), admin_button_detail_kb($slug));
+            return;
+        }
+        if ($state !== null && str_starts_with($state, 'admin_awaiting_icon_')) {
+            $slug = substr($state, strlen('admin_awaiting_icon_'));
+            if (!in_array($slug, all_button_slugs(), true)) { $ust['state'] = null; send_message($chat_id, 'این دکمه پیدا نشد.', admin_back_kb()); return; }
+            $emoji_id = first_custom_emoji_id(capture_entities($msg));
+            if ($emoji_id === null) {
+                send_message($chat_id, admin_button_icon_invalid_text(), admin_button_icon_ask_kb($slug));
+                return;
+            }
+            set_button_icon($DATA, $slug, $emoji_id);
+            $ust['state'] = null;
+            send_message($chat_id, "✅ ایموجی پریمیوم دکمه «" . B($slug) . "» تنظیم شد.");
+            send_message($chat_id, admin_button_detail_body($slug), admin_button_detail_kb($slug));
             return;
         }
     }
@@ -2342,7 +2453,7 @@ function handle_text(array $msg, array &$DATA): void {
     // hardcoded literals), so renaming a menu button never breaks routing.
     $menu_slug = resolve_menu_button($text);
 
-    if ($menu_slug === 'menu_buy') { send_message($chat_id, T('product_menu'), product_kb(), 'HTML'); return; }
+    if ($menu_slug === 'menu_buy') { send_message($chat_id, T('product_menu'), product_kb($DATA), 'HTML'); return; }
 
     if ($menu_slug === 'menu_topup') {
         $balance = get_user($DATA, $uid)['balance'];
@@ -2399,11 +2510,11 @@ function handle_callback(array $cq, array &$DATA): void {
     if (str_starts_with($data, 'admin_') && $chat_id != ADMIN_CHAT_ID) return;
 
     if ($data === 'back_to_welcome') { $DATA['user_state'][$uid] = []; edit_message_text($chat_id, $message_id, T('welcome'), null, 'HTML'); return; }
-    if ($data === 'back_to_products') { $ust['state'] = null; edit_message_text($chat_id, $message_id, T('product_menu'), product_kb(), 'HTML'); return; }
+    if ($data === 'back_to_products') { $ust['state'] = null; edit_message_text($chat_id, $message_id, T('product_menu'), product_kb($DATA), 'HTML'); return; }
 
     /* ---- gift ---- */
-    if ($data === 'product_gift_stars') { edit_message_text($chat_id, $message_id, T('gift_list'), gift_list_kb(), 'HTML'); return; }
-    if ($data === 'gift_back_to_list') { $ust['state'] = null; edit_message_text($chat_id, $message_id, T('gift_list'), gift_list_kb(), 'HTML'); return; }
+    if ($data === 'product_gift_stars') { edit_message_text($chat_id, $message_id, T('gift_list'), gift_list_kb($DATA), 'HTML'); return; }
+    if ($data === 'gift_back_to_list') { $ust['state'] = null; edit_message_text($chat_id, $message_id, T('gift_list'), gift_list_kb($DATA), 'HTML'); return; }
 
     if (str_starts_with($data, 'gift_select_')) {
         $key = substr($data, strlen('gift_select_'));
@@ -2423,7 +2534,7 @@ function handle_callback(array $cq, array &$DATA): void {
             edit_message_text($chat_id, $message_id, confirm_username_text($username), confirm_gift_username_kb(), 'HTML');
         } else {
             $ust['state'] = 'awaiting_gift_username';
-            edit_message_text($chat_id, $message_id, "شما در تلگرام یوزرنیم ندارید.\nلطفا یوزرنیم شخص مورد نظر را با @ ارسال کنید.", ikb([[ibtn('btn_back', 'gift_back_to_list')]]));
+            edit_message_text($chat_id, $message_id, T('no_username_error'), ikb([[ibtn('btn_back', 'gift_back_to_list')]]), 'HTML');
         }
         return;
     }
@@ -2536,7 +2647,7 @@ function handle_callback(array $cq, array &$DATA): void {
     }
 
     /* ---- premium ---- */
-    if ($data === 'product_premium') { edit_message_text($chat_id, $message_id, T('premium_menu'), premium_kb(), 'HTML'); return; }
+    if ($data === 'product_premium') { edit_message_text($chat_id, $message_id, T('premium_menu'), premium_kb($DATA), 'HTML'); return; }
 
     if (in_array($data, ['premium_3', 'premium_6', 'premium_12'], true)) {
         $plan = explode('_', $data)[1];
@@ -2546,7 +2657,7 @@ function handle_callback(array $cq, array &$DATA): void {
         return;
     }
 
-    if ($data === 'back_to_premium') { $ust['state'] = null; edit_message_text($chat_id, $message_id, T('premium_menu'), premium_kb(), 'HTML'); return; }
+    if ($data === 'back_to_premium') { $ust['state'] = null; edit_message_text($chat_id, $message_id, T('premium_menu'), premium_kb($DATA), 'HTML'); return; }
 
     if ($data === 'username_self') {
         if (!empty($user['username'])) {
@@ -2557,7 +2668,7 @@ function handle_callback(array $cq, array &$DATA): void {
             edit_message_text($chat_id, $message_id, confirm_username_text($username), confirm_username_kb(), 'HTML');
         } else {
             $ust['state'] = 'awaiting_username';
-            edit_message_text($chat_id, $message_id, "شما در تلگرام یوزرنیم ندارید.\nلطفا یوزرنیم شخص مورد نظر را با @ ارسال کنید.", ikb([[ibtn('btn_back', 'back_to_ask_username')]]));
+            edit_message_text($chat_id, $message_id, T('no_username_error'), ikb([[ibtn('btn_back', 'back_to_ask_username')]]), 'HTML');
         }
         return;
     }
@@ -2751,7 +2862,7 @@ function handle_callback(array $cq, array &$DATA): void {
             edit_message_text($chat_id, $message_id, confirm_username_text($username), confirm_referral_username_kb(), 'HTML');
         } else {
             $ust['state'] = 'awaiting_referral_username';
-            edit_message_text($chat_id, $message_id, "شما در تلگرام یوزرنیم ندارید.\nلطفا یوزرنیم شخص مورد نظر را با @ ارسال کنید.", ikb([[ibtn('btn_back', 'referral_reward_select_back')]]));
+            edit_message_text($chat_id, $message_id, T('no_username_error'), ikb([[ibtn('btn_back', 'referral_reward_select_back')]]), 'HTML');
         }
         return;
     }
@@ -2824,7 +2935,7 @@ function handle_callback(array $cq, array &$DATA): void {
             edit_message_text($chat_id, $message_id, confirm_username_text($username), confirm_stars_username_kb(), 'HTML');
         } else {
             $ust['state'] = 'awaiting_stars_username';
-            edit_message_text($chat_id, $message_id, "شما در تلگرام یوزرنیم ندارید.\nلطفا یوزرنیم شخص مورد نظر را با @ ارسال کنید.", ikb([[ibtn('btn_back', 'stars_back_to_amount')]]));
+            edit_message_text($chat_id, $message_id, T('no_username_error'), ikb([[ibtn('btn_back', 'stars_back_to_amount')]]), 'HTML');
         }
         return;
     }
@@ -2963,7 +3074,30 @@ function handle_callback(array $cq, array &$DATA): void {
     if ($data === 'admin_panel_back') { $ust['state'] = null; edit_message_text($chat_id, $message_id, admin_panel_text($DATA), admin_panel_kb($DATA)); return; }
     if ($data === 'admin_daily_limit') { edit_message_text($chat_id, $message_id, admin_daily_limit_text($DATA), admin_daily_limit_kb()); return; }
     if ($data === 'admin_daily_limit_back') { $ust['state'] = null; edit_message_text($chat_id, $message_id, admin_daily_limit_text($DATA), admin_daily_limit_kb()); return; }
-    if ($data === 'admin_change_daily_limit') { $ust['state'] = 'admin_awaiting_daily_limit'; edit_message_text($chat_id, $message_id, admin_ask_daily_limit_text($DATA), admin_daily_limit_ask_kb()); return; }
+    if ($data === 'admin_change_daily_limit') { $ust['state'] = 'admin_awaiting_daily_limit'; edit_message_text($chat_id, $message_id, admin_ask_daily_limit_text($DATA), admin_daily_limit_ask_kb(), 'HTML'); return; }
+
+    /* ---- inline-keyboard layout (columns per row) ---- */
+    if ($data === 'admin_layout_menu') { edit_message_text($chat_id, $message_id, admin_layout_menu_text(), admin_layout_menu_kb($DATA)); return; }
+    if ($data === 'admin_layout_menu_back') { edit_message_text($chat_id, $message_id, admin_layout_menu_text(), admin_layout_menu_kb($DATA)); return; }
+
+    if (str_starts_with($data, 'admin_layout_pick_')) {
+        $key = substr($data, strlen('admin_layout_pick_'));
+        if (!isset(LAYOUT_GROUPS[$key])) return;
+        edit_message_text($chat_id, $message_id, admin_layout_detail_text($DATA, $key), admin_layout_detail_kb($key));
+        return;
+    }
+
+    if (str_starts_with($data, 'admin_layout_set_')) {
+        $rest = substr($data, strlen('admin_layout_set_'));
+        $pos = strrpos($rest, '_');
+        if ($pos === false) return;
+        $key = substr($rest, 0, $pos);
+        $cols = (int) substr($rest, $pos + 1);
+        if (!isset(LAYOUT_GROUPS[$key]) || !in_array($cols, [1, 2, 3], true)) return;
+        $DATA['layout'][$key] = $cols;
+        edit_message_text($chat_id, $message_id, admin_layout_detail_text($DATA, $key), admin_layout_detail_kb($key));
+        return;
+    }
 
     if ($data === 'admin_profit_menu') { edit_message_text($chat_id, $message_id, admin_profit_menu_text(), admin_profit_menu_kb()); return; }
     if ($data === 'admin_profit_menu_back') { $ust['state'] = null; edit_message_text($chat_id, $message_id, admin_profit_menu_text(), admin_profit_menu_kb()); return; }
@@ -2976,7 +3110,7 @@ function handle_callback(array $cq, array &$DATA): void {
         $product = substr($data, strlen('admin_set_profit_'));
         $fa_names = ['stars' => 'استارز', 'ton' => 'تون', 'gift' => 'گیفت استارز', 'premium' => 'پرمیوم'];
         $ust['state'] = "admin_awaiting_profit_{$product}";
-        edit_message_text($chat_id, $message_id, admin_ask_profit_text($fa_names[$product] ?? $product), admin_profit_ask_kb($product));
+        edit_message_text($chat_id, $message_id, admin_ask_profit_text($fa_names[$product] ?? $product), admin_profit_ask_kb($product), 'HTML');
         return;
     }
 
@@ -3025,11 +3159,11 @@ function handle_callback(array $cq, array &$DATA): void {
     if ($data === 'admin_price_giftnft') { answer_callback_query($cq['id'], 'این بخش بزودی فعال می‌شود ⏳', true); return; }
 
     if ($data === 'admin_price_stars') { edit_message_text($chat_id, $message_id, admin_stars_price_text($DATA), admin_stars_price_kb()); return; }
-    if ($data === 'admin_change_stars_price') { $ust['state'] = 'admin_awaiting_stars_price'; edit_message_text($chat_id, $message_id, admin_ask_stars_price_text(), admin_stars_price_ask_kb()); return; }
+    if ($data === 'admin_change_stars_price') { $ust['state'] = 'admin_awaiting_stars_price'; edit_message_text($chat_id, $message_id, admin_ask_stars_price_text(), admin_stars_price_ask_kb(), 'HTML'); return; }
     if ($data === 'admin_price_stars_back') { $ust['state'] = null; edit_message_text($chat_id, $message_id, admin_stars_price_text($DATA), admin_stars_price_kb()); return; }
 
     if ($data === 'admin_price_ton') { refresh_ton_price_if_stale($DATA); edit_message_text($chat_id, $message_id, admin_ton_price_text($DATA), admin_ton_price_kb()); return; }
-    if ($data === 'admin_change_ton_price') { $ust['state'] = 'admin_awaiting_ton_price'; edit_message_text($chat_id, $message_id, admin_ask_ton_price_text(), admin_ton_price_ask_kb()); return; }
+    if ($data === 'admin_change_ton_price') { $ust['state'] = 'admin_awaiting_ton_price'; edit_message_text($chat_id, $message_id, admin_ask_ton_price_text(), admin_ton_price_ask_kb(), 'HTML'); return; }
     if ($data === 'admin_price_ton_back') { $ust['state'] = null; edit_message_text($chat_id, $message_id, admin_ton_price_text($DATA), admin_ton_price_kb()); return; }
 
     if ($data === 'admin_price_premium') { edit_message_text($chat_id, $message_id, admin_premium_price_text($DATA), admin_premium_price_kb()); return; }
@@ -3040,7 +3174,7 @@ function handle_callback(array $cq, array &$DATA): void {
         $parts = explode('_', $data);
         $plan = end($parts);
         $ust['state'] = "admin_awaiting_premium_price_{$plan}";
-        edit_message_text($chat_id, $message_id, admin_ask_premium_price_text($plan), admin_premium_price_ask_kb());
+        edit_message_text($chat_id, $message_id, admin_ask_premium_price_text($plan), admin_premium_price_ask_kb(), 'HTML');
         return;
     }
 
@@ -3059,7 +3193,7 @@ function handle_callback(array $cq, array &$DATA): void {
     if (str_starts_with($data, 'admin_change_gift_price_')) {
         $key = substr($data, strlen('admin_change_gift_price_'));
         $ust['state'] = "admin_awaiting_gift_price_{$key}";
-        edit_message_text($chat_id, $message_id, admin_ask_gift_price_text($key), admin_gift_price_ask_kb($key));
+        edit_message_text($chat_id, $message_id, admin_ask_gift_price_text($key), admin_gift_price_ask_kb($key), 'HTML');
         return;
     }
 
@@ -3139,6 +3273,30 @@ function handle_callback(array $cq, array &$DATA): void {
         $style = substr($rest, $pos + 1);
         if (!in_array($slug, all_button_slugs(), true) || !in_array($style, ['primary', 'success', 'danger', 'none'], true)) return;
         set_button_style($DATA, $slug, $style === 'none' ? null : $style);
+        edit_message_text($chat_id, $message_id, admin_button_detail_body($slug), admin_button_detail_kb($slug));
+        return;
+    }
+
+    if (str_starts_with($data, 'admin_btn_icon_set_')) {
+        $slug = substr($data, strlen('admin_btn_icon_set_'));
+        if (!in_array($slug, all_button_slugs(), true)) return;
+        $ust['state'] = "admin_awaiting_icon_{$slug}";
+        edit_message_text($chat_id, $message_id, admin_button_icon_ask_body($slug), admin_button_icon_ask_kb($slug));
+        return;
+    }
+
+    if (str_starts_with($data, 'admin_btn_icon_clear_')) {
+        $slug = substr($data, strlen('admin_btn_icon_clear_'));
+        if (!in_array($slug, all_button_slugs(), true)) return;
+        set_button_icon($DATA, $slug, null);
+        edit_message_text($chat_id, $message_id, admin_button_detail_body($slug), admin_button_detail_kb($slug));
+        return;
+    }
+
+    if (str_starts_with($data, 'admin_btn_icon_ask_back_')) {
+        $slug = substr($data, strlen('admin_btn_icon_ask_back_'));
+        if (!in_array($slug, all_button_slugs(), true)) return;
+        $ust['state'] = null;
         edit_message_text($chat_id, $message_id, admin_button_detail_body($slug), admin_button_detail_kb($slug));
         return;
     }
