@@ -2113,13 +2113,19 @@ if (PHP_SAPI === 'cli') {
 initDb();
 header('Content-Type: application/json');
 
-$expectedSecret = getOrCreateWebhookSecret();
-$incomingSecret = $_SERVER['HTTP_X_TELEGRAM_BOT_API_SECRET_TOKEN'] ?? '';
-if (!hash_equals($expectedSecret, $incomingSecret)) {
-    logMsg('Webhook request rejected: secret token mismatch (got ' . ($incomingSecret === '' ? '<empty>' : strlen($incomingSecret) . ' chars') . ', remote ' . ($_SERVER['REMOTE_ADDR'] ?? '?') . ')');
-    http_response_code(403);
-    echo json_encode(['ok' => false, 'error' => 'invalid secret token']);
-    exit;
+// Secret-token check is only enforced if a secret was actually issued (i.e. the deployer
+// ran `webhook:set` from a terminal at least once). Webhooks registered the simple way —
+// just opening https://api.telegram.org/bot<TOKEN>/setWebhook?url=... in a browser, with no
+// secret_token param — skip this check entirely, since there is nothing to compare against.
+if (is_file(WEBHOOK_SECRET_FILE)) {
+    $expectedSecret = trim((string) file_get_contents(WEBHOOK_SECRET_FILE));
+    $incomingSecret = $_SERVER['HTTP_X_TELEGRAM_BOT_API_SECRET_TOKEN'] ?? '';
+    if ($expectedSecret !== '' && !hash_equals($expectedSecret, $incomingSecret)) {
+        logMsg('Webhook request rejected: secret token mismatch (got ' . ($incomingSecret === '' ? '<empty>' : strlen($incomingSecret) . ' chars') . ', remote ' . ($_SERVER['REMOTE_ADDR'] ?? '?') . ')');
+        http_response_code(403);
+        echo json_encode(['ok' => false, 'error' => 'invalid secret token']);
+        exit;
+    }
 }
 
 $raw = file_get_contents('php://input');
