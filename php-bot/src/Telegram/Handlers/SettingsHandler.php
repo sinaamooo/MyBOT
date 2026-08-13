@@ -158,8 +158,14 @@ final class SettingsHandler
     {
         AdminStateService::clear($userId);
         $text = Formatter::embedCustomEmoji($text, $entities);
-        if (!Formatter::validateSignalTemplate($text)) {
-            $ctx->telegram->sendMessage($chatId, '⚠️ قالب شامل یک متغیر نامعتبر/ناشناخته است. ذخیره نشد.');
+        $unknown = Formatter::findUnknownPlaceholders($text);
+        if ($unknown !== []) {
+            $badList = implode('، ', array_map(fn($p) => "{{$p}}", $unknown));
+            $validList = implode(' ', array_map(fn($p) => "{{$p}}", Formatter::knownSignalPlaceholders()));
+            $ctx->telegram->sendMessage(
+                $chatId,
+                "⚠️ این متغیر(ها) ناشناخته‌اند و قالب ذخیره نشد: {$badList}\n\nمتغیرهای معتبر:\n{$validList}"
+            );
             return;
         }
         SettingsService::set('signal_message_template', $text);

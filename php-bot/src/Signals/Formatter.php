@@ -104,28 +104,46 @@ final class Formatter
         return ['symbol', 'side', 'side_emoji', 'score', 'entry', 'stop_loss', 'tp1', 'tp2', 'tp3', 'leverage', 'rr', 'timeframe', 'trend', 'regime', 'quote'];
     }
 
+    /**
+     * The {placeholder} names in $template that aren't recognized (e.g. a
+     * typo), original casing preserved for a useful error message. Matching
+     * itself is case-insensitive - {tp2}, {Tp2}, {TP2} are all the same
+     * placeholder, so a template shouldn't get silently rejected (or worse,
+     * saved with a dead unreplaced {TP2} sitting in the live message) just
+     * because of casing.
+     *
+     * @return string[]
+     */
+    public static function findUnknownPlaceholders(string $template): array
+    {
+        preg_match_all('/\{([a-zA-Z_][a-zA-Z0-9_]*)\}/', $template, $matches);
+        $known = array_flip(array_map('strtolower', self::knownSignalPlaceholders()));
+        $unknown = [];
+        foreach ($matches[1] as $name) {
+            if (!isset($known[strtolower($name)])) {
+                $unknown[$name] = true;
+            }
+        }
+        return array_keys($unknown);
+    }
+
     /** Rejects a template that references a placeholder we don't provide (e.g. a typo). */
     public static function validateSignalTemplate(string $template): bool
     {
-        preg_match_all('/\{([a-zA-Z_][a-zA-Z0-9_]*)\}/', $template, $matches);
-        $known = array_flip(self::knownSignalPlaceholders());
-        foreach ($matches[1] as $name) {
-            if (!isset($known[$name])) {
-                return false;
-            }
-        }
-        return true;
+        return self::findUnknownPlaceholders($template) === [];
     }
 
     /** @param array<string, mixed> $data */
     private static function render(string $template, array $data): string
     {
-        $search = [];
-        $replace = [];
+        $lookup = [];
         foreach ($data as $key => $value) {
-            $search[] = '{' . $key . '}';
-            $replace[] = (string) $value;
+            $lookup[strtolower((string) $key)] = (string) $value;
         }
-        return str_replace($search, $replace, $template);
+        return (string) preg_replace_callback(
+            '/\{([a-zA-Z_][a-zA-Z0-9_]*)\}/',
+            fn(array $m) => $lookup[strtolower($m[1])] ?? $m[0],
+            $template
+        );
     }
 }
