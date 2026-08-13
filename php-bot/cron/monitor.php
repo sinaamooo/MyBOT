@@ -9,8 +9,14 @@ require_once __DIR__ . '/../bootstrap.php';
 
 use App\AppFactory;
 use App\Services\SettingsService;
+use App\Support\CronLock;
 
 set_time_limit(120);
+
+if (!CronLock::acquire('monitor')) {
+    echo '[' . date('c') . "] Previous monitor run still in progress, skipping this tick\n";
+    exit(0);
+}
 
 $ctx = AppFactory::buildContext();
 $params = SettingsService::getAll();

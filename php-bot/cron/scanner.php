@@ -12,11 +12,17 @@ use App\Config;
 use App\Services\LogService;
 use App\Services\SettingsService;
 use App\Services\SymbolService;
+use App\Support\CronLock;
 
 // A large Top-N watch-list means many more requests per pass (~5 per
 // symbol) - give it more room than the default 4-minute cron interval
 // before PHP itself would time the script out.
 set_time_limit(600);
+
+if (!CronLock::acquire('scanner')) {
+    echo '[' . date('c') . "] Previous scan still in progress, skipping this tick\n";
+    exit(0);
+}
 
 SymbolService::ensureDefaults(Config::defaultSymbols());
 
