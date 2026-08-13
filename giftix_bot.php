@@ -2116,6 +2116,7 @@ header('Content-Type: application/json');
 $expectedSecret = getOrCreateWebhookSecret();
 $incomingSecret = $_SERVER['HTTP_X_TELEGRAM_BOT_API_SECRET_TOKEN'] ?? '';
 if (!hash_equals($expectedSecret, $incomingSecret)) {
+    logMsg('Webhook request rejected: secret token mismatch (got ' . ($incomingSecret === '' ? '<empty>' : strlen($incomingSecret) . ' chars') . ', remote ' . ($_SERVER['REMOTE_ADDR'] ?? '?') . ')');
     http_response_code(403);
     echo json_encode(['ok' => false, 'error' => 'invalid secret token']);
     exit;
