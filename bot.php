@@ -68,7 +68,7 @@ const ADMIN_CHAT_ID = 8213021584;
 const REQUIRED_CHANNEL = 'GiftIx_1';
 const REPORTS_CHANNEL = 'GiftIx1_Reports';
 const BOT_USERNAME = 'GiftIx1bot';
-const SUPPORT_USERNAME = 'Eli_as13';
+const SUPPORT_USERNAME = 'WhaleQT';
 const CARD_NUMBER = '00000000000';
 const CARD_HOLDER = 'name';
 const TRUST_CHANNEL = 'GiftIx_1';
@@ -144,7 +144,7 @@ const TEXT_CATEGORIES = [
 ];
 
 const TEXT_PLACEHOLDERS = [
-    'welcome' => [], 'product_menu' => [], 'join' => ['{channel}'], 'join_confirmed' => [], 'bot_off' => [],
+    'welcome' => [], 'product_menu' => [], 'join' => ['{channels}'], 'join_confirmed' => [], 'bot_off' => [],
     'trust' => ['{channel}'], 'cancelled' => [], 'ask_username' => [], 'confirm_username' => ['{username}'],
     'insufficient' => ['{shortfall}'], 'no_username_error' => [],
     'premium_menu' => [], 'premium_invoice' => ['{plan}', '{price}', '{discount}', '{max_discount}', '{final}'],
@@ -302,7 +302,7 @@ function default_texts(): array {
             "تا تجربه‌ای مطمئن و بی‌دغدغه داشته باشی !\n\n" .
             "🫶 از لیست زیر ، گزینه مورد نظرت رو انتخاب کن :",
 
-        'join' => "برای استفاده از ربات، باید در کانال‌های زیر عضو شوید\n\n@{channel}",
+        'join' => "برای استفاده از ربات، باید در کانال‌های زیر عضو شوید\n\n{channels}",
         'join_confirmed' => '✅ عضویتت تایید شد، حالا میتونی از ربات استفاده کنی.',
         'bot_off' => "🔴 ربات در حال حاضر خاموش است.\n\nبه زودی دوباره روشن خواهد شد، لطفا کمی صبر کنید 🙏",
 
@@ -1005,7 +1005,10 @@ function ton_buy_text(array &$DATA): string {
     return T('ton_buy', ['{price}' => fmt($DATA['ton_price']), '{min}' => MIN_TON]);
 }
 
-function join_text(): string { return T('join', ['{channel}' => REQUIRED_CHANNEL]); }
+function join_text(array &$DATA): string {
+    $list = implode("\n", array_map(fn($c) => "@{$c}", $DATA['required_channels']));
+    return T('join', ['{channels}' => $list]);
+}
 function trust_text(): string { return T('trust', ['{channel}' => TRUST_CHANNEL]); }
 function confirm_username_text(string $username): string { return T('confirm_username', ['{username}' => $username]); }
 
@@ -1504,14 +1507,17 @@ function get_chat_member(string $chat, $user_id): ?array {
     return tg_api('getChatMember', ['chat_id' => $chat, 'user_id' => $user_id]);
 }
 
-function is_member($user_id): bool {
-    $res = get_chat_member('@' . REQUIRED_CHANNEL, $user_id);
-    if (!$res || empty($res['ok'])) {
-        error_log("is_member check failed for user {$user_id}, defaulting to true (bot likely not admin in @" . REQUIRED_CHANNEL . ')');
-        return true;
+function is_member($user_id, array $channels): bool {
+    foreach ($channels as $channel) {
+        $res = get_chat_member('@' . $channel, $user_id);
+        if (!$res || empty($res['ok'])) {
+            error_log("is_member check failed for user {$user_id} on @{$channel}, defaulting to true (bot likely not admin there)");
+            continue;
+        }
+        $status = $res['result']['status'] ?? '';
+        if (!in_array($status, ['member', 'administrator', 'creator'], true)) return false;
     }
-    $status = $res['result']['status'] ?? '';
-    return in_array($status, ['member', 'administrator', 'creator'], true);
+    return true;
 }
 
 /* ===================== TON PRICE (Nobitex) ===================== */
@@ -1698,7 +1704,15 @@ function gift_comment_input_kb(): array { return ikb([[ibtn('btn_back', 'gift_co
 function support_kb(): array { return ikb([[ibtn('btn_support_direct', null, 'https://t.me/' . SUPPORT_USERNAME), ibtn('btn_support_indirect', 'support_indirect')]]); }
 function support_indirect_kb(): array { return ikb([[ibtn('btn_back', 'support_back')]]); }
 function admin_support_kb(string $ticket_id): array { return ikb([[ibtn('btn_admin_reply', "support_reply_{$ticket_id}")]]); }
-function join_kb(): array { return ikb([[ibtn('btn_join_channel', null, 'https://t.me/' . REQUIRED_CHANNEL)], [ibtn('btn_check_membership', 'check_membership')]]); }
+function join_kb(array &$DATA): array {
+    $rows = [];
+    foreach ($DATA['required_channels'] as $ch) {
+        $label = count($DATA['required_channels']) > 1 ? B('btn_join_channel') . " @{$ch}" : B('btn_join_channel');
+        $rows[] = [btn($label, null, "https://t.me/{$ch}", BS('btn_join_channel'), BI('btn_join_channel'))];
+    }
+    $rows[] = [ibtn('btn_check_membership', 'check_membership')];
+    return ikb($rows);
+}
 function report_kb(): array { return ikb([[ibtn('btn_report_buy', null, 'https://t.me/' . BOT_USERNAME)]]); }
 function track_kb(): array { return ikb([[ibtn('btn_track_have_code', 'track_have_code')]]); }
 function track_ask_code_kb(): array { return ikb([[ibtn('btn_back', 'track_back')]]); }
@@ -1731,6 +1745,7 @@ function admin_panel_kb(array &$DATA): array {
         ibtn('btn_admin_edit_texts', 'admin_edit_texts'),
         ibtn('btn_admin_edit_buttons', 'admin_edit_buttons'),
         btn('🧩 چیدمان دکمه‌های شیشه‌ای', 'admin_layout_menu'),
+        btn('📢 عضویت اجباری', 'admin_channels_menu'),
     ];
     $cols = get_layout_columns($DATA, 'admin_panel', LAYOUT_GROUPS['admin_panel']['default']);
     $rows = array_chunk($buttons, $cols);
@@ -1755,6 +1770,31 @@ function admin_layout_detail_kb(string $key): array {
         [ibtn('btn_back', 'admin_layout_menu_back')],
     ]);
 }
+
+function admin_channels_text(array &$DATA): string {
+    $list = $DATA['required_channels'];
+    if (!$list) {
+        return "📢 عضویت اجباری\n\nهیچ کانالی تنظیم نشده — ربات بدون بررسی عضویت اجباری کار می‌کنه.\n\nبرای افزودن یه کانال، دکمه زیر رو بزن:";
+    }
+    $lines = implode("\n", array_map(fn($c) => "• @{$c}", $list));
+    return "📢 عضویت اجباری\n\nکانال‌هایی که کاربر باید توشون عضو باشه:\n{$lines}\n\n⚠️ ربات باید تو هر کانال، ادمین باشه وگرنه بررسی عضویت انجام نمی‌شه.\n\nبرای حذف روی دکمه‌ی همون کانال بزن، یا کانال جدید اضافه کن:";
+}
+
+function admin_channels_kb(array &$DATA): array {
+    $rows = [];
+    foreach ($DATA['required_channels'] as $ch) {
+        $rows[] = [btn("❌ حذف @{$ch}", 'admin_channel_del_' . $ch)];
+    }
+    $rows[] = [btn('➕ افزودن کانال', 'admin_channel_add')];
+    $rows[] = [ibtn('btn_back', 'admin_panel_back')];
+    return ikb($rows);
+}
+
+function admin_channel_add_ask_text(): string {
+    return "📢 یوزرنیم کانال رو بفرست (با یا بدون @، مثلاً GiftIx_1).\n\n⚠️ کانال باید عمومی باشه و ربات از قبل توش ادمین شده باشه.";
+}
+
+function admin_channel_add_ask_kb(): array { return ikb([[ibtn('btn_back', 'admin_channels_menu_back')]]); }
 
 function admin_reset_confirm_kb(): array { return ikb([[ibtn('btn_admin_reset_yes', 'admin_reset_yes'), ibtn('btn_admin_reset_no', 'admin_panel_back')]]); }
 function admin_back_kb(): array { return ikb([[ibtn('btn_back', 'admin_panel_back')]]); }
@@ -1952,6 +1992,7 @@ function default_data(): array {
         'ton_price' => 298225,
         'gifts_prices' => [],
         'req_counter' => 0,
+        'required_channels' => [REQUIRED_CHANNEL],
         // Only ever holds admin *overrides* (slug => ['value'/'label' => ..., ...]);
         // T()/B() fall back to DEFAULT_TEXTS/DEFAULT_BUTTONS for any missing slug,
         // so load_data() never needs to (and must never) pre-fill these with defaults.
@@ -1988,7 +2029,8 @@ function load_data(): array {
     $data = array_replace($defaults, $decoded);
     foreach (['users', 'user_names', 'orders', 'topup_requests', 'pending_referrals', 'support_tickets',
               'admin_waiting_reject', 'admin_waiting_support_reply', 'user_state', 'gifts_prices',
-              'premium_prices', 'base_premium_prices', 'profit_percent', 'texts', 'buttons', 'layout'] as $k) {
+              'premium_prices', 'base_premium_prices', 'profit_percent', 'texts', 'buttons', 'layout',
+              'required_channels'] as $k) {
         if (!is_array($data[$k] ?? null)) $data[$k] = $defaults[$k];
     }
     if (!is_array($data['ton_price_cache'] ?? null)) $data['ton_price_cache'] = $defaults['ton_price_cache'];
@@ -2144,7 +2186,7 @@ function handle_start(array $msg, array &$DATA): void {
 
     if ($chat_id != ADMIN_CHAT_ID) {
         if (!$DATA['bot_enabled']) { send_message($chat_id, T('bot_off'), null, 'HTML'); return; }
-        if (!is_member($uid)) { send_message($chat_id, join_text(), join_kb(), 'HTML'); return; }
+        if (!is_member($uid, $DATA['required_channels'])) { send_message($chat_id, join_text($DATA), join_kb($DATA), 'HTML'); return; }
     }
     $DATA['user_names'][$uid] = display_name($user);
     register_user_and_referral($DATA, $uid);
@@ -2214,9 +2256,9 @@ function handle_text(array $msg, array &$DATA): void {
     }
 
     if ($chat_id != ADMIN_CHAT_ID && !$DATA['bot_enabled']) { send_message($chat_id, T('bot_off'), null, 'HTML'); return; }
-    if ($chat_id != ADMIN_CHAT_ID && !is_member($uid)) {
+    if ($chat_id != ADMIN_CHAT_ID && !is_member($uid, $DATA['required_channels'])) {
         $DATA['user_state'][$uid] = [];
-        send_message($chat_id, join_text(), join_kb(), 'HTML');
+        send_message($chat_id, join_text($DATA), join_kb($DATA), 'HTML');
         return;
     }
 
@@ -2271,6 +2313,24 @@ function handle_text(array $msg, array &$DATA): void {
             $DATA['daily_limit'] = (int) $raw;
             $ust['state'] = null;
             send_message($chat_id, admin_daily_limit_text($DATA), admin_daily_limit_kb());
+            return;
+        }
+        if ($state === 'admin_awaiting_channel_add') {
+            $raw = trim($text);
+            $raw = preg_replace('#^https?://t\.me/#i', '', $raw);
+            $raw = ltrim($raw, '@');
+            if (!preg_match('/^[A-Za-z][A-Za-z0-9_]{4,31}$/', $raw)) {
+                send_message($chat_id, "❌ یوزرنیم نامعتبره.\n\n" . admin_channel_add_ask_text(), admin_channel_add_ask_kb(), 'HTML');
+                return;
+            }
+            $already = array_filter($DATA['required_channels'], fn($c) => strcasecmp($c, $raw) === 0);
+            if ($already) {
+                send_message($chat_id, "این کانال از قبل تو لیست هست.", admin_channels_kb($DATA));
+            } else {
+                $DATA['required_channels'][] = $raw;
+                send_message($chat_id, "✅ کانال @{$raw} اضافه شد.\n\n⚠️ یادت نره ربات رو تو این کانال ادمین کنی، وگرنه بررسی عضویت انجام نمی‌شه.", admin_channels_kb($DATA));
+            }
+            $ust['state'] = null;
             return;
         }
         if ($state !== null && str_starts_with($state, 'admin_awaiting_profit_')) {
@@ -2495,7 +2555,7 @@ function handle_callback(array $cq, array &$DATA): void {
     answer_callback_query($cq['id']);
 
     if ($data === 'check_membership') {
-        if (is_member($uid)) {
+        if (is_member($uid, $DATA['required_channels'])) {
             $DATA['user_names'][$uid] = display_name($user);
             register_user_and_referral($DATA, $uid);
             edit_message_text($chat_id, $message_id, T('join_confirmed'), null, 'HTML');
@@ -2508,9 +2568,9 @@ function handle_callback(array $cq, array &$DATA): void {
 
     if ($chat_id != ADMIN_CHAT_ID) {
         if (!$DATA['bot_enabled']) { answer_callback_query($cq['id'], T('bot_off'), true); return; }
-        if (!is_member($uid)) {
+        if (!is_member($uid, $DATA['required_channels'])) {
             $DATA['user_state'][$uid] = [];
-            edit_message_text($chat_id, $message_id, join_text(), join_kb(), 'HTML');
+            edit_message_text($chat_id, $message_id, join_text($DATA), join_kb($DATA), 'HTML');
             return;
         }
     }
@@ -3108,6 +3168,23 @@ function handle_callback(array $cq, array &$DATA): void {
         if (!isset(LAYOUT_GROUPS[$key]) || !in_array($cols, [1, 2, 3], true)) return;
         $DATA['layout'][$key] = $cols;
         edit_message_text($chat_id, $message_id, admin_layout_detail_text($DATA, $key), admin_layout_detail_kb($key));
+        return;
+    }
+
+    /* ---- forced-membership channels ---- */
+    if ($data === 'admin_channels_menu') { $ust['state'] = null; edit_message_text($chat_id, $message_id, admin_channels_text($DATA), admin_channels_kb($DATA)); return; }
+    if ($data === 'admin_channels_menu_back') { $ust['state'] = null; edit_message_text($chat_id, $message_id, admin_channels_text($DATA), admin_channels_kb($DATA)); return; }
+
+    if ($data === 'admin_channel_add') {
+        $ust['state'] = 'admin_awaiting_channel_add';
+        edit_message_text($chat_id, $message_id, admin_channel_add_ask_text(), admin_channel_add_ask_kb(), 'HTML');
+        return;
+    }
+
+    if (str_starts_with($data, 'admin_channel_del_')) {
+        $ch = substr($data, strlen('admin_channel_del_'));
+        $DATA['required_channels'] = array_values(array_diff($DATA['required_channels'], [$ch]));
+        edit_message_text($chat_id, $message_id, admin_channels_text($DATA), admin_channels_kb($DATA));
         return;
     }
 
