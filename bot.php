@@ -38,6 +38,11 @@
  *   Lookups always fall back to the hardcoded default if a slug is missing,
  *   and load_data() only ever fills in *missing* slugs - it never
  *   overwrites an admin's saved edit on a later request.
+ * - Text edits (including bold/italic/.../custom_emoji formatting) are
+ *   converted to HTML once at save time via tg_entities_to_html() and stored
+ *   as that HTML string; T() then only needs to substitute {token}s (each
+ *   HTML-escaped) and every send of a stored text uses parse_mode=HTML, so
+ *   admin-picked premium emoji reach real users, not just the admin preview.
  * - Reply-keyboard taps are resolved by reverse-looking-up the incoming
  *   text against the *current* buttons store (not hardcoded literals), so
  *   renaming a button never breaks routing. Inline buttons route by
@@ -546,7 +551,7 @@ function default_texts(): array {
             "🎁 گیفت: {gift}\n" .
             "📎 یوزر دریافت‌کننده: {buy_username}\n" .
             "🔒 هاید: {hide}\n" .
-            "💬 کامنت: {comment}\n" .
+            "💬 کامنت: <code>{comment}</code>\n" .
             "💰 مبلغ پرداخت‌شده: {price} تومان\n" .
             "🔢 کد پیگیری: {order_id}",
 
@@ -624,37 +629,105 @@ function default_buttons(): array {
 
 /* ===================== TEXT / BUTTON STORE HELPERS ===================== */
 
-function utf16_len(string $s): int {
-    return (int) (strlen(mb_convert_encoding($s, 'UTF-16LE', 'UTF-8')) / 2);
+function esc_html(string $text): string {
+    return htmlspecialchars($text, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 }
 
-// Substitutes {token} placeholders and shifts any stored custom_emoji entity
-// offsets (UTF-16 code units, per Bot API) by the length delta each
-// replacement introduces, so entities typed outside the placeholders keep
-// pointing at the right characters after substitution.
-function render_with_entities(string $template, array $vars, ?array $entities): array {
-    $result = $template;
-    $adjusted = $entities;
-    foreach ($vars as $token => $value) {
-        $value = (string) $value;
-        $pos = mb_strpos($result, $token);
-        while ($pos !== false) {
-            $beforeUtf16 = utf16_len(mb_substr($result, 0, $pos));
-            $tokenUtf16 = utf16_len($token);
-            $delta = utf16_len($value) - $tokenUtf16;
-            if ($adjusted) {
-                foreach ($adjusted as &$e) {
-                    if ($e['offset'] >= $beforeUtf16 + $tokenUtf16) {
-                        $e['offset'] += $delta;
-                    }
-                }
-                unset($e);
-            }
-            $result = mb_substr($result, 0, $pos) . $value . mb_substr($result, $pos + mb_strlen($token));
-            $pos = mb_strpos($result, $token, $pos + mb_strlen($value));
-        }
+// Converts a message's raw text + Bot API entities (bold/italic/.../
+// custom_emoji) into an HTML string safe for parse_mode=HTML, encoding
+// custom_emoji as Telegram's non-standard <tg-emoji emoji-id="..."> tag -
+// the only way to keep premium emoji working, since `entities` and
+// parse_mode can't be sent together. Once converted, the result is a plain
+// HTML string; no entities array needs to travel alongside it again.
+function tg_entities_to_html(string $text, array $entities): string {
+    if ($entities === []) return esc_html($text);
+
+    $utf16 = @mb_convert_encoding($text, 'UTF-16LE', 'UTF-8');
+    if ($utf16 === false) return esc_html($text);
+    $unitLen = (int) (strlen($utf16) / 2);
+
+    $ents = [];
+    foreach ($entities as $e) {
+        $off = (int) ($e['offset'] ?? -1);
+        $len = (int) ($e['length'] ?? 0);
+        if ($off < 0 || $len <= 0 || $off + $len > $unitLen) continue;
+        $ents[] = [
+            'type' => (string) ($e['type'] ?? ''),
+            'start' => $off,
+            'end' => $off + $len,
+            'url' => (string) ($e['url'] ?? ''),
+            'emoji_id' => (string) ($e['custom_emoji_id'] ?? ''),
+            'language' => (string) ($e['language'] ?? ''),
+        ];
     }
-    return [$result, $adjusted];
+    if (!$ents) return esc_html($text);
+
+    usort($ents, function (array $a, array $b): int {
+        if ($a['start'] !== $b['start']) return $a['start'] <=> $b['start'];
+        return $b['end'] <=> $a['end'];
+    });
+
+    $nodes = [];
+    foreach ($ents as $e) $nodes[] = ['e' => $e, 'children' => []];
+
+    $roots = [];
+    $stack = [];
+    foreach ($nodes as $i => $node) {
+        $start = $node['e']['start'];
+        while ($stack && $nodes[end($stack)]['e']['end'] <= $start) array_pop($stack);
+        if ($stack) {
+            $nodes[end($stack)]['children'][] = $i;
+        } else {
+            $roots[] = $i;
+        }
+        $stack[] = $i;
+    }
+
+    $slice = function (int $start, int $end) use ($utf16): string {
+        $start = max(0, $start);
+        $end = max($start, $end);
+        $bytes = substr($utf16, $start * 2, ($end - $start) * 2);
+        $out = @mb_convert_encoding($bytes, 'UTF-8', 'UTF-16LE');
+        return $out === false ? '' : $out;
+    };
+
+    $tagFor = function (array $e): array {
+        switch ($e['type']) {
+            case 'bold': return ['<b>', '</b>'];
+            case 'italic': return ['<i>', '</i>'];
+            case 'underline': return ['<u>', '</u>'];
+            case 'strikethrough': return ['<s>', '</s>'];
+            case 'spoiler': return ['<tg-spoiler>', '</tg-spoiler>'];
+            case 'code': return ['<code>', '</code>'];
+            case 'pre':
+                $lang = trim($e['language']);
+                if ($lang !== '') return ['<pre><code class="language-' . esc_html($lang) . '">', '</code></pre>'];
+                return ['<pre>', '</pre>'];
+            case 'blockquote': return ['<blockquote>', '</blockquote>'];
+            case 'expandable_blockquote': return ['<blockquote expandable>', '</blockquote>'];
+            case 'text_link': return ['<a href="' . esc_html($e['url']) . '">', '</a>'];
+            case 'custom_emoji': return ['<tg-emoji emoji-id="' . esc_html($e['emoji_id']) . '">', '</tg-emoji>'];
+            default: return ['', ''];
+        }
+    };
+
+    $render = function (array $indices, int $rangeStart, int $rangeEnd) use (&$render, $nodes, $slice, $tagFor): string {
+        $out = '';
+        $cursor = $rangeStart;
+        foreach ($indices as $idx) {
+            $node = $nodes[$idx];
+            $s = $node['e']['start'];
+            $en = $node['e']['end'];
+            if ($s > $cursor) $out .= esc_html($slice($cursor, $s));
+            [$open, $close] = $tagFor($node['e']);
+            $out .= $open . $render($node['children'], $s, $en) . $close;
+            $cursor = max($cursor, $en);
+        }
+        if ($cursor < $rangeEnd) $out .= esc_html($slice($cursor, $rangeEnd));
+        return $out;
+    };
+
+    return $render($roots, 0, $unitLen);
 }
 
 function text_default(string $slug): string {
@@ -663,26 +736,26 @@ function text_default(string $slug): string {
     return $defaults[$slug] ?? '';
 }
 
+// Stored/default text templates are always already-valid HTML (admin edits
+// are baked into HTML via tg_entities_to_html() at save time; hardcoded
+// defaults are plain strings with no special HTML chars, or the handful
+// that intentionally embed literal <code>/<b> tags).
 function text_raw(string $slug): string {
     $store = $GLOBALS['STORE']['texts'] ?? [];
     return $store[$slug]['value'] ?? text_default($slug);
 }
 
-function text_entities_of(string $slug): ?array {
-    $store = $GLOBALS['STORE']['texts'] ?? [];
-    return $store[$slug]['entities'] ?? null;
-}
-
-// Renders a stored/default text template with {token} substitution. Returns
-// just the string; use T_full() when the caller also needs the entities
-// array (only meaningful for plain sendMessage calls without parse_mode).
+// Renders a stored/default HTML template with {token} substitution. Every
+// dynamic value is HTML-escaped here so user-controlled input (wallet memo,
+// comment, username, ...) can never break the surrounding markup or inject
+// tags; the template itself is trusted HTML and is left untouched. Always
+// send the result with parse_mode => 'HTML'.
 function T(string $slug, array $vars = []): string {
-    [$rendered] = render_with_entities(text_raw($slug), $vars, null);
-    return $rendered;
-}
-
-function T_full(string $slug, array $vars = []): array {
-    return render_with_entities(text_raw($slug), $vars, text_entities_of($slug));
+    $result = text_raw($slug);
+    foreach ($vars as $token => $value) {
+        $result = str_replace($token, esc_html((string) $value), $result);
+    }
+    return $result;
 }
 
 function button_default(string $slug): string {
@@ -767,8 +840,8 @@ function button_category_of(string $slug): ?string {
     return null;
 }
 
-function apply_text_edit(array &$DATA, string $slug, string $value, ?array $entities): void {
-    $DATA['texts'][$slug] = ['value' => $value, 'entities' => $entities];
+function apply_text_edit(array &$DATA, string $slug, string $html): void {
+    $DATA['texts'][$slug] = ['value' => $html];
 }
 
 function reset_text(array &$DATA, string $slug): void {
@@ -885,10 +958,9 @@ function gift_done_text($key, $username, $price, $order_id): string {
 }
 
 function admin_gift_text($user, $key, $username, $hidden, $comment, $price, $order_id): string {
-    $comment_display = $comment ? ('<code>' . htmlspecialchars((string) $comment, ENT_QUOTES) . '</code>') : 'ندارد';
     return T('admin_gift_order', ['{user_name}' => display_name($user), '{username_at}' => username_at($user),
         '{user_id}' => $user['id'], '{gift}' => gift_label($key), '{buy_username}' => $username,
-        '{hide}' => $hidden ? '✅ بله' : '❌ خیر', '{comment}' => $comment_display, '{price}' => fmt($price), '{order_id}' => $order_id]);
+        '{hide}' => $hidden ? '✅ بله' : '❌ خیر', '{comment}' => $comment ? $comment : 'ندارد', '{price}' => fmt($price), '{order_id}' => $order_id]);
 }
 
 function admin_support_text($user, string $message_text): string {
@@ -1063,9 +1135,8 @@ function admin_profit_premium_text(array &$DATA): string {
 function admin_ask_profit_text(string $product_fa): string { return "✏️ درصد سود جدید {$product_fa} رو وارد کن (فقط عدد، بدون %):"; }
 
 function admin_ton_text($user, $amount, $wallet, $memo, $price, $order_id): string {
-    $walletSafe = htmlspecialchars((string) $wallet, ENT_QUOTES);
     return T('admin_ton_order', ['{user_name}' => display_name($user), '{username_at}' => username_at($user),
-        '{user_id}' => $user['id'], '{amount}' => $amount, '{wallet}' => $walletSafe, '{memo}' => $memo,
+        '{user_id}' => $user['id'], '{amount}' => $amount, '{wallet}' => $wallet, '{memo}' => $memo,
         '{price}' => fmt($price), '{order_id}' => $order_id]);
 }
 
@@ -1083,7 +1154,7 @@ function daily_limit_exceeded_text(int $remaining): string {
 }
 
 function card_details_text(int $amount): string {
-    return T('card_details', ['{amount}' => fmt($amount), '{card_number}' => htmlspecialchars(CARD_NUMBER, ENT_QUOTES), '{card_holder}' => CARD_HOLDER]);
+    return T('card_details', ['{amount}' => fmt($amount), '{card_number}' => CARD_NUMBER, '{card_holder}' => CARD_HOLDER]);
 }
 
 function admin_topup_caption($user, int $amount, string $req_id): string {
@@ -1241,18 +1312,13 @@ function log_premium_fallback_once(): void {
     error_log('Telegram rejected style/icon_custom_emoji_id/custom_emoji entities on this send - the bot owner likely does not have Telegram Premium (Bot API 9.4 restriction). Falling back to plain rendering.');
 }
 
-function send_message($chat_id, string $text, ?array $reply_markup = null, ?string $parse_mode = null, array $extra = [], ?array $entities = null): ?array {
+function send_message($chat_id, string $text, ?array $reply_markup = null, ?string $parse_mode = null, array $extra = []): ?array {
     $params = array_merge(['chat_id' => $chat_id, 'text' => $text], $extra);
     if ($reply_markup !== null) $params['reply_markup'] = $reply_markup;
-    if ($entities) {
-        $params['entities'] = $entities; // entities and parse_mode are mutually exclusive on sendMessage
-    } elseif ($parse_mode !== null) {
-        $params['parse_mode'] = $parse_mode;
-    }
+    if ($parse_mode !== null) $params['parse_mode'] = $parse_mode;
     $res = tg_api('sendMessage', $params);
-    if ((!$res || empty($res['ok'])) && (!empty($params['entities']) || reply_markup_has_style($reply_markup))) {
+    if ((!$res || empty($res['ok'])) && reply_markup_has_style($reply_markup)) {
         log_premium_fallback_once();
-        unset($params['entities']);
         if ($reply_markup !== null) $params['reply_markup'] = strip_style_fields($reply_markup);
         $res = tg_api('sendMessage', $params);
     }
@@ -1874,7 +1940,7 @@ function register_user_and_referral(array &$DATA, $uid): void {
                 $point_awarded = true;
             }
             $invited_name = $DATA['user_names'][$uid] ?? 'یک کاربر جدید';
-            send_message($ref_id, referral_notification_text($invited_name, $point_awarded, $referrer['referrals'], $referrer['discount_balance'], $referrer['score']));
+            send_message($ref_id, referral_notification_text($invited_name, $point_awarded, $referrer['referrals'], $referrer['discount_balance'], $referrer['score']), null, 'HTML');
         }
     }
 }
@@ -1900,12 +1966,12 @@ function handle_start(array $msg, array &$DATA): void {
     }
 
     if ($chat_id != ADMIN_CHAT_ID) {
-        if (!$DATA['bot_enabled']) { send_message($chat_id, T('bot_off')); return; }
-        if (!is_member($uid)) { send_message($chat_id, join_text(), join_kb()); return; }
+        if (!$DATA['bot_enabled']) { send_message($chat_id, T('bot_off'), null, 'HTML'); return; }
+        if (!is_member($uid)) { send_message($chat_id, join_text(), join_kb(), 'HTML'); return; }
     }
     $DATA['user_names'][$uid] = display_name($user);
     register_user_and_referral($DATA, $uid);
-    send_message($chat_id, T('welcome'), main_kb($chat_id == ADMIN_CHAT_ID));
+    send_message($chat_id, T('welcome'), main_kb($chat_id == ADMIN_CHAT_ID), 'HTML');
 }
 
 function handle_photo(array $msg, array &$DATA): void {
@@ -1930,11 +1996,11 @@ function handle_photo(array $msg, array &$DATA): void {
 
     $DATA['topup_requests'][$req_id] = ['user_id' => $uid, 'chat_id' => $chat_id, 'amount' => $amount];
     if (ADMIN_CHAT_ID) {
-        send_photo(ADMIN_CHAT_ID, $file_id, admin_topup_caption($user, $amount, $req_id), admin_topup_kb($req_id));
+        send_photo(ADMIN_CHAT_ID, $file_id, admin_topup_caption($user, $amount, $req_id), admin_topup_kb($req_id), 'HTML');
     }
     $ust['state'] = null;
     $ust['pending_topup'] = null;
-    send_message($chat_id, T('receipt_sent'));
+    send_message($chat_id, T('receipt_sent'), null, 'HTML');
 }
 
 function handle_text(array $msg, array &$DATA): void {
@@ -1952,7 +2018,7 @@ function handle_text(array $msg, array &$DATA): void {
         if ($req) {
             unset($DATA['topup_requests'][$req_id]);
             refund_daily_limit($DATA, $req['user_id'], (int) $req['amount']);
-            send_message($req['chat_id'], rejected_text($text));
+            send_message($req['chat_id'], rejected_text($text), null, 'HTML');
         }
         send_message($chat_id, 'دلیل رد برای کاربر ارسال شد.');
         return;
@@ -1970,10 +2036,10 @@ function handle_text(array $msg, array &$DATA): void {
         return;
     }
 
-    if ($chat_id != ADMIN_CHAT_ID && !$DATA['bot_enabled']) { send_message($chat_id, T('bot_off')); return; }
+    if ($chat_id != ADMIN_CHAT_ID && !$DATA['bot_enabled']) { send_message($chat_id, T('bot_off'), null, 'HTML'); return; }
     if ($chat_id != ADMIN_CHAT_ID && !is_member($uid)) {
         $DATA['user_state'][$uid] = [];
-        send_message($chat_id, join_text(), join_kb());
+        send_message($chat_id, join_text(), join_kb(), 'HTML');
         return;
     }
 
@@ -2049,11 +2115,10 @@ function handle_text(array $msg, array &$DATA): void {
             $slug = substr($state, strlen('admin_awaiting_text_'));
             $ust['state'] = null;
             if (!in_array($slug, all_text_slugs(), true)) { send_message($chat_id, 'این متن پیدا نشد.', admin_back_kb()); return; }
-            $entities = capture_entities($msg);
-            apply_text_edit($DATA, $slug, $text, $entities);
-            [$preview, $previewEntities] = T_full($slug);
+            $html = tg_entities_to_html($text, capture_entities($msg) ?? []);
+            apply_text_edit($DATA, $slug, $html);
             send_message($chat_id, "✅ متن «{$slug}» ذخیره شد. پیش‌نمایش 👇");
-            send_message($chat_id, $preview, admin_text_detail_kb($slug), null, [], $previewEntities);
+            send_message($chat_id, T($slug), admin_text_detail_kb($slug), 'HTML');
             return;
         }
         if ($state !== null && str_starts_with($state, 'admin_awaiting_button_')) {
@@ -2073,7 +2138,7 @@ function handle_text(array $msg, array &$DATA): void {
         $ust['pending_premium'] = $ust['pending_premium'] ?? [];
         $ust['pending_premium']['username'] = $username;
         $ust['state'] = null;
-        send_message($chat_id, confirm_username_text($username), confirm_username_kb());
+        send_message($chat_id, confirm_username_text($username), confirm_username_kb(), 'HTML');
         return;
     }
 
@@ -2082,7 +2147,7 @@ function handle_text(array $msg, array &$DATA): void {
         if (!ctype_digit($raw)) { send_message($chat_id, 'لطفا فقط عدد مبلغ رو بفرست. مثال: 40000'); return; }
         $amount = (int) $raw;
         $remaining = get_daily_remaining($DATA, $uid);
-        if ($amount > $remaining) { send_message($chat_id, daily_limit_exceeded_text($remaining), toman_kb()); return; }
+        if ($amount > $remaining) { send_message($chat_id, daily_limit_exceeded_text($remaining), toman_kb(), 'HTML'); return; }
         use_daily_limit($DATA, $uid, $amount);
         $ust['pending_topup'] = ['amount' => $amount];
         $ust['state'] = null;
@@ -2099,10 +2164,10 @@ function handle_text(array $msg, array &$DATA): void {
         $raw = str_replace(',', '', trim($text));
         if (!ctype_digit($raw)) { send_message($chat_id, 'لطفا فقط عدد وارد کن. مثال: 100', stars_min_error_kb()); return; }
         $count = (int) $raw;
-        if ($count < STARS_MIN) { send_message($chat_id, stars_min_error_text(), stars_min_error_kb()); return; }
+        if ($count < STARS_MIN) { send_message($chat_id, stars_min_error_text(), stars_min_error_kb(), 'HTML'); return; }
         $ust['pending_stars'] = ['count' => $count];
         $ust['state'] = 'awaiting_stars_username';
-        send_message($chat_id, T('ask_username'), ask_stars_username_kb());
+        send_message($chat_id, T('ask_username'), ask_stars_username_kb(), 'HTML');
         return;
     }
 
@@ -2112,7 +2177,7 @@ function handle_text(array $msg, array &$DATA): void {
         $ust['pending_stars'] = $ust['pending_stars'] ?? [];
         $ust['pending_stars']['username'] = $username;
         $ust['state'] = null;
-        send_message($chat_id, confirm_username_text($username), confirm_stars_username_kb());
+        send_message($chat_id, confirm_username_text($username), confirm_stars_username_kb(), 'HTML');
         return;
     }
 
@@ -2122,7 +2187,7 @@ function handle_text(array $msg, array &$DATA): void {
         $ust['pending_gift'] = $ust['pending_gift'] ?? [];
         $ust['pending_gift']['username'] = $username;
         $ust['state'] = null;
-        send_message($chat_id, confirm_username_text($username), confirm_gift_username_kb());
+        send_message($chat_id, confirm_username_text($username), confirm_gift_username_kb(), 'HTML');
         return;
     }
 
@@ -2136,7 +2201,7 @@ function handle_text(array $msg, array &$DATA): void {
         $price = $g['price'] ?? $DATA['gifts_prices'][$key];
         $disc = get_user($DATA, $uid)['discount_balance'];
         $final = compute_final_price($DATA, $g, $uid);
-        send_message($chat_id, gift_invoice_text($key, $g['username'], $g['hidden'], $comment, $price, $disc, $final), gift_invoice_kb($g['hidden'], true, $g['discount_applied'] ?? false));
+        send_message($chat_id, gift_invoice_text($key, $g['username'], $g['hidden'], $comment, $price, $disc, $final), gift_invoice_kb($g['hidden'], true, $g['discount_applied'] ?? false), 'HTML');
         return;
     }
 
@@ -2146,7 +2211,7 @@ function handle_text(array $msg, array &$DATA): void {
         $ust['pending_referral_reward'] = $ust['pending_referral_reward'] ?? [];
         $ust['pending_referral_reward']['username'] = $username;
         $ust['state'] = null;
-        send_message($chat_id, confirm_username_text($username), confirm_referral_username_kb());
+        send_message($chat_id, confirm_username_text($username), confirm_referral_username_kb(), 'HTML');
         return;
     }
 
@@ -2157,7 +2222,7 @@ function handle_text(array $msg, array &$DATA): void {
         if ($amount < MIN_TON) { send_message($chat_id, 'حداقل سفارش ' . MIN_TON . ' TON است.'); return; }
         $ust['pending_ton'] = ['amount' => $amount];
         $ust['state'] = 'awaiting_ton_wallet';
-        send_message($chat_id, T('ton_wallet_ask'), ton_wallet_back_kb());
+        send_message($chat_id, T('ton_wallet_ask'), ton_wallet_back_kb(), 'HTML');
         return;
     }
 
@@ -2169,7 +2234,7 @@ function handle_text(array $msg, array &$DATA): void {
         }
         $ust['pending_ton']['wallet'] = $wallet;
         $ust['state'] = null;
-        send_message($chat_id, T('ton_memo_question'), ton_memo_kb());
+        send_message($chat_id, T('ton_memo_question'), ton_memo_kb(), 'HTML');
         return;
     }
 
@@ -2182,25 +2247,25 @@ function handle_text(array $msg, array &$DATA): void {
         $ust['state'] = null;
         $price = $ton['price'];
         $disc = get_user($DATA, $uid)['discount_balance'];
-        send_message($chat_id, ton_invoice_text($ton['amount'], $ton['wallet'], $memo, $price, $disc, $price), ton_invoice_kb(false));
+        send_message($chat_id, ton_invoice_text($ton['amount'], $ton['wallet'], $memo, $price, $disc, $price), ton_invoice_kb(false), 'HTML');
         return;
     }
 
     if ($state === 'awaiting_support_message') {
         $ticket_id = new_req_id($DATA);
         $DATA['support_tickets'][$ticket_id] = ['user_id' => $uid, 'chat_id' => $chat_id, 'message_id' => $msg['message_id']];
-        send_message($chat_id, T('support_sent_confirm'), main_kb($chat_id == ADMIN_CHAT_ID));
+        send_message($chat_id, T('support_sent_confirm'), main_kb($chat_id == ADMIN_CHAT_ID), 'HTML');
         $ust['state'] = null;
-        if (ADMIN_CHAT_ID) send_message(ADMIN_CHAT_ID, admin_support_text($user, $text), admin_support_kb($ticket_id));
+        if (ADMIN_CHAT_ID) send_message(ADMIN_CHAT_ID, admin_support_text($user, $text), admin_support_kb($ticket_id), 'HTML');
         return;
     }
 
     if ($state === 'awaiting_tracking_code') {
         $code = trim($text);
         $order = $DATA['orders'][$code] ?? null;
-        if (!$order) { send_message($chat_id, T('track_not_found'), track_ask_code_kb()); return; }
+        if (!$order) { send_message($chat_id, T('track_not_found'), track_ask_code_kb(), 'HTML'); return; }
         $ust['state'] = null;
-        send_message($chat_id, order_status_text($order));
+        send_message($chat_id, order_status_text($order), null, 'HTML');
         return;
     }
 
@@ -2208,20 +2273,20 @@ function handle_text(array $msg, array &$DATA): void {
     // hardcoded literals), so renaming a menu button never breaks routing.
     $menu_slug = resolve_menu_button($text);
 
-    if ($menu_slug === 'menu_buy') { send_message($chat_id, T('product_menu'), product_kb()); return; }
+    if ($menu_slug === 'menu_buy') { send_message($chat_id, T('product_menu'), product_kb(), 'HTML'); return; }
 
     if ($menu_slug === 'menu_topup') {
         $balance = get_user($DATA, $uid)['balance'];
         $remaining = get_daily_remaining($DATA, $uid);
-        send_message($chat_id, wallet_text($balance, $remaining), wallet_kb());
+        send_message($chat_id, wallet_text($balance, $remaining), wallet_kb(), 'HTML');
         return;
     }
 
     if ($menu_slug === 'menu_account') { send_message($chat_id, account_text($DATA, $user), null, 'HTML'); return; }
-    if ($menu_slug === 'menu_referral') { send_message($chat_id, referral_text($DATA, $user), invite_kb()); return; }
-    if ($menu_slug === 'menu_support') { send_message($chat_id, T('support'), support_kb()); return; }
-    if ($menu_slug === 'menu_track') { send_message($chat_id, T('track'), track_kb()); return; }
-    if ($menu_slug === 'menu_trust') { send_message($chat_id, trust_text()); return; }
+    if ($menu_slug === 'menu_referral') { send_message($chat_id, referral_text($DATA, $user), invite_kb(), 'HTML'); return; }
+    if ($menu_slug === 'menu_support') { send_message($chat_id, T('support'), support_kb(), 'HTML'); return; }
+    if ($menu_slug === 'menu_track') { send_message($chat_id, T('track'), track_kb(), 'HTML'); return; }
+    if ($menu_slug === 'menu_trust') { send_message($chat_id, trust_text(), null, 'HTML'); return; }
     if ($menu_slug === 'menu_admin' && $chat_id == ADMIN_CHAT_ID) { send_message($chat_id, admin_panel_text($DATA), admin_panel_kb($DATA)); return; }
 
     send_message($chat_id, 'این بخش هنوز تکمیل نشده.');
@@ -2241,8 +2306,8 @@ function handle_callback(array $cq, array &$DATA): void {
         if (is_member($uid)) {
             $DATA['user_names'][$uid] = display_name($user);
             register_user_and_referral($DATA, $uid);
-            edit_message_text($chat_id, $message_id, T('join_confirmed'));
-            send_message($chat_id, T('welcome'), main_kb($chat_id == ADMIN_CHAT_ID));
+            edit_message_text($chat_id, $message_id, T('join_confirmed'), null, 'HTML');
+            send_message($chat_id, T('welcome'), main_kb($chat_id == ADMIN_CHAT_ID), 'HTML');
         } else {
             answer_callback_query($cq['id'], 'هنوز در کانال عضو نشدید! لطفا ابتدا عضو شوید سپس دوباره امتحان کنید.', true);
         }
@@ -2253,7 +2318,7 @@ function handle_callback(array $cq, array &$DATA): void {
         if (!$DATA['bot_enabled']) { answer_callback_query($cq['id'], T('bot_off'), true); return; }
         if (!is_member($uid)) {
             $DATA['user_state'][$uid] = [];
-            edit_message_text($chat_id, $message_id, join_text(), join_kb());
+            edit_message_text($chat_id, $message_id, join_text(), join_kb(), 'HTML');
             return;
         }
     }
@@ -2264,19 +2329,19 @@ function handle_callback(array $cq, array &$DATA): void {
 
     if (str_starts_with($data, 'admin_') && $chat_id != ADMIN_CHAT_ID) return;
 
-    if ($data === 'back_to_welcome') { $DATA['user_state'][$uid] = []; edit_message_text($chat_id, $message_id, T('welcome')); return; }
-    if ($data === 'back_to_products') { $ust['state'] = null; edit_message_text($chat_id, $message_id, T('product_menu'), product_kb()); return; }
+    if ($data === 'back_to_welcome') { $DATA['user_state'][$uid] = []; edit_message_text($chat_id, $message_id, T('welcome'), null, 'HTML'); return; }
+    if ($data === 'back_to_products') { $ust['state'] = null; edit_message_text($chat_id, $message_id, T('product_menu'), product_kb(), 'HTML'); return; }
 
     /* ---- gift ---- */
-    if ($data === 'product_gift_stars') { edit_message_text($chat_id, $message_id, T('gift_list'), gift_list_kb()); return; }
-    if ($data === 'gift_back_to_list') { $ust['state'] = null; edit_message_text($chat_id, $message_id, T('gift_list'), gift_list_kb()); return; }
+    if ($data === 'product_gift_stars') { edit_message_text($chat_id, $message_id, T('gift_list'), gift_list_kb(), 'HTML'); return; }
+    if ($data === 'gift_back_to_list') { $ust['state'] = null; edit_message_text($chat_id, $message_id, T('gift_list'), gift_list_kb(), 'HTML'); return; }
 
     if (str_starts_with($data, 'gift_select_')) {
         $key = substr($data, strlen('gift_select_'));
         if (!isset(GIFTS_META[$key])) return;
         $ust['pending_gift'] = ['key' => $key, 'username' => null, 'hidden' => true, 'comment' => null];
         $ust['state'] = 'awaiting_gift_username';
-        edit_message_text($chat_id, $message_id, T('ask_username'), ask_gift_username_kb());
+        edit_message_text($chat_id, $message_id, T('ask_username'), ask_gift_username_kb(), 'HTML');
         return;
     }
 
@@ -2286,7 +2351,7 @@ function handle_callback(array $cq, array &$DATA): void {
             $ust['pending_gift'] = $ust['pending_gift'] ?? [];
             $ust['pending_gift']['username'] = $username;
             $ust['state'] = null;
-            edit_message_text($chat_id, $message_id, confirm_username_text($username), confirm_gift_username_kb());
+            edit_message_text($chat_id, $message_id, confirm_username_text($username), confirm_gift_username_kb(), 'HTML');
         } else {
             $ust['state'] = 'awaiting_gift_username';
             edit_message_text($chat_id, $message_id, "شما در تلگرام یوزرنیم ندارید.\nلطفا یوزرنیم شخص مورد نظر را با @ ارسال کنید.", ikb([[ibtn('btn_back', 'gift_back_to_list')]]));
@@ -2294,7 +2359,7 @@ function handle_callback(array $cq, array &$DATA): void {
         return;
     }
 
-    if ($data === 'gift_confirm_no') { $ust['state'] = 'awaiting_gift_username'; edit_message_text($chat_id, $message_id, T('ask_username'), ask_gift_username_kb()); return; }
+    if ($data === 'gift_confirm_no') { $ust['state'] = 'awaiting_gift_username'; edit_message_text($chat_id, $message_id, T('ask_username'), ask_gift_username_kb(), 'HTML'); return; }
 
     if ($data === 'gift_confirm_yes') {
         $g = &$ust['pending_gift'];
@@ -2305,7 +2370,7 @@ function handle_callback(array $cq, array &$DATA): void {
         $g['discount_applied'] = false;
         $price = $g['price'];
         $disc = get_user($DATA, $uid)['discount_balance'];
-        edit_message_text($chat_id, $message_id, gift_invoice_text($key, $username, true, null, $price, $disc, $price), gift_invoice_kb(true, false, false));
+        edit_message_text($chat_id, $message_id, gift_invoice_text($key, $username, true, null, $price, $disc, $price), gift_invoice_kb(true, false, false), 'HTML');
         return;
     }
 
@@ -2319,11 +2384,11 @@ function handle_callback(array $cq, array &$DATA): void {
         $price = $g['price'] ?? $DATA['gifts_prices'][$key];
         $disc = get_user($DATA, $uid)['discount_balance'];
         $final = compute_final_price($DATA, $g, $uid);
-        edit_message_text($chat_id, $message_id, gift_invoice_text($key, $username, $g['hidden'], $comment, $price, $disc, $final), gift_invoice_kb($g['hidden'], (bool) $comment, $g['discount_applied'] ?? false));
+        edit_message_text($chat_id, $message_id, gift_invoice_text($key, $username, $g['hidden'], $comment, $price, $disc, $final), gift_invoice_kb($g['hidden'], (bool) $comment, $g['discount_applied'] ?? false), 'HTML');
         return;
     }
 
-    if ($data === 'gift_comment_type') { edit_message_text($chat_id, $message_id, T('gift_comment_type'), gift_comment_type_kb()); return; }
+    if ($data === 'gift_comment_type') { edit_message_text($chat_id, $message_id, T('gift_comment_type'), gift_comment_type_kb(), 'HTML'); return; }
 
     if ($data === 'gift_comment_back_to_invoice') {
         $g = &$ust['pending_gift'];
@@ -2334,12 +2399,12 @@ function handle_callback(array $cq, array &$DATA): void {
         $price = $g['price'] ?? $DATA['gifts_prices'][$key];
         $disc = get_user($DATA, $uid)['discount_balance'];
         $final = compute_final_price($DATA, $g, $uid);
-        edit_message_text($chat_id, $message_id, gift_invoice_text($key, $username, $g['hidden'], $comment, $price, $disc, $final), gift_invoice_kb($g['hidden'], (bool) $comment, $g['discount_applied'] ?? false));
+        edit_message_text($chat_id, $message_id, gift_invoice_text($key, $username, $g['hidden'], $comment, $price, $disc, $final), gift_invoice_kb($g['hidden'], (bool) $comment, $g['discount_applied'] ?? false), 'HTML');
         return;
     }
 
-    if ($data === 'gift_comment_free') { $ust['state'] = 'awaiting_gift_comment'; edit_message_text($chat_id, $message_id, T('gift_comment_input'), gift_comment_input_kb()); return; }
-    if ($data === 'gift_comment_input_back') { $ust['state'] = null; edit_message_text($chat_id, $message_id, T('gift_comment_type'), gift_comment_type_kb()); return; }
+    if ($data === 'gift_comment_free') { $ust['state'] = 'awaiting_gift_comment'; edit_message_text($chat_id, $message_id, T('gift_comment_input'), gift_comment_input_kb(), 'HTML'); return; }
+    if ($data === 'gift_comment_input_back') { $ust['state'] = null; edit_message_text($chat_id, $message_id, T('gift_comment_type'), gift_comment_type_kb(), 'HTML'); return; }
 
     if ($data === 'gift_del_comment') {
         $g = &$ust['pending_gift'];
@@ -2350,7 +2415,7 @@ function handle_callback(array $cq, array &$DATA): void {
         $price = $g['price'] ?? $DATA['gifts_prices'][$key];
         $disc = get_user($DATA, $uid)['discount_balance'];
         $final = compute_final_price($DATA, $g, $uid);
-        edit_message_text($chat_id, $message_id, gift_invoice_text($key, $username, $g['hidden'], null, $price, $disc, $final), gift_invoice_kb($g['hidden'], false, $g['discount_applied'] ?? false));
+        edit_message_text($chat_id, $message_id, gift_invoice_text($key, $username, $g['hidden'], null, $price, $disc, $final), gift_invoice_kb($g['hidden'], false, $g['discount_applied'] ?? false), 'HTML');
         return;
     }
 
@@ -2364,11 +2429,11 @@ function handle_callback(array $cq, array &$DATA): void {
         $price = $g['price'] ?? $DATA['gifts_prices'][$key];
         $disc = get_user($DATA, $uid)['discount_balance'];
         $final = compute_final_price($DATA, $g, $uid);
-        edit_message_text($chat_id, $message_id, gift_invoice_text($key, $username, $g['hidden'], $comment, $price, $disc, $final), gift_invoice_kb($g['hidden'], (bool) $comment, $g['discount_applied']));
+        edit_message_text($chat_id, $message_id, gift_invoice_text($key, $username, $g['hidden'], $comment, $price, $disc, $final), gift_invoice_kb($g['hidden'], (bool) $comment, $g['discount_applied']), 'HTML');
         return;
     }
 
-    if ($data === 'gift_invoice_cancel') { $ust['pending_gift'] = null; $ust['state'] = null; edit_message_text($chat_id, $message_id, T('cancelled')); return; }
+    if ($data === 'gift_invoice_cancel') { $ust['pending_gift'] = null; $ust['state'] = null; edit_message_text($chat_id, $message_id, T('cancelled'), null, 'HTML'); return; }
 
     if ($data === 'gift_invoice_confirm') {
         $g = $ust['pending_gift'] ?? [];
@@ -2390,29 +2455,29 @@ function handle_callback(array $cq, array &$DATA): void {
                 'type' => 'gift', 'chat_id' => $chat_id, 'user_id' => $uid, 'buyer_name' => display_name($user),
                 'key' => $key, 'username' => $username, 'price' => $final, 'status' => 'pending', 'created_at' => persian_now_str(),
             ];
-            edit_message_text($chat_id, $message_id, gift_success_text($key, $username, $final, $order_id));
+            edit_message_text($chat_id, $message_id, gift_success_text($key, $username, $final, $order_id), null, 'HTML');
             if (ADMIN_CHAT_ID) send_message(ADMIN_CHAT_ID, admin_gift_text($user, $key, $username, $hidden, $comment, $final, $order_id), admin_order_kb($order_id), 'HTML');
         } else {
             $shortfall = $final - $u['balance'];
             $ust['topup_origin'] = 'invoice';
             $ust['last_invoice_shortfall_price'] = $final;
-            edit_message_text($chat_id, $message_id, insufficient_text($shortfall), insufficient_kb());
+            edit_message_text($chat_id, $message_id, insufficient_text($shortfall), insufficient_kb(), 'HTML');
         }
         return;
     }
 
     /* ---- premium ---- */
-    if ($data === 'product_premium') { edit_message_text($chat_id, $message_id, T('premium_menu'), premium_kb()); return; }
+    if ($data === 'product_premium') { edit_message_text($chat_id, $message_id, T('premium_menu'), premium_kb(), 'HTML'); return; }
 
     if (in_array($data, ['premium_3', 'premium_6', 'premium_12'], true)) {
         $plan = explode('_', $data)[1];
         $ust['pending_premium'] = ['plan' => $plan, 'price' => $DATA['premium_prices'][$plan]];
         $ust['state'] = 'awaiting_username';
-        edit_message_text($chat_id, $message_id, T('ask_username'), ask_username_kb());
+        edit_message_text($chat_id, $message_id, T('ask_username'), ask_username_kb(), 'HTML');
         return;
     }
 
-    if ($data === 'back_to_premium') { $ust['state'] = null; edit_message_text($chat_id, $message_id, T('premium_menu'), premium_kb()); return; }
+    if ($data === 'back_to_premium') { $ust['state'] = null; edit_message_text($chat_id, $message_id, T('premium_menu'), premium_kb(), 'HTML'); return; }
 
     if ($data === 'username_self') {
         if (!empty($user['username'])) {
@@ -2420,7 +2485,7 @@ function handle_callback(array $cq, array &$DATA): void {
             $ust['pending_premium'] = $ust['pending_premium'] ?? [];
             $ust['pending_premium']['username'] = $username;
             $ust['state'] = null;
-            edit_message_text($chat_id, $message_id, confirm_username_text($username), confirm_username_kb());
+            edit_message_text($chat_id, $message_id, confirm_username_text($username), confirm_username_kb(), 'HTML');
         } else {
             $ust['state'] = 'awaiting_username';
             edit_message_text($chat_id, $message_id, "شما در تلگرام یوزرنیم ندارید.\nلطفا یوزرنیم شخص مورد نظر را با @ ارسال کنید.", ikb([[ibtn('btn_back', 'back_to_ask_username')]]));
@@ -2428,8 +2493,8 @@ function handle_callback(array $cq, array &$DATA): void {
         return;
     }
 
-    if ($data === 'back_to_ask_username') { $ust['state'] = 'awaiting_username'; edit_message_text($chat_id, $message_id, T('ask_username'), ask_username_kb()); return; }
-    if ($data === 'confirm_no') { $ust['state'] = 'awaiting_username'; edit_message_text($chat_id, $message_id, T('ask_username'), ask_username_kb()); return; }
+    if ($data === 'back_to_ask_username') { $ust['state'] = 'awaiting_username'; edit_message_text($chat_id, $message_id, T('ask_username'), ask_username_kb(), 'HTML'); return; }
+    if ($data === 'confirm_no') { $ust['state'] = 'awaiting_username'; edit_message_text($chat_id, $message_id, T('ask_username'), ask_username_kb(), 'HTML'); return; }
 
     if ($data === 'confirm_yes') {
         $order = &$ust['pending_premium'];
@@ -2439,7 +2504,7 @@ function handle_callback(array $cq, array &$DATA): void {
         $price = $order['price'] ?? 0;
         $username = $order['username'] ?? '-';
         $disc = get_user($DATA, $uid)['discount_balance'];
-        edit_message_text($chat_id, $message_id, premium_invoice_text($plan, $price, $username, $disc, $price), invoice_kb(false));
+        edit_message_text($chat_id, $message_id, premium_invoice_text($plan, $price, $username, $disc, $price), invoice_kb(false), 'HTML');
         return;
     }
 
@@ -2452,11 +2517,11 @@ function handle_callback(array $cq, array &$DATA): void {
         $username = $order['username'] ?? '-';
         $disc = get_user($DATA, $uid)['discount_balance'];
         $final = compute_final_price($DATA, $order, $uid);
-        edit_message_text($chat_id, $message_id, premium_invoice_text($plan, $price, $username, $disc, $final), invoice_kb($order['discount_applied']));
+        edit_message_text($chat_id, $message_id, premium_invoice_text($plan, $price, $username, $disc, $final), invoice_kb($order['discount_applied']), 'HTML');
         return;
     }
 
-    if ($data === 'invoice_cancel') { $ust['pending_premium'] = null; $ust['state'] = null; edit_message_text($chat_id, $message_id, T('cancelled')); return; }
+    if ($data === 'invoice_cancel') { $ust['pending_premium'] = null; $ust['state'] = null; edit_message_text($chat_id, $message_id, T('cancelled'), null, 'HTML'); return; }
 
     if ($data === 'invoice_confirm') {
         $order = $ust['pending_premium'] ?? [];
@@ -2475,24 +2540,24 @@ function handle_callback(array $cq, array &$DATA): void {
                 'type' => 'premium', 'chat_id' => $chat_id, 'user_id' => $uid, 'buyer_name' => display_name($user),
                 'plan' => $plan, 'username' => $username, 'price' => $final, 'status' => 'pending', 'created_at' => persian_now_str(),
             ];
-            edit_message_text($chat_id, $message_id, premium_success_text($plan, $username, $final, $order_id));
-            if (ADMIN_CHAT_ID) send_message(ADMIN_CHAT_ID, admin_premium_text($user, $plan, $username, $final, $order_id), admin_order_kb($order_id));
+            edit_message_text($chat_id, $message_id, premium_success_text($plan, $username, $final, $order_id), null, 'HTML');
+            if (ADMIN_CHAT_ID) send_message(ADMIN_CHAT_ID, admin_premium_text($user, $plan, $username, $final, $order_id), admin_order_kb($order_id), 'HTML');
         } else {
             $shortfall = $final - $u['balance'];
             $ust['topup_origin'] = 'invoice';
             $ust['last_invoice_shortfall_price'] = $final;
-            edit_message_text($chat_id, $message_id, insufficient_text($shortfall), insufficient_kb());
+            edit_message_text($chat_id, $message_id, insufficient_text($shortfall), insufficient_kb(), 'HTML');
         }
         return;
     }
 
     /* ---- wallet / top-up ---- */
-    if ($data === 'wallet_increase') { edit_message_text($chat_id, $message_id, T('wallet_increase'), wallet_increase_kb()); return; }
+    if ($data === 'wallet_increase') { edit_message_text($chat_id, $message_id, T('wallet_increase'), wallet_increase_kb(), 'HTML'); return; }
 
     if ($data === 'wallet_back') {
         $balance = get_user($DATA, $uid)['balance'];
         $remaining = get_daily_remaining($DATA, $uid);
-        edit_message_text($chat_id, $message_id, wallet_text($balance, $remaining), wallet_kb());
+        edit_message_text($chat_id, $message_id, wallet_text($balance, $remaining), wallet_kb(), 'HTML');
         return;
     }
 
@@ -2500,7 +2565,7 @@ function handle_callback(array $cq, array &$DATA): void {
         $ust['topup_origin'] = $data === 'topup_from_invoice' ? 'invoice' : 'wallet';
         $ust['state'] = 'awaiting_topup_amount';
         $remaining = get_daily_remaining($DATA, $uid);
-        edit_message_text($chat_id, $message_id, toman_payment_text($remaining), toman_kb());
+        edit_message_text($chat_id, $message_id, toman_payment_text($remaining), toman_kb(), 'HTML');
         return;
     }
 
@@ -2510,9 +2575,9 @@ function handle_callback(array $cq, array &$DATA): void {
         if ($origin === 'invoice') {
             $price = $ust['last_invoice_shortfall_price'] ?? 0;
             $shortfall = max($price - get_user($DATA, $uid)['balance'], 0);
-            edit_message_text($chat_id, $message_id, insufficient_text($shortfall), insufficient_kb());
+            edit_message_text($chat_id, $message_id, insufficient_text($shortfall), insufficient_kb(), 'HTML');
         } else {
-            edit_message_text($chat_id, $message_id, T('wallet_increase'), wallet_increase_kb());
+            edit_message_text($chat_id, $message_id, T('wallet_increase'), wallet_increase_kb(), 'HTML');
         }
         return;
     }
@@ -2520,11 +2585,11 @@ function handle_callback(array $cq, array &$DATA): void {
     if ($data === 'card_back') {
         $ust['state'] = 'awaiting_topup_amount';
         $remaining = get_daily_remaining($DATA, $uid);
-        edit_message_text($chat_id, $message_id, toman_payment_text($remaining), toman_kb());
+        edit_message_text($chat_id, $message_id, toman_payment_text($remaining), toman_kb(), 'HTML');
         return;
     }
 
-    if ($data === 'send_receipt') { $ust['state'] = 'awaiting_receipt_photo'; edit_message_text($chat_id, $message_id, T('receipt_prompt'), receipt_prompt_kb()); return; }
+    if ($data === 'send_receipt') { $ust['state'] = 'awaiting_receipt_photo'; edit_message_text($chat_id, $message_id, T('receipt_prompt'), receipt_prompt_kb(), 'HTML'); return; }
 
     if ($data === 'receipt_back') {
         $pending = $ust['pending_topup'] ?? [];
@@ -2544,7 +2609,7 @@ function handle_callback(array $cq, array &$DATA): void {
             unset($DATA['topup_requests'][$req_id]);
             $old_cap = $message['caption'] ?? '';
             edit_message_caption($chat_id, $message_id, $old_cap . "\n\n✅ تایید شد");
-            send_message($req['chat_id'], approved_text($u['balance']), buy_product_kb());
+            send_message($req['chat_id'], approved_text($u['balance']), buy_product_kb(), 'HTML');
         } else {
             $DATA['admin_waiting_reject'][$chat_id] = $req_id;
             $old_cap = $message['caption'] ?? '';
@@ -2571,19 +2636,19 @@ function handle_callback(array $cq, array &$DATA): void {
             case 'referral_reward': $msgText = referral_reward_done_text($order['key'], $order['username'], $order_id); break;
             default: $msgText = gift_done_text($order['key'], $order['username'], $order['price'], $order_id);
         }
-        send_message($order['chat_id'], $msgText, buy_product_kb());
+        send_message($order['chat_id'], $msgText, buy_product_kb(), 'HTML');
 
         $buyer_name = $order['buyer_name'] ?? 'کاربر';
-        send_message('@' . REPORTS_CHANNEL, report_text($buyer_name, $order), report_kb());
+        send_message('@' . REPORTS_CHANNEL, report_text($buyer_name, $order), report_kb(), 'HTML');
         return;
     }
 
     /* ---- tracking ---- */
-    if ($data === 'track_have_code') { $ust['state'] = 'awaiting_tracking_code'; edit_message_text($chat_id, $message_id, T('track_ask_code'), track_ask_code_kb()); return; }
-    if ($data === 'track_back') { $ust['state'] = null; edit_message_text($chat_id, $message_id, T('track'), track_kb()); return; }
+    if ($data === 'track_have_code') { $ust['state'] = 'awaiting_tracking_code'; edit_message_text($chat_id, $message_id, T('track_ask_code'), track_ask_code_kb(), 'HTML'); return; }
+    if ($data === 'track_back') { $ust['state'] = null; edit_message_text($chat_id, $message_id, T('track'), track_kb(), 'HTML'); return; }
 
     /* ---- referral ---- */
-    if ($data === 'referral_back') { $ust['state'] = null; edit_message_text($chat_id, $message_id, referral_text($DATA, $user), invite_kb()); return; }
+    if ($data === 'referral_back') { $ust['state'] = null; edit_message_text($chat_id, $message_id, referral_text($DATA, $user), invite_kb(), 'HTML'); return; }
 
     if ($data === 'referral_claim_reward') {
         if (!$DATA['referral_points_enabled']) {
@@ -2594,17 +2659,17 @@ function handle_callback(array $cq, array &$DATA): void {
             answer_callback_query($cq['id'], 'هنوز امتیاز کافی نداری! برای دریافت جایزه به ' . REFERRAL_POINTS_REQUIRED . ' امتیاز رفرال نیاز داری.', true);
             return;
         }
-        edit_message_text($chat_id, $message_id, referral_reward_select_text(), referral_reward_select_kb());
+        edit_message_text($chat_id, $message_id, referral_reward_select_text(), referral_reward_select_kb(), 'HTML');
         return;
     }
 
-    if ($data === 'referral_reward_select_back') { $ust['state'] = null; edit_message_text($chat_id, $message_id, referral_reward_select_text(), referral_reward_select_kb()); return; }
+    if ($data === 'referral_reward_select_back') { $ust['state'] = null; edit_message_text($chat_id, $message_id, referral_reward_select_text(), referral_reward_select_kb(), 'HTML'); return; }
 
     if (str_starts_with($data, 'referral_reward_') && in_array(substr($data, strlen('referral_reward_')), REFERRAL_REWARD_GIFTS, true)) {
         $key = substr($data, strlen('referral_reward_'));
         $ust['pending_referral_reward'] = ['key' => $key, 'username' => null];
         $ust['state'] = 'awaiting_referral_username';
-        edit_message_text($chat_id, $message_id, T('ask_username'), ask_referral_username_kb());
+        edit_message_text($chat_id, $message_id, T('ask_username'), ask_referral_username_kb(), 'HTML');
         return;
     }
 
@@ -2614,7 +2679,7 @@ function handle_callback(array $cq, array &$DATA): void {
             $ust['pending_referral_reward'] = $ust['pending_referral_reward'] ?? [];
             $ust['pending_referral_reward']['username'] = $username;
             $ust['state'] = null;
-            edit_message_text($chat_id, $message_id, confirm_username_text($username), confirm_referral_username_kb());
+            edit_message_text($chat_id, $message_id, confirm_username_text($username), confirm_referral_username_kb(), 'HTML');
         } else {
             $ust['state'] = 'awaiting_referral_username';
             edit_message_text($chat_id, $message_id, "شما در تلگرام یوزرنیم ندارید.\nلطفا یوزرنیم شخص مورد نظر را با @ ارسال کنید.", ikb([[ibtn('btn_back', 'referral_reward_select_back')]]));
@@ -2622,17 +2687,17 @@ function handle_callback(array $cq, array &$DATA): void {
         return;
     }
 
-    if ($data === 'referral_confirm_no') { $ust['state'] = 'awaiting_referral_username'; edit_message_text($chat_id, $message_id, T('ask_username'), ask_referral_username_kb()); return; }
+    if ($data === 'referral_confirm_no') { $ust['state'] = 'awaiting_referral_username'; edit_message_text($chat_id, $message_id, T('ask_username'), ask_referral_username_kb(), 'HTML'); return; }
 
     if ($data === 'referral_confirm_yes') {
         $r = $ust['pending_referral_reward'] ?? [];
         $key = $r['key'] ?? '';
         $username = $r['username'] ?? '-';
-        edit_message_text($chat_id, $message_id, referral_reward_invoice_text($key, $username), referral_reward_invoice_kb());
+        edit_message_text($chat_id, $message_id, referral_reward_invoice_text($key, $username), referral_reward_invoice_kb(), 'HTML');
         return;
     }
 
-    if ($data === 'referral_invoice_cancel') { $ust['pending_referral_reward'] = null; $ust['state'] = null; edit_message_text($chat_id, $message_id, T('cancelled')); return; }
+    if ($data === 'referral_invoice_cancel') { $ust['pending_referral_reward'] = null; $ust['state'] = null; edit_message_text($chat_id, $message_id, T('cancelled'), null, 'HTML'); return; }
 
     if ($data === 'referral_invoice_confirm') {
         $r = $ust['pending_referral_reward'] ?? [];
@@ -2643,7 +2708,7 @@ function handle_callback(array $cq, array &$DATA): void {
             $ust['pending_referral_reward'] = null;
             $ust['state'] = null;
             answer_callback_query($cq['id'], '❌ سیستم جایزه دعوت در حال حاضر توسط مدیریت غیرفعال شده است.', true);
-            edit_message_text($chat_id, $message_id, referral_text($DATA, $user), invite_kb());
+            edit_message_text($chat_id, $message_id, referral_text($DATA, $user), invite_kb(), 'HTML');
             return;
         }
         if ($u['score'] < REFERRAL_POINTS_REQUIRED) {
@@ -2660,14 +2725,14 @@ function handle_callback(array $cq, array &$DATA): void {
             'type' => 'referral_reward', 'chat_id' => $chat_id, 'user_id' => $uid, 'buyer_name' => display_name($user),
             'key' => $key, 'username' => $username, 'price' => 0, 'status' => 'pending', 'created_at' => persian_now_str(),
         ];
-        edit_message_text($chat_id, $message_id, referral_reward_success_text($key, $username, $order_id));
-        if (ADMIN_CHAT_ID) send_message(ADMIN_CHAT_ID, admin_referral_reward_text($user, $key, $username, $order_id), admin_order_kb($order_id));
+        edit_message_text($chat_id, $message_id, referral_reward_success_text($key, $username, $order_id), null, 'HTML');
+        if (ADMIN_CHAT_ID) send_message(ADMIN_CHAT_ID, admin_referral_reward_text($user, $key, $username, $order_id), admin_order_kb($order_id), 'HTML');
         return;
     }
 
     /* ---- support ---- */
-    if ($data === 'support_indirect') { $ust['state'] = 'awaiting_support_message'; edit_message_text($chat_id, $message_id, T('support_indirect'), support_indirect_kb()); return; }
-    if ($data === 'support_back') { $ust['state'] = null; edit_message_text($chat_id, $message_id, T('support'), support_kb()); return; }
+    if ($data === 'support_indirect') { $ust['state'] = 'awaiting_support_message'; edit_message_text($chat_id, $message_id, T('support_indirect'), support_indirect_kb(), 'HTML'); return; }
+    if ($data === 'support_back') { $ust['state'] = null; edit_message_text($chat_id, $message_id, T('support'), support_kb(), 'HTML'); return; }
 
     if (str_starts_with($data, 'support_reply_')) {
         $ticket_id = substr($data, strlen('support_reply_'));
@@ -2678,8 +2743,8 @@ function handle_callback(array $cq, array &$DATA): void {
     }
 
     /* ---- stars ---- */
-    if ($data === 'product_stars') { $ust['state'] = 'awaiting_stars_amount'; $ust['pending_stars'] = []; edit_message_text($chat_id, $message_id, stars_buy_text(), stars_back_kb()); return; }
-    if ($data === 'stars_back_to_amount') { $ust['state'] = 'awaiting_stars_amount'; $ust['pending_stars'] = []; edit_message_text($chat_id, $message_id, stars_buy_text(), stars_back_kb()); return; }
+    if ($data === 'product_stars') { $ust['state'] = 'awaiting_stars_amount'; $ust['pending_stars'] = []; edit_message_text($chat_id, $message_id, stars_buy_text(), stars_back_kb(), 'HTML'); return; }
+    if ($data === 'stars_back_to_amount') { $ust['state'] = 'awaiting_stars_amount'; $ust['pending_stars'] = []; edit_message_text($chat_id, $message_id, stars_buy_text(), stars_back_kb(), 'HTML'); return; }
 
     if ($data === 'stars_username_self') {
         if (!empty($user['username'])) {
@@ -2687,7 +2752,7 @@ function handle_callback(array $cq, array &$DATA): void {
             $ust['pending_stars'] = $ust['pending_stars'] ?? [];
             $ust['pending_stars']['username'] = $username;
             $ust['state'] = null;
-            edit_message_text($chat_id, $message_id, confirm_username_text($username), confirm_stars_username_kb());
+            edit_message_text($chat_id, $message_id, confirm_username_text($username), confirm_stars_username_kb(), 'HTML');
         } else {
             $ust['state'] = 'awaiting_stars_username';
             edit_message_text($chat_id, $message_id, "شما در تلگرام یوزرنیم ندارید.\nلطفا یوزرنیم شخص مورد نظر را با @ ارسال کنید.", ikb([[ibtn('btn_back', 'stars_back_to_amount')]]));
@@ -2695,7 +2760,7 @@ function handle_callback(array $cq, array &$DATA): void {
         return;
     }
 
-    if ($data === 'stars_confirm_no') { $ust['state'] = 'awaiting_stars_username'; edit_message_text($chat_id, $message_id, T('ask_username'), ask_stars_username_kb()); return; }
+    if ($data === 'stars_confirm_no') { $ust['state'] = 'awaiting_stars_username'; edit_message_text($chat_id, $message_id, T('ask_username'), ask_stars_username_kb(), 'HTML'); return; }
 
     if ($data === 'stars_confirm_yes') {
         $s = &$ust['pending_stars'];
@@ -2706,7 +2771,7 @@ function handle_callback(array $cq, array &$DATA): void {
         $s['discount_applied'] = false;
         $price = $s['price'];
         $disc = get_user($DATA, $uid)['discount_balance'];
-        edit_message_text($chat_id, $message_id, stars_invoice_text($count, $username, $price, $disc, $price), stars_invoice_kb(false));
+        edit_message_text($chat_id, $message_id, stars_invoice_text($count, $username, $price, $disc, $price), stars_invoice_kb(false), 'HTML');
         return;
     }
 
@@ -2719,11 +2784,11 @@ function handle_callback(array $cq, array &$DATA): void {
         $price = $s['price'] ?? ($count * $DATA['stars_price']);
         $disc = get_user($DATA, $uid)['discount_balance'];
         $final = compute_final_price($DATA, $s, $uid);
-        edit_message_text($chat_id, $message_id, stars_invoice_text($count, $username, $price, $disc, $final), stars_invoice_kb($s['discount_applied']));
+        edit_message_text($chat_id, $message_id, stars_invoice_text($count, $username, $price, $disc, $final), stars_invoice_kb($s['discount_applied']), 'HTML');
         return;
     }
 
-    if ($data === 'stars_invoice_cancel') { $ust['pending_stars'] = null; $ust['state'] = null; edit_message_text($chat_id, $message_id, T('cancelled')); return; }
+    if ($data === 'stars_invoice_cancel') { $ust['pending_stars'] = null; $ust['state'] = null; edit_message_text($chat_id, $message_id, T('cancelled'), null, 'HTML'); return; }
 
     if ($data === 'stars_invoice_confirm') {
         $s = $ust['pending_stars'] ?? [];
@@ -2743,22 +2808,22 @@ function handle_callback(array $cq, array &$DATA): void {
                 'type' => 'stars', 'chat_id' => $chat_id, 'user_id' => $uid, 'buyer_name' => display_name($user),
                 'count' => $count, 'username' => $username, 'price' => $final, 'status' => 'pending', 'created_at' => persian_now_str(),
             ];
-            edit_message_text($chat_id, $message_id, stars_success_text($count, $username, $final, $order_id));
-            if (ADMIN_CHAT_ID) send_message(ADMIN_CHAT_ID, admin_stars_text($user, $count, $username, $final, $order_id), admin_order_kb($order_id));
+            edit_message_text($chat_id, $message_id, stars_success_text($count, $username, $final, $order_id), null, 'HTML');
+            if (ADMIN_CHAT_ID) send_message(ADMIN_CHAT_ID, admin_stars_text($user, $count, $username, $final, $order_id), admin_order_kb($order_id), 'HTML');
         } else {
             $shortfall = $final - $u['balance'];
             $ust['topup_origin'] = 'invoice';
             $ust['last_invoice_shortfall_price'] = $final;
-            edit_message_text($chat_id, $message_id, insufficient_text($shortfall), insufficient_kb());
+            edit_message_text($chat_id, $message_id, insufficient_text($shortfall), insufficient_kb(), 'HTML');
         }
         return;
     }
 
     /* ---- ton ---- */
-    if ($data === 'product_buy_ton') { $ust['state'] = 'awaiting_ton_amount'; $ust['pending_ton'] = []; edit_message_text($chat_id, $message_id, ton_buy_text($DATA), ton_back_kb()); return; }
-    if ($data === 'ton_back_to_amount') { $ust['state'] = 'awaiting_ton_amount'; $ust['pending_ton'] = []; edit_message_text($chat_id, $message_id, ton_buy_text($DATA), ton_back_kb()); return; }
-    if ($data === 'ton_memo_yes') { $ust['state'] = 'awaiting_ton_memo'; edit_message_text($chat_id, $message_id, T('ton_memo_input'), ton_memo_input_kb()); return; }
-    if ($data === 'ton_memo_input_back') { $ust['state'] = null; edit_message_text($chat_id, $message_id, T('ton_memo_question'), ton_memo_kb()); return; }
+    if ($data === 'product_buy_ton') { $ust['state'] = 'awaiting_ton_amount'; $ust['pending_ton'] = []; edit_message_text($chat_id, $message_id, ton_buy_text($DATA), ton_back_kb(), 'HTML'); return; }
+    if ($data === 'ton_back_to_amount') { $ust['state'] = 'awaiting_ton_amount'; $ust['pending_ton'] = []; edit_message_text($chat_id, $message_id, ton_buy_text($DATA), ton_back_kb(), 'HTML'); return; }
+    if ($data === 'ton_memo_yes') { $ust['state'] = 'awaiting_ton_memo'; edit_message_text($chat_id, $message_id, T('ton_memo_input'), ton_memo_input_kb(), 'HTML'); return; }
+    if ($data === 'ton_memo_input_back') { $ust['state'] = null; edit_message_text($chat_id, $message_id, T('ton_memo_question'), ton_memo_kb(), 'HTML'); return; }
 
     if ($data === 'ton_memo_skip') {
         $ton = &$ust['pending_ton'];
@@ -2770,11 +2835,11 @@ function handle_callback(array $cq, array &$DATA): void {
         $ton['discount_applied'] = false;
         $price = $ton['price'];
         $disc = get_user($DATA, $uid)['discount_balance'];
-        edit_message_text($chat_id, $message_id, ton_invoice_text($amount, $wallet, 'ندارد', $price, $disc, $price), ton_invoice_kb(false));
+        edit_message_text($chat_id, $message_id, ton_invoice_text($amount, $wallet, 'ندارد', $price, $disc, $price), ton_invoice_kb(false), 'HTML');
         return;
     }
 
-    if ($data === 'ton_memo_back') { $ust['state'] = 'awaiting_ton_wallet'; edit_message_text($chat_id, $message_id, T('ton_wallet_ask'), ton_wallet_back_kb()); return; }
+    if ($data === 'ton_memo_back') { $ust['state'] = 'awaiting_ton_wallet'; edit_message_text($chat_id, $message_id, T('ton_wallet_ask'), ton_wallet_back_kb(), 'HTML'); return; }
 
     if ($data === 'ton_invoice_discount') {
         $ton = &$ust['pending_ton'];
@@ -2786,11 +2851,11 @@ function handle_callback(array $cq, array &$DATA): void {
         $price = $ton['price'] ?? (int) ($amount * $DATA['ton_price']);
         $disc = get_user($DATA, $uid)['discount_balance'];
         $final = compute_final_price($DATA, $ton, $uid);
-        edit_message_text($chat_id, $message_id, ton_invoice_text($amount, $wallet, $memo, $price, $disc, $final), ton_invoice_kb($ton['discount_applied']));
+        edit_message_text($chat_id, $message_id, ton_invoice_text($amount, $wallet, $memo, $price, $disc, $final), ton_invoice_kb($ton['discount_applied']), 'HTML');
         return;
     }
 
-    if ($data === 'ton_invoice_cancel') { $ust['pending_ton'] = null; $ust['state'] = null; edit_message_text($chat_id, $message_id, T('cancelled')); return; }
+    if ($data === 'ton_invoice_cancel') { $ust['pending_ton'] = null; $ust['state'] = null; edit_message_text($chat_id, $message_id, T('cancelled'), null, 'HTML'); return; }
 
     if ($data === 'ton_invoice_confirm') {
         $ton = $ust['pending_ton'] ?? [];
@@ -2811,13 +2876,13 @@ function handle_callback(array $cq, array &$DATA): void {
                 'type' => 'ton', 'chat_id' => $chat_id, 'user_id' => $uid, 'buyer_name' => display_name($user),
                 'amount' => $amount, 'wallet' => $wallet, 'memo' => $memo, 'price' => $final, 'status' => 'pending', 'created_at' => persian_now_str(),
             ];
-            edit_message_text($chat_id, $message_id, ton_success_text($amount, $wallet, $final, $order_id));
+            edit_message_text($chat_id, $message_id, ton_success_text($amount, $wallet, $final, $order_id), null, 'HTML');
             if (ADMIN_CHAT_ID) send_message(ADMIN_CHAT_ID, admin_ton_text($user, $amount, $wallet, $memo, $final, $order_id), admin_order_kb($order_id), 'HTML');
         } else {
             $shortfall = $final - $u['balance'];
             $ust['topup_origin'] = 'invoice';
             $ust['last_invoice_shortfall_price'] = $final;
-            edit_message_text($chat_id, $message_id, insufficient_text($shortfall), insufficient_kb());
+            edit_message_text($chat_id, $message_id, insufficient_text($shortfall), insufficient_kb(), 'HTML');
         }
         return;
     }
@@ -2876,7 +2941,7 @@ function handle_callback(array $cq, array &$DATA): void {
         $broadcast_text = $ust['broadcast_text'] ?? '';
         $success = 0; $fail = 0;
         foreach (array_keys($DATA['users']) as $buid) {
-            $res = send_message($buid, broadcast_message_text($broadcast_text));
+            $res = send_message($buid, broadcast_message_text($broadcast_text), null, 'HTML');
             if ($res && !empty($res['ok'])) $success++; else $fail++;
         }
         $ust['broadcast_text'] = null;
