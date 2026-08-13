@@ -176,6 +176,73 @@ const TEXT_PLACEHOLDERS = [
     'broadcast_message' => ['{text}'],
 ];
 
+const TEXT_LABELS = [
+    'welcome' => 'پیام خوش‌آمدگویی',
+    'product_menu' => 'منوی محصولات',
+    'join' => 'درخواست عضویت در کانال',
+    'join_confirmed' => 'تایید عضویت در کانال',
+    'bot_off' => 'پیام خاموش بودن ربات',
+    'trust' => 'متن اعتمادسازی',
+    'cancelled' => 'پیام لغو سفارش',
+    'ask_username' => 'درخواست یوزرنیم گیرنده',
+    'confirm_username' => 'تایید یوزرنیم',
+    'insufficient' => 'پیام کمبود موجودی',
+    'premium_menu' => 'منوی پرمیوم',
+    'premium_invoice' => 'فاکتور خرید پرمیوم',
+    'premium_success' => 'ثبت موفق سفارش پرمیوم',
+    'premium_done' => 'تکمیل سفارش پرمیوم',
+    'stars_buy' => 'متن خرید استارز',
+    'stars_min_error' => 'خطای حداقل خرید استارز',
+    'stars_invoice' => 'فاکتور خرید استارز',
+    'stars_success' => 'ثبت موفق سفارش استارز',
+    'stars_done' => 'تکمیل سفارش استارز',
+    'gift_list' => 'متن لیست گیفت‌ها',
+    'gift_comment_type' => 'انتخاب نوع کامنت گیفت',
+    'gift_comment_input' => 'دریافت متن کامنت گیفت',
+    'gift_invoice' => 'فاکتور خرید گیفت',
+    'gift_success' => 'ثبت موفق سفارش گیفت',
+    'gift_done' => 'تکمیل سفارش گیفت',
+    'ton_buy' => 'متن خرید ارز تون',
+    'ton_wallet_ask' => 'درخواست آدرس ولت تون',
+    'ton_memo_question' => 'سوال ممو/کامنت ولت',
+    'ton_memo_input' => 'دریافت ممو/کامنت ولت',
+    'ton_invoice' => 'فاکتور خرید تون',
+    'ton_success' => 'ثبت موفق سفارش تون',
+    'ton_done' => 'تکمیل سفارش تون',
+    'wallet_increase' => 'منوی افزایش موجودی',
+    'wallet' => 'متن کیف پول',
+    'toman_payment' => 'متن پرداخت تومانی',
+    'receipt_prompt' => 'درخواست ارسال رسید',
+    'receipt_sent' => 'تایید ارسال رسید',
+    'card_details' => 'اطلاعات شماره کارت',
+    'approved' => 'تایید افزایش موجودی',
+    'rejected' => 'رد افزایش موجودی',
+    'daily_limit_exceeded' => 'اتمام سقف روزانه (مبلغ باقیمانده)',
+    'daily_limit_exceeded_zero' => 'اتمام کامل سقف روزانه',
+    'track' => 'منوی پیگیری سفارش',
+    'track_ask_code' => 'درخواست کد پیگیری',
+    'track_not_found' => 'پیام نبود کد پیگیری',
+    'order_status' => 'نمایش وضعیت سفارش',
+    'support' => 'منوی پشتیبانی',
+    'support_indirect' => 'درخواست پیام برای پشتیبانی',
+    'support_sent_confirm' => 'تایید ارسال پیام پشتیبانی',
+    'referral' => 'منوی رفرال',
+    'referral_notification' => 'اطلاع‌رسانی رفرال جدید',
+    'referral_reward_select' => 'انتخاب جایزه رفرال',
+    'referral_reward_invoice' => 'فاکتور جایزه رفرال',
+    'referral_reward_success' => 'ثبت موفق جایزه رفرال',
+    'referral_reward_done' => 'تکمیل جایزه رفرال',
+    'admin_premium_order' => 'اعلان سفارش پرمیوم به ادمین',
+    'admin_stars_order' => 'اعلان سفارش استارز به ادمین',
+    'admin_gift_order' => 'اعلان سفارش گیفت به ادمین',
+    'admin_ton_order' => 'اعلان سفارش تون به ادمین',
+    'admin_support_notify' => 'اعلان تیکت پشتیبانی به ادمین',
+    'admin_referral_reward_order' => 'اعلان جایزه رفرال به ادمین',
+    'admin_topup_caption' => 'اعلان درخواست شارژ به ادمین',
+    'report' => 'گزارش خرید در کانال ریپورت',
+    'broadcast_message' => 'قالب پیام همگانی',
+];
+
 const BUTTON_CATEGORIES = [
     'welcome' => ['menu_buy', 'menu_topup', 'menu_referral', 'menu_account', 'menu_track', 'menu_support', 'menu_trust', 'menu_admin',
         'btn_back', 'btn_back_to_menu', 'btn_self', 'btn_yes_short', 'btn_no_short', 'btn_confirm', 'btn_cancel',
@@ -1709,14 +1776,14 @@ function category_button_slugs(string $cat): array {
 
 function admin_text_list_kb(string $cat): array {
     $rows = [];
-    foreach (TEXT_CATEGORIES[$cat] ?? [] as $slug) $rows[] = [btn($slug, "admin_text_pick_{$slug}")];
+    foreach (TEXT_CATEGORIES[$cat] ?? [] as $slug) $rows[] = [btn(TEXT_LABELS[$slug] ?? $slug, "admin_text_pick_{$slug}")];
     $rows[] = [ibtn('btn_back', 'admin_edit_texts')];
     return ikb($rows);
 }
 
 function admin_button_list_kb(string $cat): array {
     $rows = [];
-    foreach (category_button_slugs($cat) as $slug) $rows[] = [btn($slug . ' — ' . B($slug), "admin_btn_pick_{$slug}")];
+    foreach (category_button_slugs($cat) as $slug) $rows[] = [btn(B($slug), "admin_btn_pick_{$slug}")];
     $rows[] = [ibtn('btn_back', 'admin_edit_buttons')];
     return ikb($rows);
 }
@@ -1732,13 +1799,15 @@ function admin_button_detail_kb(string $slug): array {
 function admin_text_detail_body(string $slug): string {
     $placeholders = TEXT_PLACEHOLDERS[$slug] ?? [];
     $ph = $placeholders ? implode(' ', $placeholders) : 'ندارد';
-    return "🔤 اسلاگ: {$slug}\n📌 پلیس‌هولدرهای مجاز: {$ph}\n\n📄 متن فعلی:\n" . text_raw($slug) .
+    $title = TEXT_LABELS[$slug] ?? $slug;
+    return "📝 عنوان: {$title}\n📌 پلیس‌هولدرهای مجاز: {$ph}\n\n📄 متن فعلی:\n" . text_raw($slug) .
         "\n\n✍️ برای تغییر، متن جدید رو همینجا (به صورت پیام معمولی) بفرست.";
 }
 
 function admin_button_detail_body(string $slug): string {
-    $style = BS($slug) ?? 'پیش‌فرض';
-    return "🔤 اسلاگ: {$slug}\n🏷 برچسب فعلی: " . B($slug) . "\n🎨 رنگ فعلی: {$style}\n\n" .
+    $style_names = ['primary' => 'آبی 🔵', 'success' => 'سبز 🟢', 'danger' => 'قرمز 🔴'];
+    $style = $style_names[BS($slug) ?? ''] ?? 'پیش‌فرض ⚪️';
+    return "🏷 برچسب فعلی: " . B($slug) . "\n🎨 رنگ فعلی: {$style}\n\n" .
         '✍️ برای تغییر نام، برچسب جدید رو همینجا (به صورت پیام معمولی) بفرست.';
 }
 
