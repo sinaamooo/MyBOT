@@ -120,6 +120,7 @@ const CATEGORY_LABELS = [
     'stars'      => '⭐️ استارز',
     'gift'       => '🎁 گیفت',
     'ton'        => '💱 تون',
+    'custom_product' => '🛒 محصولات سفارشی',
     'wallet'     => '👛 شارژ کیف‌پول',
     'track'      => '📦 پیگیری سفارش',
     'support'    => '📞 پشتیبانی',
@@ -134,11 +135,12 @@ const TEXT_CATEGORIES = [
     'stars' => ['stars_buy', 'stars_min_error', 'stars_invoice', 'stars_success', 'stars_done'],
     'gift' => ['gift_list', 'gift_comment_type', 'gift_comment_input', 'gift_invoice', 'gift_success', 'gift_done'],
     'ton' => ['ton_buy', 'ton_wallet_ask', 'ton_memo_question', 'ton_memo_input', 'ton_invoice', 'ton_success', 'ton_done'],
+    'custom_product' => ['custom_product_success', 'custom_product_done'],
     'wallet' => ['wallet_increase', 'wallet', 'toman_payment', 'receipt_prompt', 'receipt_sent', 'card_details', 'approved', 'rejected', 'daily_limit_exceeded', 'daily_limit_exceeded_zero'],
     'track' => ['track', 'track_ask_code', 'track_not_found', 'order_status'],
     'support' => ['support', 'support_indirect', 'support_sent_confirm'],
     'referral' => ['referral', 'referral_notification', 'referral_reward_select', 'referral_reward_invoice', 'referral_reward_success', 'referral_reward_done'],
-    'admin_msgs' => ['admin_premium_order', 'admin_stars_order', 'admin_gift_order', 'admin_ton_order', 'admin_support_notify', 'admin_referral_reward_order', 'admin_topup_caption', 'report', 'broadcast_message'],
+    'admin_msgs' => ['admin_premium_order', 'admin_stars_order', 'admin_gift_order', 'admin_ton_order', 'admin_custom_product_order', 'admin_support_notify', 'admin_referral_reward_order', 'admin_topup_caption', 'report', 'broadcast_message'],
     'admin_ops' => ['admin_ask_stars_price', 'admin_ask_ton_price', 'admin_ask_premium_price', 'admin_ask_gift_price', 'admin_ask_daily_limit', 'admin_ask_profit',
         'admin_numeric_error', 'admin_positive_number_error', 'admin_positive_percent_error'],
 ];
@@ -158,6 +160,8 @@ const TEXT_PLACEHOLDERS = [
     'ton_buy' => ['{price}', '{min}'], 'ton_wallet_ask' => [], 'ton_memo_question' => [], 'ton_memo_input' => [],
     'ton_invoice' => ['{amount}', '{wallet}', '{memo}', '{price}', '{discount}', '{max_discount}', '{final}'],
     'ton_success' => ['{amount}', '{wallet}', '{price}', '{order_id}'], 'ton_done' => ['{amount}', '{wallet}', '{price}', '{order_id}'],
+    'custom_product_success' => ['{name}', '{username}', '{price}', '{order_id}'],
+    'custom_product_done' => ['{name}', '{username}', '{price}', '{order_id}'],
     'wallet_increase' => [], 'wallet' => ['{balance}', '{remaining}'], 'toman_payment' => ['{remaining}'],
     'receipt_prompt' => [], 'receipt_sent' => [], 'card_details' => ['{amount}', '{card_number}', '{card_holder}'],
     'approved' => ['{balance}'], 'rejected' => ['{reason}'], 'daily_limit_exceeded' => ['{remaining}'], 'daily_limit_exceeded_zero' => [],
@@ -172,6 +176,7 @@ const TEXT_PLACEHOLDERS = [
     'admin_stars_order' => ['{user_name}', '{username_at}', '{user_id}', '{count}', '{buy_username}', '{price}', '{order_id}'],
     'admin_gift_order' => ['{user_name}', '{username_at}', '{user_id}', '{gift}', '{buy_username}', '{hide}', '{comment}', '{price}', '{order_id}'],
     'admin_ton_order' => ['{user_name}', '{username_at}', '{user_id}', '{amount}', '{wallet}', '{memo}', '{price}', '{order_id}'],
+    'admin_custom_product_order' => ['{user_name}', '{username_at}', '{user_id}', '{name}', '{buy_username}', '{price}', '{order_id}'],
     'admin_support_notify' => ['{user_name}', '{username_at}', '{user_id}', '{message}'],
     'admin_referral_reward_order' => ['{user_name}', '{username_at}', '{user_id}', '{gift}', '{buy_username}', '{order_id}'],
     'admin_topup_caption' => ['{user_name}', '{username_at}', '{user_id}', '{amount}', '{req_id}'],
@@ -216,6 +221,8 @@ const TEXT_LABELS = [
     'ton_invoice' => 'فاکتور خرید تون',
     'ton_success' => 'ثبت موفق سفارش تون',
     'ton_done' => 'تکمیل سفارش تون',
+    'custom_product_success' => 'ثبت موفق سفارش محصول سفارشی',
+    'custom_product_done' => 'تکمیل سفارش محصول سفارشی',
     'wallet_increase' => 'منوی افزایش موجودی',
     'wallet' => 'متن کیف پول',
     'toman_payment' => 'متن پرداخت تومانی',
@@ -243,6 +250,7 @@ const TEXT_LABELS = [
     'admin_stars_order' => 'اعلان سفارش استارز به ادمین',
     'admin_gift_order' => 'اعلان سفارش گیفت به ادمین',
     'admin_ton_order' => 'اعلان سفارش تون به ادمین',
+    'admin_custom_product_order' => 'اعلان سفارش محصول سفارشی به ادمین',
     'admin_support_notify' => 'اعلان تیکت پشتیبانی به ادمین',
     'admin_referral_reward_order' => 'اعلان جایزه رفرال به ادمین',
     'admin_topup_caption' => 'اعلان درخواست شارژ به ادمین',
@@ -276,14 +284,15 @@ const BUTTON_CATEGORIES = [
         'btn_admin_edit_daily_limit', 'btn_admin_edit_profit', 'btn_no_plain', 'btn_admin_edit_texts', 'btn_admin_edit_buttons'],
 ];
 
-// Inline-keyboard groups the admin can re-chunk into 1/2/3 columns per row
-// (data.layout[group] => column count). Scoped to columns-per-row, not
-// free-form per-button drag reordering.
+// Inline-keyboard groups the admin can re-lay-out via a free-form row-size
+// pattern (data.layout[group] => [row1_size, row2_size, ...], each size
+// 1-3). Buttons beyond what the pattern accounts for spill into extra rows
+// sized like the pattern's last row - see chunk_by_pattern().
 const LAYOUT_GROUPS = [
-    'products'      => ['label' => '🛒 منوی محصولات', 'default' => 2],
-    'premium_plans' => ['label' => '💎 انتخاب پلن پرمیوم', 'default' => 3],
-    'gift_list'     => ['label' => '🎁 لیست گیفت‌ها', 'default' => 2],
-    'admin_panel'   => ['label' => '🛠 منوی اصلی پنل ادمین', 'default' => 1],
+    'products'      => ['label' => '🛒 منوی محصولات', 'default_pattern' => [2, 2, 1]],
+    'premium_plans' => ['label' => '💎 انتخاب پلن پرمیوم', 'default_pattern' => [3]],
+    'gift_list'     => ['label' => '🎁 لیست گیفت‌ها', 'default_pattern' => [2]],
+    'admin_panel'   => ['label' => '🛠 منوی اصلی پنل ادمین', 'default_pattern' => [1]],
 ];
 
 function default_texts(): array {
@@ -516,6 +525,22 @@ function default_texts(): array {
             "🔓 کد پیگیری سفارش: {order_id}\n\n" .
             "😊 از اعتماد و انتخاب شما سپاسگزاریم.",
 
+        'custom_product_success' => "✅ سفارش شما با موفقیت ثبت شد!\n\n" .
+            "⛏️ نوع خدمات: {name}\n" .
+            "📎 یوزر دریافت‌کننده: {username}\n" .
+            "💰 مبلغ پرداختی:  {price} تومان\n" .
+            "🔑 کد پیگیری سفارش : {order_id}\n\n" .
+            "⏳ سفارش شما در حال پردازش است و به‌زودی وضعیت آن از طریق ربات اطلاع‌رسانی خواهد شد.\n\n" .
+            "🙏 از اعتماد شما سپاسگزاریم.",
+
+        'custom_product_done' => "✅ سفارش شما با موفقیت انجام شد 🎉\n\n" .
+            "☝️اطلاعات سفارش:\n\n" .
+            "ℹ️ نوع خدمات: {name}\n" .
+            "📎 یوزر دریافت‌کننده: {username}\n" .
+            "💳 مبلغ نهایی پرداخت شده:  {price} تومان\n" .
+            "🔓 کد پیگیری سفارش: {order_id}\n\n" .
+            "😊 از اعتماد و انتخاب شما سپاسگزاریم.",
+
         'wallet_increase' => "💰 افـزایـش مـوجـودی حساب شما\n\n" .
             "شما می‌توانید موجودی خود را به دو روش امن و سریع افزایش دهید :\n\n" .
             "💳 پرداخت تومانی – پس از واریز ، موجودی شما به سرعت با تایید پشتیبانی شارژ میشود.\n\n" .
@@ -655,6 +680,13 @@ function default_texts(): array {
             "💫 مقدار: {amount} TON\n" .
             "🏦 آدرس ولت:\n<code>{wallet}</code>\n" .
             "💬 ممو: {memo}\n" .
+            "💰 مبلغ پرداخت‌شده: {price} تومان\n" .
+            "🔢 کد پیگیری: {order_id}",
+
+        'admin_custom_product_order' => "🛒 سفارش جدید - {name}\n\n" .
+            "👤 کاربر: {user_name} ({username_at})\n" .
+            "🆔 آیدی عددی: {user_id}\n" .
+            "📎 یوزر دریافت‌کننده: {buy_username}\n" .
             "💰 مبلغ پرداخت‌شده: {price} تومان\n" .
             "🔢 کد پیگیری: {order_id}",
 
@@ -866,13 +898,16 @@ function button_default(string $slug): string {
     static $defaults = null;
     if ($defaults === null) $defaults = default_buttons();
     if (isset($defaults[$slug])) return $defaults[$slug];
+    $store = $GLOBALS['STORE'] ?? [];
     if (str_starts_with($slug, 'gift_item_')) {
         $key = substr($slug, strlen('gift_item_'));
-        if (isset(GIFTS_META[$key])) return gift_button_default($key);
+        $gifts = all_gifts($store);
+        if (isset($gifts[$key])) return gift_button_default($key, $gifts[$key]);
     }
     if (str_starts_with($slug, 'admin_gift_price_btn_')) {
         $key = substr($slug, strlen('admin_gift_price_btn_'));
-        if (isset(GIFTS_META[$key])) return admin_gift_price_button_default($key);
+        $gifts = all_gifts($store);
+        if (isset($gifts[$key])) return admin_gift_price_button_default($key, $gifts[$key]);
     }
     return $slug;
 }
@@ -928,9 +963,9 @@ function all_text_slugs(): array {
     return $out;
 }
 
-function all_button_slugs(): array {
+function all_button_slugs(array &$DATA): array {
     $out = [];
-    foreach (BUTTON_CATEGORIES as $cat => $slugs) $out = array_merge($out, category_button_slugs($cat));
+    foreach (BUTTON_CATEGORIES as $cat => $slugs) $out = array_merge($out, category_button_slugs($DATA, $cat));
     return $out;
 }
 
@@ -939,8 +974,8 @@ function text_category_of(string $slug): ?string {
     return null;
 }
 
-function button_category_of(string $slug): ?string {
-    foreach (BUTTON_CATEGORIES as $cat => $slugs) if (in_array($slug, category_button_slugs($cat), true)) return $cat;
+function button_category_of(array &$DATA, string $slug): ?string {
+    foreach (BUTTON_CATEGORIES as $cat => $slugs) if (in_array($slug, category_button_slugs($DATA, $cat), true)) return $cat;
     return null;
 }
 
@@ -982,9 +1017,58 @@ function reset_button(array &$DATA, string $slug): void {
     unset($DATA['buttons'][$slug]);
 }
 
-function get_layout_columns(array &$DATA, string $group, int $default): int {
-    $val = (int) ($DATA['layout'][$group] ?? $default);
-    return in_array($val, [1, 2, 3], true) ? $val : $default;
+// Row-size pattern for a layout group, e.g. [2, 1, 2] = 2 buttons on row 1,
+// 1 on row 2, 2 on row 3. Falls back to $default_pattern when nothing valid
+// is stored (missing, corrupted, or any entry outside 1-3).
+function get_layout_pattern(array &$DATA, string $group, array $default_pattern): array {
+    $stored = $DATA['layout'][$group] ?? null;
+    if (!is_array($stored) || $stored === []) return $default_pattern;
+    $pattern = [];
+    foreach ($stored as $v) {
+        $n = (int) $v;
+        if ($n < 1 || $n > 3) return $default_pattern;
+        $pattern[] = $n;
+    }
+    return $pattern ?: $default_pattern;
+}
+
+// Splits $buttons into rows sized by $pattern, in order. If $buttons has
+// more items than $pattern accounts for (e.g. an admin adds new gifts/
+// products after setting the layout), the leftovers spill into extra rows
+// sized like $pattern's last row (minimum 1) instead of being dropped. If
+// $buttons runs out first, stops early - never an empty row or a row
+// referencing a button that doesn't exist.
+function chunk_by_pattern(array $buttons, array $pattern): array {
+    $rows = [];
+    $i = 0;
+    $n = count($buttons);
+    foreach ($pattern as $size) {
+        if ($i >= $n) break;
+        $size = max(1, (int) $size);
+        $rows[] = array_slice($buttons, $i, $size);
+        $i += $size;
+    }
+    $last = $pattern ? max(1, (int) end($pattern)) : 1;
+    while ($i < $n) {
+        $rows[] = array_slice($buttons, $i, $last);
+        $i += $last;
+    }
+    return $rows;
+}
+
+// Parses an admin's free-text layout pattern like "2,1,2" or "2 1 2" into
+// [2, 1, 2]. Returns null on any invalid token (not 1-3) or an empty input.
+function parse_layout_pattern(string $text): ?array {
+    $parts = preg_split('/[,\s]+/', trim($text), -1, PREG_SPLIT_NO_EMPTY);
+    if (!$parts) return null;
+    $out = [];
+    foreach ($parts as $p) {
+        if (!ctype_digit($p)) return null;
+        $n = (int) $p;
+        if ($n < 1 || $n > 3) return null;
+        $out[] = $n;
+    }
+    return $out ?: null;
 }
 
 /* ===================== DYNAMIC TEXT HELPERS ===================== */
@@ -1061,8 +1145,42 @@ function admin_stars_text($user, $count, $username, $price, $order_id): string {
         '{user_id}' => $user['id'], '{count}' => $count, '{buy_username}' => $username, '{price}' => fmt($price), '{order_id}' => $order_id]);
 }
 
+function custom_product_success_text(string $name, string $username, int $price, string $order_id): string {
+    return T('custom_product_success', ['{name}' => $name, '{username}' => $username, '{price}' => fmt($price), '{order_id}' => $order_id]);
+}
+
+function custom_product_done_text(string $name, string $username, int $price, string $order_id): string {
+    return T('custom_product_done', ['{name}' => $name, '{username}' => $username, '{price}' => fmt($price), '{order_id}' => $order_id]);
+}
+
+function admin_custom_product_text($user, string $name, string $username, int $price, string $order_id): string {
+    return T('admin_custom_product_order', ['{user_name}' => display_name($user), '{username_at}' => username_at($user),
+        '{user_id}' => $user['id'], '{name}' => $name, '{buy_username}' => $username, '{price}' => fmt($price), '{order_id}' => $order_id]);
+}
+
+// Plain (non-editable) invoice text for the generic custom-product flow -
+// kept deliberately outside the T()/B() store, same as e.g.
+// admin_channel_add_ask_text(): an admin-tool-internal prompt, not a
+// user-facing template the spec asked to make editable.
+function custom_product_invoice_text(string $name, string $username, int $price, int $disc, int $final): string {
+    return "📑 فاکتور خرید {$name}\n\n" .
+        "📎 یوزر دریافت‌کننده: {$username}\n\n" .
+        '💰 مبلغ فاکتور:  ' . fmt($price) . " تومان\n" .
+        '🎁 کل موجودی تخفیف:  ' . fmt($disc) . " تومان\n\n" .
+        '💡 حداکثر تخفیف قابل اعمال:  ' . fmt(min($disc, $price)) . " تومان\n\n" .
+        '💳 مبلغ نهایی:  ' . fmt($final) . " تومان\n\n" .
+        "🍾 در صورتی که جزئیات بالا مورد تأیید شماست \n\n" .
+        'روی دکمه «تأیید ✅» کلیک کنید.';
+}
+
+function custom_product_detail_text(array $p): string {
+    return "🛒 {$p['name']}\n\n💰 قیمت: " . fmt($p['price']) . " تومان\n\n📝 توضیحات:\n{$p['description']}\n\nبرای ادامه، دکمه زیر رو بزن:";
+}
+
 function gift_label(string $key): string {
-    $g = GIFTS_META[$key];
+    $store = $GLOBALS['STORE'] ?? [];
+    $gifts = all_gifts($store);
+    $g = $gifts[$key] ?? ['name' => $key, 'stars' => 0];
     return "گیفت {$g['name']} ({$g['stars']} ⭐️)";
 }
 
@@ -1096,6 +1214,7 @@ function order_report_fields(array $order): array {
     if ($order['type'] === 'ton') return ['خرید ارز تون', '💱', "{$order['amount']} TON"];
     if ($order['type'] === 'stars') return ['استارز تلگرام', '⭐️', "{$order['count']} 🌟"];
     if ($order['type'] === 'referral_reward') return ['جایزه رفرال', '🎁', gift_label($order['key'])];
+    if ($order['type'] === 'custom_product') return [$order['name'], '🛒', '1 عدد'];
     return ['گیفت استارز', '🎁', gift_label($order['key'])];
 }
 
@@ -1130,6 +1249,10 @@ function order_status_text(array $order): string {
         $label = 'جایزه رفرال'; $emoji = '🎁';
         $qty = gift_label($order['key']);
         $extra = "📎 یوزر دریافت‌کننده: {$order['username']}";
+    } elseif ($type_ === 'custom_product') {
+        $label = $order['name']; $emoji = '🛒';
+        $qty = '1 عدد';
+        $extra = "📎 یوزر دریافت‌کننده: {$order['username']}";
     } else {
         $label = 'گیفت استارز'; $emoji = '🎁';
         $qty = gift_label($order['key']);
@@ -1153,12 +1276,21 @@ function admin_panel_text(array &$DATA): string {
         "از گزینه‌های زیر یکی رو انتخاب کن:";
 }
 
-function admin_layout_menu_text(): string { return "🧩 چیدمان دکمه‌های شیشه‌ای\n\nگروه مورد نظر رو انتخاب کن تا تعداد ستون‌هاش رو تغییر بدی:"; }
+function admin_layout_menu_text(): string { return "🧩 چیدمان دکمه‌های شیشه‌ای\n\nگروه مورد نظر رو انتخاب کن تا چیدمان ردیف‌هاش رو تغییر بدی:"; }
 
 function admin_layout_detail_text(array &$DATA, string $key): string {
     $meta = LAYOUT_GROUPS[$key];
-    $cols = get_layout_columns($DATA, $key, $meta['default']);
-    return "{$meta['label']}\n\n📐 چیدمان فعلی: {$cols} دکمه در هر ردیف\n\nتعداد ستون جدید رو انتخاب کن:";
+    $pattern = get_layout_pattern($DATA, $key, $meta['default_pattern']);
+    $pattern_str = implode(',', $pattern);
+    $count = layout_group_button_count($DATA, $key);
+    $accounted = min(array_sum($pattern), $count);
+    $extra = $count - $accounted;
+    $spill_note = $extra > 0
+        ? "\n\n⚠️ الگو فقط برای {$accounted} دکمه از {$count} دکمه تعریف شده - {$extra} دکمه باقی‌مانده به صورت خودکار در ردیف‌های " . max(1, (int) end($pattern)) . "تایی چیده می‌شن."
+        : "\n\n✅ الگو دقیقاً همه {$count} دکمه این بخش رو پوشش می‌ده.";
+    return "{$meta['label']}\n\n📐 چیدمان فعلی: {$pattern_str}\n🔢 تعداد دکمه‌های این بخش: {$count}{$spill_note}\n\n" .
+        "✍️ برای تغییر چیدمان، الگوی جدید رو به صورت عدد (هر عدد بین 1 تا 3) با کاما یا فاصله بفرست.\n\n" .
+        "مثال: 2,1,2 یا 2 1 2";
 }
 
 function broadcast_confirm_text(string $text): string { return "📢 متن زیر برای تمام کاربران ربات ارسال خواهد شد:\n\n{$text}\n\nآیا مطمئن هستید؟"; }
@@ -1581,9 +1713,9 @@ function rbtn(string $text, ?string $style = null, ?string $icon_custom_emoji_id
 }
 
 function gift_button_slug(string $key): string { return "gift_item_{$key}"; }
-function gift_button_default(string $key): string { $g = GIFTS_META[$key]; return "{$g['emoji']} {$g['name']} (⭐️ {$g['stars']})"; }
+function gift_button_default(string $key, array $g): string { return "{$g['emoji']} {$g['name']} (⭐️ {$g['stars']})"; }
 function admin_gift_price_button_slug(string $key): string { return "admin_gift_price_btn_{$key}"; }
-function admin_gift_price_button_default(string $key): string { $g = GIFTS_META[$key]; return "{$g['emoji']} {$g['name']}"; }
+function admin_gift_price_button_default(string $key, array $g): string { return "{$g['emoji']} {$g['name']}"; }
 
 function main_kb(bool $is_admin = false): array {
     $rows = [
@@ -1597,22 +1729,29 @@ function main_kb(bool $is_admin = false): array {
     return rkb($rows);
 }
 
-function product_kb(array &$DATA): array {
+function product_buttons(array &$DATA): array {
     $buttons = [
         ibtn('btn_premium', 'product_premium'), ibtn('btn_stars', 'product_stars'),
         ibtn('btn_gift_stars', 'product_gift_stars'), ibtn('btn_buy_ton', 'product_buy_ton'),
         ibtn('btn_gift_nft', 'product_gift_nft'),
     ];
-    $cols = get_layout_columns($DATA, 'products', LAYOUT_GROUPS['products']['default']);
-    $rows = array_chunk($buttons, $cols);
+    foreach ($DATA['custom_products'] as $key => $p) {
+        $buttons[] = btn($p['name'], "product_custom_{$key}");
+    }
+    return $buttons;
+}
+
+function product_kb(array &$DATA): array {
+    $pattern = get_layout_pattern($DATA, 'products', LAYOUT_GROUPS['products']['default_pattern']);
+    $rows = chunk_by_pattern(product_buttons($DATA), $pattern);
     $rows[] = [ibtn('btn_back', 'back_to_welcome')];
     return ikb($rows);
 }
 
 function premium_kb(array &$DATA): array {
     $buttons = [ibtn('btn_plan_3', 'premium_3'), ibtn('btn_plan_6', 'premium_6'), ibtn('btn_plan_12', 'premium_12')];
-    $cols = get_layout_columns($DATA, 'premium_plans', LAYOUT_GROUPS['premium_plans']['default']);
-    $rows = array_chunk($buttons, $cols);
+    $pattern = get_layout_pattern($DATA, 'premium_plans', LAYOUT_GROUPS['premium_plans']['default_pattern']);
+    $rows = chunk_by_pattern($buttons, $pattern);
     $rows[] = [ibtn('btn_back', 'back_to_products')];
     return ikb($rows);
 }
@@ -1678,9 +1817,9 @@ function stars_invoice_kb(bool $discount_applied = false): array {
 
 function gift_list_kb(array &$DATA): array {
     $buttons = [];
-    foreach (array_keys(GIFTS_META) as $key) $buttons[] = ibtn(gift_button_slug($key), "gift_select_{$key}");
-    $cols = get_layout_columns($DATA, 'gift_list', LAYOUT_GROUPS['gift_list']['default']);
-    $rows = array_chunk($buttons, $cols);
+    foreach (array_keys(all_gifts($DATA)) as $key) $buttons[] = ibtn(gift_button_slug($key), "gift_select_{$key}");
+    $pattern = get_layout_pattern($DATA, 'gift_list', LAYOUT_GROUPS['gift_list']['default_pattern']);
+    $rows = chunk_by_pattern($buttons, $pattern);
     $rows[] = [ibtn('btn_back', 'back_to_products')];
     return ikb($rows);
 }
@@ -1702,6 +1841,23 @@ function gift_invoice_kb(bool $hidden, bool $has_comment, bool $discount_applied
 
 function gift_comment_type_kb(): array { return ikb([[ibtn('btn_gift_comment_free', 'gift_comment_free')], [ibtn('btn_back', 'gift_comment_back_to_invoice')]]); }
 function gift_comment_input_kb(): array { return ikb([[ibtn('btn_back', 'gift_comment_input_back')]]); }
+
+/* ---- custom product (generic simple purchase flow) ---- */
+
+function custom_product_detail_kb(string $key): array {
+    return ikb([[btn('🛍 خرید', "custom_product_buy_{$key}")], [ibtn('btn_back', 'back_to_products')]]);
+}
+function ask_custom_product_username_kb(string $key): array {
+    return ikb([[ibtn('btn_self', 'custom_product_username_self')], [ibtn('btn_back', "custom_product_detail_{$key}")]]);
+}
+function confirm_custom_product_username_kb(): array { return ikb([[ibtn('btn_yes_short', 'custom_product_confirm_yes'), ibtn('btn_no_short', 'custom_product_confirm_no')]]); }
+function custom_product_invoice_kb(bool $discount_applied = false): array {
+    $slug = $discount_applied ? 'btn_discount_remove' : 'btn_discount_apply';
+    return ikb([
+        [ibtn('btn_confirm', 'custom_product_invoice_confirm')],
+        [ibtn($slug, 'custom_product_invoice_discount'), ibtn('btn_cancel', 'custom_product_invoice_cancel')],
+    ]);
+}
 function support_kb(): array { return ikb([[ibtn('btn_support_direct', null, 'https://t.me/' . SUPPORT_USERNAME), ibtn('btn_support_indirect', 'support_indirect')]]); }
 function support_indirect_kb(): array { return ikb([[ibtn('btn_back', 'support_back')]]); }
 function admin_support_kb(string $ticket_id): array { return ikb([[ibtn('btn_admin_reply', "support_reply_{$ticket_id}")]]); }
@@ -1732,10 +1888,10 @@ function ask_referral_username_kb(): array { return ikb([[ibtn('btn_self', 'refe
 function confirm_referral_username_kb(): array { return ikb([[ibtn('btn_yes_short', 'referral_confirm_yes'), ibtn('btn_no_short', 'referral_confirm_no')]]); }
 function referral_reward_invoice_kb(): array { return ikb([[ibtn('btn_confirm', 'referral_invoice_confirm')], [ibtn('btn_cancel', 'referral_invoice_cancel')]]); }
 
-function admin_panel_kb(array &$DATA): array {
+function admin_panel_buttons(array &$DATA): array {
     $toggle_label = $DATA['bot_enabled'] ? '🔴 خاموش کردن ربات' : '🟢 روشن کردن ربات';
     $ref_toggle_label = $DATA['referral_points_enabled'] ? '🔴 غیرفعال‌سازی جایزه دعوت' : '🟢 فعال‌سازی جایزه دعوت';
-    $buttons = [
+    return [
         btn($toggle_label, 'admin_toggle_bot'),
         btn($ref_toggle_label, 'admin_toggle_referral_points'),
         ibtn('btn_admin_broadcast', 'admin_broadcast'),
@@ -1747,19 +1903,35 @@ function admin_panel_kb(array &$DATA): array {
         ibtn('btn_admin_edit_buttons', 'admin_edit_buttons'),
         btn('🧩 چیدمان دکمه‌های شیشه‌ای', 'admin_layout_menu'),
         btn('📢 عضویت اجباری', 'admin_channels_menu'),
+        btn('🛒 مدیریت محصولات', 'admin_products_menu'),
     ];
-    $cols = get_layout_columns($DATA, 'admin_panel', LAYOUT_GROUPS['admin_panel']['default']);
-    $rows = array_chunk($buttons, $cols);
+}
+
+function admin_panel_kb(array &$DATA): array {
+    $pattern = get_layout_pattern($DATA, 'admin_panel', LAYOUT_GROUPS['admin_panel']['default_pattern']);
+    $rows = chunk_by_pattern(admin_panel_buttons($DATA), $pattern);
     // Destructive action always stays isolated on its own row, unaffected by layout.
     $rows[] = [ibtn('btn_admin_reset', 'admin_reset_confirm')];
     return ikb($rows);
 }
 
+// Number of buttons currently rendered in a layout group, so the admin can
+// see how many of them a saved pattern accounts for vs. how many spill over.
+function layout_group_button_count(array &$DATA, string $key): int {
+    switch ($key) {
+        case 'products': return count(product_buttons($DATA));
+        case 'premium_plans': return 3;
+        case 'gift_list': return count(all_gifts($DATA));
+        case 'admin_panel': return count(admin_panel_buttons($DATA));
+        default: return 0;
+    }
+}
+
 function admin_layout_menu_kb(array &$DATA): array {
     $rows = [];
     foreach (LAYOUT_GROUPS as $key => $meta) {
-        $cols = get_layout_columns($DATA, $key, $meta['default']);
-        $rows[] = [btn("{$meta['label']} ({$cols} ستونه)", "admin_layout_pick_{$key}")];
+        $pattern = get_layout_pattern($DATA, $key, $meta['default_pattern']);
+        $rows[] = [btn("{$meta['label']} (" . implode(',', $pattern) . ')', "admin_layout_pick_{$key}")];
     }
     $rows[] = [ibtn('btn_back', 'admin_panel_back')];
     return ikb($rows);
@@ -1767,7 +1939,7 @@ function admin_layout_menu_kb(array &$DATA): array {
 
 function admin_layout_detail_kb(string $key): array {
     return ikb([
-        [btn('1 ستونه', "admin_layout_set_{$key}_1"), btn('2 ستونه', "admin_layout_set_{$key}_2"), btn('3 ستونه', "admin_layout_set_{$key}_3")],
+        [btn('🔄 بازگردانی پیش‌فرض', "admin_layout_reset_{$key}")],
         [ibtn('btn_back', 'admin_layout_menu_back')],
     ]);
 }
@@ -1796,6 +1968,40 @@ function admin_channel_add_ask_text(): string {
 }
 
 function admin_channel_add_ask_kb(): array { return ikb([[ibtn('btn_back', 'admin_channels_menu_back')]]); }
+
+/* ---- custom products admin management ---- */
+
+function admin_products_text(array &$DATA): string {
+    $n = count($DATA['custom_products']);
+    return "🛒 مدیریت محصولات سفارشی\n\nتعداد محصولات فعلی: {$n}\n\nمحصول مورد نظر رو برای مدیریت انتخاب کن یا محصول جدید اضافه کن:";
+}
+
+function admin_products_menu_kb(array &$DATA): array {
+    $rows = [];
+    foreach ($DATA['custom_products'] as $key => $p) {
+        $rows[] = [btn("🛒 {$p['name']} (" . fmt($p['price']) . ' ت)', "admin_product_detail_{$key}")];
+    }
+    $rows[] = [btn('➕ افزودن محصول جدید', 'admin_product_add')];
+    $rows[] = [ibtn('btn_back', 'admin_panel_back')];
+    return ikb($rows);
+}
+
+function admin_product_detail_text(array $p): string {
+    return "🛒 {$p['name']}\n\n💰 قیمت: " . fmt($p['price']) . " تومان\n\n📝 توضیحات:\n{$p['description']}";
+}
+
+function admin_product_detail_kb(string $key): array {
+    return ikb([[btn('❌ حذف این محصول', "admin_product_delete_{$key}")], [ibtn('btn_back', 'admin_products_menu_back')]]);
+}
+
+function admin_product_add_cancel_kb(): array { return ikb([[ibtn('btn_back', 'admin_product_add_cancel')]]); }
+
+/* ---- custom gifts admin management ---- */
+
+const ADMIN_GIFT_ADD_ASK_NAME_TEXT = '🎁 نام گیفت جدید رو بفرست:';
+function admin_gift_add_ask_emoji_text(): string { return '🖼 یک ایموجی برای این گیفت بفرست:'; }
+function admin_gift_add_ask_stars_text(): string { return '⭐️ تعداد استارز این گیفت رو وارد کن (فقط عدد صحیح مثبت):'; }
+function admin_gift_add_cancel_kb(): array { return ikb([[ibtn('btn_back', 'admin_gift_add_cancel')]]); }
 
 function admin_reset_confirm_kb(): array { return ikb([[ibtn('btn_admin_reset_yes', 'admin_reset_yes'), ibtn('btn_admin_reset_no', 'admin_panel_back')]]); }
 function admin_back_kb(): array { return ikb([[ibtn('btn_back', 'admin_panel_back')]]); }
@@ -1827,9 +2033,9 @@ function admin_premium_plan_select_kb(): array {
 }
 function admin_premium_price_ask_kb(): array { return ikb([[ibtn('btn_back', 'admin_premium_plan_select_back')]]); }
 
-function admin_gift_price_list_kb(): array {
+function admin_gift_price_list_kb(array &$DATA): array {
     $rows = [];
-    $keys = array_keys(GIFTS_META);
+    $keys = array_keys(all_gifts($DATA));
     $i = 0;
     $n = count($keys);
     while ($i < $n) {
@@ -1843,11 +2049,17 @@ function admin_gift_price_list_kb(): array {
             $i += 1;
         }
     }
+    $rows[] = [btn('➕ افزودن گیفت جدید', 'admin_gift_add')];
     $rows[] = [ibtn('btn_back', 'admin_price_menu_back')];
     return ikb($rows);
 }
 
-function admin_gift_price_detail_kb(string $key): array { return ikb([[ibtn('btn_admin_edit_price', "admin_change_gift_price_{$key}")], [ibtn('btn_back', 'admin_gift_price_list_back')]]); }
+function admin_gift_price_detail_kb(string $key, bool $is_custom = false): array {
+    $rows = [[ibtn('btn_admin_edit_price', "admin_change_gift_price_{$key}")]];
+    if ($is_custom) $rows[] = [btn('❌ حذف این گیفت', "admin_gift_delete_{$key}")];
+    $rows[] = [ibtn('btn_back', 'admin_gift_price_list_back')];
+    return ikb($rows);
+}
 function admin_gift_price_ask_kb(string $key): array { return ikb([[ibtn('btn_back', "admin_gift_price_detail_back_{$key}")]]); }
 function admin_daily_limit_kb(): array { return ikb([[ibtn('btn_admin_edit_daily_limit', 'admin_change_daily_limit')], [ibtn('btn_back', 'admin_panel_back')]]); }
 function admin_daily_limit_ask_kb(): array { return ikb([[ibtn('btn_back', 'admin_daily_limit_back')]]); }
@@ -1880,13 +2092,13 @@ function admin_button_categories_kb(): array {
     return ikb($rows);
 }
 
-function category_button_slugs(string $cat): array {
+function category_button_slugs(array &$DATA, string $cat): array {
     $slugs = BUTTON_CATEGORIES[$cat] ?? [];
     if ($cat === 'gift') {
-        foreach (array_keys(GIFTS_META) as $k) $slugs[] = gift_button_slug($k);
+        foreach (array_keys(all_gifts($DATA)) as $k) $slugs[] = gift_button_slug($k);
     }
     if ($cat === 'admin_msgs') {
-        foreach (array_keys(GIFTS_META) as $k) $slugs[] = admin_gift_price_button_slug($k);
+        foreach (array_keys(all_gifts($DATA)) as $k) $slugs[] = admin_gift_price_button_slug($k);
     }
     return $slugs;
 }
@@ -1898,9 +2110,9 @@ function admin_text_list_kb(string $cat): array {
     return ikb($rows);
 }
 
-function admin_button_list_kb(string $cat): array {
+function admin_button_list_kb(array &$DATA, string $cat): array {
     $rows = [];
-    foreach (category_button_slugs($cat) as $slug) $rows[] = [btn(B($slug), "admin_btn_pick_{$slug}")];
+    foreach (category_button_slugs($DATA, $cat) as $slug) $rows[] = [btn(B($slug), "admin_btn_pick_{$slug}")];
     $rows[] = [ibtn('btn_back', 'admin_edit_buttons')];
     return ikb($rows);
 }
@@ -1992,6 +2204,11 @@ function default_data(): array {
         'gift_star_price' => 3514,
         'ton_price' => 298225,
         'gifts_prices' => [],
+        // admin-added catalog entries, same shape as GIFTS_META/products below;
+        // never overrides a built-in key - see all_gifts()/new_custom_gift_key()
+        'custom_gifts' => [],
+        // key => ['name','price' (flat Toman),'description']; admin-added, generic purchase flow
+        'custom_products' => [],
         'req_counter' => 0,
         'required_channels' => [REQUIRED_CHANNEL],
         // Only ever holds admin *overrides* (slug => ['value'/'label' => ..., ...]);
@@ -1999,12 +2216,20 @@ function default_data(): array {
         // so load_data() never needs to (and must never) pre-fill these with defaults.
         'texts' => [],
         'buttons' => [],
-        // group => column count (1-3); missing group falls back to LAYOUT_GROUPS[group]['default']
+        // group => row-size pattern (each 1-3); missing group falls back to
+        // LAYOUT_GROUPS[group]['default_pattern'] - see get_layout_pattern()
         'layout' => [],
         'ton_price_cache' => ['base' => 298225, 'fetched_at' => 0],
     ];
     recalc_prices($data);
     return $data;
+}
+
+// Full gift catalog: built-ins first, then admin-added custom gifts. Custom
+// entries can never override a built-in key (that would break code that
+// references specific built-in keys directly, e.g. REFERRAL_REWARD_GIFTS).
+function all_gifts(array &$DATA): array {
+    return GIFTS_META + ($DATA['custom_gifts'] ?? []);
 }
 
 function recalc_prices(array &$DATA): void {
@@ -2015,7 +2240,7 @@ function recalc_prices(array &$DATA): void {
     foreach ($DATA['base_premium_prices'] as $plan => $base) {
         $DATA['premium_prices'][$plan] = (int) round($base * (1 + $pp['premium'] / 100));
     }
-    foreach (GIFTS_META as $key => $g) {
+    foreach (all_gifts($DATA) as $key => $g) {
         $DATA['gifts_prices'][$key] = (int) round($g['stars'] * $DATA['gift_star_price']);
     }
 }
@@ -2031,14 +2256,15 @@ function load_data(): array {
     foreach (['users', 'user_names', 'orders', 'topup_requests', 'pending_referrals', 'support_tickets',
               'admin_waiting_reject', 'admin_waiting_support_reply', 'user_state', 'gifts_prices',
               'premium_prices', 'base_premium_prices', 'profit_percent', 'texts', 'buttons', 'layout',
-              'required_channels'] as $k) {
+              'required_channels', 'custom_gifts', 'custom_products'] as $k) {
         if (!is_array($data[$k] ?? null)) $data[$k] = $defaults[$k];
     }
     if (!is_array($data['ton_price_cache'] ?? null)) $data['ton_price_cache'] = $defaults['ton_price_cache'];
     recalc_prices($data);
     if (isset($decoded['gifts_prices']) && is_array($decoded['gifts_prices'])) {
+        $known_gifts = all_gifts($data);
         foreach ($decoded['gifts_prices'] as $key => $price) {
-            if (isset(GIFTS_META[$key])) $data['gifts_prices'][$key] = $price;
+            if (isset($known_gifts[$key])) $data['gifts_prices'][$key] = $price;
         }
     }
     if (isset($decoded['stars_price'])) $data['stars_price'] = $decoded['stars_price'];
@@ -2070,6 +2296,29 @@ function &get_user(array &$DATA, $uid): array {
 function &get_ustate(array &$DATA, $uid): array {
     if (!isset($DATA['user_state'][$uid])) $DATA['user_state'][$uid] = [];
     return $DATA['user_state'][$uid];
+}
+
+function slugify_ascii(string $name): string {
+    $slug = strtolower(trim((string) preg_replace('/[^A-Za-z0-9]+/', '_', $name), '_'));
+    return $slug === '' ? 'item' : substr($slug, 0, 24);
+}
+
+// custom_ + ascii slug of the admin's name + a short unique suffix, never
+// colliding with a built-in or already-existing custom key.
+function new_custom_gift_key(array &$DATA, string $name): string {
+    $slug = slugify_ascii($name);
+    do {
+        $key = 'custom_' . $slug . '_' . substr(uniqid(), -6);
+    } while (isset(all_gifts($DATA)[$key]));
+    return $key;
+}
+
+function new_custom_product_key(array &$DATA, string $name): string {
+    $slug = slugify_ascii($name);
+    do {
+        $key = 'p_' . $slug . '_' . substr(uniqid(), -6);
+    } while (isset($DATA['custom_products'][$key]));
+    return $key;
 }
 
 function display_name(array $user): string {
@@ -2303,9 +2552,9 @@ function handle_text(array $msg, array &$DATA): void {
             $key = substr($state, strlen('admin_awaiting_gift_price_'));
             $raw = str_replace(',', '', trim($text));
             if (!ctype_digit($raw)) { send_message($chat_id, T('admin_numeric_error'), admin_gift_price_ask_kb($key), 'HTML'); return; }
-            if (isset(GIFTS_META[$key])) $DATA['gifts_prices'][$key] = (int) $raw;
+            if (isset(all_gifts($DATA)[$key])) $DATA['gifts_prices'][$key] = (int) $raw;
             $ust['state'] = null;
-            send_message($chat_id, admin_gift_price_detail_text($DATA, $key), admin_gift_price_detail_kb($key));
+            send_message($chat_id, admin_gift_price_detail_text($DATA, $key), admin_gift_price_detail_kb($key, !isset(GIFTS_META[$key])));
             return;
         }
         if ($state === 'admin_awaiting_daily_limit') {
@@ -2332,6 +2581,77 @@ function handle_text(array $msg, array &$DATA): void {
                 send_message($chat_id, "✅ کانال @{$raw} اضافه شد.\n\n⚠️ یادت نره ربات رو تو این کانال ادمین کنی، وگرنه بررسی عضویت انجام نمی‌شه.", admin_channels_kb($DATA));
             }
             $ust['state'] = null;
+            return;
+        }
+        if ($state !== null && str_starts_with($state, 'admin_awaiting_layout_')) {
+            $key = substr($state, strlen('admin_awaiting_layout_'));
+            $ust['state'] = null;
+            if (!isset(LAYOUT_GROUPS[$key])) { send_message($chat_id, 'این گروه پیدا نشد.', admin_back_kb()); return; }
+            $pattern = parse_layout_pattern($text);
+            if ($pattern === null) {
+                $ust['state'] = "admin_awaiting_layout_{$key}";
+                send_message($chat_id, "❌ فرمت نامعتبره. هر عدد باید بین 1 تا 3 باشه و حداقل یک عدد بفرست.\n\nمثال: 2,1,2 یا 2 1 2", admin_layout_detail_kb($key), 'HTML');
+                return;
+            }
+            $DATA['layout'][$key] = $pattern;
+            send_message($chat_id, "✅ چیدمان «" . LAYOUT_GROUPS[$key]['label'] . "» ذخیره شد.\n\n" . admin_layout_detail_text($DATA, $key), admin_layout_detail_kb($key), 'HTML');
+            return;
+        }
+        if ($state === 'admin_awaiting_new_gift_name') {
+            $name = trim($text);
+            if ($name === '') { send_message($chat_id, 'نام نمی‌تونه خالی باشه. دوباره بفرست:', admin_gift_add_cancel_kb()); return; }
+            $ust['pending_new_gift'] = ['name' => $name];
+            $ust['state'] = 'admin_awaiting_new_gift_emoji';
+            send_message($chat_id, admin_gift_add_ask_emoji_text(), admin_gift_add_cancel_kb(), 'HTML');
+            return;
+        }
+        if ($state === 'admin_awaiting_new_gift_emoji') {
+            $emoji = trim($text);
+            if ($emoji === '') { send_message($chat_id, 'ایموجی نمی‌تونه خالی باشه. دوباره بفرست:', admin_gift_add_cancel_kb()); return; }
+            $ust['pending_new_gift']['emoji'] = $emoji;
+            $ust['state'] = 'admin_awaiting_new_gift_stars';
+            send_message($chat_id, admin_gift_add_ask_stars_text(), admin_gift_add_cancel_kb(), 'HTML');
+            return;
+        }
+        if ($state === 'admin_awaiting_new_gift_stars') {
+            $raw = str_replace(',', '', trim($text));
+            if (!ctype_digit($raw) || (int) $raw <= 0) { send_message($chat_id, T('admin_positive_number_error'), admin_gift_add_cancel_kb(), 'HTML'); return; }
+            $stars = (int) $raw;
+            $name = $ust['pending_new_gift']['name'] ?? 'گیفت';
+            $emoji = $ust['pending_new_gift']['emoji'] ?? '🎁';
+            $key = new_custom_gift_key($DATA, $name);
+            $DATA['custom_gifts'][$key] = ['name' => $name, 'emoji' => $emoji, 'stars' => $stars];
+            $DATA['gifts_prices'][$key] = (int) round($stars * $DATA['gift_star_price']);
+            $ust['state'] = null;
+            $ust['pending_new_gift'] = null;
+            send_message($chat_id, "✅ گیفت «{$emoji} {$name}» ({$stars} ⭐️) اضافه شد و همین الان به لیست گیفت‌ها اضافه شد.", admin_gift_price_list_kb($DATA), 'HTML');
+            return;
+        }
+        if ($state === 'admin_awaiting_new_product_name') {
+            $name = trim($text);
+            if ($name === '') { send_message($chat_id, 'نام نمی‌تونه خالی باشه. دوباره بفرست:', admin_product_add_cancel_kb()); return; }
+            $ust['pending_new_product'] = ['name' => $name];
+            $ust['state'] = 'admin_awaiting_new_product_price';
+            send_message($chat_id, '💰 قیمت این محصول رو به تومان وارد کن (فقط عدد):', admin_product_add_cancel_kb(), 'HTML');
+            return;
+        }
+        if ($state === 'admin_awaiting_new_product_price') {
+            $raw = str_replace(',', '', trim($text));
+            if (!ctype_digit($raw) || (int) $raw <= 0) { send_message($chat_id, T('admin_positive_number_error'), admin_product_add_cancel_kb(), 'HTML'); return; }
+            $ust['pending_new_product']['price'] = (int) $raw;
+            $ust['state'] = 'admin_awaiting_new_product_desc';
+            send_message($chat_id, '📝 یه توضیح کوتاه برای این محصول بفرست (این متن قبل از تایید خرید به کاربر نشون داده می‌شه):', admin_product_add_cancel_kb(), 'HTML');
+            return;
+        }
+        if ($state === 'admin_awaiting_new_product_desc') {
+            $desc = trim($text);
+            $name = $ust['pending_new_product']['name'] ?? 'محصول';
+            $price = $ust['pending_new_product']['price'] ?? 0;
+            $key = new_custom_product_key($DATA, $name);
+            $DATA['custom_products'][$key] = ['name' => $name, 'price' => $price, 'description' => $desc];
+            $ust['state'] = null;
+            $ust['pending_new_product'] = null;
+            send_message($chat_id, "✅ محصول «{$name}» اضافه شد.", admin_products_menu_kb($DATA), 'HTML');
             return;
         }
         if ($state !== null && str_starts_with($state, 'admin_awaiting_profit_')) {
@@ -2362,7 +2682,7 @@ function handle_text(array $msg, array &$DATA): void {
         if ($state !== null && str_starts_with($state, 'admin_awaiting_button_')) {
             $slug = substr($state, strlen('admin_awaiting_button_'));
             $ust['state'] = null;
-            if (!in_array($slug, all_button_slugs(), true)) { send_message($chat_id, 'این دکمه پیدا نشد.', admin_back_kb()); return; }
+            if (!in_array($slug, all_button_slugs($DATA), true)) { send_message($chat_id, 'این دکمه پیدا نشد.', admin_back_kb()); return; }
             $entities = capture_entities($msg);
             apply_button_edit($DATA, $slug, $text, $entities);
             send_message($chat_id, "✅ نام دکمه «{$slug}» به «" . B($slug) . "» تغییر کرد.");
@@ -2371,7 +2691,7 @@ function handle_text(array $msg, array &$DATA): void {
         }
         if ($state !== null && str_starts_with($state, 'admin_awaiting_icon_')) {
             $slug = substr($state, strlen('admin_awaiting_icon_'));
-            if (!in_array($slug, all_button_slugs(), true)) { $ust['state'] = null; send_message($chat_id, 'این دکمه پیدا نشد.', admin_back_kb()); return; }
+            if (!in_array($slug, all_button_slugs($DATA), true)) { $ust['state'] = null; send_message($chat_id, 'این دکمه پیدا نشد.', admin_back_kb()); return; }
             $emoji_id = first_custom_emoji_id(capture_entities($msg));
             if ($emoji_id === null) {
                 send_message($chat_id, admin_button_icon_invalid_text(), admin_button_icon_ask_kb($slug));
@@ -2465,6 +2785,16 @@ function handle_text(array $msg, array &$DATA): void {
         $ust['pending_referral_reward']['username'] = $username;
         $ust['state'] = null;
         send_message($chat_id, confirm_username_text($username), confirm_referral_username_kb(), 'HTML');
+        return;
+    }
+
+    if ($state === 'awaiting_custom_product_username') {
+        $username = trim($text);
+        if (!str_starts_with($username, '@')) $username = '@' . $username;
+        $ust['pending_custom_product'] = $ust['pending_custom_product'] ?? [];
+        $ust['pending_custom_product']['username'] = $username;
+        $ust['state'] = null;
+        send_message($chat_id, confirm_username_text($username), confirm_custom_product_username_kb(), 'HTML');
         return;
     }
 
@@ -2591,7 +2921,7 @@ function handle_callback(array $cq, array &$DATA): void {
 
     if (str_starts_with($data, 'gift_select_')) {
         $key = substr($data, strlen('gift_select_'));
-        if (!isset(GIFTS_META[$key])) return;
+        if (!isset(all_gifts($DATA)[$key])) return;
         $ust['pending_gift'] = ['key' => $key, 'username' => null, 'hidden' => true, 'comment' => null];
         $ust['state'] = 'awaiting_gift_username';
         edit_message_text($chat_id, $message_id, T('ask_username'), ask_gift_username_kb(), 'HTML');
@@ -2887,6 +3217,7 @@ function handle_callback(array $cq, array &$DATA): void {
             case 'ton': $msgText = ton_done_text($order['amount'], $order['wallet'], $order['price'], $order_id); break;
             case 'stars': $msgText = stars_done_text($order['count'], $order['username'], $order['price'], $order_id); break;
             case 'referral_reward': $msgText = referral_reward_done_text($order['key'], $order['username'], $order_id); break;
+            case 'custom_product': $msgText = custom_product_done_text($order['name'], $order['username'], $order['price'], $order_id); break;
             default: $msgText = gift_done_text($order['key'], $order['username'], $order['price'], $order_id);
         }
         send_message($order['chat_id'], $msgText, buy_product_kb(), 'HTML');
@@ -3143,32 +3474,137 @@ function handle_callback(array $cq, array &$DATA): void {
     /* ---- NFT gift placeholder (declared in keyboard, unimplemented upstream; wired to a "coming soon" alert like admin_price_giftnft) ---- */
     if ($data === 'product_gift_nft') { answer_callback_query($cq['id'], PRODUCT_PLACEHOLDER_NFT_TEXT, true); return; }
 
+    /* ---- custom products (generic simple purchase flow) ---- */
+    if (str_starts_with($data, 'custom_product_detail_')) {
+        $key = substr($data, strlen('custom_product_detail_'));
+        $p = $DATA['custom_products'][$key] ?? null;
+        $ust['state'] = null;
+        if (!$p) { edit_message_text($chat_id, $message_id, T('product_menu'), product_kb($DATA), 'HTML'); return; }
+        edit_message_text($chat_id, $message_id, custom_product_detail_text($p), custom_product_detail_kb($key), 'HTML');
+        return;
+    }
+
+    if (str_starts_with($data, 'custom_product_buy_')) {
+        $key = substr($data, strlen('custom_product_buy_'));
+        $p = $DATA['custom_products'][$key] ?? null;
+        if (!$p) { answer_callback_query($cq['id'], 'این محصول دیگر موجود نیست.', true); return; }
+        $ust['pending_custom_product'] = ['key' => $key, 'name' => $p['name'], 'price' => (int) $p['price'], 'username' => null];
+        $ust['state'] = 'awaiting_custom_product_username';
+        edit_message_text($chat_id, $message_id, T('ask_username'), ask_custom_product_username_kb($key), 'HTML');
+        return;
+    }
+
+    if (str_starts_with($data, 'product_custom_')) {
+        $key = substr($data, strlen('product_custom_'));
+        $p = $DATA['custom_products'][$key] ?? null;
+        if (!$p) { answer_callback_query($cq['id'], 'این محصول دیگر موجود نیست.', true); return; }
+        $ust['state'] = null;
+        edit_message_text($chat_id, $message_id, custom_product_detail_text($p), custom_product_detail_kb($key), 'HTML');
+        return;
+    }
+
+    if ($data === 'custom_product_username_self') {
+        $key = $ust['pending_custom_product']['key'] ?? '';
+        if (!empty($user['username'])) {
+            $username = '@' . $user['username'];
+            $ust['pending_custom_product'] = $ust['pending_custom_product'] ?? [];
+            $ust['pending_custom_product']['username'] = $username;
+            $ust['state'] = null;
+            edit_message_text($chat_id, $message_id, confirm_username_text($username), confirm_custom_product_username_kb(), 'HTML');
+        } else {
+            $ust['state'] = 'awaiting_custom_product_username';
+            edit_message_text($chat_id, $message_id, T('no_username_error'), ikb([[ibtn('btn_back', "custom_product_detail_{$key}")]]), 'HTML');
+        }
+        return;
+    }
+
+    if ($data === 'custom_product_confirm_no') {
+        $key = $ust['pending_custom_product']['key'] ?? '';
+        $ust['state'] = 'awaiting_custom_product_username';
+        edit_message_text($chat_id, $message_id, T('ask_username'), ask_custom_product_username_kb($key), 'HTML');
+        return;
+    }
+
+    if ($data === 'custom_product_confirm_yes') {
+        $p = &$ust['pending_custom_product'];
+        $p = $p ?? [];
+        $p['discount_applied'] = false;
+        $name = $p['name'] ?? '';
+        $username = $p['username'] ?? '-';
+        $price = $p['price'] ?? 0;
+        $disc = get_user($DATA, $uid)['discount_balance'];
+        edit_message_text($chat_id, $message_id, custom_product_invoice_text($name, $username, $price, $disc, $price), custom_product_invoice_kb(false), 'HTML');
+        return;
+    }
+
+    if ($data === 'custom_product_invoice_discount') {
+        $p = &$ust['pending_custom_product'];
+        $p = $p ?? [];
+        $p['discount_applied'] = empty($p['discount_applied']);
+        $name = $p['name'] ?? '';
+        $username = $p['username'] ?? '-';
+        $price = $p['price'] ?? 0;
+        $disc = get_user($DATA, $uid)['discount_balance'];
+        $final = compute_final_price($DATA, $p, $uid);
+        edit_message_text($chat_id, $message_id, custom_product_invoice_text($name, $username, $price, $disc, $final), custom_product_invoice_kb($p['discount_applied']), 'HTML');
+        return;
+    }
+
+    if ($data === 'custom_product_invoice_cancel') { $ust['pending_custom_product'] = null; $ust['state'] = null; edit_message_text($chat_id, $message_id, T('cancelled'), null, 'HTML'); return; }
+
+    if ($data === 'custom_product_invoice_confirm') {
+        $p = $ust['pending_custom_product'] ?? [];
+        $key = $p['key'] ?? '';
+        $name = $p['name'] ?? '';
+        $username = $p['username'] ?? '-';
+        $final = compute_final_price($DATA, $p, $uid);
+        $u = &get_user($DATA, $uid);
+        if ($u['balance'] >= $final) {
+            $u['balance'] -= $final;
+            consume_discount_if_applied($DATA, $p, $uid);
+            apply_referral_commission($DATA, $uid, $final);
+            $order_id = new_id();
+            push_order_history($DATA, $uid, "🛒 خرید {$name} - به مبلغ " . fmt($final) . ' تومان');
+            $ust['pending_custom_product'] = null;
+            $DATA['orders'][$order_id] = [
+                'type' => 'custom_product', 'chat_id' => $chat_id, 'user_id' => $uid, 'buyer_name' => display_name($user),
+                'product_key' => $key, 'name' => $name, 'username' => $username, 'price' => $final, 'status' => 'pending', 'created_at' => persian_now_str(),
+            ];
+            edit_message_text($chat_id, $message_id, custom_product_success_text($name, $username, $final, $order_id), null, 'HTML');
+            if (ADMIN_CHAT_ID) send_message(ADMIN_CHAT_ID, admin_custom_product_text($user, $name, $username, $final, $order_id), admin_order_kb($order_id), 'HTML');
+        } else {
+            $shortfall = $final - $u['balance'];
+            $ust['topup_origin'] = 'invoice';
+            $ust['last_invoice_shortfall_price'] = $final;
+            edit_message_text($chat_id, $message_id, insufficient_text($shortfall), insufficient_kb(), 'HTML');
+        }
+        return;
+    }
+
     /* ---- admin panel ---- */
     if ($data === 'admin_panel_back') { $ust['state'] = null; edit_message_text($chat_id, $message_id, admin_panel_text($DATA), admin_panel_kb($DATA)); return; }
     if ($data === 'admin_daily_limit') { edit_message_text($chat_id, $message_id, admin_daily_limit_text($DATA), admin_daily_limit_kb()); return; }
     if ($data === 'admin_daily_limit_back') { $ust['state'] = null; edit_message_text($chat_id, $message_id, admin_daily_limit_text($DATA), admin_daily_limit_kb()); return; }
     if ($data === 'admin_change_daily_limit') { $ust['state'] = 'admin_awaiting_daily_limit'; edit_message_text($chat_id, $message_id, admin_ask_daily_limit_text($DATA), admin_daily_limit_ask_kb(), 'HTML'); return; }
 
-    /* ---- inline-keyboard layout (columns per row) ---- */
-    if ($data === 'admin_layout_menu') { edit_message_text($chat_id, $message_id, admin_layout_menu_text(), admin_layout_menu_kb($DATA)); return; }
-    if ($data === 'admin_layout_menu_back') { edit_message_text($chat_id, $message_id, admin_layout_menu_text(), admin_layout_menu_kb($DATA)); return; }
+    /* ---- inline-keyboard layout (free-form row-size pattern) ---- */
+    if ($data === 'admin_layout_menu') { $ust['state'] = null; edit_message_text($chat_id, $message_id, admin_layout_menu_text(), admin_layout_menu_kb($DATA)); return; }
+    if ($data === 'admin_layout_menu_back') { $ust['state'] = null; edit_message_text($chat_id, $message_id, admin_layout_menu_text(), admin_layout_menu_kb($DATA)); return; }
 
     if (str_starts_with($data, 'admin_layout_pick_')) {
         $key = substr($data, strlen('admin_layout_pick_'));
         if (!isset(LAYOUT_GROUPS[$key])) return;
-        edit_message_text($chat_id, $message_id, admin_layout_detail_text($DATA, $key), admin_layout_detail_kb($key));
+        $ust['state'] = "admin_awaiting_layout_{$key}";
+        edit_message_text($chat_id, $message_id, admin_layout_detail_text($DATA, $key), admin_layout_detail_kb($key), 'HTML');
         return;
     }
 
-    if (str_starts_with($data, 'admin_layout_set_')) {
-        $rest = substr($data, strlen('admin_layout_set_'));
-        $pos = strrpos($rest, '_');
-        if ($pos === false) return;
-        $key = substr($rest, 0, $pos);
-        $cols = (int) substr($rest, $pos + 1);
-        if (!isset(LAYOUT_GROUPS[$key]) || !in_array($cols, [1, 2, 3], true)) return;
-        $DATA['layout'][$key] = $cols;
-        edit_message_text($chat_id, $message_id, admin_layout_detail_text($DATA, $key), admin_layout_detail_kb($key));
+    if (str_starts_with($data, 'admin_layout_reset_')) {
+        $key = substr($data, strlen('admin_layout_reset_'));
+        if (!isset(LAYOUT_GROUPS[$key])) return;
+        unset($DATA['layout'][$key]);
+        $ust['state'] = null;
+        edit_message_text($chat_id, $message_id, admin_layout_detail_text($DATA, $key), admin_layout_detail_kb($key), 'HTML');
         return;
     }
 
@@ -3186,6 +3622,37 @@ function handle_callback(array $cq, array &$DATA): void {
         $ch = substr($data, strlen('admin_channel_del_'));
         $DATA['required_channels'] = array_values(array_diff($DATA['required_channels'], [$ch]));
         edit_message_text($chat_id, $message_id, admin_channels_text($DATA), admin_channels_kb($DATA));
+        return;
+    }
+
+    /* ---- custom products admin management ---- */
+    if ($data === 'admin_products_menu') { $ust['state'] = null; edit_message_text($chat_id, $message_id, admin_products_text($DATA), admin_products_menu_kb($DATA)); return; }
+    if ($data === 'admin_products_menu_back') { $ust['state'] = null; edit_message_text($chat_id, $message_id, admin_products_text($DATA), admin_products_menu_kb($DATA)); return; }
+
+    if (str_starts_with($data, 'admin_product_detail_')) {
+        $key = substr($data, strlen('admin_product_detail_'));
+        $p = $DATA['custom_products'][$key] ?? null;
+        if (!$p) { edit_message_text($chat_id, $message_id, admin_products_text($DATA), admin_products_menu_kb($DATA)); return; }
+        edit_message_text($chat_id, $message_id, admin_product_detail_text($p), admin_product_detail_kb($key), 'HTML');
+        return;
+    }
+
+    if (str_starts_with($data, 'admin_product_delete_')) {
+        $key = substr($data, strlen('admin_product_delete_'));
+        unset($DATA['custom_products'][$key]);
+        edit_message_text($chat_id, $message_id, "✅ محصول حذف شد.\n\n" . admin_products_text($DATA), admin_products_menu_kb($DATA), 'HTML');
+        return;
+    }
+
+    if ($data === 'admin_product_add') {
+        $ust['state'] = 'admin_awaiting_new_product_name';
+        edit_message_text($chat_id, $message_id, '🛒 نام محصول جدید رو بفرست:', admin_product_add_cancel_kb(), 'HTML');
+        return;
+    }
+
+    if ($data === 'admin_product_add_cancel') {
+        $ust['state'] = null; $ust['pending_new_product'] = null;
+        edit_message_text($chat_id, $message_id, admin_products_text($DATA), admin_products_menu_kb($DATA));
         return;
     }
 
@@ -3270,18 +3737,43 @@ function handle_callback(array $cq, array &$DATA): void {
 
     if ($data === 'admin_premium_plan_select_back') { $ust['state'] = null; edit_message_text($chat_id, $message_id, ADMIN_PREMIUM_PLAN_SELECT_TEXT, admin_premium_plan_select_kb()); return; }
 
-    if ($data === 'admin_price_giftstars') { edit_message_text($chat_id, $message_id, ADMIN_GIFT_PRICE_LIST_TEXT, admin_gift_price_list_kb()); return; }
-    if ($data === 'admin_gift_price_list_back') { $ust['state'] = null; edit_message_text($chat_id, $message_id, ADMIN_GIFT_PRICE_LIST_TEXT, admin_gift_price_list_kb()); return; }
+    if ($data === 'admin_price_giftstars') { edit_message_text($chat_id, $message_id, ADMIN_GIFT_PRICE_LIST_TEXT, admin_gift_price_list_kb($DATA)); return; }
+    if ($data === 'admin_gift_price_list_back') { $ust['state'] = null; edit_message_text($chat_id, $message_id, ADMIN_GIFT_PRICE_LIST_TEXT, admin_gift_price_list_kb($DATA)); return; }
+
+    if ($data === 'admin_gift_add') {
+        $ust['state'] = 'admin_awaiting_new_gift_name';
+        edit_message_text($chat_id, $message_id, ADMIN_GIFT_ADD_ASK_NAME_TEXT, admin_gift_add_cancel_kb(), 'HTML');
+        return;
+    }
+
+    if ($data === 'admin_gift_add_cancel') {
+        $ust['state'] = null; $ust['pending_new_gift'] = null;
+        edit_message_text($chat_id, $message_id, ADMIN_GIFT_PRICE_LIST_TEXT, admin_gift_price_list_kb($DATA));
+        return;
+    }
+
+    if (str_starts_with($data, 'admin_gift_delete_')) {
+        $key = substr($data, strlen('admin_gift_delete_'));
+        if (isset(GIFTS_META[$key]) || !isset($DATA['custom_gifts'][$key])) { answer_callback_query($cq['id'], 'این گیفت قابل حذف نیست.', true); return; }
+        unset($DATA['custom_gifts'][$key]);
+        unset($DATA['gifts_prices'][$key]);
+        unset($DATA['buttons'][gift_button_slug($key)]);
+        unset($DATA['buttons'][admin_gift_price_button_slug($key)]);
+        $ust['state'] = null;
+        edit_message_text($chat_id, $message_id, "✅ گیفت حذف شد.\n\n" . ADMIN_GIFT_PRICE_LIST_TEXT, admin_gift_price_list_kb($DATA));
+        return;
+    }
 
     if (str_starts_with($data, 'admin_gift_price_detail_back_')) {
         $key = substr($data, strlen('admin_gift_price_detail_back_'));
         $ust['state'] = null;
-        edit_message_text($chat_id, $message_id, admin_gift_price_detail_text($DATA, $key), admin_gift_price_detail_kb($key));
+        edit_message_text($chat_id, $message_id, admin_gift_price_detail_text($DATA, $key), admin_gift_price_detail_kb($key, !isset(GIFTS_META[$key])));
         return;
     }
 
     if (str_starts_with($data, 'admin_change_gift_price_')) {
         $key = substr($data, strlen('admin_change_gift_price_'));
+        if (!isset(all_gifts($DATA)[$key])) return;
         $ust['state'] = "admin_awaiting_gift_price_{$key}";
         edit_message_text($chat_id, $message_id, admin_ask_gift_price_text($key), admin_gift_price_ask_kb($key), 'HTML');
         return;
@@ -3289,8 +3781,8 @@ function handle_callback(array $cq, array &$DATA): void {
 
     if (str_starts_with($data, 'admin_gift_price_')) {
         $key = substr($data, strlen('admin_gift_price_'));
-        if (isset(GIFTS_META[$key])) {
-            edit_message_text($chat_id, $message_id, admin_gift_price_detail_text($DATA, $key), admin_gift_price_detail_kb($key));
+        if (isset(all_gifts($DATA)[$key])) {
+            edit_message_text($chat_id, $message_id, admin_gift_price_detail_text($DATA, $key), admin_gift_price_detail_kb($key, !isset(GIFTS_META[$key])));
         }
         return;
     }
@@ -3336,20 +3828,20 @@ function handle_callback(array $cq, array &$DATA): void {
         $cat = substr($data, strlen('admin_btn_cat_'));
         if (!isset(BUTTON_CATEGORIES[$cat])) return;
         $ust['admin_btn_cat'] = $cat;
-        edit_message_text($chat_id, $message_id, CATEGORY_LABELS[$cat] . "\n\nدکمه مورد نظر رو انتخاب کن:", admin_button_list_kb($cat));
+        edit_message_text($chat_id, $message_id, CATEGORY_LABELS[$cat] . "\n\nدکمه مورد نظر رو انتخاب کن:", admin_button_list_kb($DATA, $cat));
         return;
     }
 
     if ($data === 'admin_btn_list_back') {
         $cat = $ust['admin_btn_cat'] ?? null;
         if ($cat === null || !isset(BUTTON_CATEGORIES[$cat])) { edit_message_text($chat_id, $message_id, '✏️ ویرایش نام دکمه‌ها', admin_button_categories_kb()); return; }
-        edit_message_text($chat_id, $message_id, CATEGORY_LABELS[$cat] . "\n\nدکمه مورد نظر رو انتخاب کن:", admin_button_list_kb($cat));
+        edit_message_text($chat_id, $message_id, CATEGORY_LABELS[$cat] . "\n\nدکمه مورد نظر رو انتخاب کن:", admin_button_list_kb($DATA, $cat));
         return;
     }
 
     if (str_starts_with($data, 'admin_btn_reset_')) {
         $slug = substr($data, strlen('admin_btn_reset_'));
-        if (!in_array($slug, all_button_slugs(), true)) return;
+        if (!in_array($slug, all_button_slugs($DATA), true)) return;
         reset_button($DATA, $slug);
         edit_message_text($chat_id, $message_id, admin_button_detail_body($slug), admin_button_detail_kb($slug));
         return;
@@ -3361,7 +3853,7 @@ function handle_callback(array $cq, array &$DATA): void {
         if ($pos === false) return;
         $slug = substr($rest, 0, $pos);
         $style = substr($rest, $pos + 1);
-        if (!in_array($slug, all_button_slugs(), true) || !in_array($style, ['primary', 'success', 'danger', 'none'], true)) return;
+        if (!in_array($slug, all_button_slugs($DATA), true) || !in_array($style, ['primary', 'success', 'danger', 'none'], true)) return;
         set_button_style($DATA, $slug, $style === 'none' ? null : $style);
         edit_message_text($chat_id, $message_id, admin_button_detail_body($slug), admin_button_detail_kb($slug));
         return;
@@ -3369,7 +3861,7 @@ function handle_callback(array $cq, array &$DATA): void {
 
     if (str_starts_with($data, 'admin_btn_icon_set_')) {
         $slug = substr($data, strlen('admin_btn_icon_set_'));
-        if (!in_array($slug, all_button_slugs(), true)) return;
+        if (!in_array($slug, all_button_slugs($DATA), true)) return;
         $ust['state'] = "admin_awaiting_icon_{$slug}";
         edit_message_text($chat_id, $message_id, admin_button_icon_ask_body($slug), admin_button_icon_ask_kb($slug));
         return;
@@ -3377,7 +3869,7 @@ function handle_callback(array $cq, array &$DATA): void {
 
     if (str_starts_with($data, 'admin_btn_icon_clear_')) {
         $slug = substr($data, strlen('admin_btn_icon_clear_'));
-        if (!in_array($slug, all_button_slugs(), true)) return;
+        if (!in_array($slug, all_button_slugs($DATA), true)) return;
         set_button_icon($DATA, $slug, null);
         edit_message_text($chat_id, $message_id, admin_button_detail_body($slug), admin_button_detail_kb($slug));
         return;
@@ -3385,7 +3877,7 @@ function handle_callback(array $cq, array &$DATA): void {
 
     if (str_starts_with($data, 'admin_btn_icon_ask_back_')) {
         $slug = substr($data, strlen('admin_btn_icon_ask_back_'));
-        if (!in_array($slug, all_button_slugs(), true)) return;
+        if (!in_array($slug, all_button_slugs($DATA), true)) return;
         $ust['state'] = null;
         edit_message_text($chat_id, $message_id, admin_button_detail_body($slug), admin_button_detail_kb($slug));
         return;
@@ -3393,7 +3885,7 @@ function handle_callback(array $cq, array &$DATA): void {
 
     if (str_starts_with($data, 'admin_btn_pick_')) {
         $slug = substr($data, strlen('admin_btn_pick_'));
-        if (!in_array($slug, all_button_slugs(), true)) return;
+        if (!in_array($slug, all_button_slugs($DATA), true)) return;
         $ust['state'] = "admin_awaiting_button_{$slug}";
         edit_message_text($chat_id, $message_id, admin_button_detail_body($slug), admin_button_detail_kb($slug));
         return;
