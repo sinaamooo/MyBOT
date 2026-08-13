@@ -251,11 +251,23 @@ final class Scoring
             }
         }
 
+        // The 8 core components above are normalized to their own 0-100 scale
+        // (unchanged since before the ICT/SMC additions) so min_score/
+        // watchlist_min_score keep meaning the same thing regardless of how
+        // many extra components exist. ICT/SMC confluence below is added as
+        // a bonus on top - confirming signals get a boost, but its absence
+        // never dilutes the base score the way folding it into the same
+        // denominator would (that silently made 75+ scores far rarer).
+        $baseMax = $wTrend + $wEma + $wRsi + $wMacd + $wAdx + $wVolume + $wPa + $wHtf;
+        $baseScore = $baseMax > 0 ? (self::clamp($total, $baseMax) / $baseMax) * 100.0 : 0.0;
+
+        $icmBonus = 0.0;
+
         // 9) ICT/SMC Order Blocks + Breaker Blocks (15M)
         if (!empty($params['indicator_smc_ob_enabled'])) {
             $ob = OrderBlocks::evaluate($obZones, $setupIdx, $bullish);
             if ($ob['hit']) {
-                $total += $wSmcOb;
+                $icmBonus += $wSmcOb;
                 $reasons[] = $ob['reason'];
             }
         }
@@ -264,7 +276,7 @@ final class Scoring
         if (!empty($params['indicator_fvg_enabled'])) {
             $fvg = FairValueGap::evaluate($fvgZones, $setupIdx, $bullish);
             if ($fvg['hit']) {
-                $total += $wFvg;
+                $icmBonus += $wFvg;
                 $reasons[] = $fvg['reason'];
             }
         }
@@ -273,7 +285,7 @@ final class Scoring
         if (!empty($params['indicator_liquidity_enabled'])) {
             $sweep = Liquidity::detectSweep($liquidityPools, $entryIdx, $bullish);
             if ($sweep['hit']) {
-                $total += $wLiquidity;
+                $icmBonus += $wLiquidity;
                 $reasons[] = $sweep['reason'];
             }
         }
@@ -282,14 +294,11 @@ final class Scoring
         if (!empty($params['indicator_structure_enabled'])) {
             $struct = MarketStructure::evaluate($structure, $setupIdx, $bullish);
             if ($struct['hit']) {
-                $total += $wStructure;
+                $icmBonus += $wStructure;
                 $reasons[] = $struct['reason'];
             }
         }
 
-        $maxScore = $wTrend + $wEma + $wRsi + $wMacd + $wAdx + $wVolume + $wPa + $wHtf + $wSmcOb + $wFvg + $wLiquidity + $wStructure;
-        $raw = self::clamp($total, $maxScore);
-        $normalized = $maxScore > 0 ? ($raw / $maxScore) * 100.0 : 0.0;
-        return [$normalized, $reasons];
+        return [min(100.0, $baseScore + $icmBonus), $reasons];
     }
 }
