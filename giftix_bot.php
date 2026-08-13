@@ -51,7 +51,12 @@ $ADMINS = [
     8213021584 => 'owner',
 ];
 
-$REQUIRED_CHANNELS = ['GiftIx_1'];
+// Empty = join-gate disabled. To require membership again, list channel usernames here
+// (without @) AND make sure the bot itself is an ADMIN of each channel first — Telegram's
+// getChatMember call fails for a bot that isn't a member/admin of the channel, and this bot
+// treats that failure as "not joined", which is what caused users to get stuck even after
+// actually joining.
+$REQUIRED_CHANNELS = [];
 
 $BASE_PRICES = [
     'ton' => 298_225,
