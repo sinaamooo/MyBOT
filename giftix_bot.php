@@ -197,6 +197,19 @@ function initDb(): void
         key TEXT PRIMARY KEY,
         value TEXT
     )");
+    $d->exec("CREATE TABLE IF NOT EXISTS menu_buttons (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        section TEXT NOT NULL,
+        label TEXT NOT NULL,
+        color TEXT NOT NULL DEFAULT 'blue',
+        action_type TEXT NOT NULL,
+        action_value TEXT,
+        price INTEGER,
+        description TEXT,
+        position INTEGER NOT NULL DEFAULT 0,
+        new_row INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT
+    )");
     $d->exec("CREATE TABLE IF NOT EXISTS user_state (
         telegram_id INTEGER PRIMARY KEY,
         step TEXT,
@@ -526,7 +539,7 @@ function kb(array $rows): array
 
 function productKeyboard(): array
 {
-    return kb([
+    return kbWithSection('main_menu', [
         [glassButton('خرید استارز', 'buy_stars', 'blue')],
         [glassButton('خرید پرمیوم', 'buy_premium', 'purple')],
         [glassButton('ارسال هدیه', 'buy_gift', 'green')],
@@ -547,6 +560,7 @@ function adminKeyboard(): array
         [glassButton('تراکنش‌ها', 'admin_transactions', 'purple')],
         [glassButton('تیکت‌ها', 'admin_tickets', 'red')],
         [glassButton('مدیریت قیمت‌ها', 'admin_price', 'yellow')],
+        [glassButton('چیدمان دکمه‌ها', 'admin_layout', 'purple')],
         [glassButton('ارسال همگانی', 'admin_broadcast', 'blue')],
         [glassButton('پشتیبان‌گیری', 'admin_backup', 'green')],
         [glassButton('فعال/غیرفعال حالت تعمیر', 'admin_toggle', 'red')],
@@ -556,6 +570,93 @@ function adminKeyboard(): array
 function backRow(string $callbackData, string $label = 'بازگشت'): array
 {
     return [glassButton($label, $callbackData, 'gray')];
+}
+
+// ============================================================
+// Admin-editable menu buttons — lets an admin add extra glass buttons (links, other
+// internal sections, or brand-new priced products) to any of these sections, and choose
+// the exact row/column layout by sequentially picking "new row" or "same row" per button
+// (so e.g. "2 on top, 1 in the middle, 2 more" is just five adds in that order).
+// ============================================================
+const MENU_SECTIONS = [
+    'main_menu' => 'منوی اصلی',
+    'products' => 'لیست محصولات',
+    'buy_stars' => 'خرید استارز',
+    'buy_premium' => 'خرید پرمیوم',
+    'buy_gift' => 'ارسال هدیه',
+    'buy_ton' => 'خرید تون‌کوین',
+    'wallet' => 'کیف پول',
+];
+
+const MENU_INTERNAL_ACTIONS = [
+    'main_menu' => 'منوی اصلی',
+    'products' => 'لیست محصولات',
+    'buy_stars' => 'خرید استارز',
+    'buy_premium' => 'خرید پرمیوم',
+    'buy_gift' => 'ارسال هدیه',
+    'buy_ton' => 'خرید تون‌کوین',
+    'wallet' => 'کیف پول',
+    'deposit' => 'افزایش موجودی',
+    'track_order' => 'پیگیری سفارش',
+    'support' => 'پشتیبانی',
+    'settings' => 'تنظیمات',
+];
+
+function getMenuButtons(string $section): array
+{
+    $stmt = db()->prepare('SELECT * FROM menu_buttons WHERE section = ? ORDER BY position ASC, id ASC');
+    $stmt->execute([$section]);
+    return $stmt->fetchAll();
+}
+
+function sectionRows(string $section): array
+{
+    $rows = [];
+    foreach (getMenuButtons($section) as $btn) {
+        if ($btn['action_type'] === 'url') {
+            $button = urlButton($btn['label'], (string) $btn['action_value']);
+        } elseif ($btn['action_type'] === 'product') {
+            $button = glassButton($btn['label'] . ' - ' . fmtN((int) $btn['price']) . ' تومان', 'mb_' . $btn['id'], $btn['color']);
+        } else {
+            $button = glassButton($btn['label'], (string) $btn['action_value'], $btn['color']);
+        }
+        if ((int) $btn['new_row'] === 1 || empty($rows)) {
+            $rows[] = [$button];
+        } else {
+            $rows[count($rows) - 1][] = $button;
+        }
+    }
+    return $rows;
+}
+
+function kbWithSection(string $section, array $staticRows, array $trailingRows = []): array
+{
+    return kb(array_merge($staticRows, sectionRows($section), $trailingRows));
+}
+
+function addMenuButton(string $section, string $label, string $color, string $actionType, ?string $actionValue, ?int $price, ?string $description, bool $newRow): int
+{
+    $stmt = db()->prepare('SELECT COALESCE(MAX(position), -1) mx FROM menu_buttons WHERE section = ?');
+    $stmt->execute([$section]);
+    $nextPos = (int) $stmt->fetch()['mx'] + 1;
+
+    $stmt = db()->prepare('INSERT INTO menu_buttons (section, label, color, action_type, action_value, price, description, position, new_row, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+    $stmt->execute([$section, $label, $color, $actionType, $actionValue, $price, $description, $nextPos, $newRow ? 1 : 0, nowTehran()]);
+    return (int) db()->lastInsertId();
+}
+
+function getMenuButton(int $id): ?array
+{
+    $stmt = db()->prepare('SELECT * FROM menu_buttons WHERE id = ?');
+    $stmt->execute([$id]);
+    return $stmt->fetch() ?: null;
+}
+
+function deleteMenuButton(int $id): void
+{
+    $stmt = db()->prepare('DELETE FROM menu_buttons WHERE id = ?');
+    $stmt->execute([$id]);
 }
 
 // ============================================================
@@ -867,13 +968,12 @@ function cbMainMenu(array $ctx): void
 function cbProducts(array $ctx): void
 {
     $lang = $ctx['lang'];
-    editMessageText($ctx['chatId'], $ctx['messageId'], b(h(txt('products_title', $lang))), kb([
+    editMessageText($ctx['chatId'], $ctx['messageId'], b(h(txt('products_title', $lang))), kbWithSection('products', [
         [glassButton('خرید استارز', 'buy_stars', 'blue')],
         [glassButton('خرید پرمیوم', 'buy_premium', 'purple')],
         [glassButton('ارسال هدیه', 'buy_gift', 'green')],
         [glassButton('خرید تون‌کوین', 'buy_ton', 'orange')],
-        backRow('main_menu'),
-    ]));
+    ], [backRow('main_menu')]));
 }
 
 // ============================================================
@@ -892,7 +992,7 @@ function cbBuyStars(array $ctx): void
         . h('قیمت هر استارز: ') . b(fmtN($price) . ' تومان') . "\n"
         . h('حداقل خرید: 50 عدد') . "\n\n"
         . quoteBlock(h('تعداد استارز موردنظر خود را ارسال کنید:'));
-    editMessageText($ctx['chatId'], $ctx['messageId'], $text, kb([backRow('products')]));
+    editMessageText($ctx['chatId'], $ctx['messageId'], $text, kbWithSection('buy_stars', [], [backRow('products')]));
 }
 
 // ============================================================
@@ -905,12 +1005,11 @@ function cbBuyPremium(array $ctx): void
     $p6 = getPrice('premium', '6m');
     $p12 = getPrice('premium', '12m');
     $text = b(pe('crown') . ' ' . h(txt('premium_title', $lang)));
-    editMessageText($ctx['chatId'], $ctx['messageId'], $text, kb([
+    editMessageText($ctx['chatId'], $ctx['messageId'], $text, kbWithSection('buy_premium', [
         [glassButton("3 ماهه - " . fmtN($p3) . ' تومان', 'premium_3m', 'blue')],
         [glassButton("6 ماهه - " . fmtN($p6) . ' تومان', 'premium_6m', 'green')],
         [glassButton("12 ماهه - " . fmtN($p12) . ' تومان', 'premium_12m', 'purple')],
-        backRow('products'),
-    ]));
+    ], [backRow('products')]));
 }
 
 function cbPremiumSelect(array $ctx, string $data): void
@@ -968,14 +1067,13 @@ function giftKeyboardRows(): array
         $price = getPrice('gift_star') * $info['mult'];
         $rows[] = [glassButton($info['label'] . ' - ' . fmtN($price) . ' تومان', 'gift_' . $key, 'green')];
     }
-    $rows[] = backRow('products');
     return $rows;
 }
 
 function cbBuyGift(array $ctx): void
 {
     $lang = $ctx['lang'];
-    editMessageText($ctx['chatId'], $ctx['messageId'], b(pe('gift') . ' ' . h(txt('gift_list_title', $lang))), kb(giftKeyboardRows()));
+    editMessageText($ctx['chatId'], $ctx['messageId'], b(pe('gift') . ' ' . h(txt('gift_list_title', $lang))), kbWithSection('buy_gift', giftKeyboardRows(), [backRow('products')]));
 }
 
 function cbGiftSelect(array $ctx, string $data): void
@@ -1040,7 +1138,7 @@ function cbBuyTon(array $ctx): void
         . h('قیمت هر TON: ') . b(fmtN($price) . ' تومان') . "\n"
         . h('حداقل خرید: 0.1 TON') . "\n\n"
         . quoteBlock(h('مقدار TON موردنظر خود را ارسال کنید:'));
-    editMessageText($ctx['chatId'], $ctx['messageId'], $text, kb([backRow('products')]));
+    editMessageText($ctx['chatId'], $ctx['messageId'], $text, kbWithSection('buy_ton', [], [backRow('products')]));
 }
 
 // ============================================================
@@ -1065,11 +1163,10 @@ function cbWallet(array $ctx): void
         . quoteBlock(h('کد معرف شما: ') . b(h($user['referral_code'])) . "\n"
             . h('لینک دعوت: https://t.me/' . BOT_USERNAME . '?start=ref_' . $user['referral_code']));
 
-    editMessageText($ctx['chatId'], $ctx['messageId'], $text, kb([
+    editMessageText($ctx['chatId'], $ctx['messageId'], $text, kbWithSection('wallet', [
         [glassButton('افزایش موجودی', 'deposit', 'green')],
         [glassButton('تراکنش‌های من', 'transactions', 'blue')],
-        backRow('main_menu'),
-    ]));
+    ], [backRow('main_menu')]));
 }
 
 function cbDeposit(array $ctx): void
@@ -1477,6 +1574,216 @@ function handleAdminPriceEditSend(array $message, int $adminTgId): void
 }
 
 // ============================================================
+// Admin: menu/button layout builder
+// ============================================================
+function cbAdminLayout(array $ctx): void
+{
+    $rows = [];
+    foreach (MENU_SECTIONS as $key => $label) {
+        $rows[] = [glassButton($label, 'admin_layout_sec_' . $key, 'blue')];
+    }
+    $rows[] = backRow('admin_panel');
+    editMessageText($ctx['chatId'], $ctx['messageId'], b(h('چیدمان دکمه‌ها')) . "\n\n" . h('بخشی که می‌خواید دکمه بهش اضافه کنید یا مدیریت کنید رو انتخاب کنید:'), kb($rows));
+}
+
+function renderLayoutSection(array $ctx, string $section): void
+{
+    $label = MENU_SECTIONS[$section] ?? $section;
+    $buttons = getMenuButtons($section);
+
+    $lines = [b(h('دکمه‌های بخش: ' . $label))];
+    $rows = [];
+    if (!$buttons) {
+        $lines[] = h('هنوز دکمه‌ی سفارشی‌ای اضافه نشده.');
+    }
+    foreach ($buttons as $btn) {
+        $typeLabel = ['url' => 'لینک', 'product' => 'محصول ' . fmtN((int) $btn['price']) . ' تومان', 'callback' => 'داخلی'][$btn['action_type']] ?? $btn['action_type'];
+        $rowMark = (int) $btn['new_row'] === 1 ? 'ردیف جدید' : 'همون ردیف قبلی';
+        $lines[] = quoteBlock(h($btn['label'] . ' (' . $typeLabel . ' — ' . $rowMark . ')'));
+        $rows[] = [glassButton('حذف: ' . $btn['label'], 'admin_layout_del_' . $btn['id'], 'red')];
+    }
+    $rows[] = [glassButton('افزودن دکمه جدید', 'admin_layout_add_' . $section, 'green')];
+    $rows[] = backRow('admin_layout');
+
+    editMessageText($ctx['chatId'], $ctx['messageId'], implode("\n", $lines), kb($rows));
+}
+
+function cbAdminLayoutSection(array $ctx, string $data): void
+{
+    $section = substr($data, strlen('admin_layout_sec_'));
+    if (!isset(MENU_SECTIONS[$section])) {
+        return;
+    }
+    renderLayoutSection($ctx, $section);
+}
+
+function cbAdminLayoutDelete(array $ctx, string $data): void
+{
+    $id = (int) substr($data, strlen('admin_layout_del_'));
+    $btn = getMenuButton($id);
+    if (!$btn) {
+        return;
+    }
+    deleteMenuButton($id);
+    logAdminAction($ctx['tgId'], 'menu_button_delete', null, ['id' => $id, 'section' => $btn['section']]);
+    renderLayoutSection($ctx, $btn['section']);
+}
+
+function cbAdminLayoutAddStart(array $ctx, string $data): void
+{
+    $section = substr($data, strlen('admin_layout_add_'));
+    if (!isset(MENU_SECTIONS[$section])) {
+        return;
+    }
+    $st = &state($ctx['tgId']);
+    $st['data']['layout'] = ['section' => $section];
+    $st['step'] = 'layout_label';
+
+    editMessageText($ctx['chatId'], $ctx['messageId'], quoteBlock(h('متن (لیبل) دکمه جدید را ارسال کنید:')), kb([backRow('admin_layout_sec_' . $section)]));
+}
+
+function sendLayoutTypePrompt(int|string $chatId): void
+{
+    sendMessage($chatId, h('نوع این دکمه چیه؟'), kb([
+        [glassButton('اتصال به یکی از بخش‌های ربات', 'layout_type_callback', 'blue')],
+        [glassButton('لینک بیرونی (URL)', 'layout_type_url', 'green')],
+        [glassButton('محصول جدید با قیمت', 'layout_type_product', 'purple')],
+    ]));
+}
+
+function sendLayoutRowPrompt(int|string $chatId): void
+{
+    sendMessage($chatId, h('این دکمه کجای چیدمان قرار بگیره؟'), kb([
+        [glassButton('ردیف جدید (زیر همه)', 'layout_row_new', 'blue')],
+        [glassButton('کنار آخرین دکمه، همون ردیف', 'layout_row_same', 'green')],
+    ]));
+}
+
+function cbLayoutTypeCallback(array $ctx): void
+{
+    $rows = [];
+    foreach (MENU_INTERNAL_ACTIONS as $key => $label) {
+        $rows[] = [glassButton($label, 'layout_cb_' . $key, 'blue')];
+    }
+    editMessageText($ctx['chatId'], $ctx['messageId'], h('دکمه به کدوم بخش وصل بشه؟'), kb($rows));
+}
+
+function cbLayoutPickCb(array $ctx, string $data): void
+{
+    $action = substr($data, strlen('layout_cb_'));
+    if (!isset(MENU_INTERNAL_ACTIONS[$action])) {
+        return;
+    }
+    $st = &state($ctx['tgId']);
+    $st['data']['layout']['type'] = 'callback';
+    $st['data']['layout']['value'] = $action;
+    sendLayoutRowPrompt($ctx['chatId']);
+}
+
+function cbLayoutTypeUrl(array $ctx): void
+{
+    $st = &state($ctx['tgId']);
+    $st['step'] = 'layout_url';
+    editMessageText($ctx['chatId'], $ctx['messageId'], quoteBlock(h('آدرس (URL) کامل رو ارسال کنید (با https:// شروع بشه):')));
+}
+
+function cbLayoutTypeProduct(array $ctx): void
+{
+    $st = &state($ctx['tgId']);
+    $st['step'] = 'layout_price';
+    editMessageText($ctx['chatId'], $ctx['messageId'], quoteBlock(h('قیمت به تومان و در صورت نیاز توضیح رو ارسال کنید.')) . "\n" . h('مثال: 150000 پک ویژه تولد'));
+}
+
+function cbLayoutRow(array $ctx, string $data): void
+{
+    $st = &state($ctx['tgId']);
+    if (!isset($st['data']['layout']['section'])) {
+        return;
+    }
+    $st['data']['layout']['new_row'] = ($data === 'layout_row_new');
+
+    $colorRows = [
+        [glassButton('آبی', 'layout_color_blue', 'blue'), glassButton('سبز', 'layout_color_green', 'green')],
+        [glassButton('قرمز', 'layout_color_red', 'red'), glassButton('بنفش', 'layout_color_purple', 'purple')],
+        [glassButton('نارنجی', 'layout_color_orange', 'orange'), glassButton('زرد', 'layout_color_yellow', 'yellow')],
+        [glassButton('طوسی', 'layout_color_gray', 'gray')],
+    ];
+    sendMessage($ctx['chatId'], h('رنگ دکمه رو انتخاب کنید:'), kb($colorRows));
+}
+
+function cbLayoutColor(array $ctx, string $data): void
+{
+    $color = substr($data, strlen('layout_color_'));
+    global $COLOR_EMOJI;
+    if (!isset($COLOR_EMOJI[$color])) {
+        return;
+    }
+    $st = &state($ctx['tgId']);
+    $l = $st['data']['layout'] ?? null;
+    if (!$l || empty($l['section']) || empty($l['label']) || empty($l['type'])) {
+        editMessageText($ctx['chatId'], $ctx['messageId'], h('اطلاعات ناقص است، دوباره تلاش کنید.'));
+        return;
+    }
+
+    $actionValue = $l['value'] ?? null;
+    $price = $l['type'] === 'product' ? (int) ($l['price'] ?? 0) : null;
+    $description = $l['type'] === 'product' ? ($l['description'] ?? null) : null;
+
+    addMenuButton($l['section'], $l['label'], $color, $l['type'], $actionValue, $price, $description, !empty($l['new_row']));
+    logAdminAction($ctx['tgId'], 'menu_button_add', null, ['section' => $l['section'], 'label' => $l['label'], 'type' => $l['type']]);
+
+    $st['data']['layout'] = null;
+    editMessageText($ctx['chatId'], $ctx['messageId'], b(pe('check') . ' ' . h('دکمه اضافه شد.')));
+    renderLayoutSection($ctx, $l['section']);
+}
+
+// ============================================================
+// Custom-product purchase flow (from admin-added "product" menu buttons)
+// ============================================================
+function cbCustomProductInfo(array $ctx, string $data): void
+{
+    $id = (int) substr($data, strlen('mb_'));
+    $btn = getMenuButton($id);
+    if (!$btn || $btn['action_type'] !== 'product') {
+        return;
+    }
+    $text = b(h($btn['label'])) . "\n\n"
+        . ($btn['description'] ? h((string) $btn['description']) . "\n\n" : '')
+        . h('قیمت: ') . b(fmtN((int) $btn['price']) . ' تومان') . "\n\n"
+        . quoteBlock(h('برای نهایی‌کردن خرید تایید کنید.'));
+    editMessageText($ctx['chatId'], $ctx['messageId'], $text, kb([
+        [glassButton('تایید و پرداخت', 'mbc_' . $id, 'green')],
+        backRow('products'),
+    ]));
+}
+
+function cbCustomProductConfirm(array $ctx, string $data): void
+{
+    $id = (int) substr($data, strlen('mbc_'));
+    $btn = getMenuButton($id);
+    if (!$btn || $btn['action_type'] !== 'product') {
+        return;
+    }
+    $price = (int) $btn['price'];
+    $user = getUserByTelegramId($ctx['tgId']);
+    if ((int) $user['balance'] < $price) {
+        editMessageText($ctx['chatId'], $ctx['messageId'], b(h('موجودی کیف پول کافی نیست!')) . "\n" . h('موجودی: ' . fmtN((int) $user['balance']) . ' تومان'));
+        return;
+    }
+
+    $order = createOrder((int) $user['id'], 'custom', ['menu_button_id' => $id, 'name' => $btn['label']], $price);
+    adjustBalance((int) $user['id'], -$price);
+
+    $text = b(pe('check') . ' ' . h(txt('order_success', $ctx['lang']))) . "\n\n"
+        . h('محصول: ' . $btn['label']) . "\n"
+        . h('مبلغ: ' . fmtN($price) . ' تومان') . "\n"
+        . quoteBlock(h('کد پیگیری: ') . b(h($order['order_id'])));
+    editMessageText($ctx['chatId'], $ctx['messageId'], $text, productKeyboard());
+
+    notifyAdmins(b(h('سفارش جدید (محصول سفارشی: ' . $btn['label'] . ')')) . "\n\n" . orderAdminSummary($order, $user));
+}
+
+// ============================================================
 // Admin: broadcast
 // ============================================================
 function cbAdminBroadcastStart(array $ctx): void
@@ -1577,6 +1884,43 @@ function handleTextInput(array $message, array $user, ?string $step): void
     $text = trim((string) ($message['text'] ?? ''));
     $lang = $user['language'] ?: DEFAULT_LANG;
     $st = &state($tgId);
+
+    if ($step === 'layout_label' && isAdmin($tgId)) {
+        if ($text === '') {
+            sendMessage($chatId, h('متن دکمه نمی‌تواند خالی باشد.'));
+            return;
+        }
+        $st['data']['layout']['label'] = $text;
+        $st['step'] = null;
+        sendLayoutTypePrompt($chatId);
+        return;
+    }
+
+    if ($step === 'layout_url' && isAdmin($tgId)) {
+        if (!preg_match('#^https?://#i', $text)) {
+            sendMessage($chatId, h('آدرس باید با http:// یا https:// شروع بشه.'));
+            return;
+        }
+        $st['data']['layout']['type'] = 'url';
+        $st['data']['layout']['value'] = $text;
+        $st['step'] = null;
+        sendLayoutRowPrompt($chatId);
+        return;
+    }
+
+    if ($step === 'layout_price' && isAdmin($tgId)) {
+        $parts = preg_split('/\s+/', $text, 2);
+        if (!isset($parts[0]) || !ctype_digit($parts[0]) || (int) $parts[0] <= 0) {
+            sendMessage($chatId, h('فرمت نامعتبر است. مثال: 150000 پک ویژه تولد'));
+            return;
+        }
+        $st['data']['layout']['type'] = 'product';
+        $st['data']['layout']['price'] = (int) $parts[0];
+        $st['data']['layout']['description'] = $parts[1] ?? null;
+        $st['step'] = null;
+        sendLayoutRowPrompt($chatId);
+        return;
+    }
 
     if ($step === 'stars_count') {
         if (!ctype_digit($text) || (int) $text < 50) {
@@ -1855,6 +2199,8 @@ function handleCallbackQuery(array $cq): void
         case $data === 'support': cbSupport($ctx); return;
         case $data === 'settings': cbSettings($ctx); return;
         case str_starts_with($data, 'set_lang_'): cbSetLang($ctx, $data); return;
+        case str_starts_with($data, 'mbc_'): cbCustomProductConfirm($ctx, $data); return;
+        case str_starts_with($data, 'mb_'): cbCustomProductInfo($ctx, $data); return;
     }
 
     if (!isAdmin($tgId)) {
@@ -1878,6 +2224,16 @@ function handleCallbackQuery(array $cq): void
         case str_starts_with($data, 'admin_ticket_reply_'): cbAdminTicketReplyStart($ctx, $data); return;
         case str_starts_with($data, 'admin_ticket_close_'): cbAdminTicketClose($ctx, $data); return;
         case $data === 'admin_price': cbAdminPrice($ctx); return;
+        case $data === 'admin_layout': cbAdminLayout($ctx); return;
+        case str_starts_with($data, 'admin_layout_sec_'): cbAdminLayoutSection($ctx, $data); return;
+        case str_starts_with($data, 'admin_layout_add_'): cbAdminLayoutAddStart($ctx, $data); return;
+        case str_starts_with($data, 'admin_layout_del_'): cbAdminLayoutDelete($ctx, $data); return;
+        case $data === 'layout_type_callback': cbLayoutTypeCallback($ctx); return;
+        case $data === 'layout_type_url': cbLayoutTypeUrl($ctx); return;
+        case $data === 'layout_type_product': cbLayoutTypeProduct($ctx); return;
+        case str_starts_with($data, 'layout_cb_'): cbLayoutPickCb($ctx, $data); return;
+        case $data === 'layout_row_new' || $data === 'layout_row_same': cbLayoutRow($ctx, $data); return;
+        case str_starts_with($data, 'layout_color_'): cbLayoutColor($ctx, $data); return;
         case $data === 'admin_broadcast': cbAdminBroadcastStart($ctx); return;
         case $data === 'admin_backup': cbAdminBackupNow($ctx); return;
         case $data === 'admin_toggle': cbAdminToggle($ctx); return;
