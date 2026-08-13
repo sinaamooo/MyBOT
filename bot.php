@@ -953,11 +953,16 @@ function reset_text(array &$DATA, string $slug): void {
 }
 
 function apply_button_edit(array &$DATA, string $slug, string $label, ?array $entities): void {
+    // Telegram always renders icon_custom_emoji_id BEFORE the button text, with
+    // no way to move it after - so a label edit must never auto-set it (that
+    // silently duplicated whatever emoji was typed and forced it to the front).
+    // The label text itself already carries any emoji exactly where it was
+    // typed - front, back, or anywhere - with no separate icon involved.
     $existing = $DATA['buttons'][$slug] ?? [];
     $DATA['buttons'][$slug] = [
         'label' => $label,
         'style' => $existing['style'] ?? null,
-        'icon_custom_emoji_id' => first_custom_emoji_id($entities) ?? ($existing['icon_custom_emoji_id'] ?? null),
+        'icon_custom_emoji_id' => $existing['icon_custom_emoji_id'] ?? null,
     ];
 }
 
@@ -1894,7 +1899,9 @@ function admin_button_detail_body(string $slug): string {
 }
 
 function admin_button_icon_ask_body(string $slug): string {
-    return '🖼 یک پیام حاوی ایموجی پریمیوم (از اکانت پریمیوم خودت) بفرست تا به عنوان آیکون دکمه «' . B($slug) . '» تنظیم بشه.';
+    return '🖼 یک پیام حاوی ایموجی پریمیوم (از اکانت پریمیوم خودت) بفرست تا به عنوان آیکون دکمه «' . B($slug) . '» تنظیم بشه.' .
+        "\n\n⚠️ توجه: تلگرام همیشه این آیکون رو قبل از متن دکمه نشون می‌ده و امکان جابه‌جایی به بعد از متن وجود نداره. " .
+        'اگه می‌خوای ایموجی دقیقاً وسط یا انتهای متن دکمه باشه، به‌جای این گزینه، همون ایموجی رو مستقیم داخل متن دکمه (وقتی نام دکمه رو ویرایش می‌کنی) در همون‌جایی که می‌خوای تایپ کن.';
 }
 
 function admin_button_icon_ask_kb(string $slug): array {
