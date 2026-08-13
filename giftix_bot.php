@@ -2,7 +2,16 @@
 /**
  * GiftIx Store Bot — PHP port of the original Python (python-telegram-bot + SQLAlchemy) source.
  *
- * Run with:  php giftix_bot.php
+ * Two run modes, same file:
+ *   1) Long polling (CLI):  php giftix_bot.php run
+ *   2) Webhook (web server): deploy this file at a public HTTPS URL and register it with
+ *      `php giftix_bot.php webhook:set https://your-domain/path/giftix_bot.php`
+ *      `php giftix_bot.php webhook:delete` switches back to polling mode.
+ *      `php giftix_bot.php webhook:info` shows Telegram's current webhook status.
+ * A mode change takes effect immediately server-side (setWebhook disables getUpdates and
+ * vice versa) — never run polling while a webhook is registered, or run two pollers/webhooks
+ * against the same token at once.
+ *
  * Requires:  php-cli, php-curl, php-sqlite3, php-mbstring (php >= 8.1)
  *
  * Notes on premium (custom) emoji:
@@ -19,11 +28,6 @@
  */
 
 declare(strict_types=1);
-
-if (PHP_SAPI !== 'cli') {
-    fwrite(STDERR, "This bot must be run from the command line: php giftix_bot.php\n");
-    exit(1);
-}
 
 date_default_timezone_set('Asia/Tehran');
 mb_internal_encoding('UTF-8');
@@ -93,7 +97,11 @@ $GIFTS = [
 // ============================================================
 function logMsg(string $msg): void
 {
-    fwrite(STDOUT, '[' . date('Y-m-d H:i:s') . "] {$msg}\n");
+    $line = '[' . date('Y-m-d H:i:s') . "] {$msg}\n";
+    if (PHP_SAPI === 'cli') {
+        fwrite(STDOUT, $line);
+    }
+    @file_put_contents(__DIR__ . '/giftix_bot.log', $line, FILE_APPEND);
 }
 
 // ============================================================
@@ -183,6 +191,15 @@ function initDb(): void
     $d->exec("CREATE TABLE IF NOT EXISTS settings (
         key TEXT PRIMARY KEY,
         value TEXT
+    )");
+    $d->exec("CREATE TABLE IF NOT EXISTS user_state (
+        telegram_id INTEGER PRIMARY KEY,
+        step TEXT,
+        data TEXT,
+        broadcast INTEGER NOT NULL DEFAULT 0,
+        ticket_reply_id INTEGER,
+        price_edit INTEGER NOT NULL DEFAULT 0,
+        updated_at TEXT
     )");
 }
 
@@ -704,6 +721,42 @@ function resetStep(int $tgId): void
 {
     $st = &state($tgId);
     $st['step'] = null;
+}
+
+// Webhook mode serves one update per fresh PHP-FPM process, so conversation state cannot
+// live only in the $STATE array — it is loaded from and saved back to SQLite around every
+// single update (loadState/saveState below), keeping polling and webhook mode identical.
+function loadState(int $tgId): void
+{
+    global $STATE;
+    $stmt = db()->prepare('SELECT * FROM user_state WHERE telegram_id = ?');
+    $stmt->execute([$tgId]);
+    $row = $stmt->fetch();
+    if ($row) {
+        $STATE[$tgId] = [
+            'step' => $row['step'],
+            'data' => $row['data'] ? (json_decode((string) $row['data'], true) ?: []) : [],
+            'broadcast' => (bool) $row['broadcast'],
+            'ticket_reply_id' => $row['ticket_reply_id'] !== null ? (int) $row['ticket_reply_id'] : null,
+            'price_edit' => (bool) $row['price_edit'],
+        ];
+    } else {
+        $STATE[$tgId] = ['step' => null, 'data' => [], 'broadcast' => false, 'ticket_reply_id' => null, 'price_edit' => false];
+    }
+}
+
+function saveState(int $tgId): void
+{
+    $st = state($tgId);
+    $stmt = db()->prepare('INSERT INTO user_state (telegram_id, step, data, broadcast, ticket_reply_id, price_edit, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(telegram_id) DO UPDATE SET step = excluded.step, data = excluded.data,
+            broadcast = excluded.broadcast, ticket_reply_id = excluded.ticket_reply_id,
+            price_edit = excluded.price_edit, updated_at = excluded.updated_at');
+    $stmt->execute([
+        $tgId, $st['step'], json_encode($st['data'] ?? [], JSON_UNESCAPED_UNICODE),
+        !empty($st['broadcast']) ? 1 : 0, $st['ticket_reply_id'] ?? null, !empty($st['price_edit']) ? 1 : 0, nowTehran(),
+    ]);
 }
 
 // ============================================================
@@ -1899,10 +1952,24 @@ function handleMessage(array $message): void
 
 function processUpdate(array $update): void
 {
+    $tgId = null;
+    if (isset($update['callback_query']['from']['id'])) {
+        $tgId = (int) $update['callback_query']['from']['id'];
+    } elseif (isset($update['message']['from']['id'])) {
+        $tgId = (int) $update['message']['from']['id'];
+    }
+    if ($tgId !== null) {
+        loadState($tgId);
+    }
+
     if (isset($update['callback_query'])) {
         handleCallbackQuery($update['callback_query']);
     } elseif (isset($update['message'])) {
         handleMessage($update['message']);
+    }
+
+    if ($tgId !== null) {
+        saveState($tgId);
     }
 }
 
@@ -1963,4 +2030,106 @@ function main(): void
     }
 }
 
-main();
+// ============================================================
+// Webhook management (setWebhook/deleteWebhook) + secret-token verification
+// ============================================================
+const WEBHOOK_SECRET_FILE = __DIR__ . '/.giftix_webhook_secret';
+
+function getOrCreateWebhookSecret(): string
+{
+    if (is_file(WEBHOOK_SECRET_FILE)) {
+        $existing = trim((string) file_get_contents(WEBHOOK_SECRET_FILE));
+        if ($existing !== '') {
+            return $existing;
+        }
+    }
+    $secret = bin2hex(random_bytes(32));
+    file_put_contents(WEBHOOK_SECRET_FILE, $secret);
+    chmod(WEBHOOK_SECRET_FILE, 0600);
+    return $secret;
+}
+
+function cliWebhookSet(string $url): void
+{
+    $secret = getOrCreateWebhookSecret();
+    $res = apiRequest('setWebhook', [
+        'url' => $url,
+        'secret_token' => $secret,
+        'allowed_updates' => ['message', 'callback_query'],
+    ]);
+    if ($res === null) {
+        fwrite(STDERR, "Failed to set webhook. Check the URL is a public HTTPS address with a trusted certificate.\n");
+        exit(1);
+    }
+    echo "Webhook registered: {$url}\n";
+    echo "Telegram will now push updates instead of long polling — do not also run 'php giftix_bot.php run'.\n";
+}
+
+function cliWebhookDelete(): void
+{
+    $res = apiRequest('deleteWebhook', ['drop_pending_updates' => false]);
+    echo $res !== null
+        ? "Webhook removed. You can go back to polling with: php giftix_bot.php run\n"
+        : "Failed to delete webhook.\n";
+}
+
+function cliWebhookInfo(): void
+{
+    $res = apiRequest('getWebhookInfo', []);
+    echo json_encode($res, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . "\n";
+}
+
+// ============================================================
+// Entry point — CLI (polling / webhook management) or web (webhook receiver)
+// ============================================================
+if (PHP_SAPI === 'cli') {
+    initDb();
+    $cmd = $argv[1] ?? 'run';
+    switch ($cmd) {
+        case 'webhook:set':
+            if (empty($argv[2])) {
+                fwrite(STDERR, "Usage: php giftix_bot.php webhook:set https://your-domain/path/giftix_bot.php\n");
+                exit(1);
+            }
+            cliWebhookSet($argv[2]);
+            break;
+        case 'webhook:delete':
+            cliWebhookDelete();
+            break;
+        case 'webhook:info':
+            cliWebhookInfo();
+            break;
+        case 'run':
+            main();
+            break;
+        default:
+            fwrite(STDERR, "Unknown command '{$cmd}'. Use: run | webhook:set <url> | webhook:delete | webhook:info\n");
+            exit(1);
+    }
+    exit(0);
+}
+
+// --- Web server (webhook) request ---
+initDb();
+header('Content-Type: application/json');
+
+$expectedSecret = getOrCreateWebhookSecret();
+$incomingSecret = $_SERVER['HTTP_X_TELEGRAM_BOT_API_SECRET_TOKEN'] ?? '';
+if (!hash_equals($expectedSecret, $incomingSecret)) {
+    http_response_code(403);
+    echo json_encode(['ok' => false, 'error' => 'invalid secret token']);
+    exit;
+}
+
+$raw = file_get_contents('php://input');
+$update = json_decode((string) $raw, true);
+if (is_array($update)) {
+    try {
+        processUpdate($update);
+    } catch (Throwable $e) {
+        logMsg('Webhook error: ' . $e->getMessage());
+    }
+}
+
+http_response_code(200);
+echo json_encode(['ok' => true]);
