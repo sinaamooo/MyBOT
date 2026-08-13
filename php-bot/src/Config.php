@@ -118,7 +118,7 @@ final class Config
     public static function defaultSignalMessageTemplate(): string
     {
         return "━━━━━━━━━━━━━━\n"
-            . "{header_emoji} سیگنال جدید فیوچرز\n\n"
+            . "🚨 سیگنال جدید فیوچرز\n\n"
             . "🪙 {symbol}\n"
             . "{side_emoji} {side}\n\n"
             . "📊 اطمینان: {score}%\n\n"
@@ -133,7 +133,7 @@ final class Config
             . "📊 روند:\n{trend}\n"
             . "🌐 رژیم بازار:\n{regime}\n"
             . "━━━━━━━━━━━━━━\n\n"
-            . "💬 {quote}\n"
+            . "{quote}\n"
             . "━━━━━━━━━━━━━━\n\n"
             . "⚠️ فقط جنبه آموزشی/سیگنال دارد\n"
             . "ریسک خودتان را با دقت مدیریت کنید\n"
@@ -283,16 +283,13 @@ final class Config
             'ai_layer_enabled' => false,
             'news_filter_enabled' => false,
 
-            // --- Message template ---
+            // --- Message template (paste a custom/premium emoji directly into
+            // the template text via the editor - it's preserved automatically,
+            // no separate settings screen needed; requires the pasting
+            // account to have Telegram Premium or it won't render for anyone) ---
             'signal_message_template' => self::defaultSignalMessageTemplate(),
             'signal_quote_enabled' => true,
             'signal_card_enabled' => true,
-
-            // --- Premium/custom emoji (requires the bot owner's account to have
-            // Telegram Premium - see the Premium Emoji panel screen) ---
-            'premium_emoji_enabled' => false,
-            'premium_emoji_signal_id' => '',
-            'premium_emoji_pump_id' => '',
 
             // --- Daily good-morning / good-night channel messages (checked once
             // per minute by cron/monitor.php against notification_timezone) ---

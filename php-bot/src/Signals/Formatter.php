@@ -42,24 +42,46 @@ final class Formatter
     }
 
     /**
-     * Renders a premium/custom emoji via Telegram's <tg-emoji> HTML tag when
-     * enabled and configured for this slot, falling back to a plain emoji
-     * otherwise - including when the bot owner's account has no Telegram
-     * Premium, since Telegram would otherwise reject the whole message.
+     * Bakes any custom/premium emoji the admin pasted into a template-edit
+     * message into <tg-emoji> HTML tags at their exact position, so it's
+     * preserved wherever they put it (front, back, middle) - no separate
+     * settings screen needed, and it degrades to the plain fallback emoji
+     * automatically for anyone without Telegram Premium reading it.
      *
-     * @param array<string, mixed> $params
+     * @param array<int, array<string, mixed>> $entities Telegram message entities
      */
-    public static function premiumEmoji(array $params, string $slot, string $fallback): string
+    public static function embedCustomEmoji(string $text, array $entities): string
     {
-        if (empty($params['premium_emoji_enabled'])) {
-            return $fallback;
+        $customEmoji = array_values(array_filter(
+            $entities,
+            fn(array $e) => ($e['type'] ?? '') === 'custom_emoji' && isset($e['custom_emoji_id'])
+        ));
+        if ($customEmoji === []) {
+            return $text;
         }
-        $key = $slot === 'pump' ? 'premium_emoji_pump_id' : 'premium_emoji_signal_id';
-        $id = (string) ($params[$key] ?? '');
-        if ($id === '') {
-            return $fallback;
+
+        // Entity offsets are UTF-16 code units; round-trip through UTF-16LE to
+        // get the matching UTF-8 byte offset so preceding surrogate-pair
+        // characters (most emoji) don't throw off the position.
+        $utf16 = mb_convert_encoding($text, 'UTF-16LE', 'UTF-8');
+        $byteOffset = static function (int $utf16Offset) use ($utf16): int {
+            $prefix = substr($utf16, 0, $utf16Offset * 2);
+            return strlen((string) mb_convert_encoding($prefix, 'UTF-8', 'UTF-16LE'));
+        };
+
+        // Splice from the end backward so earlier byte offsets stay valid.
+        usort($customEmoji, fn(array $a, array $b) => (int) $b['offset'] <=> (int) $a['offset']);
+
+        foreach ($customEmoji as $entity) {
+            $start = $byteOffset((int) $entity['offset']);
+            $end = $byteOffset((int) $entity['offset'] + (int) $entity['length']);
+            $fallback = substr($text, $start, $end - $start);
+            $id = htmlspecialchars((string) $entity['custom_emoji_id'], ENT_QUOTES);
+            $tag = '<tg-emoji emoji-id="' . $id . '">' . $fallback . '</tg-emoji>';
+            $text = substr($text, 0, $start) . $tag . substr($text, $end);
         }
-        return '<tg-emoji emoji-id="' . htmlspecialchars($id, ENT_QUOTES) . '">' . $fallback . '</tg-emoji>';
+
+        return $text;
     }
 
     /** @param array<string, mixed> $data */
@@ -79,7 +101,7 @@ final class Formatter
     /** @return string[] */
     public static function knownSignalPlaceholders(): array
     {
-        return ['symbol', 'side', 'side_emoji', 'score', 'entry', 'stop_loss', 'tp1', 'tp2', 'tp3', 'leverage', 'rr', 'timeframe', 'trend', 'regime', 'quote', 'header_emoji'];
+        return ['symbol', 'side', 'side_emoji', 'score', 'entry', 'stop_loss', 'tp1', 'tp2', 'tp3', 'leverage', 'rr', 'timeframe', 'trend', 'regime', 'quote'];
     }
 
     /** Rejects a template that references a placeholder we don't provide (e.g. a typo). */

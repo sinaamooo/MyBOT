@@ -163,8 +163,7 @@ final class Scanner
             'timeframe' => $candidate['timeframe'],
             'trend' => $candidate['trend'],
             'regime' => $candidate['regime'],
-            'quote' => !empty($params['signal_quote_enabled']) ? Formatter::randomQuote() : '',
-            'header_emoji' => Formatter::premiumEmoji($params, 'signal', '🚨'),
+            'quote' => !empty($params['signal_quote_enabled']) ? '<blockquote>💬 ' . Formatter::randomQuote() . '</blockquote>' : '',
         ]);
 
         if ($candidate['leverage'] >= 50) {
@@ -174,8 +173,7 @@ final class Scanner
         }
 
         if (!empty($candidate['pump_detected'])) {
-            $pumpEmoji = Formatter::premiumEmoji($params, 'pump', '🚀');
-            $text = "{$pumpEmoji} <b>شکارچی پامپ</b> (جهش حجم + شکست + شتاب مومنتوم)\n\n" . $text;
+            $text = "🚀 <b>شکارچی پامپ</b> (جهش حجم + شکست + شتاب مومنتوم)\n\n" . $text;
         }
         if ($isTest) {
             $text = "🧪 <b>سیگنال تستی</b> (معامله واقعی نیست)\n\n" . $text;
