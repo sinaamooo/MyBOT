@@ -102,12 +102,6 @@ const GIFTS_META = [
     'cake'         => ['name' => 'کیک',          'emoji' => '🎂', 'stars' => 50],
     'ring'         => ['name' => 'حلقه',         'emoji' => '💍', 'stars' => 100],
     'diamond'      => ['name' => 'الماس',        'emoji' => '💎', 'stars' => 100],
-    'heart_val'    => ['name' => 'قلب ولن',      'emoji' => '💝', 'stars' => 52],
-    'bear_val'     => ['name' => 'خرس ولن',      'emoji' => '🐻', 'stars' => 52],
-    'bear_wday'    => ['name' => 'خرس روز زن',   'emoji' => '🧸', 'stars' => 52],
-    'bear_april'   => ['name' => 'خرس 1 اوریل',  'emoji' => '🎪', 'stars' => 52],
-    'bear_xmas'    => ['name' => 'خرس کریسمسی',  'emoji' => '🎅', 'stars' => 52],
-    'bear_patrick' => ['name' => 'خرس پاتریک',   'emoji' => '🍀', 'stars' => 52],
 ];
 
 const PRODUCT_PLACEHOLDER_NFT_TEXT = '🖼 بخش گیفت NFT (در حال تکمیل...)';
