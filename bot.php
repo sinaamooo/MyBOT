@@ -27,10 +27,27 @@
  *   inside the same JSON store under data.user_state[user_id].
  * - The daily top-up limit reset is lazy (checked/reset on read), exactly
  *   like the original get_daily_remaining() - no cron/scheduler needed.
- * - The original's periodic TON-price external API refresh and autosave
- *   background jobs have no equivalent in a webhook (no long-running
- *   process); every request already saves the store, and TON price stays
- *   at whatever the admin panel sets it to.
+ * - TON base price is fetched from Nobitex (market/stats, ton/rls) with the
+ *   same lazy-refresh trick: cached with a timestamp in the JSON store and
+ *   re-fetched on read once stale (TON_PRICE_CACHE_SECONDS). Optionally hit
+ *   bot.php?cron=refresh_prices from a real server cron for fresher pricing.
+ * - Every user-facing/admin-notification text lives in data.texts[slug] and
+ *   every button label in data.buttons[slug], both seeded from the
+ *   DEFAULT_TEXTS / DEFAULT_BUTTONS constants below and editable at runtime
+ *   from the admin panel ("✏️ ویرایش متن‌های ربات" / "✏️ ویرایش نام دکمه‌ها").
+ *   Lookups always fall back to the hardcoded default if a slug is missing,
+ *   and load_data() only ever fills in *missing* slugs - it never
+ *   overwrites an admin's saved edit on a later request.
+ * - Reply-keyboard taps are resolved by reverse-looking-up the incoming
+ *   text against the *current* buttons store (not hardcoded literals), so
+ *   renaming a button never breaks routing. Inline buttons route by
+ *   callback_data (unaffected by label edits); only their displayed text/
+ *   style/icon come from the store.
+ * - Bot API 9.4 "style" (primary/success/danger) and
+ *   icon_custom_emoji_id/custom_emoji entities only actually render for a
+ *   bot owner with Telegram Premium; every send that uses them retries once
+ *   with the fields stripped if Telegram rejects the call, so the bot never
+ *   gets stuck failing to send.
  */
 
 declare(strict_types=1);
@@ -57,6 +74,9 @@ const LOCK_FILE = __DIR__ . '/giftix_data.lock';
 
 const MIN_TON = 0.1;
 const STARS_MIN = 50;
+
+const NOBITEX_TON_STATS_URL = 'https://api.nobitex.ir/market/stats?srcCurrency=ton&dstCurrency=rls';
+const TON_PRICE_CACHE_SECONDS = 300;
 
 const REFERRAL_COMMISSION_PERCENT = 5;
 const REFERRAL_SIGNUP_BONUS = 1000;
@@ -87,113 +107,694 @@ const GIFTS_META = [
 
 const PRODUCT_PLACEHOLDER_NFT_TEXT = '🖼 بخش گیفت NFT (در حال تکمیل...)';
 
-/* ===================== STATIC TEXT ===================== */
+/* ===================== EDITABLE TEXTS / BUTTONS METADATA ===================== */
 
-const WELCOME_TEXT = "🌟 ب ربات فروشگاه GiftIx خوش آمدید !\n\n" .
-    "✨با ما بهترین خدمات تلگرام را با کمترین قیمت و بالاترین سرعت دریافت کنید\n\n" .
-    "🎁 خدمات بات GiftIx\n\n" .
-    "• ⭐️استارز تلگرام\n" .
-    "• 💎پرمیوم تلگرام\n" .
-    "• 🎁گیفت‌های استارزی و NFT\n" .
-    "• ⚡️فروش ارز تون ( GRAM )\n\n" .
-    "🚀 برای شروع ، یکی از گزینه‌های منو پایین را انتخاب کنید ☝️";
+const CATEGORY_LABELS = [
+    'welcome'    => '👋 خوش‌آمدگویی / محصولات',
+    'premium'    => '💎 پرمیوم',
+    'stars'      => '⭐️ استارز',
+    'gift'       => '🎁 گیفت',
+    'ton'        => '💱 تون',
+    'wallet'     => '👛 شارژ کیف‌پول',
+    'track'      => '📦 پیگیری سفارش',
+    'support'    => '📞 پشتیبانی',
+    'referral'   => '👥 رفرال',
+    'admin_msgs' => '🛠 پیام‌های ادمین',
+];
 
-const PRODUCT_TEXT = "🛒 محصول مورد نظر خودتو انتخاب کن !\n\n" .
-    "🚀 تمامی سفارشات با بالاترین سرعت و همراه با پشتیبانی کامل انجام می‌شن " .
-    "تا تجربه‌ای مطمئن و بی‌دغدغه داشته باشی !\n\n" .
-    "🫶 از لیست زیر ، گزینه مورد نظرت رو انتخاب کن :";
+const TEXT_CATEGORIES = [
+    'welcome' => ['welcome', 'product_menu', 'join', 'join_confirmed', 'bot_off', 'trust', 'cancelled', 'ask_username', 'confirm_username', 'insufficient'],
+    'premium' => ['premium_menu', 'premium_invoice', 'premium_success', 'premium_done'],
+    'stars' => ['stars_buy', 'stars_min_error', 'stars_invoice', 'stars_success', 'stars_done'],
+    'gift' => ['gift_list', 'gift_comment_type', 'gift_comment_input', 'gift_invoice', 'gift_success', 'gift_done'],
+    'ton' => ['ton_buy', 'ton_wallet_ask', 'ton_memo_question', 'ton_memo_input', 'ton_invoice', 'ton_success', 'ton_done'],
+    'wallet' => ['wallet_increase', 'wallet', 'toman_payment', 'receipt_prompt', 'receipt_sent', 'card_details', 'approved', 'rejected', 'daily_limit_exceeded', 'daily_limit_exceeded_zero'],
+    'track' => ['track', 'track_ask_code', 'track_not_found', 'order_status'],
+    'support' => ['support', 'support_indirect', 'support_sent_confirm'],
+    'referral' => ['referral', 'referral_notification', 'referral_reward_select', 'referral_reward_invoice', 'referral_reward_success', 'referral_reward_done'],
+    'admin_msgs' => ['admin_premium_order', 'admin_stars_order', 'admin_gift_order', 'admin_ton_order', 'admin_support_notify', 'admin_referral_reward_order', 'admin_topup_caption', 'report', 'broadcast_message'],
+];
 
-const PREMIUM_TEXT = "🟪 Telegram Premium\n\n" .
-    "⭐️ سطح فوق جدیدی از امکانات تلگرام را تجربه کنید.\n\n" .
-    "✅فعال شدن تیک آبی \n" .
-    "💎 دسترسی به قابلیت‌های اختصاصی پریمیوم\n" .
-    "📂 افزایش محدودیت‌های آپلود\n" .
-    "⚡️ سرعت بیشتر در دانلود و استفاده از تلگرام\n" .
-    "👨‍🎨 استیکرها، ایموجی‌ها و قابلیت‌های ویژه\n" .
-    "📈 ابزارهای حرفه‌ای برای مدیریت بهتر\n\n" .
-    "🛡 فعال‌سازی رسمی، \n" .
-    "امن و بدون نیاز به دسترسی به اکانت\n\n" .
-    "🚀 انجام سفارش در کوتاه‌ترین زمان ممکن\n\n" .
-    "✍️ کدام گزینه را انتخاب می‌کنید؟";
+const TEXT_PLACEHOLDERS = [
+    'welcome' => [], 'product_menu' => [], 'join' => ['{channel}'], 'join_confirmed' => [], 'bot_off' => [],
+    'trust' => ['{channel}'], 'cancelled' => [], 'ask_username' => [], 'confirm_username' => ['{username}'],
+    'insufficient' => ['{shortfall}'],
+    'premium_menu' => [], 'premium_invoice' => ['{plan}', '{price}', '{discount}', '{max_discount}', '{final}'],
+    'premium_success' => ['{plan}', '{username}', '{price}', '{order_id}'], 'premium_done' => ['{plan}', '{username}', '{price}', '{order_id}'],
+    'stars_buy' => ['{min}'], 'stars_min_error' => ['{min}'],
+    'stars_invoice' => ['{count}', '{username}', '{price}', '{discount}', '{max_discount}', '{final}'],
+    'stars_success' => ['{count}', '{username}', '{price}', '{order_id}'], 'stars_done' => ['{count}', '{username}', '{price}', '{order_id}'],
+    'gift_list' => [], 'gift_comment_type' => [], 'gift_comment_input' => [],
+    'gift_invoice' => ['{gift}', '{username}', '{hide}', '{comment}', '{price}', '{discount}', '{max_discount}', '{final}'],
+    'gift_success' => ['{gift}', '{username}', '{price}', '{order_id}'], 'gift_done' => ['{gift}', '{username}', '{price}', '{order_id}'],
+    'ton_buy' => ['{price}', '{min}'], 'ton_wallet_ask' => [], 'ton_memo_question' => [], 'ton_memo_input' => [],
+    'ton_invoice' => ['{amount}', '{wallet}', '{memo}', '{price}', '{discount}', '{max_discount}', '{final}'],
+    'ton_success' => ['{amount}', '{wallet}', '{price}', '{order_id}'], 'ton_done' => ['{amount}', '{wallet}', '{price}', '{order_id}'],
+    'wallet_increase' => [], 'wallet' => ['{balance}', '{remaining}'], 'toman_payment' => ['{remaining}'],
+    'receipt_prompt' => [], 'receipt_sent' => [], 'card_details' => ['{amount}', '{card_number}', '{card_holder}'],
+    'approved' => ['{balance}'], 'rejected' => ['{reason}'], 'daily_limit_exceeded' => ['{remaining}'], 'daily_limit_exceeded_zero' => [],
+    'track' => [], 'track_ask_code' => [], 'track_not_found' => [],
+    'order_status' => ['{label}', '{emoji}', '{qty}', '{price}', '{status}', '{extra}', '{date}'],
+    'support' => [], 'support_indirect' => [], 'support_sent_confirm' => [],
+    'referral' => ['{link}', '{referrals}', '{discount}', '{score}', '{commission_percent}', '{points_required}', '{trust_channel}'],
+    'referral_notification' => ['{invited_name}', '{point_line}', '{referrals}', '{discount}', '{score}', '{commission_percent}'],
+    'referral_reward_select' => [], 'referral_reward_invoice' => ['{gift}', '{username}', '{points_required}'],
+    'referral_reward_success' => ['{gift}', '{username}', '{order_id}'], 'referral_reward_done' => ['{gift}', '{username}', '{order_id}'],
+    'admin_premium_order' => ['{user_name}', '{username_at}', '{user_id}', '{plan}', '{buy_username}', '{price}', '{order_id}'],
+    'admin_stars_order' => ['{user_name}', '{username_at}', '{user_id}', '{count}', '{buy_username}', '{price}', '{order_id}'],
+    'admin_gift_order' => ['{user_name}', '{username_at}', '{user_id}', '{gift}', '{buy_username}', '{hide}', '{comment}', '{price}', '{order_id}'],
+    'admin_ton_order' => ['{user_name}', '{username_at}', '{user_id}', '{amount}', '{wallet}', '{memo}', '{price}', '{order_id}'],
+    'admin_support_notify' => ['{user_name}', '{username_at}', '{user_id}', '{message}'],
+    'admin_referral_reward_order' => ['{user_name}', '{username_at}', '{user_id}', '{gift}', '{buy_username}', '{order_id}'],
+    'admin_topup_caption' => ['{user_name}', '{username_at}', '{user_id}', '{amount}', '{req_id}'],
+    'report' => ['{buyer_name}', '{label}', '{emoji}', '{qty}', '{price}', '{date}', '{bot_username}'],
+    'broadcast_message' => ['{text}'],
+];
 
-const ASK_USERNAME_TEXT = "📎 یوزرنیم اکانت مورد نظر \n\n" .
-    "✅اگر قصد خرید برای اکانت خودتان را دارید ، روی دکمه «برای خودم» کلیک کنید.\n\n" .
-    "✅اگر قصد خرید برای شخص دیگری را دارید یوزرنیم تلگرام او را با علامت @ ارسال کنید\n\n" .
-    "نمونه:\n" .
-    "✅@Eli_as13\n" .
-    "😭 Eli_as13";
+const BUTTON_CATEGORIES = [
+    'welcome' => ['menu_buy', 'menu_topup', 'menu_referral', 'menu_account', 'menu_track', 'menu_support', 'menu_trust', 'menu_admin',
+        'btn_back', 'btn_back_to_menu', 'btn_self', 'btn_yes_short', 'btn_no_short', 'btn_confirm', 'btn_cancel',
+        'btn_card_to_card', 'btn_discount_apply', 'btn_discount_remove', 'btn_join_channel', 'btn_check_membership'],
+    'premium' => ['btn_premium', 'btn_plan_3', 'btn_plan_6', 'btn_plan_12'],
+    'stars' => ['btn_stars'],
+    'gift' => ['btn_gift_stars', 'btn_gift_nft', 'btn_gift_comment_free', 'btn_gift_hide_on', 'btn_gift_hide_off', 'btn_gift_comment_set', 'btn_gift_comment_del'],
+    'ton' => ['btn_buy_ton', 'btn_ton_short', 'btn_ton_memo_yes', 'btn_ton_memo_skip'],
+    'wallet' => ['btn_wallet_increase', 'btn_toman_payment', 'btn_send_receipt', 'btn_admin_approve', 'btn_admin_reject'],
+    'track' => ['btn_track_have_code', 'btn_admin_done', 'btn_report_buy'],
+    'support' => ['btn_support_direct', 'btn_support_indirect', 'btn_admin_reply'],
+    'referral' => ['btn_referral_claim'],
+    'admin_msgs' => ['btn_admin_broadcast', 'btn_admin_view_users', 'btn_admin_price_menu', 'btn_admin_profit_menu',
+        'btn_admin_daily_limit', 'btn_admin_reset', 'btn_admin_reset_yes', 'btn_admin_reset_no', 'btn_admin_edit_price',
+        'btn_admin_edit_daily_limit', 'btn_admin_edit_profit', 'btn_no_plain', 'btn_admin_edit_texts', 'btn_admin_edit_buttons'],
+];
 
-const CANCELLED_TEXT = "👎 سفارش شما لغو شد\n\n" .
-    "برای خرید مجدد، از منوی اصلی گزینه ' خـریـد مـحـصـول🛒' را انتخاب کنید.";
+function default_texts(): array {
+    return [
+        'welcome' => "🌟 ب ربات فروشگاه GiftIx خوش آمدید !\n\n" .
+            "✨با ما بهترین خدمات تلگرام را با کمترین قیمت و بالاترین سرعت دریافت کنید\n\n" .
+            "🎁 خدمات بات GiftIx\n\n" .
+            "• ⭐️استارز تلگرام\n" .
+            "• 💎پرمیوم تلگرام\n" .
+            "• 🎁گیفت‌های استارزی و NFT\n" .
+            "• ⚡️فروش ارز تون ( GRAM )\n\n" .
+            "🚀 برای شروع ، یکی از گزینه‌های منو پایین را انتخاب کنید ☝️",
 
-const TON_WALLET_TEXT = "💼 آدرس ولت تون ( TON )\n\n" .
-    "⚠️ نکات مهم قبل از ارسال آدرس :\n\n" .
-    "• آدرس باید مخصوص شبکه TON باشد.\n" .
-    "• آدرس را کامل و بدون فاصله یا تغییر ارسال نمایید.\n" .
-    "• مسئولیت صحت آدرس واردشده بر عهده کاربر است.\n\n" .
-    "📎 نمونه فرمت آدرس ولت تون :\n" .
-    "UQ….................…xY\n" .
-    "یا\n" .
-    "EQ….................…9K\n\n" .
-    "🔓 لطفاً آدرس ولت تون ( TON ) خود را ارسال کنید :";
+        'product_menu' => "🛒 محصول مورد نظر خودتو انتخاب کن !\n\n" .
+            "🚀 تمامی سفارشات با بالاترین سرعت و همراه با پشتیبانی کامل انجام می‌شن " .
+            "تا تجربه‌ای مطمئن و بی‌دغدغه داشته باشی !\n\n" .
+            "🫶 از لیست زیر ، گزینه مورد نظرت رو انتخاب کن :",
 
-const TON_MEMO_QUESTION_TEXT = "💼 آدرس ولت ثبت شد!\n\n" .
-    "💬 یک سوال مهم:\n\n" .
-    "بعضی ولت‌های TON برای دریافت درستِ ارز، نیاز به کامنت (ممو) دارن " .
-    "تا واریز به همون ولت بره و گم نشه!\n\n" .
-    "🌟 ولت شما کامنت/ممو داره؟\n" .
-    "• اگه داره، روی «بله، کامنت دارم» بزن و متن کامنت رو بفرست\n" .
-    "• اگه نداره یا مطمئن نیستی، روی «رد کردن» بزن";
+        'join' => "برای استفاده از ربات، باید در کانال‌های زیر عضو شوید\n\n@{channel}",
+        'join_confirmed' => '✅ عضویتت تایید شد، حالا میتونی از ربات استفاده کنی.',
+        'bot_off' => "🔴 ربات در حال حاضر خاموش است.\n\nبه زودی دوباره روشن خواهد شد، لطفا کمی صبر کنید 🙏",
 
-const TON_MEMO_INPUT_TEXT = "💬 ارسال کامنت/ممو ولت\n\n" .
-    "لطفاً متن کامنت (ممو) ولت تون رو همینجا بفرستید " .
-    "تا دقیقاً همون برای واریز استفاده بشه.";
+        'trust' => "⭐ چرا می‌توانید با خیال راحت به ما اعتماد کنید؟\n\n" .
+            "ما یک ساله در زمینه‌ی خرید و فروش استارز و پرمیوم فعالیت داریم و در این مدت " .
+            "با صداقت، سرعت و پشتیبانی قوی تونستیم اعتماد صدها کاربر رو جلب کنیم ❤️\n\n" .
+            "✅ دلایل اعتماد :\n" .
+            "• 💳 پرداخت سریع، مطمئن و شفاف\n" .
+            "• 🌟 بیش از 200 رضایت واقعی مشتری\n" .
+            "• 📞 پشتیبانی فعال 24 ساعته، قبل و بعد از خرید\n" .
+            "• 🧾 دارای نماد اعتبار و سابقه‌ی چندساله فعالیت بدون هیچ گزارش منفی\n\n" .
+            "📣 برای مشاهده‌ی نظرات و رضایت کاربران، می‌تونید در کانال @{channel} ما\n" .
+            "هشتگ زیر رو جست‌وجو کنید ☝️\n\n" .
+            "☝️ #رضایت_GiftIx\n" .
+            "اعتماد شما باعث افتخار ماست 💙",
 
-const WALLET_INCREASE_TEXT = "💰 افـزایـش مـوجـودی حساب شما\n\n" .
-    "شما می‌توانید موجودی خود را به دو روش امن و سریع افزایش دهید :\n\n" .
-    "💳 پرداخت تومانی – پس از واریز ، موجودی شما به سرعت با تایید پشتیبانی شارژ میشود.\n\n" .
-    "🚀 فرآیند افزایش موجودی ساده ، سریع و امن است و پس از پرداخت می‌توانید " .
-    "به راحتی از تمامی خدمات ربات استفاده کنید ✔️";
+        'cancelled' => "👎 سفارش شما لغو شد\n\nبرای خرید مجدد، از منوی اصلی گزینه ' خـریـد مـحـصـول🛒' را انتخاب کنید.",
 
-const RECEIPT_PROMPT_TEXT = '💳 رسید خود را در قالب عکس ارسال کنید';
+        'ask_username' => "📎 یوزرنیم اکانت مورد نظر \n\n" .
+            "✅اگر قصد خرید برای اکانت خودتان را دارید ، روی دکمه «برای خودم» کلیک کنید.\n\n" .
+            "✅اگر قصد خرید برای شخص دیگری را دارید یوزرنیم تلگرام او را با علامت @ ارسال کنید\n\n" .
+            "نمونه:\n" .
+            "✅@Eli_as13\n" .
+            "😭 Eli_as13",
 
-const RECEIPT_SENT_TEXT = "✅ درخواست افزایش موجودی شما با موفقیت ارسال شد\n\n" .
-    "پس از تایید نهایی توسط ادمین، موجودی حساب شما به مبلغی که تعیین کرده اید شارژ میشود";
+        'confirm_username' => "{username}\n\n✅ آیا یوزرنیم بالا را تایید می‌کنید؟",
+        'insufficient' => 'برای ادامه خرید مبلغ کمبود شما {shortfall} تومان است. یکی از روش های زیر را برای شارژ سریع انتخاب کنید:',
 
-const STARS_BUY_TEXT_TPL = "🌟 خرید استارز تلگرام\n\n" .
-    "🚀 تحویل آنی، پشتیبانی لحظه‌ای و ثبت سفارش بدون تأخیر\n\n" .
-    "✨ مناسب برای:\n" .
-    "💎  خرید تلگرام پریمیوم \n" .
-    "⭐️ ری‌اکشن‌های استارزی\n" .
-    "📣 تبلیغات تلگرامی\n" .
-    "🛍 مینی‌اپ‌ها \n" .
-    "🎁خرید گیفت\n\n" .
-    "📈 حداقل خرید:  %d عدد\n\n" .
-    "👇 تعداد استارز موردنیاز خود را وارد کنید:";
+        'premium_menu' => "🟪 Telegram Premium\n\n" .
+            "⭐️ سطح فوق جدیدی از امکانات تلگرام را تجربه کنید.\n\n" .
+            "✅فعال شدن تیک آبی \n" .
+            "💎 دسترسی به قابلیت‌های اختصاصی پریمیوم\n" .
+            "📂 افزایش محدودیت‌های آپلود\n" .
+            "⚡️ سرعت بیشتر در دانلود و استفاده از تلگرام\n" .
+            "👨‍🎨 استیکرها، ایموجی‌ها و قابلیت‌های ویژه\n" .
+            "📈 ابزارهای حرفه‌ای برای مدیریت بهتر\n\n" .
+            "🛡 فعال‌سازی رسمی، \n" .
+            "امن و بدون نیاز به دسترسی به اکانت\n\n" .
+            "🚀 انجام سفارش در کوتاه‌ترین زمان ممکن\n\n" .
+            "✍️ کدام گزینه را انتخاب می‌کنید؟",
 
-const GIFT_LIST_TEXT = "💰 هدیه دادن گیفت ، تجربه‌ای خاص در تلگرام!\n\n" .
-    "⭐️ با گیفت‌های استارزی می‌تونی دوستان، خانواده یا معشوقت رو شگفت‌زده کنی !\n\n" .
-    "💫 مزایای گیفت‌های استارزی :\n\n" .
-    "• 🎁 ارسال هدیه به دوستان و آشنایان برای سوپرایز کردن\n" .
-    "• 👾 قابل نمایش روی پروفایل تلگرام\n\n" .
-    "💱 لطفاً گیفت مورد نظر خود را از لیست زیر انتخاب کنید :";
+        'premium_invoice' => "⏰ فاکتور خرید پرمیوم\n\n" .
+            "💫 نوع پلن: {plan} ماهه\n" .
+            "📎 یوزر دریافت‌کننده: {username}\n" .
+            "💰 مبلغ فاکتور:  {price} تومان\n" .
+            "🎁 کل موجودی تخفیف:  {discount} تومان\n\n" .
+            "💡 حداکثر تخفیف قابل اعمال:  {max_discount} تومان\n\n" .
+            "💳 مبلغ نهایی:  {final} تومان\n\n" .
+            "🍾 در صورتی که جزئیات بالا مورد تأیید شماست \n\n" .
+            "روی دکمه «تأیید ✅» کلیک کنید.",
 
-const GIFT_COMMENT_TYPE_TEXT = "💬 تنظیم کامنت گیفت\n\nنوع کامنت را انتخاب کنید:";
-const GIFT_COMMENT_INPUT_TEXT = 'کامنت خود را ارسال کنید:';
+        'premium_success' => "✅ سفارش شما با موفقیت ثبت شد!\n\n" .
+            "💫 پلن: {plan} ماهه\n" .
+            "📎 یوزر: {username}\n" .
+            "💰 مبلغ پرداخت‌شده: {price} تومان\n\n" .
+            "🔑 کد پیگیری سفارش : {order_id}\n\n" .
+            "⏳ سفارش شما در حال پردازش است و به‌زودی وضعیت آن از طریق ربات اطلاع‌رسانی خواهد شد.\n\n" .
+            "🙏 از اعتماد شما سپاسگزاریم.",
 
-const TRACK_TEXT = "📦 پیگیری سفارش\n\n\n" .
-    "🔢 در صورتی که کد پیگیری محصول خود را دارید دکمه زیر را فشار دهید\n" .
-    "‼️ برای اطلاع از وضعیت سفارش خود باید کد پیگیری داشته باشید";
+        'premium_done' => "✅ سفارش شما با موفقیت انجام شد 🎉\n\n" .
+            "☝️اطلاعات سفارش:\n\n" .
+            "ℹ️ نوع خدمات: پرمیوم تلگرام\n" .
+            "💫 پلن: {plan} ماهه\n" .
+            "📎 یوزر: {username}\n" .
+            "💳 مبلغ نهایی پرداخت شده:  {price} تومان\n" .
+            "🔓 کد پیگیری سفارش: {order_id}\n\n" .
+            "😊 از اعتماد و انتخاب شما سپاسگزاریم.",
 
-const TRACK_ASK_CODE_TEXT = '🔢 کد پیگیری سفارشتان را ارسال کنید 🔍';
-const TRACK_NOT_FOUND_TEXT = "❌ کد پیگیری یافت نشد.\n\nلطفا کد پیگیری صحیح رو دوباره ارسال کن.";
+        'stars_buy' => "🌟 خرید استارز تلگرام\n\n" .
+            "🚀 تحویل آنی، پشتیبانی لحظه‌ای و ثبت سفارش بدون تأخیر\n\n" .
+            "✨ مناسب برای:\n" .
+            "💎  خرید تلگرام پریمیوم \n" .
+            "⭐️ ری‌اکشن‌های استارزی\n" .
+            "📣 تبلیغات تلگرامی\n" .
+            "🛍 مینی‌اپ‌ها \n" .
+            "🎁خرید گیفت\n\n" .
+            "📈 حداقل خرید:  {min} عدد\n\n" .
+            "👇 تعداد استارز موردنیاز خود را وارد کنید:",
 
-const SUPPORT_TEXT = 'لطفاً یکی از گزینه‌های زیر را انتخاب کنید تا با پشتیبانی ارتباط بگیرید 👇';
-const SUPPORT_INDIRECT_TEXT = '💬 پیام خود را برای پشتیبانی ارسال کنید 📞';
-const SUPPORT_SENT_CONFIRM_TEXT = '💬 پیام شما به پشتیبانی ارسال شد  و  در اسرع وقت به آن پاسخ داده خواهد شد✅';
+        'stars_min_error' => '‼️ حداقل تعداد استارز برای خرید {min} عدد میباشد ...',
 
-const JOIN_CONFIRMED_TEXT = '✅ عضویتت تایید شد، حالا میتونی از ربات استفاده کنی.';
-const BOT_OFF_TEXT = "🔴 ربات در حال حاضر خاموش است.\n\nبه زودی دوباره روشن خواهد شد، لطفا کمی صبر کنید 🙏";
+        'stars_invoice' => "⏰ فاکتور خرید استارز\n\n" .
+            "💫 مقدار خرید: {count}\n" .
+            "📎 یوزر دریافت‌کننده: {username}\n" .
+            "💰 مبلغ فاکتور:  {price} تومان\n" .
+            "🎁 کل موجودی تخفیف:  {discount} تومان\n\n" .
+            "💡 حداکثر تخفیف قابل اعمال:  {max_discount} تومان\n\n" .
+            "💳 مبلغ نهایی:  {final} تومان\n\n" .
+            "🍾 در صورتی که جزئیات بالا مورد تأیید شماست \n\n" .
+            "روی دکمه «تأیید ✅» کلیک کنید.",
+
+        'stars_success' => "✅ سفارش شما با موفقیت ثبت شد!\n\n" .
+            "⛏️ نوع خدمات: خرید استارز تلگرام\n" .
+            "⭐️ تعداد: {count} استارز\n" .
+            "📎 یوزر دریافت‌کننده: {username}\n" .
+            "💰 مبلغ پرداختی:  {price} تومان\n" .
+            "🔑 کد پیگیری سفارش : {order_id}\n\n" .
+            "⏳ سفارش شما در حال پردازش است و به‌زودی وضعیت آن از طریق ربات اطلاع‌رسانی خواهد شد.\n\n" .
+            "🙏 از اعتماد شما سپاسگزاریم.",
+
+        'stars_done' => "✅ سفارش شما با موفقیت انجام شد 🎉\n\n" .
+            "☝️اطلاعات سفارش:\n\n" .
+            "ℹ️ نوع خدمات: خرید استارز تلگرام\n" .
+            "⭐️ تعداد: {count} استارز\n" .
+            "📎 یوزر دریافت‌کننده: {username}\n" .
+            "💳 مبلغ نهایی پرداخت شده:  {price} تومان\n" .
+            "🔓 کد پیگیری سفارش: {order_id}\n\n" .
+            "😊 از اعتماد و انتخاب شما سپاسگزاریم.",
+
+        'gift_list' => "💰 هدیه دادن گیفت ، تجربه‌ای خاص در تلگرام!\n\n" .
+            "⭐️ با گیفت‌های استارزی می‌تونی دوستان، خانواده یا معشوقت رو شگفت‌زده کنی !\n\n" .
+            "💫 مزایای گیفت‌های استارزی :\n\n" .
+            "• 🎁 ارسال هدیه به دوستان و آشنایان برای سوپرایز کردن\n" .
+            "• 👾 قابل نمایش روی پروفایل تلگرام\n\n" .
+            "💱 لطفاً گیفت مورد نظر خود را از لیست زیر انتخاب کنید :",
+
+        'gift_comment_type' => "💬 تنظیم کامنت گیفت\n\nنوع کامنت را انتخاب کنید:",
+        'gift_comment_input' => 'کامنت خود را ارسال کنید:',
+
+        'gift_invoice' => "📑 فاکتور خرید گیفت\n\n" .
+            "💫 مقدار خرید: {gift}\n" .
+            "🔗 یوزر دریافت‌کننده: {username}\n" .
+            "🔒 گیفت هاید: {hide}\n" .
+            "کامنت : {comment}\n\n" .
+            "💰 مبلغ فاکتور:  {price} تومان\n" .
+            "🎁 کل موجودی تخفیف:  {discount} تومان\n\n" .
+            "💡 حداکثر تخفیف قابل اعمال:  {max_discount} تومان\n\n" .
+            "💳 مبلغ نهایی:  {final} تومان\n\n" .
+            "🔮 در صورتی که جزئیات بالا مورد تأیید شماست ✓ \n" .
+            "روی دکمه «تأیید ✅» کلیک کنید.",
+
+        'gift_success' => "✅ سفارش شما با موفقیت ثبت شد!\n\n" .
+            "⛏️ نوع خدمات: خرید گیفت استارز\n" .
+            "🎁 گیفت: {gift}\n" .
+            "📎 یوزر دریافت‌کننده: {username}\n" .
+            "💰 مبلغ پرداختی:  {price} تومان\n" .
+            "🔑 کد پیگیری سفارش : {order_id}\n\n" .
+            "⏳ سفارش شما در حال پردازش است و به‌زودی وضعیت آن از طریق ربات اطلاع‌رسانی خواهد شد.\n\n" .
+            "🙏 از اعتماد شما سپاسگزاریم.",
+
+        'gift_done' => "✅ سفارش شما با موفقیت انجام شد 🎉\n\n" .
+            "☝️اطلاعات سفارش:\n\n" .
+            "ℹ️ نوع خدمات: خرید گیفت استارز\n" .
+            "🎁 گیفت: {gift}\n" .
+            "📎 یوزر دریافت‌کننده: {username}\n" .
+            "💳 مبلغ نهایی پرداخت شده:  {price} تومان\n" .
+            "🔓 کد پیگیری سفارش: {order_id}\n\n" .
+            "😊 از اعتماد و انتخاب شما سپاسگزاریم.",
+
+        'ton_buy' => "💰 خرید ارز تون (GRAM)\n\n" .
+            "✨ ارز تون را با بهترین قیمت و تحویل مستقیم به کیف پول خود دریافت کنید.\n\n" .
+            "💎 انتقال مستقیم به ولت \n" .
+            "⚡️ انجام سریع سفارش\n" .
+            "🔒 تراکنش امن و قابل‌اعتماد\n" .
+            "🙏 پشتیبانی کامل در تمامی مراحل\n\n" .
+            "📊 قیمت هر TON:  {price} تومان\n" .
+            "📌 حداقل سفارش: {min} TON\n\n" .
+            "☝️ مقدار TON موردنیاز خود را وارد کنید.\n\n" .
+            "💡 مثال: 0.5 یا 2.5",
+
+        'ton_wallet_ask' => "💼 آدرس ولت تون ( TON )\n\n" .
+            "⚠️ نکات مهم قبل از ارسال آدرس :\n\n" .
+            "• آدرس باید مخصوص شبکه TON باشد.\n" .
+            "• آدرس را کامل و بدون فاصله یا تغییر ارسال نمایید.\n" .
+            "• مسئولیت صحت آدرس واردشده بر عهده کاربر است.\n\n" .
+            "📎 نمونه فرمت آدرس ولت تون :\n" .
+            "UQ….................…xY\n" .
+            "یا\n" .
+            "EQ….................…9K\n\n" .
+            "🔓 لطفاً آدرس ولت تون ( TON ) خود را ارسال کنید :",
+
+        'ton_memo_question' => "💼 آدرس ولت ثبت شد!\n\n" .
+            "💬 یک سوال مهم:\n\n" .
+            "بعضی ولت‌های TON برای دریافت درستِ ارز، نیاز به کامنت (ممو) دارن " .
+            "تا واریز به همون ولت بره و گم نشه!\n\n" .
+            "🌟 ولت شما کامنت/ممو داره؟\n" .
+            "• اگه داره، روی «بله، کامنت دارم» بزن و متن کامنت رو بفرست\n" .
+            "• اگه نداره یا مطمئن نیستی، روی «رد کردن» بزن",
+
+        'ton_memo_input' => "💬 ارسال کامنت/ممو ولت\n\n" .
+            "لطفاً متن کامنت (ممو) ولت تون رو همینجا بفرستید " .
+            "تا دقیقاً همون برای واریز استفاده بشه.",
+
+        'ton_invoice' => "📑 فاکتور خرید ارز تون\n\n" .
+            "💫 مقدار خرید: {amount} تون\n" .
+            "🏦 ولت آدرس دریافتی: {wallet}\n" .
+            "💬 ممو/کامنت ولت: {memo}\n" .
+            "💰 مبلغ فاکتور:  {price} تومان\n" .
+            "🎁 کل موجودی تخفیف:  {discount} تومان\n\n" .
+            "💡 حداکثر تخفیف قابل اعمال:  {max_discount} تومان\n\n" .
+            "💳 مبلغ نهایی:  {final} تومان\n\n" .
+            "🔮 در صورتی که جزئیات بالا مورد تأیید شماست ✓ \n" .
+            "روی دکمه «تأیید ✅» کلیک کنید.",
+
+        'ton_success' => "✅ سفارش شما با موفقیت ثبت شد.\n\n" .
+            "⛏️نوع خدمات : خرید ارز تون\n" .
+            "🔢 تعداد : {amount}\n" .
+            "📎 آدرس ولت : {wallet}\n" .
+            "💰 مبلغ پرداختی :  {price} تومان\n" .
+            "🔑 کد پیگیری سفارش : {order_id}\n\n" .
+            "⏳ سفارش شما در حال پردازش است و به‌زودی وضعیت آن از طریق ربات اطلاع‌رسانی خواهد شد.\n\n" .
+            "🙏 از اعتماد شما سپاسگزاریم.",
+
+        'ton_done' => "✅ سفارش شما با موفقیت انجام شد 🎉\n\n" .
+            "☝️اطلاعات سفارش:\n\n" .
+            "ℹ️ نوع خدمات: خرید ارز تون\n" .
+            "👀 تعداد: {amount} TON\n" .
+            "🔗 ولت تون: {wallet}\n" .
+            "💳 مبلغ نهایی پرداخت شده:  {price} تومان\n" .
+            "🔓 کد پیگیری سفارش: {order_id}\n\n" .
+            "😊 از اعتماد و انتخاب شما سپاسگزاریم.",
+
+        'wallet_increase' => "💰 افـزایـش مـوجـودی حساب شما\n\n" .
+            "شما می‌توانید موجودی خود را به دو روش امن و سریع افزایش دهید :\n\n" .
+            "💳 پرداخت تومانی – پس از واریز ، موجودی شما به سرعت با تایید پشتیبانی شارژ میشود.\n\n" .
+            "🚀 فرآیند افزایش موجودی ساده ، سریع و امن است و پس از پرداخت می‌توانید " .
+            "به راحتی از تمامی خدمات ربات استفاده کنید ✔️",
+
+        'wallet' => "کیف پول 💰\n\n" .
+            "موجودی شما:  {balance} تومان 💸\n" .
+            "باقی مانده سقف مجاز افزایش موجودی تومانی امروز:  {remaining} 🚀\n\n" .
+            'برای افزایش موجودی خود روی دکمه زیر کلیک کنید 👇',
+
+        'toman_payment' => "💳 پرداخت تومانی \n\n" .
+            "ابتدا مبلغی که قصد دارید به موجودی خود اضافه کنید را وارد کنید.\n\n\n" .
+            "📱 باقیمانده سقف مجاز پرداخت تومانی امروز :  {remaining} تومان\n\n\n" .
+            '‼️ توجه کنید که مبلغ واریزی نباید بیشتر از مبلغ سقف مجاز باشد ، ' .
+            'در غیر اینصورت حساب شما فقط در حد سقف مجاز شارژ خواهد شد ' .
+            'و مسئولیت آن به عهده خودتان است ❌',
+
+        'receipt_prompt' => '💳 رسید خود را در قالب عکس ارسال کنید',
+        'receipt_sent' => "✅ درخواست افزایش موجودی شما با موفقیت ارسال شد\n\n" .
+            "پس از تایید نهایی توسط ادمین، موجودی حساب شما به مبلغی که تعیین کرده اید شارژ میشود",
+
+        'card_details' => "💸 مبلغ واریزی:   {amount} تومان\n\n" .
+            "💼 شماره کارت جهت واریز :\n\n" .
+            "<code>{card_number}</code>\n\n" .
+            "👤 به نام: {card_holder}\n\n" .
+            "⚡️ لطفا پس از واریز پول،  «دکمه ارسال رسید» را بزنید و سپس " .
+            "رسید پرداخت را بصورت عکس ارسال کنید\n\n" .
+            "❗️توجه: چنانچه رسید بصورت متن بود از آن اسکرین شات بگیرید و اسکرین شات را ارسال کنید.\n\n" .
+            '❗️در صورت مغایرت مبلغ تعیین شده با مبلغ واریز شده به کارت مسئولیت آن به عهده خودتان است.',
+
+        'approved' => "🔥 مشتری عزیز\n\n✔️ رسید افزایش موجودی شما با موفقیت تایید شد\nموجودی شما:  {balance} تومان",
+        'rejected' => "❌ متاسفانه درخواست افزایش موجودی شما رد شد.\n\nدلیل: {reason}",
+        'daily_limit_exceeded' => "❌ مبلغی که وارد کردی بیشتر از سقف مجاز باقی‌مونده امروزته.\n\n" .
+            "📱 سقف مجاز باقی‌مونده امروز شما:  {remaining} تومان\n\n" .
+            'لطفا مبلغ کمتر یا مساوی همین مقدار رو وارد کن.',
+        'daily_limit_exceeded_zero' => "❌ سقف مجاز شارژ تومانی امروز شما تموم شده.\n\nلطفا فردا دوباره تلاش کن یا با پشتیبانی در ارتباط باش.",
+
+        'track' => "📦 پیگیری سفارش\n\n\n" .
+            "🔢 در صورتی که کد پیگیری محصول خود را دارید دکمه زیر را فشار دهید\n" .
+            "‼️ برای اطلاع از وضعیت سفارش خود باید کد پیگیری داشته باشید",
+        'track_ask_code' => '🔢 کد پیگیری سفارشتان را ارسال کنید 🔍',
+        'track_not_found' => "❌ کد پیگیری یافت نشد.\n\nلطفا کد پیگیری صحیح رو دوباره ارسال کن.",
+
+        'order_status' => "🔢 مشخصات سفارش \n\n" .
+            "📦 نوع سفارش: {label} {emoji}\n" .
+            "📊 تعداد: {qty}\n" .
+            "💼 قیمت:  {price}\n" .
+            "📱 وضعیت: {status}\n\n\n" .
+            "{extra}\n" .
+            "🗓️ تاریخ و ساعت: {date}",
+
+        'support' => 'لطفاً یکی از گزینه‌های زیر را انتخاب کنید تا با پشتیبانی ارتباط بگیرید 👇',
+        'support_indirect' => '💬 پیام خود را برای پشتیبانی ارسال کنید 📞',
+        'support_sent_confirm' => '💬 پیام شما به پشتیبانی ارسال شد  و  در اسرع وقت به آن پاسخ داده خواهد شد✅',
+
+        'referral' => "👥 زیرمجموعه‌گیری ( Referral System )\n\n" .
+            "🔗 لینک اختصاصی شما :\n{link}\n\n" .
+            "👥 زیرمجموعه‌ها : {referrals} نفر\n" .
+            "💰 درآمد شما :  {discount} تومان\n" .
+            "🏅 امتیاز رفرال : {score}\n\n" .
+            "❗️ توضیحات سیستم رفرال :\n\n" .
+            "• با ارسال لینک اختصاصی خود ، دوستانتان را به ربات دعوت کنید.\n\n" .
+            "• هر زمان زیرمجموعه‌ی شما خریدی انجام دهد، {commission_percent}٪ از مبلغ " .
+            "آن خرید به موجودی تخفیف شما اضافه می‌شود.\n\n" .
+            "• اگر در تایم‌های اعلام‌شده توسط ادمین زیرمجموعه بگیرید ، به ازای هر دعوت " .
+            "1 امتیاز به امتیاز رفرال شما اضافه می‌شود.\n\n" .
+            "• تایم‌ها از طریق اطلاع‌رسانی ربات و کانال تلگرام @{trust_channel} اعلام می‌شوند\n\n" .
+            "• درصورت داشتن هر {points_required} امتیاز " .
+            "شما قادر به دریافت یک جایزه هستید\n\n" .
+            '(جایزه : گیفت تدی یا قلب 15 استارزی به انتخاب خودتان)',
+
+        'referral_notification' => "🎉 تبریک! یک زیرمجموعه جدید داری!\n\n" .
+            "👤 کاربر «{invited_name}» با لینک دعوت شما عضو ربات شد.\n\n{point_line}" .
+            "\n━━━━━━━━━━━━━━━━━\n" .
+            "👥 کل زیرمجموعه‌های شما: {referrals} نفر\n" .
+            "💸 موجودی تخفیف شما: {discount} تومان\n" .
+            "🏅 امتیاز رفرال شما: {score}\n\n" .
+            "💡 هر خریدی که زیرمجموعه‌تون انجام بده، {commission_percent}٪ " .
+            'از مبلغ خرید به موجودی تخفیف شما اضافه میشه.',
+
+        'referral_reward_select' => '🎁 یکی از گیفت‌های زیر رو به عنوان جایزه رفرال انتخاب کن:',
+        'referral_reward_invoice' => "🎁 فاکتور جایزه رفرال\n\n" .
+            "💫 جایزه: {gift}\n" .
+            "📎 یوزر دریافت‌کننده: {username}\n" .
+            "🏅 امتیاز مصرفی: {points_required}\n" .
+            "💰 مبلغ قابل پرداخت: رایگان 🎁\n\n" .
+            "🍾 در صورتی که جزئیات بالا مورد تأیید شماست \n\n" .
+            "روی دکمه «تأیید ✅» کلیک کنید.",
+
+        'referral_reward_success' => "✅ جایزه رفرال شما با موفقیت ثبت شد!\n\n" .
+            "🎁 جایزه: {gift}\n" .
+            "📎 یوزر دریافت‌کننده: {username}\n" .
+            "💰 مبلغ پرداختی: رایگان 🎁\n" .
+            "🔑 کد پیگیری سفارش : {order_id}\n\n" .
+            "⏳ سفارش شما در حال پردازش است و به‌زودی وضعیت آن از طریق ربات اطلاع‌رسانی خواهد شد.\n\n" .
+            "🙏 از همراهی شما سپاسگزاریم.",
+
+        'referral_reward_done' => "✅ جایزه رفرال شما با موفقیت انجام شد 🎉\n\n" .
+            "☝️اطلاعات سفارش:\n\n" .
+            "ℹ️ نوع خدمات: جایزه رفرال\n" .
+            "🎁 گیفت: {gift}\n" .
+            "📎 یوزر دریافت‌کننده: {username}\n" .
+            "💳 مبلغ نهایی پرداخت شده: رایگان 🎁\n" .
+            "🔓 کد پیگیری سفارش: {order_id}\n\n" .
+            "😊 از همراهی شما سپاسگزاریم.",
+
+        'admin_premium_order' => "🛒 سفارش جدید - پرمیوم تلگرام\n\n" .
+            "👤 کاربر: {user_name} ({username_at})\n" .
+            "🆔 آیدی عددی: {user_id}\n" .
+            "💫 پلن: {plan} ماهه\n" .
+            "📎 یوزر دریافت‌کننده: {buy_username}\n" .
+            "💰 مبلغ پرداخت‌شده: {price} تومان\n" .
+            "🔢 کد پیگیری: {order_id}",
+
+        'admin_stars_order' => "🛒 سفارش جدید - استارز تلگرام\n\n" .
+            "👤 کاربر: {user_name} ({username_at})\n" .
+            "🆔 آیدی عددی: {user_id}\n" .
+            "⭐️ تعداد استارز: {count}\n" .
+            "📎 یوزر دریافت‌کننده: {buy_username}\n" .
+            "💰 مبلغ پرداخت‌شده: {price} تومان\n" .
+            "🔢 کد پیگیری: {order_id}",
+
+        'admin_gift_order' => "🛒 سفارش جدید - گیفت استارز\n\n" .
+            "👤 کاربر: {user_name} ({username_at})\n" .
+            "🆔 آیدی عددی: {user_id}\n" .
+            "🎁 گیفت: {gift}\n" .
+            "📎 یوزر دریافت‌کننده: {buy_username}\n" .
+            "🔒 هاید: {hide}\n" .
+            "💬 کامنت: {comment}\n" .
+            "💰 مبلغ پرداخت‌شده: {price} تومان\n" .
+            "🔢 کد پیگیری: {order_id}",
+
+        'admin_ton_order' => "🛒 سفارش جدید - خرید ارز تون\n\n" .
+            "👤 کاربر: {user_name} ({username_at})\n" .
+            "🆔 آیدی عددی: {user_id}\n" .
+            "💫 مقدار: {amount} TON\n" .
+            "🏦 آدرس ولت:\n<code>{wallet}</code>\n" .
+            "💬 ممو: {memo}\n" .
+            "💰 مبلغ پرداخت‌شده: {price} تومان\n" .
+            "🔢 کد پیگیری: {order_id}",
+
+        'admin_support_notify' => "📨 پیام جدید پشتیبانی\n\n" .
+            "👤 کاربر: {user_name} ({username_at})\n" .
+            "🆔 آیدی عددی: {user_id}\n\n" .
+            "💬 متن پیام:\n{message}",
+
+        'admin_referral_reward_order' => "🎁 سفارش جدید - جایزه رفرال (رایگان)\n\n" .
+            "👤 کاربر: {user_name} ({username_at})\n" .
+            "🆔 آیدی عددی: {user_id}\n" .
+            "🎁 گیفت: {gift}\n" .
+            "📎 یوزر دریافت‌کننده: {buy_username}\n" .
+            "🔢 کد پیگیری: {order_id}",
+
+        'admin_topup_caption' => "🧾 درخواست افزایش موجودی جدید\n\n" .
+            "👤 کاربر: {user_name} ({username_at})\n" .
+            "🆔 آیدی عددی: {user_id}\n" .
+            "💸 مبلغ: {amount} تومان\n" .
+            "🔢 شماره درخواست: {req_id}",
+
+        'report' => "🛍 خرید موفق ✅\n\n" .
+            "👤 خریدار: {buyer_name}\n" .
+            "🛒 سفارش : {label} {emoji}\n" .
+            "⛏️ تعداد: {qty}\n" .
+            "💰 مبلغ پرداخت شده :  {price} \n\n" .
+            "⏰ {date} \n" .
+            "📱 @{bot_username}",
+
+        'broadcast_message' => "👤 پیام مدیریت به تمام کاربران\n\n{text}",
+    ];
+}
+
+function default_buttons(): array {
+    return [
+        'menu_buy' => '🛒 خرید محصول', 'menu_topup' => '👛 شارژ موجودی', 'menu_referral' => '🔗 لینک دعوت من',
+        'menu_account' => '👤 حساب کاربری', 'menu_track' => '📋 پیگیری سفارش', 'menu_support' => '📞 پشتیبانی',
+        'menu_trust' => '🔽 چطور میتوانم اعتماد کنم؟', 'menu_admin' => '🛠 پنل ادمین',
+        'btn_back' => '🔙 بازگشت', 'btn_back_to_menu' => '🔙 بازگشت به منو', 'btn_self' => '👤 برای خودم',
+        'btn_yes_short' => '✅ بله', 'btn_no_short' => '❌ خیر', 'btn_confirm' => 'تأیید ✅', 'btn_cancel' => '❌ کنسل',
+        'btn_card_to_card' => '💳 کارت به کارت', 'btn_discount_apply' => '💸 اعمال تخفیف', 'btn_discount_remove' => '❌ لغو تخفیف',
+        'btn_join_channel' => '📢 عضویت در کانال', 'btn_check_membership' => '✅ عضو شدم',
+
+        'btn_premium' => '💎 پرمیوم تلگرام', 'btn_plan_3' => '3 ماه', 'btn_plan_6' => '6 ماه', 'btn_plan_12' => '12 ماه',
+        'btn_stars' => '⭐️ استارز تلگرام',
+        'btn_gift_stars' => '🎀 گیفت استارز', 'btn_gift_nft' => '🖼 گیفت NFT', 'btn_gift_comment_free' => '✍️ عادی (رایگان)',
+        'btn_gift_hide_on' => '🔓 هاید کردن', 'btn_gift_hide_off' => '🔒 لغو هاید بودن',
+        'btn_gift_comment_set' => '💬 تنظیم کامنت', 'btn_gift_comment_del' => '🗑 حذف کامنت',
+        'btn_buy_ton' => '💱 خرید ارز تون', 'btn_ton_short' => '💱 ارز تون', 'btn_ton_memo_yes' => '✅ بله، کامنت دارم', 'btn_ton_memo_skip' => '❌ رد کردن',
+        'btn_wallet_increase' => 'افزایش موجودی', 'btn_toman_payment' => '💳 پرداخت تومانی', 'btn_send_receipt' => '📨 ارسال رسید',
+        'btn_admin_approve' => '✅ تایید', 'btn_admin_reject' => '❌ رد',
+        'btn_track_have_code' => '🔢 کد پیگیری محصول دارم', 'btn_admin_done' => '✅ انجام شد', 'btn_report_buy' => '🛍 حالا اقدام به خرید کن',
+        'btn_support_direct' => '☎️ ارتباط مستقیم', 'btn_support_indirect' => '💬 ارتباط غیر مستقیم', 'btn_admin_reply' => '✍️ پاسخ دادن',
+        'btn_referral_claim' => '🎁 دریافت جایزه',
+
+        'btn_admin_broadcast' => '📢 ارسال پیام به تمام کاربران', 'btn_admin_view_users' => '👥 دیدن کاربران ربات',
+        'btn_admin_price_menu' => '💰 تنظیم قیمت', 'btn_admin_profit_menu' => '📈 تغییر درصد سود',
+        'btn_admin_daily_limit' => '📊 تنظیم سقف شارژ روزانه', 'btn_admin_reset' => '🗑 ریست کامل داده‌های ربات',
+        'btn_admin_reset_yes' => '✅ بله، همه چیز پاک بشه', 'btn_admin_reset_no' => '❌ نه، برگرد',
+        'btn_admin_edit_price' => '✏️ تغییر قیمت', 'btn_admin_edit_daily_limit' => '✏️ تنظیم سقف روزانه',
+        'btn_admin_edit_profit' => '✏️ تنظیم سود', 'btn_no_plain' => '❌ نه',
+        'btn_admin_edit_texts' => '✏️ ویرایش متن‌های ربات', 'btn_admin_edit_buttons' => '✏️ ویرایش نام دکمه‌ها',
+        'btn_style_primary' => '🔵 آبی', 'btn_style_success' => '🟢 سبز', 'btn_style_danger' => '🔴 قرمز', 'btn_default' => '⚪️ پیش‌فرض',
+    ];
+}
+
+/* ===================== TEXT / BUTTON STORE HELPERS ===================== */
+
+function utf16_len(string $s): int {
+    return (int) (strlen(mb_convert_encoding($s, 'UTF-16LE', 'UTF-8')) / 2);
+}
+
+// Substitutes {token} placeholders and shifts any stored custom_emoji entity
+// offsets (UTF-16 code units, per Bot API) by the length delta each
+// replacement introduces, so entities typed outside the placeholders keep
+// pointing at the right characters after substitution.
+function render_with_entities(string $template, array $vars, ?array $entities): array {
+    $result = $template;
+    $adjusted = $entities;
+    foreach ($vars as $token => $value) {
+        $value = (string) $value;
+        $pos = mb_strpos($result, $token);
+        while ($pos !== false) {
+            $beforeUtf16 = utf16_len(mb_substr($result, 0, $pos));
+            $tokenUtf16 = utf16_len($token);
+            $delta = utf16_len($value) - $tokenUtf16;
+            if ($adjusted) {
+                foreach ($adjusted as &$e) {
+                    if ($e['offset'] >= $beforeUtf16 + $tokenUtf16) {
+                        $e['offset'] += $delta;
+                    }
+                }
+                unset($e);
+            }
+            $result = mb_substr($result, 0, $pos) . $value . mb_substr($result, $pos + mb_strlen($token));
+            $pos = mb_strpos($result, $token, $pos + mb_strlen($value));
+        }
+    }
+    return [$result, $adjusted];
+}
+
+function text_default(string $slug): string {
+    static $defaults = null;
+    if ($defaults === null) $defaults = default_texts();
+    return $defaults[$slug] ?? '';
+}
+
+function text_raw(string $slug): string {
+    $store = $GLOBALS['STORE']['texts'] ?? [];
+    return $store[$slug]['value'] ?? text_default($slug);
+}
+
+function text_entities_of(string $slug): ?array {
+    $store = $GLOBALS['STORE']['texts'] ?? [];
+    return $store[$slug]['entities'] ?? null;
+}
+
+// Renders a stored/default text template with {token} substitution. Returns
+// just the string; use T_full() when the caller also needs the entities
+// array (only meaningful for plain sendMessage calls without parse_mode).
+function T(string $slug, array $vars = []): string {
+    [$rendered] = render_with_entities(text_raw($slug), $vars, null);
+    return $rendered;
+}
+
+function T_full(string $slug, array $vars = []): array {
+    return render_with_entities(text_raw($slug), $vars, text_entities_of($slug));
+}
+
+function button_default(string $slug): string {
+    static $defaults = null;
+    if ($defaults === null) $defaults = default_buttons();
+    if (isset($defaults[$slug])) return $defaults[$slug];
+    if (str_starts_with($slug, 'gift_item_')) {
+        $key = substr($slug, strlen('gift_item_'));
+        if (isset(GIFTS_META[$key])) return gift_button_default($key);
+    }
+    if (str_starts_with($slug, 'admin_gift_price_btn_')) {
+        $key = substr($slug, strlen('admin_gift_price_btn_'));
+        if (isset(GIFTS_META[$key])) return admin_gift_price_button_default($key);
+    }
+    return $slug;
+}
+
+function B(string $slug): string {
+    $store = $GLOBALS['STORE']['buttons'] ?? [];
+    return $store[$slug]['label'] ?? button_default($slug);
+}
+
+function BS(string $slug): ?string {
+    $store = $GLOBALS['STORE']['buttons'] ?? [];
+    return $store[$slug]['style'] ?? null;
+}
+
+function BI(string $slug): ?string {
+    $store = $GLOBALS['STORE']['buttons'] ?? [];
+    return $store[$slug]['icon_custom_emoji_id'] ?? null;
+}
+
+function ibtn(string $slug, ?string $cb = null, ?string $url = null): array {
+    return btn(B($slug), $cb, $url, BS($slug), BI($slug));
+}
+
+function rbtn_s(string $slug): array {
+    return rbtn(B($slug), BS($slug));
+}
+
+function resolve_menu_button(string $text): ?string {
+    foreach (BUTTON_CATEGORIES['welcome'] as $slug) {
+        if (str_starts_with($slug, 'menu_') && B($slug) === $text) return $slug;
+    }
+    return null;
+}
+
+// Extracts entities from an admin's edit message verbatim (offsets already
+// correct for that exact text) for storage alongside a text/button edit.
+function capture_entities(array $msg): ?array {
+    $entities = $msg['entities'] ?? null;
+    return (is_array($entities) && $entities) ? $entities : null;
+}
+
+function first_custom_emoji_id(?array $entities): ?string {
+    if (!$entities) return null;
+    foreach ($entities as $e) {
+        if (($e['type'] ?? '') === 'custom_emoji' && !empty($e['custom_emoji_id'])) return (string) $e['custom_emoji_id'];
+    }
+    return null;
+}
+
+function all_text_slugs(): array {
+    $out = [];
+    foreach (TEXT_CATEGORIES as $slugs) $out = array_merge($out, $slugs);
+    return $out;
+}
+
+function all_button_slugs(): array {
+    $out = [];
+    foreach (BUTTON_CATEGORIES as $cat => $slugs) $out = array_merge($out, category_button_slugs($cat));
+    return $out;
+}
+
+function text_category_of(string $slug): ?string {
+    foreach (TEXT_CATEGORIES as $cat => $slugs) if (in_array($slug, $slugs, true)) return $cat;
+    return null;
+}
+
+function button_category_of(string $slug): ?string {
+    foreach (BUTTON_CATEGORIES as $cat => $slugs) if (in_array($slug, category_button_slugs($cat), true)) return $cat;
+    return null;
+}
+
+function apply_text_edit(array &$DATA, string $slug, string $value, ?array $entities): void {
+    $DATA['texts'][$slug] = ['value' => $value, 'entities' => $entities];
+}
+
+function reset_text(array &$DATA, string $slug): void {
+    unset($DATA['texts'][$slug]);
+}
+
+function apply_button_edit(array &$DATA, string $slug, string $label, ?array $entities): void {
+    $existing = $DATA['buttons'][$slug] ?? [];
+    $DATA['buttons'][$slug] = [
+        'label' => $label,
+        'style' => $existing['style'] ?? null,
+        'icon_custom_emoji_id' => first_custom_emoji_id($entities) ?? ($existing['icon_custom_emoji_id'] ?? null),
+    ];
+}
+
+function set_button_style(array &$DATA, string $slug, ?string $style): void {
+    $existing = $DATA['buttons'][$slug] ?? ['label' => button_default($slug), 'icon_custom_emoji_id' => null];
+    $existing['style'] = $style;
+    $DATA['buttons'][$slug] = $existing;
+}
+
+function reset_button(array &$DATA, string $slug): void {
+    unset($DATA['buttons'][$slug]);
+}
+
+/* ===================== DYNAMIC TEXT HELPERS ===================== */
 
 const ADMIN_BROADCAST_ASK_TEXT = '📢 متن پیامی که می‌خوای برای تمام کاربران ربات ارسال بشه رو بفرست:';
 const ADMIN_VIEW_USERS_EMPTY_TEXT = '👥 هنوز هیچ کاربری ربات رو استارت نکرده.';
@@ -201,165 +802,67 @@ const ADMIN_PRICE_MENU_TEXT = "💰 تنظیم قیمت محصولات\n\nمحص
 const ADMIN_PREMIUM_PLAN_SELECT_TEXT = '✏️ قیمت کدوم پلن پرمیوم رو می‌خوای تغییر بدی؟';
 const ADMIN_GIFT_PRICE_LIST_TEXT = '🎀 گیفت مورد نظر برای مشاهده/تغییر قیمت رو انتخاب کن:';
 
-/* ===================== DYNAMIC TEXT HELPERS ===================== */
-
 function fmt($n): string { return number_format((float) $n, 0, '.', ','); }
 
-function stars_buy_text(): string { return sprintf(STARS_BUY_TEXT_TPL, STARS_MIN); }
-function stars_min_error_text(): string { return "‼️ حداقل تعداد استارز برای خرید " . STARS_MIN . " عدد میباشد ..."; }
+function stars_buy_text(): string { return T('stars_buy', ['{min}' => STARS_MIN]); }
+function stars_min_error_text(): string { return T('stars_min_error', ['{min}' => STARS_MIN]); }
 
 function ton_buy_text(array &$DATA): string {
-    return "💰 خرید ارز تون (GRAM)\n\n" .
-        "✨ ارز تون را با بهترین قیمت و تحویل مستقیم به کیف پول خود دریافت کنید.\n\n" .
-        "💎 انتقال مستقیم به ولت \n" .
-        "⚡️ انجام سریع سفارش\n" .
-        "🔒 تراکنش امن و قابل‌اعتماد\n" .
-        "🙏 پشتیبانی کامل در تمامی مراحل\n\n" .
-        "📊 قیمت هر TON:  " . fmt($DATA['ton_price']) . " تومان\n" .
-        "📌 حداقل سفارش: " . MIN_TON . " TON\n\n" .
-        "☝️ مقدار TON موردنیاز خود را وارد کنید.\n\n" .
-        "💡 مثال: 0.5 یا 2.5";
+    refresh_ton_price_if_stale($DATA);
+    return T('ton_buy', ['{price}' => fmt($DATA['ton_price']), '{min}' => MIN_TON]);
 }
 
-function join_text(): string { return "برای استفاده از ربات، باید در کانال‌های زیر عضو شوید\n\n@" . REQUIRED_CHANNEL; }
-
-function trust_text(): string {
-    return "⭐ چرا می‌توانید با خیال راحت به ما اعتماد کنید؟\n\n" .
-        "ما یک ساله در زمینه‌ی خرید و فروش استارز و پرمیوم فعالیت داریم و در این مدت " .
-        "با صداقت، سرعت و پشتیبانی قوی تونستیم اعتماد صدها کاربر رو جلب کنیم ❤️\n\n" .
-        "✅ دلایل اعتماد :\n" .
-        "• 💳 پرداخت سریع، مطمئن و شفاف\n" .
-        "• 🌟 بیش از 200 رضایت واقعی مشتری\n" .
-        "• 📞 پشتیبانی فعال 24 ساعته، قبل و بعد از خرید\n" .
-        "• 🧾 دارای نماد اعتبار و سابقه‌ی چندساله فعالیت بدون هیچ گزارش منفی\n\n" .
-        "📣 برای مشاهده‌ی نظرات و رضایت کاربران، می‌تونید در کانال @" . TRUST_CHANNEL . " ما\n" .
-        "هشتگ زیر رو جست‌وجو کنید ☝️\n\n" .
-        "☝️ #رضایت_GiftIx\n" .
-        "اعتماد شما باعث افتخار ماست 💙";
-}
-
-function confirm_username_text(string $username): string { return "{$username}\n\n✅ آیا یوزرنیم بالا را تایید می‌کنید؟"; }
+function join_text(): string { return T('join', ['{channel}' => REQUIRED_CHANNEL]); }
+function trust_text(): string { return T('trust', ['{channel}' => TRUST_CHANNEL]); }
+function confirm_username_text(string $username): string { return T('confirm_username', ['{username}' => $username]); }
 
 function premium_invoice_text($plan, $price, $username, $disc, $final): string {
-    return "⏰ فاکتور خرید پرمیوم\n\n" .
-        "💫 نوع پلن: {$plan} ماهه\n" .
-        "📎 یوزر دریافت‌کننده: {$username}\n" .
-        "💰 مبلغ فاکتور:  " . fmt($price) . " تومان\n" .
-        "🎁 کل موجودی تخفیف:  " . fmt($disc) . " تومان\n\n" .
-        "💡 حداکثر تخفیف قابل اعمال:  " . fmt(min($disc, $price)) . " تومان\n\n" .
-        "💳 مبلغ نهایی:  " . fmt($final) . " تومان\n\n" .
-        "🍾 در صورتی که جزئیات بالا مورد تأیید شماست \n\n" .
-        "روی دکمه «تأیید ✅» کلیک کنید.";
+    return T('premium_invoice', ['{plan}' => $plan, '{price}' => fmt($price), '{username}' => $username,
+        '{discount}' => fmt($disc), '{max_discount}' => fmt(min($disc, $price)), '{final}' => fmt($final)]);
 }
 
 function premium_success_text($plan, $username, $price, $order_id): string {
-    return "✅ سفارش شما با موفقیت ثبت شد!\n\n" .
-        "💫 پلن: {$plan} ماهه\n" .
-        "📎 یوزر: {$username}\n" .
-        "💰 مبلغ پرداخت‌شده: " . fmt($price) . " تومان\n\n" .
-        "🔑 کد پیگیری سفارش : {$order_id}\n\n" .
-        "⏳ سفارش شما در حال پردازش است و به‌زودی وضعیت آن از طریق ربات اطلاع‌رسانی خواهد شد.\n\n" .
-        "🙏 از اعتماد شما سپاسگزاریم.";
+    return T('premium_success', ['{plan}' => $plan, '{username}' => $username, '{price}' => fmt($price), '{order_id}' => $order_id]);
 }
 
 function premium_done_text($plan, $username, $price, $order_id): string {
-    return "✅ سفارش شما با موفقیت انجام شد 🎉\n\n" .
-        "☝️اطلاعات سفارش:\n\n" .
-        "ℹ️ نوع خدمات: پرمیوم تلگرام\n" .
-        "💫 پلن: {$plan} ماهه\n" .
-        "📎 یوزر: {$username}\n" .
-        "💳 مبلغ نهایی پرداخت شده:  " . fmt($price) . " تومان\n" .
-        "🔓 کد پیگیری سفارش: {$order_id}\n\n" .
-        "😊 از اعتماد و انتخاب شما سپاسگزاریم.";
+    return T('premium_done', ['{plan}' => $plan, '{username}' => $username, '{price}' => fmt($price), '{order_id}' => $order_id]);
 }
 
 function admin_premium_text($user, $plan, $username, $price, $order_id): string {
-    return "🛒 سفارش جدید - پرمیوم تلگرام\n\n" .
-        "👤 کاربر: " . display_name($user) . ' (' . username_at($user) . ")\n" .
-        "🆔 آیدی عددی: {$user['id']}\n" .
-        "💫 پلن: {$plan} ماهه\n" .
-        "📎 یوزر دریافت‌کننده: {$username}\n" .
-        "💰 مبلغ پرداخت‌شده: " . fmt($price) . " تومان\n" .
-        "🔢 کد پیگیری: {$order_id}";
+    return T('admin_premium_order', ['{user_name}' => display_name($user), '{username_at}' => username_at($user),
+        '{user_id}' => $user['id'], '{plan}' => $plan, '{buy_username}' => $username, '{price}' => fmt($price), '{order_id}' => $order_id]);
 }
 
 function ton_invoice_text($amount, $wallet, $memo, $price, $disc, $final): string {
-    return "📑 فاکتور خرید ارز تون\n\n" .
-        "💫 مقدار خرید: {$amount} تون\n" .
-        "🏦 ولت آدرس دریافتی: {$wallet}\n" .
-        "💬 ممو/کامنت ولت: {$memo}\n" .
-        "💰 مبلغ فاکتور:  " . fmt($price) . " تومان\n" .
-        "🎁 کل موجودی تخفیف:  " . fmt($disc) . " تومان\n\n" .
-        "💡 حداکثر تخفیف قابل اعمال:  " . fmt(min($disc, $price)) . " تومان\n\n" .
-        "💳 مبلغ نهایی:  " . fmt($final) . " تومان\n\n" .
-        "🔮 در صورتی که جزئیات بالا مورد تأیید شماست ✓ \n" .
-        "روی دکمه «تأیید ✅» کلیک کنید.";
+    return T('ton_invoice', ['{amount}' => $amount, '{wallet}' => $wallet, '{memo}' => $memo,
+        '{price}' => fmt($price), '{discount}' => fmt($disc), '{max_discount}' => fmt(min($disc, $price)), '{final}' => fmt($final)]);
 }
 
 function ton_success_text($amount, $wallet, $price, $order_id): string {
-    return "✅ سفارش شما با موفقیت ثبت شد.\n\n" .
-        "⛏️نوع خدمات : خرید ارز تون\n" .
-        "🔢 تعداد : {$amount}\n" .
-        "📎 آدرس ولت : {$wallet}\n" .
-        "💰 مبلغ پرداختی :  " . fmt($price) . " تومان\n" .
-        "🔑 کد پیگیری سفارش : {$order_id}\n\n" .
-        "⏳ سفارش شما در حال پردازش است و به‌زودی وضعیت آن از طریق ربات اطلاع‌رسانی خواهد شد.\n\n" .
-        "🙏 از اعتماد شما سپاسگزاریم.";
+    return T('ton_success', ['{amount}' => $amount, '{wallet}' => $wallet, '{price}' => fmt($price), '{order_id}' => $order_id]);
 }
 
 function ton_done_text($amount, $wallet, $price, $order_id): string {
-    return "✅ سفارش شما با موفقیت انجام شد 🎉\n\n" .
-        "☝️اطلاعات سفارش:\n\n" .
-        "ℹ️ نوع خدمات: خرید ارز تون\n" .
-        "👀 تعداد: {$amount} TON\n" .
-        "🔗 ولت تون: {$wallet}\n" .
-        "💳 مبلغ نهایی پرداخت شده:  " . fmt($price) . " تومان\n" .
-        "🔓 کد پیگیری سفارش: {$order_id}\n\n" .
-        "😊 از اعتماد و انتخاب شما سپاسگزاریم.";
+    return T('ton_done', ['{amount}' => $amount, '{wallet}' => $wallet, '{price}' => fmt($price), '{order_id}' => $order_id]);
 }
 
 function stars_invoice_text($count, $username, $price, $disc, $final): string {
-    return "⏰ فاکتور خرید استارز\n\n" .
-        "💫 مقدار خرید: {$count}\n" .
-        "📎 یوزر دریافت‌کننده: {$username}\n" .
-        "💰 مبلغ فاکتور:  " . fmt($price) . " تومان\n" .
-        "🎁 کل موجودی تخفیف:  " . fmt($disc) . " تومان\n\n" .
-        "💡 حداکثر تخفیف قابل اعمال:  " . fmt(min($disc, $price)) . " تومان\n\n" .
-        "💳 مبلغ نهایی:  " . fmt($final) . " تومان\n\n" .
-        "🍾 در صورتی که جزئیات بالا مورد تأیید شماست \n\n" .
-        "روی دکمه «تأیید ✅» کلیک کنید.";
+    return T('stars_invoice', ['{count}' => $count, '{username}' => $username,
+        '{price}' => fmt($price), '{discount}' => fmt($disc), '{max_discount}' => fmt(min($disc, $price)), '{final}' => fmt($final)]);
 }
 
 function stars_success_text($count, $username, $price, $order_id): string {
-    return "✅ سفارش شما با موفقیت ثبت شد!\n\n" .
-        "⛏️ نوع خدمات: خرید استارز تلگرام\n" .
-        "⭐️ تعداد: {$count} استارز\n" .
-        "📎 یوزر دریافت‌کننده: {$username}\n" .
-        "💰 مبلغ پرداختی:  " . fmt($price) . " تومان\n" .
-        "🔑 کد پیگیری سفارش : {$order_id}\n\n" .
-        "⏳ سفارش شما در حال پردازش است و به‌زودی وضعیت آن از طریق ربات اطلاع‌رسانی خواهد شد.\n\n" .
-        "🙏 از اعتماد شما سپاسگزاریم.";
+    return T('stars_success', ['{count}' => $count, '{username}' => $username, '{price}' => fmt($price), '{order_id}' => $order_id]);
 }
 
 function stars_done_text($count, $username, $price, $order_id): string {
-    return "✅ سفارش شما با موفقیت انجام شد 🎉\n\n" .
-        "☝️اطلاعات سفارش:\n\n" .
-        "ℹ️ نوع خدمات: خرید استارز تلگرام\n" .
-        "⭐️ تعداد: {$count} استارز\n" .
-        "📎 یوزر دریافت‌کننده: {$username}\n" .
-        "💳 مبلغ نهایی پرداخت شده:  " . fmt($price) . " تومان\n" .
-        "🔓 کد پیگیری سفارش: {$order_id}\n\n" .
-        "😊 از اعتماد و انتخاب شما سپاسگزاریم.";
+    return T('stars_done', ['{count}' => $count, '{username}' => $username, '{price}' => fmt($price), '{order_id}' => $order_id]);
 }
 
 function admin_stars_text($user, $count, $username, $price, $order_id): string {
-    return "🛒 سفارش جدید - استارز تلگرام\n\n" .
-        "👤 کاربر: " . display_name($user) . ' (' . username_at($user) . ")\n" .
-        "🆔 آیدی عددی: {$user['id']}\n" .
-        "⭐️ تعداد استارز: {$count}\n" .
-        "📎 یوزر دریافت‌کننده: {$username}\n" .
-        "💰 مبلغ پرداخت‌شده: " . fmt($price) . " تومان\n" .
-        "🔢 کد پیگیری: {$order_id}";
+    return T('admin_stars_order', ['{user_name}' => display_name($user), '{username_at}' => username_at($user),
+        '{user_id}' => $user['id'], '{count}' => $count, '{buy_username}' => $username, '{price}' => fmt($price), '{order_id}' => $order_id]);
 }
 
 function gift_label(string $key): string {
@@ -368,62 +871,29 @@ function gift_label(string $key): string {
 }
 
 function gift_invoice_text($key, $username, $hidden, $comment, $price, $disc, $final): string {
-    $hide_str = $hidden ? '✅ بله' : '❌ خیر';
-    $comment_str = $comment ? $comment : 'ندارد';
-    return "📑 فاکتور خرید گیفت\n\n" .
-        "💫 مقدار خرید: " . gift_label($key) . "\n" .
-        "🔗 یوزر دریافت‌کننده: {$username}\n" .
-        "🔒 گیفت هاید: {$hide_str}\n" .
-        "کامنت : {$comment_str}\n\n" .
-        "💰 مبلغ فاکتور:  " . fmt($price) . " تومان\n" .
-        "🎁 کل موجودی تخفیف:  " . fmt($disc) . " تومان\n\n" .
-        "💡 حداکثر تخفیف قابل اعمال:  " . fmt(min($disc, $price)) . " تومان\n\n" .
-        "💳 مبلغ نهایی:  " . fmt($final) . " تومان\n\n" .
-        "🔮 در صورتی که جزئیات بالا مورد تأیید شماست ✓ \n" .
-        "روی دکمه «تأیید ✅» کلیک کنید.";
+    return T('gift_invoice', ['{gift}' => gift_label($key), '{username}' => $username,
+        '{hide}' => $hidden ? '✅ بله' : '❌ خیر', '{comment}' => $comment ? $comment : 'ندارد',
+        '{price}' => fmt($price), '{discount}' => fmt($disc), '{max_discount}' => fmt(min($disc, $price)), '{final}' => fmt($final)]);
 }
 
 function gift_success_text($key, $username, $price, $order_id): string {
-    return "✅ سفارش شما با موفقیت ثبت شد!\n\n" .
-        "⛏️ نوع خدمات: خرید گیفت استارز\n" .
-        "🎁 گیفت: " . gift_label($key) . "\n" .
-        "📎 یوزر دریافت‌کننده: {$username}\n" .
-        "💰 مبلغ پرداختی:  " . fmt($price) . " تومان\n" .
-        "🔑 کد پیگیری سفارش : {$order_id}\n\n" .
-        "⏳ سفارش شما در حال پردازش است و به‌زودی وضعیت آن از طریق ربات اطلاع‌رسانی خواهد شد.\n\n" .
-        "🙏 از اعتماد شما سپاسگزاریم.";
+    return T('gift_success', ['{gift}' => gift_label($key), '{username}' => $username, '{price}' => fmt($price), '{order_id}' => $order_id]);
 }
 
 function gift_done_text($key, $username, $price, $order_id): string {
-    return "✅ سفارش شما با موفقیت انجام شد 🎉\n\n" .
-        "☝️اطلاعات سفارش:\n\n" .
-        "ℹ️ نوع خدمات: خرید گیفت استارز\n" .
-        "🎁 گیفت: " . gift_label($key) . "\n" .
-        "📎 یوزر دریافت‌کننده: {$username}\n" .
-        "💳 مبلغ نهایی پرداخت شده:  " . fmt($price) . " تومان\n" .
-        "🔓 کد پیگیری سفارش: {$order_id}\n\n" .
-        "😊 از اعتماد و انتخاب شما سپاسگزاریم.";
+    return T('gift_done', ['{gift}' => gift_label($key), '{username}' => $username, '{price}' => fmt($price), '{order_id}' => $order_id]);
 }
 
 function admin_gift_text($user, $key, $username, $hidden, $comment, $price, $order_id): string {
-    $hide_str = $hidden ? '✅ بله' : '❌ خیر';
     $comment_display = $comment ? ('<code>' . htmlspecialchars((string) $comment, ENT_QUOTES) . '</code>') : 'ندارد';
-    return "🛒 سفارش جدید - گیفت استارز\n\n" .
-        "👤 کاربر: " . display_name($user) . ' (' . username_at($user) . ")\n" .
-        "🆔 آیدی عددی: {$user['id']}\n" .
-        "🎁 گیفت: " . gift_label($key) . "\n" .
-        "📎 یوزر دریافت‌کننده: {$username}\n" .
-        "🔒 هاید: {$hide_str}\n" .
-        "💬 کامنت: {$comment_display}\n" .
-        "💰 مبلغ پرداخت‌شده: " . fmt($price) . " تومان\n" .
-        "🔢 کد پیگیری: {$order_id}";
+    return T('admin_gift_order', ['{user_name}' => display_name($user), '{username_at}' => username_at($user),
+        '{user_id}' => $user['id'], '{gift}' => gift_label($key), '{buy_username}' => $username,
+        '{hide}' => $hidden ? '✅ بله' : '❌ خیر', '{comment}' => $comment_display, '{price}' => fmt($price), '{order_id}' => $order_id]);
 }
 
 function admin_support_text($user, string $message_text): string {
-    return "📨 پیام جدید پشتیبانی\n\n" .
-        "👤 کاربر: " . display_name($user) . ' (' . username_at($user) . ")\n" .
-        "🆔 آیدی عددی: {$user['id']}\n\n" .
-        "💬 متن پیام:\n{$message_text}";
+    return T('admin_support_notify', ['{user_name}' => display_name($user), '{username_at}' => username_at($user),
+        '{user_id}' => $user['id'], '{message}' => $message_text]);
 }
 
 function order_report_fields(array $order): array {
@@ -441,13 +911,8 @@ function price_display(array $order): string {
 
 function report_text(string $buyer_name, array $order): string {
     [$label, $emoji, $qty] = order_report_fields($order);
-    return "🛍 خرید موفق ✅\n\n" .
-        "👤 خریدار: {$buyer_name}\n" .
-        "🛒 سفارش : {$label} {$emoji}\n" .
-        "⛏️ تعداد: {$qty}\n" .
-        "💰 مبلغ پرداخت شده :  " . price_display($order) . " \n\n" .
-        "⏰ " . persian_now_str() . " \n" .
-        "📱 @" . BOT_USERNAME;
+    return T('report', ['{buyer_name}' => $buyer_name, '{label}' => $label, '{emoji}' => $emoji, '{qty}' => $qty,
+        '{price}' => price_display($order), '{date}' => persian_now_str(), '{bot_username}' => BOT_USERNAME]);
 }
 
 function order_status_text(array $order): string {
@@ -480,13 +945,8 @@ function order_status_text(array $order): string {
     $parts = preg_split('/\s+/', trim($date_raw));
     $date_display = (count($parts) >= 2) ? ($parts[0] . ' ساعت ' . end($parts)) : $date_raw;
 
-    return "🔢 مشخصات سفارش \n\n" .
-        "📦 نوع سفارش: {$label} {$emoji}\n" .
-        "📊 تعداد: {$qty}\n" .
-        "💼 قیمت:  " . price_display($order) . "\n" .
-        "📱 وضعیت: {$status_label}\n\n\n" .
-        "{$extra}\n" .
-        "🗓️ تاریخ و ساعت: {$date_display}";
+    return T('order_status', ['{label}' => $label, '{emoji}' => $emoji, '{qty}' => $qty,
+        '{price}' => price_display($order), '{status}' => $status_label, '{extra}' => $extra, '{date}' => $date_display]);
 }
 
 function admin_panel_text(array &$DATA): string {
@@ -499,7 +959,7 @@ function admin_panel_text(array &$DATA): string {
 }
 
 function broadcast_confirm_text(string $text): string { return "📢 متن زیر برای تمام کاربران ربات ارسال خواهد شد:\n\n{$text}\n\nآیا مطمئن هستید؟"; }
-function broadcast_message_text(string $text): string { return "👤 پیام مدیریت به تمام کاربران\n\n{$text}"; }
+function broadcast_message_text(string $text): string { return T('broadcast_message', ['{text}' => $text]); }
 function broadcast_done_text(int $success, int $fail): string { return "✅ پیام به {$success} کاربر ارسال شد.\n❌ ارسال به {$fail} کاربر ناموفق بود."; }
 
 function view_users_text(array &$DATA): string {
@@ -604,66 +1064,35 @@ function admin_ask_profit_text(string $product_fa): string { return "✏️ در
 
 function admin_ton_text($user, $amount, $wallet, $memo, $price, $order_id): string {
     $walletSafe = htmlspecialchars((string) $wallet, ENT_QUOTES);
-    return "🛒 سفارش جدید - خرید ارز تون\n\n" .
-        "👤 کاربر: " . display_name($user) . ' (' . username_at($user) . ")\n" .
-        "🆔 آیدی عددی: {$user['id']}\n" .
-        "💫 مقدار: {$amount} TON\n" .
-        "🏦 آدرس ولت:\n<code>{$walletSafe}</code>\n" .
-        "💬 ممو: {$memo}\n" .
-        "💰 مبلغ پرداخت‌شده: " . fmt($price) . " تومان\n" .
-        "🔢 کد پیگیری: {$order_id}";
+    return T('admin_ton_order', ['{user_name}' => display_name($user), '{username_at}' => username_at($user),
+        '{user_id}' => $user['id'], '{amount}' => $amount, '{wallet}' => $walletSafe, '{memo}' => $memo,
+        '{price}' => fmt($price), '{order_id}' => $order_id]);
 }
 
-function insufficient_text(int $shortfall): string {
-    return "برای ادامه خرید مبلغ کمبود شما " . fmt($shortfall) . ' تومان است. یکی از روش های زیر را برای شارژ سریع انتخاب کنید:';
-}
+function insufficient_text(int $shortfall): string { return T('insufficient', ['{shortfall}' => fmt($shortfall)]); }
 
 function wallet_text(int $balance, int $remaining): string {
-    return "کیف پول 💰\n\n" .
-        "موجودی شما:  " . fmt($balance) . " تومان 💸\n" .
-        "باقی مانده سقف مجاز افزایش موجودی تومانی امروز:  " . fmt($remaining) . " 🚀\n\n" .
-        'برای افزایش موجودی خود روی دکمه زیر کلیک کنید 👇';
+    return T('wallet', ['{balance}' => fmt($balance), '{remaining}' => fmt($remaining)]);
 }
 
-function toman_payment_text(int $remaining): string {
-    return "💳 پرداخت تومانی \n\n" .
-        "ابتدا مبلغی که قصد دارید به موجودی خود اضافه کنید را وارد کنید.\n\n\n" .
-        "📱 باقیمانده سقف مجاز پرداخت تومانی امروز :  " . fmt($remaining) . " تومان\n\n\n" .
-        '‼️ توجه کنید که مبلغ واریزی نباید بیشتر از مبلغ سقف مجاز باشد ، ' .
-        'در غیر اینصورت حساب شما فقط در حد سقف مجاز شارژ خواهد شد ' .
-        'و مسئولیت آن به عهده خودتان است ❌';
-}
+function toman_payment_text(int $remaining): string { return T('toman_payment', ['{remaining}' => fmt($remaining)]); }
 
 function daily_limit_exceeded_text(int $remaining): string {
-    if ($remaining <= 0) {
-        return "❌ سقف مجاز شارژ تومانی امروز شما تموم شده.\n\nلطفا فردا دوباره تلاش کن یا با پشتیبانی در ارتباط باش.";
-    }
-    return "❌ مبلغی که وارد کردی بیشتر از سقف مجاز باقی‌مونده امروزته.\n\n" .
-        "📱 سقف مجاز باقی‌مونده امروز شما:  " . fmt($remaining) . " تومان\n\n" .
-        'لطفا مبلغ کمتر یا مساوی همین مقدار رو وارد کن.';
+    if ($remaining <= 0) return T('daily_limit_exceeded_zero');
+    return T('daily_limit_exceeded', ['{remaining}' => fmt($remaining)]);
 }
 
 function card_details_text(int $amount): string {
-    return "💸 مبلغ واریزی:   " . fmt($amount) . " تومان\n\n" .
-        "💼 شماره کارت جهت واریز :\n\n" .
-        '<code>' . htmlspecialchars(CARD_NUMBER, ENT_QUOTES) . "</code>\n\n" .
-        '👤 به نام: ' . CARD_HOLDER . "\n\n" .
-        "⚡️ لطفا پس از واریز پول،  «دکمه ارسال رسید» را بزنید و سپس " .
-        "رسید پرداخت را بصورت عکس ارسال کنید\n\n" .
-        "❗️توجه: چنانچه رسید بصورت متن بود از آن اسکرین شات بگیرید و اسکرین شات را ارسال کنید.\n\n" .
-        '❗️در صورت مغایرت مبلغ تعیین شده با مبلغ واریز شده به کارت مسئولیت آن به عهده خودتان است.';
+    return T('card_details', ['{amount}' => fmt($amount), '{card_number}' => htmlspecialchars(CARD_NUMBER, ENT_QUOTES), '{card_holder}' => CARD_HOLDER]);
 }
 
 function admin_topup_caption($user, int $amount, string $req_id): string {
-    return "🧾 درخواست افزایش موجودی جدید\n\n" .
-        "👤 کاربر: " . display_name($user) . ' (' . username_at($user) . ")\n" .
-        "🆔 آیدی عددی: {$user['id']}\n" .
-        "💸 مبلغ: " . fmt($amount) . " تومان\n" .
-        "🔢 شماره درخواست: {$req_id}";
+    return T('admin_topup_caption', ['{user_name}' => display_name($user), '{username_at}' => username_at($user),
+        '{user_id}' => $user['id'], '{amount}' => fmt($amount), '{req_id}' => $req_id]);
 }
 
-function approved_text(int $balance): string { return "🔥 مشتری عزیز\n\n✔️ رسید افزایش موجودی شما با موفقیت تایید شد\nموجودی شما:  " . fmt($balance) . ' تومان'; }
-function rejected_text(string $reason): string { return "❌ متاسفانه درخواست افزایش موجودی شما رد شد.\n\nدلیل: {$reason}"; }
+function approved_text(int $balance): string { return T('approved', ['{balance}' => fmt($balance)]); }
+function rejected_text(string $reason): string { return T('rejected', ['{reason}' => $reason]); }
 
 function account_text(array &$DATA, $user): string {
     $u = get_user($DATA, $user['id']);
@@ -685,76 +1114,35 @@ function account_text(array &$DATA, $user): string {
 function referral_text(array &$DATA, $user): string {
     $u = get_user($DATA, $user['id']);
     $link = 'https://t.me/' . BOT_USERNAME . '?start=ref_' . $user['id'];
-    return "👥 زیرمجموعه‌گیری ( Referral System )\n\n" .
-        "🔗 لینک اختصاصی شما :\n{$link}\n\n" .
-        "👥 زیرمجموعه‌ها : {$u['referrals']} نفر\n" .
-        "💰 درآمد شما :  " . fmt($u['discount_balance']) . " تومان\n" .
-        "🏅 امتیاز رفرال : {$u['score']}\n\n" .
-        "❗️ توضیحات سیستم رفرال :\n\n" .
-        "• با ارسال لینک اختصاصی خود ، دوستانتان را به ربات دعوت کنید.\n\n" .
-        "• هر زمان زیرمجموعه‌ی شما خریدی انجام دهد، " . REFERRAL_COMMISSION_PERCENT . "٪ از مبلغ " .
-        "آن خرید به موجودی تخفیف شما اضافه می‌شود.\n\n" .
-        "• اگر در تایم‌های اعلام‌شده توسط ادمین زیرمجموعه بگیرید ، به ازای هر دعوت " .
-        "1 امتیاز به امتیاز رفرال شما اضافه می‌شود.\n\n" .
-        "• تایم‌ها از طریق اطلاع‌رسانی ربات و کانال تلگرام @" . TRUST_CHANNEL . " اعلام می‌شوند\n\n" .
-        "• درصورت داشتن هر " . REFERRAL_POINTS_REQUIRED . " امتیاز " .
-        "شما قادر به دریافت یک جایزه هستید\n\n" .
-        '(جایزه : گیفت تدی یا قلب 15 استارزی به انتخاب خودتان)';
+    return T('referral', ['{link}' => $link, '{referrals}' => $u['referrals'], '{discount}' => fmt($u['discount_balance']),
+        '{score}' => $u['score'], '{commission_percent}' => REFERRAL_COMMISSION_PERCENT,
+        '{points_required}' => REFERRAL_POINTS_REQUIRED, '{trust_channel}' => TRUST_CHANNEL]);
 }
 
 function referral_notification_text(string $invited_name, bool $point_awarded, int $total_referrals = 0, int $total_discount = 0, int $total_score = 0): string {
-    $text = "🎉 تبریک! یک زیرمجموعه جدید داری!\n\n" .
-        "👤 کاربر «{$invited_name}» با لینک دعوت شما عضو ربات شد.\n\n";
-    if ($point_awarded) $text .= "🏅 1 امتیاز رفرال به امتیازهای شما اضافه شد.\n";
-    $text .= "\n━━━━━━━━━━━━━━━━━\n" .
-        "👥 کل زیرمجموعه‌های شما: {$total_referrals} نفر\n" .
-        "💸 موجودی تخفیف شما: " . fmt($total_discount) . " تومان\n" .
-        "🏅 امتیاز رفرال شما: {$total_score}\n\n" .
-        "💡 هر خریدی که زیرمجموعه‌تون انجام بده، " . REFERRAL_COMMISSION_PERCENT . "٪ " .
-        'از مبلغ خرید به موجودی تخفیف شما اضافه میشه.';
-    return $text;
+    $point_line = $point_awarded ? "🏅 1 امتیاز رفرال به امتیازهای شما اضافه شد.\n" : '';
+    return T('referral_notification', ['{invited_name}' => $invited_name, '{point_line}' => $point_line,
+        '{referrals}' => $total_referrals, '{discount}' => fmt($total_discount), '{score}' => $total_score,
+        '{commission_percent}' => REFERRAL_COMMISSION_PERCENT]);
 }
 
-function referral_reward_select_text(): string { return '🎁 یکی از گیفت‌های زیر رو به عنوان جایزه رفرال انتخاب کن:'; }
+function referral_reward_select_text(): string { return T('referral_reward_select'); }
 
 function referral_reward_invoice_text(string $key, string $username): string {
-    return "🎁 فاکتور جایزه رفرال\n\n" .
-        "💫 جایزه: " . gift_label($key) . "\n" .
-        "📎 یوزر دریافت‌کننده: {$username}\n" .
-        "🏅 امتیاز مصرفی: " . REFERRAL_POINTS_REQUIRED . "\n" .
-        "💰 مبلغ قابل پرداخت: رایگان 🎁\n\n" .
-        "🍾 در صورتی که جزئیات بالا مورد تأیید شماست \n\n" .
-        "روی دکمه «تأیید ✅» کلیک کنید.";
+    return T('referral_reward_invoice', ['{gift}' => gift_label($key), '{username}' => $username, '{points_required}' => REFERRAL_POINTS_REQUIRED]);
 }
 
 function referral_reward_success_text(string $key, string $username, string $order_id): string {
-    return "✅ جایزه رفرال شما با موفقیت ثبت شد!\n\n" .
-        "🎁 جایزه: " . gift_label($key) . "\n" .
-        "📎 یوزر دریافت‌کننده: {$username}\n" .
-        "💰 مبلغ پرداختی: رایگان 🎁\n" .
-        "🔑 کد پیگیری سفارش : {$order_id}\n\n" .
-        "⏳ سفارش شما در حال پردازش است و به‌زودی وضعیت آن از طریق ربات اطلاع‌رسانی خواهد شد.\n\n" .
-        "🙏 از همراهی شما سپاسگزاریم.";
+    return T('referral_reward_success', ['{gift}' => gift_label($key), '{username}' => $username, '{order_id}' => $order_id]);
 }
 
 function admin_referral_reward_text($user, string $key, string $username, string $order_id): string {
-    return "🎁 سفارش جدید - جایزه رفرال (رایگان)\n\n" .
-        "👤 کاربر: " . display_name($user) . ' (' . username_at($user) . ")\n" .
-        "🆔 آیدی عددی: {$user['id']}\n" .
-        "🎁 گیفت: " . gift_label($key) . "\n" .
-        "📎 یوزر دریافت‌کننده: {$username}\n" .
-        "🔢 کد پیگیری: {$order_id}";
+    return T('admin_referral_reward_order', ['{user_name}' => display_name($user), '{username_at}' => username_at($user),
+        '{user_id}' => $user['id'], '{gift}' => gift_label($key), '{buy_username}' => $username, '{order_id}' => $order_id]);
 }
 
 function referral_reward_done_text(string $key, string $username, string $order_id): string {
-    return "✅ جایزه رفرال شما با موفقیت انجام شد 🎉\n\n" .
-        "☝️اطلاعات سفارش:\n\n" .
-        "ℹ️ نوع خدمات: جایزه رفرال\n" .
-        "🎁 گیفت: " . gift_label($key) . "\n" .
-        "📎 یوزر دریافت‌کننده: {$username}\n" .
-        "💳 مبلغ نهایی پرداخت شده: رایگان 🎁\n" .
-        "🔓 کد پیگیری سفارش: {$order_id}\n\n" .
-        "😊 از همراهی شما سپاسگزاریم.";
+    return T('referral_reward_done', ['{gift}' => gift_label($key), '{username}' => $username, '{order_id}' => $order_id]);
 }
 
 /* ===================== JALALI DATE (no external deps) ===================== */
@@ -819,11 +1207,56 @@ function tg_api(string $method, array $params = []): ?array {
     return is_array($decoded) ? $decoded : null;
 }
 
-function send_message($chat_id, string $text, ?array $reply_markup = null, ?string $parse_mode = null, array $extra = []): ?array {
+// Bot API 9.4 style/icon_custom_emoji_id/custom_emoji only actually render
+// for a bot owner with Telegram Premium; Telegram rejects the whole call
+// otherwise, so every send that may carry them retries once with the
+// fields stripped, logging just once per request.
+function reply_markup_has_style(?array $markup): bool {
+    if (!$markup) return false;
+    $rows = $markup['inline_keyboard'] ?? $markup['keyboard'] ?? null;
+    if (!$rows) return false;
+    foreach ($rows as $row) {
+        foreach ($row as $b) {
+            if (isset($b['style']) || isset($b['icon_custom_emoji_id'])) return true;
+        }
+    }
+    return false;
+}
+
+function strip_style_fields(array $markup): array {
+    $key = isset($markup['inline_keyboard']) ? 'inline_keyboard' : (isset($markup['keyboard']) ? 'keyboard' : null);
+    if ($key === null) return $markup;
+    foreach ($markup[$key] as &$row) {
+        foreach ($row as &$b) unset($b['style'], $b['icon_custom_emoji_id']);
+        unset($b);
+    }
+    unset($row);
+    return $markup;
+}
+
+function log_premium_fallback_once(): void {
+    static $logged = false;
+    if ($logged) return;
+    $logged = true;
+    error_log('Telegram rejected style/icon_custom_emoji_id/custom_emoji entities on this send - the bot owner likely does not have Telegram Premium (Bot API 9.4 restriction). Falling back to plain rendering.');
+}
+
+function send_message($chat_id, string $text, ?array $reply_markup = null, ?string $parse_mode = null, array $extra = [], ?array $entities = null): ?array {
     $params = array_merge(['chat_id' => $chat_id, 'text' => $text], $extra);
     if ($reply_markup !== null) $params['reply_markup'] = $reply_markup;
-    if ($parse_mode !== null) $params['parse_mode'] = $parse_mode;
-    return tg_api('sendMessage', $params);
+    if ($entities) {
+        $params['entities'] = $entities; // entities and parse_mode are mutually exclusive on sendMessage
+    } elseif ($parse_mode !== null) {
+        $params['parse_mode'] = $parse_mode;
+    }
+    $res = tg_api('sendMessage', $params);
+    if ((!$res || empty($res['ok'])) && (!empty($params['entities']) || reply_markup_has_style($reply_markup))) {
+        log_premium_fallback_once();
+        unset($params['entities']);
+        if ($reply_markup !== null) $params['reply_markup'] = strip_style_fields($reply_markup);
+        $res = tg_api('sendMessage', $params);
+    }
+    return $res;
 }
 
 function edit_message_text($chat_id, $message_id, string $text, ?array $reply_markup = null, ?string $parse_mode = null): ?array {
@@ -831,13 +1264,25 @@ function edit_message_text($chat_id, $message_id, string $text, ?array $reply_ma
     $params = ['chat_id' => $chat_id, 'message_id' => $message_id, 'text' => $text];
     if ($reply_markup !== null) $params['reply_markup'] = $reply_markup;
     if ($parse_mode !== null) $params['parse_mode'] = $parse_mode;
-    return tg_api('editMessageText', $params);
+    $res = tg_api('editMessageText', $params);
+    if ((!$res || empty($res['ok'])) && reply_markup_has_style($reply_markup)) {
+        log_premium_fallback_once();
+        $params['reply_markup'] = strip_style_fields($reply_markup);
+        $res = tg_api('editMessageText', $params);
+    }
+    return $res;
 }
 
 function edit_message_caption($chat_id, $message_id, string $caption, ?array $reply_markup = null): ?array {
     $params = ['chat_id' => $chat_id, 'message_id' => $message_id, 'caption' => $caption];
     if ($reply_markup !== null) $params['reply_markup'] = $reply_markup;
-    return tg_api('editMessageCaption', $params);
+    $res = tg_api('editMessageCaption', $params);
+    if ((!$res || empty($res['ok'])) && reply_markup_has_style($reply_markup)) {
+        log_premium_fallback_once();
+        $params['reply_markup'] = strip_style_fields($reply_markup);
+        $res = tg_api('editMessageCaption', $params);
+    }
+    return $res;
 }
 
 function answer_callback_query(string $id, ?string $text = null, bool $show_alert = false): ?array {
@@ -852,7 +1297,13 @@ function send_photo($chat_id, string $file_id, ?string $caption = null, ?array $
     if ($caption !== null) $params['caption'] = $caption;
     if ($reply_markup !== null) $params['reply_markup'] = $reply_markup;
     if ($parse_mode !== null) $params['parse_mode'] = $parse_mode;
-    return tg_api('sendPhoto', $params);
+    $res = tg_api('sendPhoto', $params);
+    if ((!$res || empty($res['ok'])) && reply_markup_has_style($reply_markup)) {
+        log_premium_fallback_once();
+        $params['reply_markup'] = strip_style_fields($reply_markup);
+        $res = tg_api('sendPhoto', $params);
+    }
+    return $res;
 }
 
 function get_chat_member(string $chat, $user_id): ?array {
@@ -869,99 +1320,154 @@ function is_member($user_id): bool {
     return in_array($status, ['member', 'administrator', 'creator'], true);
 }
 
+/* ===================== TON PRICE (Nobitex) ===================== */
+
+// Fetches the TON/Rial spot price from Nobitex and returns the base Toman
+// price (Rial / 10, rounded to the nearest 100 Toman), or null on failure.
+function fetch_ton_price_from_nobitex(): ?int {
+    $ch = curl_init(NOBITEX_TON_STATS_URL);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => 8,
+        CURLOPT_CONNECTTIMEOUT => 4,
+    ]);
+    $res = curl_exec($ch);
+    if ($res === false) {
+        error_log('fetch_ton_price_from_nobitex curl error: ' . curl_error($ch));
+        curl_close($ch);
+        return null;
+    }
+    curl_close($ch);
+    $decoded = json_decode($res, true);
+    $rial = $decoded['stats']['ton-rls']['latest'] ?? null;
+    if (!is_numeric($rial)) {
+        error_log('fetch_ton_price_from_nobitex: unexpected response: ' . substr((string) $res, 0, 300));
+        return null;
+    }
+    return (int) round(((float) $rial) / 10 / 100) * 100;
+}
+
+// Lazy on-demand refresh: re-fetches only when the cache is stale (or
+// $force). Never throws - a failed fetch just keeps serving the last
+// cached base price so the purchase flow never breaks.
+function refresh_ton_price_if_stale(array &$DATA, bool $force = false): void {
+    $cache = $DATA['ton_price_cache'] ?? ['base' => $DATA['base_ton_price'], 'fetched_at' => 0];
+    if (!$force && (time() - (int) ($cache['fetched_at'] ?? 0)) < TON_PRICE_CACHE_SECONDS) return;
+    $fresh = fetch_ton_price_from_nobitex();
+    if ($fresh === null) {
+        $DATA['ton_price_cache'] = $cache; // keep last known value, just don't retry every request
+        return;
+    }
+    $DATA['ton_price_cache'] = ['base' => $fresh, 'fetched_at' => time()];
+    $DATA['base_ton_price'] = $fresh;
+    recalc_prices($DATA);
+}
+
 /* ===================== KEYBOARDS ===================== */
 
 function ikb(array $rows): array { return ['inline_keyboard' => $rows]; }
-function btn(string $text, ?string $cb = null, ?string $url = null): array {
-    return $url !== null ? ['text' => $text, 'url' => $url] : ['text' => $text, 'callback_data' => $cb];
+function btn(string $text, ?string $cb = null, ?string $url = null, ?string $style = null, ?string $icon_custom_emoji_id = null): array {
+    $b = $url !== null ? ['text' => $text, 'url' => $url] : ['text' => $text, 'callback_data' => $cb];
+    if ($style !== null) $b['style'] = $style;
+    if ($icon_custom_emoji_id !== null) $b['icon_custom_emoji_id'] = $icon_custom_emoji_id;
+    return $b;
 }
 function rkb(array $rows): array { return ['keyboard' => $rows, 'resize_keyboard' => true]; }
-function rbtn(string $text): array { return ['text' => $text]; }
+function rbtn(string $text, ?string $style = null): array {
+    $b = ['text' => $text];
+    if ($style !== null) $b['style'] = $style;
+    return $b;
+}
+
+function gift_button_slug(string $key): string { return "gift_item_{$key}"; }
+function gift_button_default(string $key): string { $g = GIFTS_META[$key]; return "{$g['emoji']} {$g['name']} (⭐️ {$g['stars']})"; }
+function admin_gift_price_button_slug(string $key): string { return "admin_gift_price_btn_{$key}"; }
+function admin_gift_price_button_default(string $key): string { $g = GIFTS_META[$key]; return "{$g['emoji']} {$g['name']}"; }
 
 function main_kb(bool $is_admin = false): array {
     $rows = [
-        [rbtn('🛒 خرید محصول')],
-        [rbtn('👛 شارژ موجودی'), rbtn('🔗 لینک دعوت من')],
-        [rbtn('👤 حساب کاربری')],
-        [rbtn('📋 پیگیری سفارش'), rbtn('📞 پشتیبانی')],
-        [rbtn('🔽 چطور میتوانم اعتماد کنم؟')],
+        [rbtn_s('menu_buy')],
+        [rbtn_s('menu_topup'), rbtn_s('menu_referral')],
+        [rbtn_s('menu_account')],
+        [rbtn_s('menu_track'), rbtn_s('menu_support')],
+        [rbtn_s('menu_trust')],
     ];
-    if ($is_admin) $rows[] = [rbtn('🛠 پنل ادمین')];
+    if ($is_admin) $rows[] = [rbtn_s('menu_admin')];
     return rkb($rows);
 }
 
 function product_kb(): array {
     return ikb([
-        [btn('💎 پرمیوم تلگرام', 'product_premium'), btn('⭐️ استارز تلگرام', 'product_stars')],
-        [btn('🎀 گیفت استارز', 'product_gift_stars'), btn('💱 خرید ارز تون', 'product_buy_ton')],
-        [btn('🖼 گیفت NFT', 'product_gift_nft')],
-        [btn('🔙 بازگشت', 'back_to_welcome')],
+        [ibtn('btn_premium', 'product_premium'), ibtn('btn_stars', 'product_stars')],
+        [ibtn('btn_gift_stars', 'product_gift_stars'), ibtn('btn_buy_ton', 'product_buy_ton')],
+        [ibtn('btn_gift_nft', 'product_gift_nft')],
+        [ibtn('btn_back', 'back_to_welcome')],
     ]);
 }
 
 function premium_kb(): array {
     return ikb([
-        [btn('3 ماه', 'premium_3'), btn('6 ماه', 'premium_6'), btn('12 ماه', 'premium_12')],
-        [btn('🔙 بازگشت', 'back_to_products')],
+        [ibtn('btn_plan_3', 'premium_3'), ibtn('btn_plan_6', 'premium_6'), ibtn('btn_plan_12', 'premium_12')],
+        [ibtn('btn_back', 'back_to_products')],
     ]);
 }
 
 function ask_username_kb(): array {
-    return ikb([[btn('👤 برای خودم', 'username_self')], [btn('🔙 بازگشت', 'back_to_premium')]]);
+    return ikb([[ibtn('btn_self', 'username_self')], [ibtn('btn_back', 'back_to_premium')]]);
 }
 
-function confirm_username_kb(): array { return ikb([[btn('✅ بله', 'confirm_yes'), btn('❌ خیر', 'confirm_no')]]); }
+function confirm_username_kb(): array { return ikb([[ibtn('btn_yes_short', 'confirm_yes'), ibtn('btn_no_short', 'confirm_no')]]); }
 
 function invoice_kb(bool $discount_applied = false): array {
-    $label = $discount_applied ? '❌ لغو تخفیف' : '💸 اعمال تخفیف';
+    $slug = $discount_applied ? 'btn_discount_remove' : 'btn_discount_apply';
     return ikb([
-        [btn('تأیید ✅', 'invoice_confirm')],
-        [btn($label, 'invoice_discount'), btn('❌ کنسل', 'invoice_cancel')],
+        [ibtn('btn_confirm', 'invoice_confirm')],
+        [ibtn($slug, 'invoice_discount'), ibtn('btn_cancel', 'invoice_cancel')],
     ]);
 }
 
 function insufficient_kb(): array {
-    return ikb([[btn('💳 کارت به کارت', 'topup_from_invoice')], [btn('🔙 بازگشت به منو', 'back_to_products')]]);
+    return ikb([[ibtn('btn_card_to_card', 'topup_from_invoice')], [ibtn('btn_back_to_menu', 'back_to_products')]]);
 }
 
-function wallet_kb(): array { return ikb([[btn('افزایش موجودی', 'wallet_increase')], [btn('🔙 بازگشت', 'back_to_welcome')]]); }
-function wallet_increase_kb(): array { return ikb([[btn('💳 پرداخت تومانی', 'topup_from_wallet')], [btn('🔙 بازگشت', 'wallet_back')]]); }
-function toman_kb(): array { return ikb([[btn('🔙 بازگشت', 'topup_back')]]); }
-function card_details_kb(): array { return ikb([[btn('🔙 بازگشت', 'card_back'), btn('📨 ارسال رسید', 'send_receipt')]]); }
-function receipt_prompt_kb(): array { return ikb([[btn('🔙 بازگشت', 'receipt_back')]]); }
-function admin_topup_kb(string $req_id): array { return ikb([[btn('✅ تایید', "topup_approve_{$req_id}"), btn('❌ رد', "topup_reject_{$req_id}")]]); }
-function admin_order_kb(string $order_id): array { return ikb([[btn('✅ انجام شد', "order_done_{$order_id}")]]); }
-function buy_product_kb(): array { return ikb([[btn('🛒 خرید محصول', 'back_to_products')]]); }
-function ton_back_kb(): array { return ikb([[btn('🔙 بازگشت', 'back_to_products')]]); }
-function ton_wallet_back_kb(): array { return ikb([[btn('🔙 بازگشت', 'ton_back_to_amount')]]); }
+function wallet_kb(): array { return ikb([[ibtn('btn_wallet_increase', 'wallet_increase')], [ibtn('btn_back', 'back_to_welcome')]]); }
+function wallet_increase_kb(): array { return ikb([[ibtn('btn_toman_payment', 'topup_from_wallet')], [ibtn('btn_back', 'wallet_back')]]); }
+function toman_kb(): array { return ikb([[ibtn('btn_back', 'topup_back')]]); }
+function card_details_kb(): array { return ikb([[ibtn('btn_back', 'card_back'), ibtn('btn_send_receipt', 'send_receipt')]]); }
+function receipt_prompt_kb(): array { return ikb([[ibtn('btn_back', 'receipt_back')]]); }
+function admin_topup_kb(string $req_id): array { return ikb([[ibtn('btn_admin_approve', "topup_approve_{$req_id}"), ibtn('btn_admin_reject', "topup_reject_{$req_id}")]]); }
+function admin_order_kb(string $order_id): array { return ikb([[ibtn('btn_admin_done', "order_done_{$order_id}")]]); }
+function buy_product_kb(): array { return ikb([[ibtn('menu_buy', 'back_to_products')]]); }
+function ton_back_kb(): array { return ikb([[ibtn('btn_back', 'back_to_products')]]); }
+function ton_wallet_back_kb(): array { return ikb([[ibtn('btn_back', 'ton_back_to_amount')]]); }
 
 function ton_memo_kb(): array {
     return ikb([
-        [btn('✅ بله، کامنت دارم', 'ton_memo_yes')],
-        [btn('❌ رد کردن', 'ton_memo_skip')],
-        [btn('🔙 بازگشت', 'ton_memo_back')],
+        [ibtn('btn_ton_memo_yes', 'ton_memo_yes')],
+        [ibtn('btn_ton_memo_skip', 'ton_memo_skip')],
+        [ibtn('btn_back', 'ton_memo_back')],
     ]);
 }
-function ton_memo_input_kb(): array { return ikb([[btn('🔙 بازگشت', 'ton_memo_input_back')]]); }
+function ton_memo_input_kb(): array { return ikb([[ibtn('btn_back', 'ton_memo_input_back')]]); }
 
 function ton_invoice_kb(bool $discount_applied = false): array {
-    $label = $discount_applied ? '❌ لغو تخفیف' : '💸 اعمال تخفیف';
+    $slug = $discount_applied ? 'btn_discount_remove' : 'btn_discount_apply';
     return ikb([
-        [btn('تأیید ✅', 'ton_invoice_confirm')],
-        [btn($label, 'ton_invoice_discount'), btn('❌ کنسل', 'ton_invoice_cancel')],
+        [ibtn('btn_confirm', 'ton_invoice_confirm')],
+        [ibtn($slug, 'ton_invoice_discount'), ibtn('btn_cancel', 'ton_invoice_cancel')],
     ]);
 }
 
-function stars_back_kb(): array { return ikb([[btn('🔙 بازگشت', 'back_to_products')]]); }
-function stars_min_error_kb(): array { return ikb([[btn('🔙 بازگشت', 'back_to_products')]]); }
-function ask_stars_username_kb(): array { return ikb([[btn('👤 برای خودم', 'stars_username_self')], [btn('🔙 بازگشت', 'stars_back_to_amount')]]); }
-function confirm_stars_username_kb(): array { return ikb([[btn('✅ بله', 'stars_confirm_yes'), btn('❌ خیر', 'stars_confirm_no')]]); }
+function stars_back_kb(): array { return ikb([[ibtn('btn_back', 'back_to_products')]]); }
+function stars_min_error_kb(): array { return ikb([[ibtn('btn_back', 'back_to_products')]]); }
+function ask_stars_username_kb(): array { return ikb([[ibtn('btn_self', 'stars_username_self')], [ibtn('btn_back', 'stars_back_to_amount')]]); }
+function confirm_stars_username_kb(): array { return ikb([[ibtn('btn_yes_short', 'stars_confirm_yes'), ibtn('btn_no_short', 'stars_confirm_no')]]); }
 
 function stars_invoice_kb(bool $discount_applied = false): array {
-    $label = $discount_applied ? '❌ لغو تخفیف' : '💸 اعمال تخفیف';
+    $slug = $discount_applied ? 'btn_discount_remove' : 'btn_discount_apply';
     return ikb([
-        [btn('تأیید ✅', 'stars_invoice_confirm')],
-        [btn($label, 'stars_invoice_discount'), btn('❌ کنسل', 'stars_invoice_cancel')],
+        [ibtn('btn_confirm', 'stars_invoice_confirm')],
+        [ibtn($slug, 'stars_invoice_discount'), ibtn('btn_cancel', 'stars_invoice_cancel')],
     ]);
 }
 
@@ -971,61 +1477,58 @@ function gift_list_kb(): array {
     $i = 0;
     $n = count($keys);
     while ($i < $n) {
-        $g = GIFTS_META[$keys[$i]];
-        $label_a = "{$g['emoji']} {$g['name']} (⭐️ {$g['stars']})";
+        $a = ibtn(gift_button_slug($keys[$i]), "gift_select_{$keys[$i]}");
         if ($i + 1 < $n) {
-            $g2 = GIFTS_META[$keys[$i + 1]];
-            $label_b = "{$g2['emoji']} {$g2['name']} (⭐️ {$g2['stars']})";
-            $rows[] = [btn($label_a, "gift_select_{$keys[$i]}"), btn($label_b, "gift_select_{$keys[$i + 1]}")];
+            $b = ibtn(gift_button_slug($keys[$i + 1]), "gift_select_{$keys[$i + 1]}");
+            $rows[] = [$a, $b];
             $i += 2;
         } else {
-            $rows[] = [btn($label_a, "gift_select_{$keys[$i]}")];
+            $rows[] = [$a];
             $i += 1;
         }
     }
-    $rows[] = [btn('◀️ بازگشت', 'back_to_products')];
+    $rows[] = [ibtn('btn_back', 'back_to_products')];
     return ikb($rows);
 }
 
-function ask_gift_username_kb(): array { return ikb([[btn('👤 برای خودم', 'gift_username_self')], [btn('🔙 بازگشت', 'gift_back_to_list')]]); }
-function confirm_gift_username_kb(): array { return ikb([[btn('✅ بله', 'gift_confirm_yes'), btn('❌ خیر', 'gift_confirm_no')]]); }
+function ask_gift_username_kb(): array { return ikb([[ibtn('btn_self', 'gift_username_self')], [ibtn('btn_back', 'gift_back_to_list')]]); }
+function confirm_gift_username_kb(): array { return ikb([[ibtn('btn_yes_short', 'gift_confirm_yes'), ibtn('btn_no_short', 'gift_confirm_no')]]); }
 
 function gift_invoice_kb(bool $hidden, bool $has_comment, bool $discount_applied = false): array {
-    $hide_label = !$hidden ? '🔓 هاید کردن' : '🔒 لغو هاید بودن';
-    $comment_label = $has_comment ? '🗑 حذف کامنت' : '💬 تنظیم کامنت';
+    $hide_slug = !$hidden ? 'btn_gift_hide_on' : 'btn_gift_hide_off';
+    $comment_slug = $has_comment ? 'btn_gift_comment_del' : 'btn_gift_comment_set';
     $comment_cb = $has_comment ? 'gift_del_comment' : 'gift_comment_type';
-    $discount_label = $discount_applied ? '❌ لغو تخفیف' : '💸 اعمال تخفیف';
+    $discount_slug = $discount_applied ? 'btn_discount_remove' : 'btn_discount_apply';
     return ikb([
-        [btn('تأیید ✅', 'gift_invoice_confirm')],
-        [btn($discount_label, 'gift_invoice_discount'), btn('❌ کنسل', 'gift_invoice_cancel')],
-        [btn($comment_label, $comment_cb), btn($hide_label, 'gift_toggle_hide')],
+        [ibtn('btn_confirm', 'gift_invoice_confirm')],
+        [ibtn($discount_slug, 'gift_invoice_discount'), ibtn('btn_cancel', 'gift_invoice_cancel')],
+        [ibtn($comment_slug, $comment_cb), ibtn($hide_slug, 'gift_toggle_hide')],
     ]);
 }
 
-function gift_comment_type_kb(): array { return ikb([[btn('✍️ عادی (رایگان)', 'gift_comment_free')], [btn('🔙 بازگشت', 'gift_comment_back_to_invoice')]]); }
-function gift_comment_input_kb(): array { return ikb([[btn('🔙 بازگشت', 'gift_comment_input_back')]]); }
-function support_kb(): array { return ikb([[btn('☎️ ارتباط مستقیم', null, 'https://t.me/' . SUPPORT_USERNAME), btn('💬 ارتباط غیر مستقیم', 'support_indirect')]]); }
-function support_indirect_kb(): array { return ikb([[btn('🔙 بازگشت', 'support_back')]]); }
-function admin_support_kb(string $ticket_id): array { return ikb([[btn('✍️ پاسخ دادن', "support_reply_{$ticket_id}")]]); }
-function join_kb(): array { return ikb([[btn('📢 عضویت در کانال', null, 'https://t.me/' . REQUIRED_CHANNEL)], [btn('✅ عضو شدم', 'check_membership')]]); }
-function report_kb(): array { return ikb([[btn('🛍 حالا اقدام به خرید کن', null, 'https://t.me/' . BOT_USERNAME)]]); }
-function track_kb(): array { return ikb([[btn('🔢 کد پیگیری محصول دارم', 'track_have_code')]]); }
-function track_ask_code_kb(): array { return ikb([[btn('🔙 بازگشت', 'track_back')]]); }
-function invite_kb(): array { return ikb([[btn('🎁 دریافت جایزه', 'referral_claim_reward')]]); }
+function gift_comment_type_kb(): array { return ikb([[ibtn('btn_gift_comment_free', 'gift_comment_free')], [ibtn('btn_back', 'gift_comment_back_to_invoice')]]); }
+function gift_comment_input_kb(): array { return ikb([[ibtn('btn_back', 'gift_comment_input_back')]]); }
+function support_kb(): array { return ikb([[ibtn('btn_support_direct', null, 'https://t.me/' . SUPPORT_USERNAME), ibtn('btn_support_indirect', 'support_indirect')]]); }
+function support_indirect_kb(): array { return ikb([[ibtn('btn_back', 'support_back')]]); }
+function admin_support_kb(string $ticket_id): array { return ikb([[ibtn('btn_admin_reply', "support_reply_{$ticket_id}")]]); }
+function join_kb(): array { return ikb([[ibtn('btn_join_channel', null, 'https://t.me/' . REQUIRED_CHANNEL)], [ibtn('btn_check_membership', 'check_membership')]]); }
+function report_kb(): array { return ikb([[ibtn('btn_report_buy', null, 'https://t.me/' . BOT_USERNAME)]]); }
+function track_kb(): array { return ikb([[ibtn('btn_track_have_code', 'track_have_code')]]); }
+function track_ask_code_kb(): array { return ikb([[ibtn('btn_back', 'track_back')]]); }
+function invite_kb(): array { return ikb([[ibtn('btn_referral_claim', 'referral_claim_reward')]]); }
 
 function referral_reward_select_kb(): array {
     $rows = [];
     foreach (REFERRAL_REWARD_GIFTS as $k) {
-        $g = GIFTS_META[$k];
-        $rows[] = [btn("{$g['emoji']} گیفت {$g['name']}", "referral_reward_{$k}")];
+        $rows[] = [ibtn(gift_button_slug($k), "referral_reward_{$k}")];
     }
-    $rows[] = [btn('🔙 بازگشت', 'referral_back')];
+    $rows[] = [ibtn('btn_back', 'referral_back')];
     return ikb($rows);
 }
 
-function ask_referral_username_kb(): array { return ikb([[btn('👤 برای خودم', 'referral_username_self')], [btn('🔙 بازگشت', 'referral_reward_select_back')]]); }
-function confirm_referral_username_kb(): array { return ikb([[btn('✅ بله', 'referral_confirm_yes'), btn('❌ خیر', 'referral_confirm_no')]]); }
-function referral_reward_invoice_kb(): array { return ikb([[btn('تأیید ✅', 'referral_invoice_confirm')], [btn('❌ کنسل', 'referral_invoice_cancel')]]); }
+function ask_referral_username_kb(): array { return ikb([[ibtn('btn_self', 'referral_username_self')], [ibtn('btn_back', 'referral_reward_select_back')]]); }
+function confirm_referral_username_kb(): array { return ikb([[ibtn('btn_yes_short', 'referral_confirm_yes'), ibtn('btn_no_short', 'referral_confirm_no')]]); }
+function referral_reward_invoice_kb(): array { return ikb([[ibtn('btn_confirm', 'referral_invoice_confirm')], [ibtn('btn_cancel', 'referral_invoice_cancel')]]); }
 
 function admin_panel_kb(array &$DATA): array {
     $toggle_label = $DATA['bot_enabled'] ? '🔴 خاموش کردن ربات' : '🟢 روشن کردن ربات';
@@ -1033,44 +1536,46 @@ function admin_panel_kb(array &$DATA): array {
     return ikb([
         [btn($toggle_label, 'admin_toggle_bot')],
         [btn($ref_toggle_label, 'admin_toggle_referral_points')],
-        [btn('📢 ارسال پیام به تمام کاربران', 'admin_broadcast')],
-        [btn('👥 دیدن کاربران ربات', 'admin_view_users')],
-        [btn('💰 تنظیم قیمت', 'admin_price_menu')],
-        [btn('📈 تغییر درصد سود', 'admin_profit_menu')],
-        [btn('📊 تنظیم سقف شارژ روزانه', 'admin_daily_limit')],
-        [btn('🗑 ریست کامل داده‌های ربات', 'admin_reset_confirm')],
+        [ibtn('btn_admin_broadcast', 'admin_broadcast')],
+        [ibtn('btn_admin_view_users', 'admin_view_users')],
+        [ibtn('btn_admin_price_menu', 'admin_price_menu')],
+        [ibtn('btn_admin_profit_menu', 'admin_profit_menu')],
+        [ibtn('btn_admin_daily_limit', 'admin_daily_limit')],
+        [ibtn('btn_admin_edit_texts', 'admin_edit_texts')],
+        [ibtn('btn_admin_edit_buttons', 'admin_edit_buttons')],
+        [ibtn('btn_admin_reset', 'admin_reset_confirm')],
     ]);
 }
 
-function admin_reset_confirm_kb(): array { return ikb([[btn('✅ بله، همه چیز پاک بشه', 'admin_reset_yes'), btn('❌ نه، برگرد', 'admin_panel_back')]]); }
-function admin_back_kb(): array { return ikb([[btn('🔙 بازگشت', 'admin_panel_back')]]); }
-function admin_broadcast_ask_kb(): array { return ikb([[btn('🔙 بازگشت', 'admin_panel_back')]]); }
-function admin_broadcast_confirm_kb(): array { return ikb([[btn('❌ نه', 'admin_broadcast_no'), btn('✅ بله', 'admin_broadcast_yes')]]); }
+function admin_reset_confirm_kb(): array { return ikb([[ibtn('btn_admin_reset_yes', 'admin_reset_yes'), ibtn('btn_admin_reset_no', 'admin_panel_back')]]); }
+function admin_back_kb(): array { return ikb([[ibtn('btn_back', 'admin_panel_back')]]); }
+function admin_broadcast_ask_kb(): array { return ikb([[ibtn('btn_back', 'admin_panel_back')]]); }
+function admin_broadcast_confirm_kb(): array { return ikb([[ibtn('btn_no_plain', 'admin_broadcast_no'), ibtn('btn_yes_short', 'admin_broadcast_yes')]]); }
 
 function admin_price_menu_kb(): array {
     return ikb([
-        [btn('⭐️ استارز تلگرام', 'admin_price_stars')],
-        [btn('💎 پرمیوم تلگرام', 'admin_price_premium')],
-        [btn('💱 ارز تون', 'admin_price_ton')],
-        [btn('🎀 گیفت استارز', 'admin_price_giftstars')],
-        [btn('🖼 گیفت NFT', 'admin_price_giftnft')],
-        [btn('🔙 بازگشت', 'admin_panel_back')],
+        [ibtn('btn_stars', 'admin_price_stars')],
+        [ibtn('btn_premium', 'admin_price_premium')],
+        [ibtn('btn_ton_short', 'admin_price_ton')],
+        [ibtn('btn_gift_stars', 'admin_price_giftstars')],
+        [ibtn('btn_gift_nft', 'admin_price_giftnft')],
+        [ibtn('btn_back', 'admin_panel_back')],
     ]);
 }
 
-function admin_stars_price_kb(): array { return ikb([[btn('✏️ تغییر قیمت', 'admin_change_stars_price')], [btn('🔙 بازگشت', 'admin_price_menu_back')]]); }
-function admin_stars_price_ask_kb(): array { return ikb([[btn('🔙 بازگشت', 'admin_price_stars_back')]]); }
-function admin_ton_price_kb(): array { return ikb([[btn('✏️ تغییر قیمت', 'admin_change_ton_price')], [btn('🔙 بازگشت', 'admin_price_menu_back')]]); }
-function admin_ton_price_ask_kb(): array { return ikb([[btn('🔙 بازگشت', 'admin_price_ton_back')]]); }
-function admin_premium_price_kb(): array { return ikb([[btn('✏️ تغییر قیمت', 'admin_change_premium_price')], [btn('🔙 بازگشت', 'admin_price_menu_back')]]); }
+function admin_stars_price_kb(): array { return ikb([[ibtn('btn_admin_edit_price', 'admin_change_stars_price')], [ibtn('btn_back', 'admin_price_menu_back')]]); }
+function admin_stars_price_ask_kb(): array { return ikb([[ibtn('btn_back', 'admin_price_stars_back')]]); }
+function admin_ton_price_kb(): array { return ikb([[ibtn('btn_admin_edit_price', 'admin_change_ton_price')], [ibtn('btn_back', 'admin_price_menu_back')]]); }
+function admin_ton_price_ask_kb(): array { return ikb([[ibtn('btn_back', 'admin_price_ton_back')]]); }
+function admin_premium_price_kb(): array { return ikb([[ibtn('btn_admin_edit_price', 'admin_change_premium_price')], [ibtn('btn_back', 'admin_price_menu_back')]]); }
 
 function admin_premium_plan_select_kb(): array {
     return ikb([
-        [btn('3 ماه', 'admin_premium_plan_3'), btn('6 ماه', 'admin_premium_plan_6'), btn('12 ماه', 'admin_premium_plan_12')],
-        [btn('🔙 بازگشت', 'admin_price_premium_back')],
+        [ibtn('btn_plan_3', 'admin_premium_plan_3'), ibtn('btn_plan_6', 'admin_premium_plan_6'), ibtn('btn_plan_12', 'admin_premium_plan_12')],
+        [ibtn('btn_back', 'admin_price_premium_back')],
     ]);
 }
-function admin_premium_price_ask_kb(): array { return ikb([[btn('🔙 بازگشت', 'admin_premium_plan_select_back')]]); }
+function admin_premium_price_ask_kb(): array { return ikb([[ibtn('btn_back', 'admin_premium_plan_select_back')]]); }
 
 function admin_gift_price_list_kb(): array {
     $rows = [];
@@ -1078,38 +1583,107 @@ function admin_gift_price_list_kb(): array {
     $i = 0;
     $n = count($keys);
     while ($i < $n) {
-        $g = GIFTS_META[$keys[$i]];
-        $label_a = "{$g['emoji']} {$g['name']}";
+        $a = ibtn(admin_gift_price_button_slug($keys[$i]), "admin_gift_price_{$keys[$i]}");
         if ($i + 1 < $n) {
-            $g2 = GIFTS_META[$keys[$i + 1]];
-            $label_b = "{$g2['emoji']} {$g2['name']}";
-            $rows[] = [btn($label_a, "admin_gift_price_{$keys[$i]}"), btn($label_b, "admin_gift_price_{$keys[$i + 1]}")];
+            $b = ibtn(admin_gift_price_button_slug($keys[$i + 1]), "admin_gift_price_{$keys[$i + 1]}");
+            $rows[] = [$a, $b];
             $i += 2;
         } else {
-            $rows[] = [btn($label_a, "admin_gift_price_{$keys[$i]}")];
+            $rows[] = [$a];
             $i += 1;
         }
     }
-    $rows[] = [btn('🔙 بازگشت', 'admin_price_menu_back')];
+    $rows[] = [ibtn('btn_back', 'admin_price_menu_back')];
     return ikb($rows);
 }
 
-function admin_gift_price_detail_kb(string $key): array { return ikb([[btn('✏️ تغییر قیمت', "admin_change_gift_price_{$key}")], [btn('🔙 بازگشت', 'admin_gift_price_list_back')]]); }
-function admin_gift_price_ask_kb(string $key): array { return ikb([[btn('🔙 بازگشت', "admin_gift_price_detail_back_{$key}")]]); }
-function admin_daily_limit_kb(): array { return ikb([[btn('✏️ تنظیم سقف روزانه', 'admin_change_daily_limit')], [btn('🔙 بازگشت', 'admin_panel_back')]]); }
-function admin_daily_limit_ask_kb(): array { return ikb([[btn('🔙 بازگشت', 'admin_daily_limit_back')]]); }
+function admin_gift_price_detail_kb(string $key): array { return ikb([[ibtn('btn_admin_edit_price', "admin_change_gift_price_{$key}")], [ibtn('btn_back', 'admin_gift_price_list_back')]]); }
+function admin_gift_price_ask_kb(string $key): array { return ikb([[ibtn('btn_back', "admin_gift_price_detail_back_{$key}")]]); }
+function admin_daily_limit_kb(): array { return ikb([[ibtn('btn_admin_edit_daily_limit', 'admin_change_daily_limit')], [ibtn('btn_back', 'admin_panel_back')]]); }
+function admin_daily_limit_ask_kb(): array { return ikb([[ibtn('btn_back', 'admin_daily_limit_back')]]); }
 
 function admin_profit_menu_kb(): array {
     return ikb([
-        [btn('⭐️ استارز تلگرام', 'admin_profit_stars')],
-        [btn('💱 ارز تون', 'admin_profit_ton')],
-        [btn('🎀 گیفت استارز', 'admin_profit_gift')],
-        [btn('💎 پرمیوم تلگرام', 'admin_profit_premium')],
-        [btn('🔙 بازگشت', 'admin_panel_back')],
+        [ibtn('btn_stars', 'admin_profit_stars')],
+        [ibtn('btn_ton_short', 'admin_profit_ton')],
+        [ibtn('btn_gift_stars', 'admin_profit_gift')],
+        [ibtn('btn_premium', 'admin_profit_premium')],
+        [ibtn('btn_back', 'admin_panel_back')],
     ]);
 }
-function admin_profit_detail_kb(string $product): array { return ikb([[btn('✏️ تنظیم سود', "admin_set_profit_{$product}")], [btn('🔙 بازگشت', 'admin_profit_menu_back')]]); }
-function admin_profit_ask_kb(string $product): array { return ikb([[btn('🔙 بازگشت', "admin_profit_{$product}")]]); }
+function admin_profit_detail_kb(string $product): array { return ikb([[ibtn('btn_admin_edit_profit', "admin_set_profit_{$product}")], [ibtn('btn_back', 'admin_profit_menu_back')]]); }
+function admin_profit_ask_kb(string $product): array { return ikb([[ibtn('btn_back', "admin_profit_{$product}")]]); }
+
+/* ---- text/button editor admin panel ---- */
+
+function admin_text_categories_kb(): array {
+    $rows = [];
+    foreach (TEXT_CATEGORIES as $cat => $slugs) $rows[] = [btn(CATEGORY_LABELS[$cat], "admin_text_cat_{$cat}")];
+    $rows[] = [ibtn('btn_back', 'admin_panel_back')];
+    return ikb($rows);
+}
+
+function admin_button_categories_kb(): array {
+    $rows = [];
+    foreach (BUTTON_CATEGORIES as $cat => $slugs) $rows[] = [btn(CATEGORY_LABELS[$cat], "admin_btn_cat_{$cat}")];
+    $rows[] = [ibtn('btn_back', 'admin_panel_back')];
+    return ikb($rows);
+}
+
+function category_button_slugs(string $cat): array {
+    $slugs = BUTTON_CATEGORIES[$cat] ?? [];
+    if ($cat === 'gift') {
+        foreach (array_keys(GIFTS_META) as $k) $slugs[] = gift_button_slug($k);
+    }
+    if ($cat === 'admin_msgs') {
+        foreach (array_keys(GIFTS_META) as $k) $slugs[] = admin_gift_price_button_slug($k);
+    }
+    return $slugs;
+}
+
+function admin_text_list_kb(string $cat): array {
+    $rows = [];
+    foreach (TEXT_CATEGORIES[$cat] ?? [] as $slug) $rows[] = [btn($slug, "admin_text_pick_{$slug}")];
+    $rows[] = [ibtn('btn_back', 'admin_edit_texts')];
+    return ikb($rows);
+}
+
+function admin_button_list_kb(string $cat): array {
+    $rows = [];
+    foreach (category_button_slugs($cat) as $slug) $rows[] = [btn($slug . ' — ' . B($slug), "admin_btn_pick_{$slug}")];
+    $rows[] = [ibtn('btn_back', 'admin_edit_buttons')];
+    return ikb($rows);
+}
+
+function admin_text_detail_kb(string $slug): array {
+    return ikb([[btn('🔄 بازگردانی پیش‌فرض', "admin_text_reset_{$slug}")], [ibtn('btn_back', 'admin_text_list_back')]]);
+}
+
+function admin_button_detail_kb(string $slug): array {
+    return ikb([[btn('🔄 بازگردانی پیش‌فرض', "admin_btn_reset_{$slug}")], [ibtn('btn_back', 'admin_btn_list_back')]]);
+}
+
+function admin_text_detail_body(string $slug): string {
+    $placeholders = TEXT_PLACEHOLDERS[$slug] ?? [];
+    $ph = $placeholders ? implode(' ', $placeholders) : 'ندارد';
+    return "🔤 اسلاگ: {$slug}\n📌 پلیس‌هولدرهای مجاز: {$ph}\n\n📄 متن فعلی:\n" . text_raw($slug) .
+        "\n\n✍️ برای تغییر، متن جدید رو همینجا (به صورت پیام معمولی) بفرست.";
+}
+
+function admin_button_detail_body(string $slug): string {
+    $style = BS($slug) ?? 'پیش‌فرض';
+    return "🔤 اسلاگ: {$slug}\n🏷 برچسب فعلی: " . B($slug) . "\n🎨 رنگ فعلی: {$style}\n\n" .
+        '✍️ برای تغییر نام، برچسب جدید رو همینجا (به صورت پیام معمولی) بفرست.';
+}
+
+function admin_button_style_kb(string $slug): array {
+    return ikb([[
+        btn(B('btn_style_primary'), "admin_btn_style_{$slug}_primary"),
+        btn(B('btn_style_success'), "admin_btn_style_{$slug}_success"),
+        btn(B('btn_style_danger'), "admin_btn_style_{$slug}_danger"),
+        btn(B('btn_default'), "admin_btn_style_{$slug}_none"),
+    ]]);
+}
 
 /* ===================== DATA STORE ===================== */
 
@@ -1137,6 +1711,12 @@ function default_data(): array {
         'ton_price' => 298225,
         'gifts_prices' => [],
         'req_counter' => 0,
+        // Only ever holds admin *overrides* (slug => ['value'/'label' => ..., ...]);
+        // T()/B() fall back to DEFAULT_TEXTS/DEFAULT_BUTTONS for any missing slug,
+        // so load_data() never needs to (and must never) pre-fill these with defaults.
+        'texts' => [],
+        'buttons' => [],
+        'ton_price_cache' => ['base' => 298225, 'fetched_at' => 0],
     ];
     recalc_prices($data);
     return $data;
@@ -1165,9 +1745,10 @@ function load_data(): array {
     $data = array_replace($defaults, $decoded);
     foreach (['users', 'user_names', 'orders', 'topup_requests', 'pending_referrals', 'support_tickets',
               'admin_waiting_reject', 'admin_waiting_support_reply', 'user_state', 'gifts_prices',
-              'premium_prices', 'base_premium_prices', 'profit_percent'] as $k) {
+              'premium_prices', 'base_premium_prices', 'profit_percent', 'texts', 'buttons'] as $k) {
         if (!is_array($data[$k] ?? null)) $data[$k] = $defaults[$k];
     }
+    if (!is_array($data['ton_price_cache'] ?? null)) $data['ton_price_cache'] = $defaults['ton_price_cache'];
     recalc_prices($data);
     if (isset($decoded['gifts_prices']) && is_array($decoded['gifts_prices'])) {
         foreach ($decoded['gifts_prices'] as $key => $price) {
@@ -1319,12 +1900,12 @@ function handle_start(array $msg, array &$DATA): void {
     }
 
     if ($chat_id != ADMIN_CHAT_ID) {
-        if (!$DATA['bot_enabled']) { send_message($chat_id, BOT_OFF_TEXT); return; }
+        if (!$DATA['bot_enabled']) { send_message($chat_id, T('bot_off')); return; }
         if (!is_member($uid)) { send_message($chat_id, join_text(), join_kb()); return; }
     }
     $DATA['user_names'][$uid] = display_name($user);
     register_user_and_referral($DATA, $uid);
-    send_message($chat_id, WELCOME_TEXT, main_kb($chat_id == ADMIN_CHAT_ID));
+    send_message($chat_id, T('welcome'), main_kb($chat_id == ADMIN_CHAT_ID));
 }
 
 function handle_photo(array $msg, array &$DATA): void {
@@ -1353,7 +1934,7 @@ function handle_photo(array $msg, array &$DATA): void {
     }
     $ust['state'] = null;
     $ust['pending_topup'] = null;
-    send_message($chat_id, RECEIPT_SENT_TEXT);
+    send_message($chat_id, T('receipt_sent'));
 }
 
 function handle_text(array $msg, array &$DATA): void {
@@ -1389,7 +1970,7 @@ function handle_text(array $msg, array &$DATA): void {
         return;
     }
 
-    if ($chat_id != ADMIN_CHAT_ID && !$DATA['bot_enabled']) { send_message($chat_id, BOT_OFF_TEXT); return; }
+    if ($chat_id != ADMIN_CHAT_ID && !$DATA['bot_enabled']) { send_message($chat_id, T('bot_off')); return; }
     if ($chat_id != ADMIN_CHAT_ID && !is_member($uid)) {
         $DATA['user_state'][$uid] = [];
         send_message($chat_id, join_text(), join_kb());
@@ -1464,6 +2045,26 @@ function handle_text(array $msg, array &$DATA): void {
             send_message($chat_id, $fn($DATA), admin_profit_detail_kb($product));
             return;
         }
+        if ($state !== null && str_starts_with($state, 'admin_awaiting_text_')) {
+            $slug = substr($state, strlen('admin_awaiting_text_'));
+            $ust['state'] = null;
+            if (!in_array($slug, all_text_slugs(), true)) { send_message($chat_id, 'این متن پیدا نشد.', admin_back_kb()); return; }
+            $entities = capture_entities($msg);
+            apply_text_edit($DATA, $slug, $text, $entities);
+            [$preview, $previewEntities] = T_full($slug);
+            send_message($chat_id, "✅ متن «{$slug}» ذخیره شد. پیش‌نمایش 👇");
+            send_message($chat_id, $preview, admin_text_detail_kb($slug), null, [], $previewEntities);
+            return;
+        }
+        if ($state !== null && str_starts_with($state, 'admin_awaiting_button_')) {
+            $slug = substr($state, strlen('admin_awaiting_button_'));
+            $ust['state'] = null;
+            if (!in_array($slug, all_button_slugs(), true)) { send_message($chat_id, 'این دکمه پیدا نشد.', admin_back_kb()); return; }
+            $entities = capture_entities($msg);
+            apply_button_edit($DATA, $slug, $text, $entities);
+            send_message($chat_id, "✅ نام دکمه «{$slug}» به «" . B($slug) . "» تغییر کرد.\n\nاگه بخوای می‌تونی رنگ این دکمه رو هم تنظیم کنی:", admin_button_style_kb($slug));
+            return;
+        }
     }
 
     if ($state === 'awaiting_username') {
@@ -1501,7 +2102,7 @@ function handle_text(array $msg, array &$DATA): void {
         if ($count < STARS_MIN) { send_message($chat_id, stars_min_error_text(), stars_min_error_kb()); return; }
         $ust['pending_stars'] = ['count' => $count];
         $ust['state'] = 'awaiting_stars_username';
-        send_message($chat_id, ASK_USERNAME_TEXT, ask_stars_username_kb());
+        send_message($chat_id, T('ask_username'), ask_stars_username_kb());
         return;
     }
 
@@ -1556,7 +2157,7 @@ function handle_text(array $msg, array &$DATA): void {
         if ($amount < MIN_TON) { send_message($chat_id, 'حداقل سفارش ' . MIN_TON . ' TON است.'); return; }
         $ust['pending_ton'] = ['amount' => $amount];
         $ust['state'] = 'awaiting_ton_wallet';
-        send_message($chat_id, TON_WALLET_TEXT, ton_wallet_back_kb());
+        send_message($chat_id, T('ton_wallet_ask'), ton_wallet_back_kb());
         return;
     }
 
@@ -1568,7 +2169,7 @@ function handle_text(array $msg, array &$DATA): void {
         }
         $ust['pending_ton']['wallet'] = $wallet;
         $ust['state'] = null;
-        send_message($chat_id, TON_MEMO_QUESTION_TEXT, ton_memo_kb());
+        send_message($chat_id, T('ton_memo_question'), ton_memo_kb());
         return;
     }
 
@@ -1588,7 +2189,7 @@ function handle_text(array $msg, array &$DATA): void {
     if ($state === 'awaiting_support_message') {
         $ticket_id = new_req_id($DATA);
         $DATA['support_tickets'][$ticket_id] = ['user_id' => $uid, 'chat_id' => $chat_id, 'message_id' => $msg['message_id']];
-        send_message($chat_id, SUPPORT_SENT_CONFIRM_TEXT, main_kb($chat_id == ADMIN_CHAT_ID));
+        send_message($chat_id, T('support_sent_confirm'), main_kb($chat_id == ADMIN_CHAT_ID));
         $ust['state'] = null;
         if (ADMIN_CHAT_ID) send_message(ADMIN_CHAT_ID, admin_support_text($user, $text), admin_support_kb($ticket_id));
         return;
@@ -1597,27 +2198,31 @@ function handle_text(array $msg, array &$DATA): void {
     if ($state === 'awaiting_tracking_code') {
         $code = trim($text);
         $order = $DATA['orders'][$code] ?? null;
-        if (!$order) { send_message($chat_id, TRACK_NOT_FOUND_TEXT, track_ask_code_kb()); return; }
+        if (!$order) { send_message($chat_id, T('track_not_found'), track_ask_code_kb()); return; }
         $ust['state'] = null;
         send_message($chat_id, order_status_text($order));
         return;
     }
 
-    if ($text === '🛒 خرید محصول') { send_message($chat_id, PRODUCT_TEXT, product_kb()); return; }
+    // Reply-keyboard taps are matched against the *current* buttons store (not
+    // hardcoded literals), so renaming a menu button never breaks routing.
+    $menu_slug = resolve_menu_button($text);
 
-    if ($text === '👛 شارژ موجودی') {
+    if ($menu_slug === 'menu_buy') { send_message($chat_id, T('product_menu'), product_kb()); return; }
+
+    if ($menu_slug === 'menu_topup') {
         $balance = get_user($DATA, $uid)['balance'];
         $remaining = get_daily_remaining($DATA, $uid);
         send_message($chat_id, wallet_text($balance, $remaining), wallet_kb());
         return;
     }
 
-    if ($text === '👤 حساب کاربری') { send_message($chat_id, account_text($DATA, $user), null, 'HTML'); return; }
-    if ($text === '🔗 لینک دعوت من') { send_message($chat_id, referral_text($DATA, $user), invite_kb()); return; }
-    if ($text === '📞 پشتیبانی') { send_message($chat_id, SUPPORT_TEXT, support_kb()); return; }
-    if ($text === '📋 پیگیری سفارش') { send_message($chat_id, TRACK_TEXT, track_kb()); return; }
-    if ($text === '🔽 چطور میتوانم اعتماد کنم؟') { send_message($chat_id, trust_text()); return; }
-    if ($text === '🛠 پنل ادمین' && $chat_id == ADMIN_CHAT_ID) { send_message($chat_id, admin_panel_text($DATA), admin_panel_kb($DATA)); return; }
+    if ($menu_slug === 'menu_account') { send_message($chat_id, account_text($DATA, $user), null, 'HTML'); return; }
+    if ($menu_slug === 'menu_referral') { send_message($chat_id, referral_text($DATA, $user), invite_kb()); return; }
+    if ($menu_slug === 'menu_support') { send_message($chat_id, T('support'), support_kb()); return; }
+    if ($menu_slug === 'menu_track') { send_message($chat_id, T('track'), track_kb()); return; }
+    if ($menu_slug === 'menu_trust') { send_message($chat_id, trust_text()); return; }
+    if ($menu_slug === 'menu_admin' && $chat_id == ADMIN_CHAT_ID) { send_message($chat_id, admin_panel_text($DATA), admin_panel_kb($DATA)); return; }
 
     send_message($chat_id, 'این بخش هنوز تکمیل نشده.');
 }
@@ -1636,8 +2241,8 @@ function handle_callback(array $cq, array &$DATA): void {
         if (is_member($uid)) {
             $DATA['user_names'][$uid] = display_name($user);
             register_user_and_referral($DATA, $uid);
-            edit_message_text($chat_id, $message_id, JOIN_CONFIRMED_TEXT);
-            send_message($chat_id, WELCOME_TEXT, main_kb($chat_id == ADMIN_CHAT_ID));
+            edit_message_text($chat_id, $message_id, T('join_confirmed'));
+            send_message($chat_id, T('welcome'), main_kb($chat_id == ADMIN_CHAT_ID));
         } else {
             answer_callback_query($cq['id'], 'هنوز در کانال عضو نشدید! لطفا ابتدا عضو شوید سپس دوباره امتحان کنید.', true);
         }
@@ -1645,7 +2250,7 @@ function handle_callback(array $cq, array &$DATA): void {
     }
 
     if ($chat_id != ADMIN_CHAT_ID) {
-        if (!$DATA['bot_enabled']) { answer_callback_query($cq['id'], BOT_OFF_TEXT, true); return; }
+        if (!$DATA['bot_enabled']) { answer_callback_query($cq['id'], T('bot_off'), true); return; }
         if (!is_member($uid)) {
             $DATA['user_state'][$uid] = [];
             edit_message_text($chat_id, $message_id, join_text(), join_kb());
@@ -1659,19 +2264,19 @@ function handle_callback(array $cq, array &$DATA): void {
 
     if (str_starts_with($data, 'admin_') && $chat_id != ADMIN_CHAT_ID) return;
 
-    if ($data === 'back_to_welcome') { $DATA['user_state'][$uid] = []; edit_message_text($chat_id, $message_id, WELCOME_TEXT); return; }
-    if ($data === 'back_to_products') { $ust['state'] = null; edit_message_text($chat_id, $message_id, PRODUCT_TEXT, product_kb()); return; }
+    if ($data === 'back_to_welcome') { $DATA['user_state'][$uid] = []; edit_message_text($chat_id, $message_id, T('welcome')); return; }
+    if ($data === 'back_to_products') { $ust['state'] = null; edit_message_text($chat_id, $message_id, T('product_menu'), product_kb()); return; }
 
     /* ---- gift ---- */
-    if ($data === 'product_gift_stars') { edit_message_text($chat_id, $message_id, GIFT_LIST_TEXT, gift_list_kb()); return; }
-    if ($data === 'gift_back_to_list') { $ust['state'] = null; edit_message_text($chat_id, $message_id, GIFT_LIST_TEXT, gift_list_kb()); return; }
+    if ($data === 'product_gift_stars') { edit_message_text($chat_id, $message_id, T('gift_list'), gift_list_kb()); return; }
+    if ($data === 'gift_back_to_list') { $ust['state'] = null; edit_message_text($chat_id, $message_id, T('gift_list'), gift_list_kb()); return; }
 
     if (str_starts_with($data, 'gift_select_')) {
         $key = substr($data, strlen('gift_select_'));
         if (!isset(GIFTS_META[$key])) return;
         $ust['pending_gift'] = ['key' => $key, 'username' => null, 'hidden' => true, 'comment' => null];
         $ust['state'] = 'awaiting_gift_username';
-        edit_message_text($chat_id, $message_id, ASK_USERNAME_TEXT, ask_gift_username_kb());
+        edit_message_text($chat_id, $message_id, T('ask_username'), ask_gift_username_kb());
         return;
     }
 
@@ -1684,12 +2289,12 @@ function handle_callback(array $cq, array &$DATA): void {
             edit_message_text($chat_id, $message_id, confirm_username_text($username), confirm_gift_username_kb());
         } else {
             $ust['state'] = 'awaiting_gift_username';
-            edit_message_text($chat_id, $message_id, "شما در تلگرام یوزرنیم ندارید.\nلطفا یوزرنیم شخص مورد نظر را با @ ارسال کنید.", ikb([[btn('🔙 بازگشت', 'gift_back_to_list')]]));
+            edit_message_text($chat_id, $message_id, "شما در تلگرام یوزرنیم ندارید.\nلطفا یوزرنیم شخص مورد نظر را با @ ارسال کنید.", ikb([[ibtn('btn_back', 'gift_back_to_list')]]));
         }
         return;
     }
 
-    if ($data === 'gift_confirm_no') { $ust['state'] = 'awaiting_gift_username'; edit_message_text($chat_id, $message_id, ASK_USERNAME_TEXT, ask_gift_username_kb()); return; }
+    if ($data === 'gift_confirm_no') { $ust['state'] = 'awaiting_gift_username'; edit_message_text($chat_id, $message_id, T('ask_username'), ask_gift_username_kb()); return; }
 
     if ($data === 'gift_confirm_yes') {
         $g = &$ust['pending_gift'];
@@ -1718,7 +2323,7 @@ function handle_callback(array $cq, array &$DATA): void {
         return;
     }
 
-    if ($data === 'gift_comment_type') { edit_message_text($chat_id, $message_id, GIFT_COMMENT_TYPE_TEXT, gift_comment_type_kb()); return; }
+    if ($data === 'gift_comment_type') { edit_message_text($chat_id, $message_id, T('gift_comment_type'), gift_comment_type_kb()); return; }
 
     if ($data === 'gift_comment_back_to_invoice') {
         $g = &$ust['pending_gift'];
@@ -1733,8 +2338,8 @@ function handle_callback(array $cq, array &$DATA): void {
         return;
     }
 
-    if ($data === 'gift_comment_free') { $ust['state'] = 'awaiting_gift_comment'; edit_message_text($chat_id, $message_id, GIFT_COMMENT_INPUT_TEXT, gift_comment_input_kb()); return; }
-    if ($data === 'gift_comment_input_back') { $ust['state'] = null; edit_message_text($chat_id, $message_id, GIFT_COMMENT_TYPE_TEXT, gift_comment_type_kb()); return; }
+    if ($data === 'gift_comment_free') { $ust['state'] = 'awaiting_gift_comment'; edit_message_text($chat_id, $message_id, T('gift_comment_input'), gift_comment_input_kb()); return; }
+    if ($data === 'gift_comment_input_back') { $ust['state'] = null; edit_message_text($chat_id, $message_id, T('gift_comment_type'), gift_comment_type_kb()); return; }
 
     if ($data === 'gift_del_comment') {
         $g = &$ust['pending_gift'];
@@ -1763,7 +2368,7 @@ function handle_callback(array $cq, array &$DATA): void {
         return;
     }
 
-    if ($data === 'gift_invoice_cancel') { $ust['pending_gift'] = null; $ust['state'] = null; edit_message_text($chat_id, $message_id, CANCELLED_TEXT); return; }
+    if ($data === 'gift_invoice_cancel') { $ust['pending_gift'] = null; $ust['state'] = null; edit_message_text($chat_id, $message_id, T('cancelled')); return; }
 
     if ($data === 'gift_invoice_confirm') {
         $g = $ust['pending_gift'] ?? [];
@@ -1797,17 +2402,17 @@ function handle_callback(array $cq, array &$DATA): void {
     }
 
     /* ---- premium ---- */
-    if ($data === 'product_premium') { edit_message_text($chat_id, $message_id, PREMIUM_TEXT, premium_kb()); return; }
+    if ($data === 'product_premium') { edit_message_text($chat_id, $message_id, T('premium_menu'), premium_kb()); return; }
 
     if (in_array($data, ['premium_3', 'premium_6', 'premium_12'], true)) {
         $plan = explode('_', $data)[1];
         $ust['pending_premium'] = ['plan' => $plan, 'price' => $DATA['premium_prices'][$plan]];
         $ust['state'] = 'awaiting_username';
-        edit_message_text($chat_id, $message_id, ASK_USERNAME_TEXT, ask_username_kb());
+        edit_message_text($chat_id, $message_id, T('ask_username'), ask_username_kb());
         return;
     }
 
-    if ($data === 'back_to_premium') { $ust['state'] = null; edit_message_text($chat_id, $message_id, PREMIUM_TEXT, premium_kb()); return; }
+    if ($data === 'back_to_premium') { $ust['state'] = null; edit_message_text($chat_id, $message_id, T('premium_menu'), premium_kb()); return; }
 
     if ($data === 'username_self') {
         if (!empty($user['username'])) {
@@ -1818,13 +2423,13 @@ function handle_callback(array $cq, array &$DATA): void {
             edit_message_text($chat_id, $message_id, confirm_username_text($username), confirm_username_kb());
         } else {
             $ust['state'] = 'awaiting_username';
-            edit_message_text($chat_id, $message_id, "شما در تلگرام یوزرنیم ندارید.\nلطفا یوزرنیم شخص مورد نظر را با @ ارسال کنید.", ikb([[btn('🔙 بازگشت', 'back_to_ask_username')]]));
+            edit_message_text($chat_id, $message_id, "شما در تلگرام یوزرنیم ندارید.\nلطفا یوزرنیم شخص مورد نظر را با @ ارسال کنید.", ikb([[ibtn('btn_back', 'back_to_ask_username')]]));
         }
         return;
     }
 
-    if ($data === 'back_to_ask_username') { $ust['state'] = 'awaiting_username'; edit_message_text($chat_id, $message_id, ASK_USERNAME_TEXT, ask_username_kb()); return; }
-    if ($data === 'confirm_no') { $ust['state'] = 'awaiting_username'; edit_message_text($chat_id, $message_id, ASK_USERNAME_TEXT, ask_username_kb()); return; }
+    if ($data === 'back_to_ask_username') { $ust['state'] = 'awaiting_username'; edit_message_text($chat_id, $message_id, T('ask_username'), ask_username_kb()); return; }
+    if ($data === 'confirm_no') { $ust['state'] = 'awaiting_username'; edit_message_text($chat_id, $message_id, T('ask_username'), ask_username_kb()); return; }
 
     if ($data === 'confirm_yes') {
         $order = &$ust['pending_premium'];
@@ -1851,7 +2456,7 @@ function handle_callback(array $cq, array &$DATA): void {
         return;
     }
 
-    if ($data === 'invoice_cancel') { $ust['pending_premium'] = null; $ust['state'] = null; edit_message_text($chat_id, $message_id, CANCELLED_TEXT); return; }
+    if ($data === 'invoice_cancel') { $ust['pending_premium'] = null; $ust['state'] = null; edit_message_text($chat_id, $message_id, T('cancelled')); return; }
 
     if ($data === 'invoice_confirm') {
         $order = $ust['pending_premium'] ?? [];
@@ -1882,7 +2487,7 @@ function handle_callback(array $cq, array &$DATA): void {
     }
 
     /* ---- wallet / top-up ---- */
-    if ($data === 'wallet_increase') { edit_message_text($chat_id, $message_id, WALLET_INCREASE_TEXT, wallet_increase_kb()); return; }
+    if ($data === 'wallet_increase') { edit_message_text($chat_id, $message_id, T('wallet_increase'), wallet_increase_kb()); return; }
 
     if ($data === 'wallet_back') {
         $balance = get_user($DATA, $uid)['balance'];
@@ -1907,7 +2512,7 @@ function handle_callback(array $cq, array &$DATA): void {
             $shortfall = max($price - get_user($DATA, $uid)['balance'], 0);
             edit_message_text($chat_id, $message_id, insufficient_text($shortfall), insufficient_kb());
         } else {
-            edit_message_text($chat_id, $message_id, WALLET_INCREASE_TEXT, wallet_increase_kb());
+            edit_message_text($chat_id, $message_id, T('wallet_increase'), wallet_increase_kb());
         }
         return;
     }
@@ -1919,7 +2524,7 @@ function handle_callback(array $cq, array &$DATA): void {
         return;
     }
 
-    if ($data === 'send_receipt') { $ust['state'] = 'awaiting_receipt_photo'; edit_message_text($chat_id, $message_id, RECEIPT_PROMPT_TEXT, receipt_prompt_kb()); return; }
+    if ($data === 'send_receipt') { $ust['state'] = 'awaiting_receipt_photo'; edit_message_text($chat_id, $message_id, T('receipt_prompt'), receipt_prompt_kb()); return; }
 
     if ($data === 'receipt_back') {
         $pending = $ust['pending_topup'] ?? [];
@@ -1974,8 +2579,8 @@ function handle_callback(array $cq, array &$DATA): void {
     }
 
     /* ---- tracking ---- */
-    if ($data === 'track_have_code') { $ust['state'] = 'awaiting_tracking_code'; edit_message_text($chat_id, $message_id, TRACK_ASK_CODE_TEXT, track_ask_code_kb()); return; }
-    if ($data === 'track_back') { $ust['state'] = null; edit_message_text($chat_id, $message_id, TRACK_TEXT, track_kb()); return; }
+    if ($data === 'track_have_code') { $ust['state'] = 'awaiting_tracking_code'; edit_message_text($chat_id, $message_id, T('track_ask_code'), track_ask_code_kb()); return; }
+    if ($data === 'track_back') { $ust['state'] = null; edit_message_text($chat_id, $message_id, T('track'), track_kb()); return; }
 
     /* ---- referral ---- */
     if ($data === 'referral_back') { $ust['state'] = null; edit_message_text($chat_id, $message_id, referral_text($DATA, $user), invite_kb()); return; }
@@ -1999,7 +2604,7 @@ function handle_callback(array $cq, array &$DATA): void {
         $key = substr($data, strlen('referral_reward_'));
         $ust['pending_referral_reward'] = ['key' => $key, 'username' => null];
         $ust['state'] = 'awaiting_referral_username';
-        edit_message_text($chat_id, $message_id, ASK_USERNAME_TEXT, ask_referral_username_kb());
+        edit_message_text($chat_id, $message_id, T('ask_username'), ask_referral_username_kb());
         return;
     }
 
@@ -2012,12 +2617,12 @@ function handle_callback(array $cq, array &$DATA): void {
             edit_message_text($chat_id, $message_id, confirm_username_text($username), confirm_referral_username_kb());
         } else {
             $ust['state'] = 'awaiting_referral_username';
-            edit_message_text($chat_id, $message_id, "شما در تلگرام یوزرنیم ندارید.\nلطفا یوزرنیم شخص مورد نظر را با @ ارسال کنید.", ikb([[btn('🔙 بازگشت', 'referral_reward_select_back')]]));
+            edit_message_text($chat_id, $message_id, "شما در تلگرام یوزرنیم ندارید.\nلطفا یوزرنیم شخص مورد نظر را با @ ارسال کنید.", ikb([[ibtn('btn_back', 'referral_reward_select_back')]]));
         }
         return;
     }
 
-    if ($data === 'referral_confirm_no') { $ust['state'] = 'awaiting_referral_username'; edit_message_text($chat_id, $message_id, ASK_USERNAME_TEXT, ask_referral_username_kb()); return; }
+    if ($data === 'referral_confirm_no') { $ust['state'] = 'awaiting_referral_username'; edit_message_text($chat_id, $message_id, T('ask_username'), ask_referral_username_kb()); return; }
 
     if ($data === 'referral_confirm_yes') {
         $r = $ust['pending_referral_reward'] ?? [];
@@ -2027,7 +2632,7 @@ function handle_callback(array $cq, array &$DATA): void {
         return;
     }
 
-    if ($data === 'referral_invoice_cancel') { $ust['pending_referral_reward'] = null; $ust['state'] = null; edit_message_text($chat_id, $message_id, CANCELLED_TEXT); return; }
+    if ($data === 'referral_invoice_cancel') { $ust['pending_referral_reward'] = null; $ust['state'] = null; edit_message_text($chat_id, $message_id, T('cancelled')); return; }
 
     if ($data === 'referral_invoice_confirm') {
         $r = $ust['pending_referral_reward'] ?? [];
@@ -2061,8 +2666,8 @@ function handle_callback(array $cq, array &$DATA): void {
     }
 
     /* ---- support ---- */
-    if ($data === 'support_indirect') { $ust['state'] = 'awaiting_support_message'; edit_message_text($chat_id, $message_id, SUPPORT_INDIRECT_TEXT, support_indirect_kb()); return; }
-    if ($data === 'support_back') { $ust['state'] = null; edit_message_text($chat_id, $message_id, SUPPORT_TEXT, support_kb()); return; }
+    if ($data === 'support_indirect') { $ust['state'] = 'awaiting_support_message'; edit_message_text($chat_id, $message_id, T('support_indirect'), support_indirect_kb()); return; }
+    if ($data === 'support_back') { $ust['state'] = null; edit_message_text($chat_id, $message_id, T('support'), support_kb()); return; }
 
     if (str_starts_with($data, 'support_reply_')) {
         $ticket_id = substr($data, strlen('support_reply_'));
@@ -2085,12 +2690,12 @@ function handle_callback(array $cq, array &$DATA): void {
             edit_message_text($chat_id, $message_id, confirm_username_text($username), confirm_stars_username_kb());
         } else {
             $ust['state'] = 'awaiting_stars_username';
-            edit_message_text($chat_id, $message_id, "شما در تلگرام یوزرنیم ندارید.\nلطفا یوزرنیم شخص مورد نظر را با @ ارسال کنید.", ikb([[btn('🔙 بازگشت', 'stars_back_to_amount')]]));
+            edit_message_text($chat_id, $message_id, "شما در تلگرام یوزرنیم ندارید.\nلطفا یوزرنیم شخص مورد نظر را با @ ارسال کنید.", ikb([[ibtn('btn_back', 'stars_back_to_amount')]]));
         }
         return;
     }
 
-    if ($data === 'stars_confirm_no') { $ust['state'] = 'awaiting_stars_username'; edit_message_text($chat_id, $message_id, ASK_USERNAME_TEXT, ask_stars_username_kb()); return; }
+    if ($data === 'stars_confirm_no') { $ust['state'] = 'awaiting_stars_username'; edit_message_text($chat_id, $message_id, T('ask_username'), ask_stars_username_kb()); return; }
 
     if ($data === 'stars_confirm_yes') {
         $s = &$ust['pending_stars'];
@@ -2118,7 +2723,7 @@ function handle_callback(array $cq, array &$DATA): void {
         return;
     }
 
-    if ($data === 'stars_invoice_cancel') { $ust['pending_stars'] = null; $ust['state'] = null; edit_message_text($chat_id, $message_id, CANCELLED_TEXT); return; }
+    if ($data === 'stars_invoice_cancel') { $ust['pending_stars'] = null; $ust['state'] = null; edit_message_text($chat_id, $message_id, T('cancelled')); return; }
 
     if ($data === 'stars_invoice_confirm') {
         $s = $ust['pending_stars'] ?? [];
@@ -2152,8 +2757,8 @@ function handle_callback(array $cq, array &$DATA): void {
     /* ---- ton ---- */
     if ($data === 'product_buy_ton') { $ust['state'] = 'awaiting_ton_amount'; $ust['pending_ton'] = []; edit_message_text($chat_id, $message_id, ton_buy_text($DATA), ton_back_kb()); return; }
     if ($data === 'ton_back_to_amount') { $ust['state'] = 'awaiting_ton_amount'; $ust['pending_ton'] = []; edit_message_text($chat_id, $message_id, ton_buy_text($DATA), ton_back_kb()); return; }
-    if ($data === 'ton_memo_yes') { $ust['state'] = 'awaiting_ton_memo'; edit_message_text($chat_id, $message_id, TON_MEMO_INPUT_TEXT, ton_memo_input_kb()); return; }
-    if ($data === 'ton_memo_input_back') { $ust['state'] = null; edit_message_text($chat_id, $message_id, TON_MEMO_QUESTION_TEXT, ton_memo_kb()); return; }
+    if ($data === 'ton_memo_yes') { $ust['state'] = 'awaiting_ton_memo'; edit_message_text($chat_id, $message_id, T('ton_memo_input'), ton_memo_input_kb()); return; }
+    if ($data === 'ton_memo_input_back') { $ust['state'] = null; edit_message_text($chat_id, $message_id, T('ton_memo_question'), ton_memo_kb()); return; }
 
     if ($data === 'ton_memo_skip') {
         $ton = &$ust['pending_ton'];
@@ -2169,7 +2774,7 @@ function handle_callback(array $cq, array &$DATA): void {
         return;
     }
 
-    if ($data === 'ton_memo_back') { $ust['state'] = 'awaiting_ton_wallet'; edit_message_text($chat_id, $message_id, TON_WALLET_TEXT, ton_wallet_back_kb()); return; }
+    if ($data === 'ton_memo_back') { $ust['state'] = 'awaiting_ton_wallet'; edit_message_text($chat_id, $message_id, T('ton_wallet_ask'), ton_wallet_back_kb()); return; }
 
     if ($data === 'ton_invoice_discount') {
         $ton = &$ust['pending_ton'];
@@ -2185,7 +2790,7 @@ function handle_callback(array $cq, array &$DATA): void {
         return;
     }
 
-    if ($data === 'ton_invoice_cancel') { $ust['pending_ton'] = null; $ust['state'] = null; edit_message_text($chat_id, $message_id, CANCELLED_TEXT); return; }
+    if ($data === 'ton_invoice_cancel') { $ust['pending_ton'] = null; $ust['state'] = null; edit_message_text($chat_id, $message_id, T('cancelled')); return; }
 
     if ($data === 'ton_invoice_confirm') {
         $ton = $ust['pending_ton'] ?? [];
@@ -2229,7 +2834,7 @@ function handle_callback(array $cq, array &$DATA): void {
     if ($data === 'admin_profit_menu') { edit_message_text($chat_id, $message_id, admin_profit_menu_text(), admin_profit_menu_kb()); return; }
     if ($data === 'admin_profit_menu_back') { $ust['state'] = null; edit_message_text($chat_id, $message_id, admin_profit_menu_text(), admin_profit_menu_kb()); return; }
     if ($data === 'admin_profit_stars') { edit_message_text($chat_id, $message_id, admin_profit_stars_text($DATA), admin_profit_detail_kb('stars')); return; }
-    if ($data === 'admin_profit_ton') { edit_message_text($chat_id, $message_id, admin_profit_ton_text($DATA), admin_profit_detail_kb('ton')); return; }
+    if ($data === 'admin_profit_ton') { refresh_ton_price_if_stale($DATA); edit_message_text($chat_id, $message_id, admin_profit_ton_text($DATA), admin_profit_detail_kb('ton')); return; }
     if ($data === 'admin_profit_gift') { edit_message_text($chat_id, $message_id, admin_profit_gift_text($DATA), admin_profit_detail_kb('gift')); return; }
     if ($data === 'admin_profit_premium') { edit_message_text($chat_id, $message_id, admin_profit_premium_text($DATA), admin_profit_detail_kb('premium')); return; }
 
@@ -2289,7 +2894,7 @@ function handle_callback(array $cq, array &$DATA): void {
     if ($data === 'admin_change_stars_price') { $ust['state'] = 'admin_awaiting_stars_price'; edit_message_text($chat_id, $message_id, admin_ask_stars_price_text(), admin_stars_price_ask_kb()); return; }
     if ($data === 'admin_price_stars_back') { $ust['state'] = null; edit_message_text($chat_id, $message_id, admin_stars_price_text($DATA), admin_stars_price_kb()); return; }
 
-    if ($data === 'admin_price_ton') { edit_message_text($chat_id, $message_id, admin_ton_price_text($DATA), admin_ton_price_kb()); return; }
+    if ($data === 'admin_price_ton') { refresh_ton_price_if_stale($DATA); edit_message_text($chat_id, $message_id, admin_ton_price_text($DATA), admin_ton_price_kb()); return; }
     if ($data === 'admin_change_ton_price') { $ust['state'] = 'admin_awaiting_ton_price'; edit_message_text($chat_id, $message_id, admin_ask_ton_price_text(), admin_ton_price_ask_kb()); return; }
     if ($data === 'admin_price_ton_back') { $ust['state'] = null; edit_message_text($chat_id, $message_id, admin_ton_price_text($DATA), admin_ton_price_kb()); return; }
 
@@ -2331,6 +2936,86 @@ function handle_callback(array $cq, array &$DATA): void {
         }
         return;
     }
+
+    /* ---- text editor ---- */
+    if ($data === 'admin_edit_texts') { $ust['state'] = null; edit_message_text($chat_id, $message_id, '✏️ ویرایش متن‌های ربات\n\nدسته مورد نظر رو انتخاب کن:', admin_text_categories_kb()); return; }
+
+    if (str_starts_with($data, 'admin_text_cat_')) {
+        $cat = substr($data, strlen('admin_text_cat_'));
+        if (!isset(TEXT_CATEGORIES[$cat])) return;
+        $ust['admin_text_cat'] = $cat;
+        edit_message_text($chat_id, $message_id, CATEGORY_LABELS[$cat] . "\n\nمتن مورد نظر رو انتخاب کن:", admin_text_list_kb($cat));
+        return;
+    }
+
+    if ($data === 'admin_text_list_back') {
+        $cat = $ust['admin_text_cat'] ?? null;
+        if ($cat === null || !isset(TEXT_CATEGORIES[$cat])) { edit_message_text($chat_id, $message_id, '✏️ ویرایش متن‌های ربات', admin_text_categories_kb()); return; }
+        edit_message_text($chat_id, $message_id, CATEGORY_LABELS[$cat] . "\n\nمتن مورد نظر رو انتخاب کن:", admin_text_list_kb($cat));
+        return;
+    }
+
+    if (str_starts_with($data, 'admin_text_reset_')) {
+        $slug = substr($data, strlen('admin_text_reset_'));
+        if (!in_array($slug, all_text_slugs(), true)) return;
+        reset_text($DATA, $slug);
+        edit_message_text($chat_id, $message_id, admin_text_detail_body($slug), admin_text_detail_kb($slug));
+        return;
+    }
+
+    if (str_starts_with($data, 'admin_text_pick_')) {
+        $slug = substr($data, strlen('admin_text_pick_'));
+        if (!in_array($slug, all_text_slugs(), true)) return;
+        $ust['state'] = "admin_awaiting_text_{$slug}";
+        edit_message_text($chat_id, $message_id, admin_text_detail_body($slug), admin_text_detail_kb($slug));
+        return;
+    }
+
+    /* ---- button label editor ---- */
+    if ($data === 'admin_edit_buttons') { $ust['state'] = null; edit_message_text($chat_id, $message_id, '✏️ ویرایش نام دکمه‌ها\n\nدسته مورد نظر رو انتخاب کن:', admin_button_categories_kb()); return; }
+
+    if (str_starts_with($data, 'admin_btn_cat_')) {
+        $cat = substr($data, strlen('admin_btn_cat_'));
+        if (!isset(BUTTON_CATEGORIES[$cat])) return;
+        $ust['admin_btn_cat'] = $cat;
+        edit_message_text($chat_id, $message_id, CATEGORY_LABELS[$cat] . "\n\nدکمه مورد نظر رو انتخاب کن:", admin_button_list_kb($cat));
+        return;
+    }
+
+    if ($data === 'admin_btn_list_back') {
+        $cat = $ust['admin_btn_cat'] ?? null;
+        if ($cat === null || !isset(BUTTON_CATEGORIES[$cat])) { edit_message_text($chat_id, $message_id, '✏️ ویرایش نام دکمه‌ها', admin_button_categories_kb()); return; }
+        edit_message_text($chat_id, $message_id, CATEGORY_LABELS[$cat] . "\n\nدکمه مورد نظر رو انتخاب کن:", admin_button_list_kb($cat));
+        return;
+    }
+
+    if (str_starts_with($data, 'admin_btn_reset_')) {
+        $slug = substr($data, strlen('admin_btn_reset_'));
+        if (!in_array($slug, all_button_slugs(), true)) return;
+        reset_button($DATA, $slug);
+        edit_message_text($chat_id, $message_id, admin_button_detail_body($slug), admin_button_detail_kb($slug));
+        return;
+    }
+
+    if (str_starts_with($data, 'admin_btn_style_')) {
+        $rest = substr($data, strlen('admin_btn_style_'));
+        $pos = strrpos($rest, '_');
+        if ($pos === false) return;
+        $slug = substr($rest, 0, $pos);
+        $style = substr($rest, $pos + 1);
+        if (!in_array($slug, all_button_slugs(), true) || !in_array($style, ['primary', 'success', 'danger', 'none'], true)) return;
+        set_button_style($DATA, $slug, $style === 'none' ? null : $style);
+        edit_message_text($chat_id, $message_id, admin_button_detail_body($slug), admin_button_detail_kb($slug));
+        return;
+    }
+
+    if (str_starts_with($data, 'admin_btn_pick_')) {
+        $slug = substr($data, strlen('admin_btn_pick_'));
+        if (!in_array($slug, all_button_slugs(), true)) return;
+        $ust['state'] = "admin_awaiting_button_{$slug}";
+        edit_message_text($chat_id, $message_id, admin_button_detail_body($slug), admin_button_detail_kb($slug));
+        return;
+    }
 }
 
 /* ===================== ENTRY POINT ===================== */
@@ -2364,9 +3049,27 @@ function dispatch_update(array $update, array &$DATA): void {
     }
 }
 
+// Optional GET-triggered refresh for a real server cron, e.g.:
+//   */5 * * * * curl -s "https://yourdomain.com/bot.php?cron=refresh_prices"
+// Forces a fresh Nobitex fetch regardless of the lazy cache TTL.
+function handle_cron_refresh_prices(): void {
+    header('Content-Type: application/json; charset=utf-8');
+    $lockFh = fopen(LOCK_FILE, 'c');
+    if ($lockFh === false) { http_response_code(500); echo json_encode(['ok' => false, 'error' => 'lock']); return; }
+    flock($lockFh, LOCK_EX);
+    $DATA = load_data();
+    $before = $DATA['ton_price'];
+    refresh_ton_price_if_stale($DATA, true);
+    save_data($DATA);
+    flock($lockFh, LOCK_UN);
+    fclose($lockFh);
+    echo json_encode(['ok' => true, 'ton_price_before' => $before, 'ton_price_after' => $DATA['ton_price']], JSON_UNESCAPED_UNICODE);
+}
+
 function main_entry(): void {
     if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
         if (isset($_GET['setup_webhook'])) { handle_setup_webhook(); return; }
+        if (isset($_GET['cron']) && $_GET['cron'] === 'refresh_prices') { handle_cron_refresh_prices(); return; }
         header('Content-Type: text/plain; charset=utf-8');
         echo 'GiftIx bot webhook endpoint is alive.';
         return;
@@ -2384,6 +3087,9 @@ function main_entry(): void {
     flock($lockFh, LOCK_EX);
 
     $DATA = load_data();
+    // Text/button lookup helpers (T/B/BS/BI) read this reference instead of
+    // threading $DATA through every keyboard/label-building function.
+    $GLOBALS['STORE'] = &$DATA;
     try {
         dispatch_update($update, $DATA);
     } catch (Throwable $e) {
