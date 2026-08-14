@@ -98,19 +98,67 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($a === 'save_buttons') {
         $ids = array_keys(cfg()['buttons']);
         $post = $_POST;
+        if (!parseLayout($post['layout'] ?? '')) go('چیدمان نامعتبر است. مثال درست: 2,1,1', 'err');
         cfgSet(function (&$c) use ($ids, $post) {
-            $c['ui']['mode'] = ($post['mode'] ?? 'menu') === 'glass' ? 'glass' : 'menu';
-            $c['ui']['show_color_in_menu'] = !empty($post['show_color']);
+            $c['ui']['mode']     = ($post['mode'] ?? 'menu') === 'glass' ? 'glass' : 'menu';
+            $c['ui']['layout']   = trim($post['layout'] ?? '1');
+            $c['ui']['show_dot'] = !empty($post['show_dot']);
             foreach ($ids as $id) {
                 if (!isset($c['buttons'][$id])) continue;
+                $col = $post["color_$id"] ?? 'none';
                 $c['buttons'][$id]['emoji'] = trim($post["emoji_$id"] ?? '');
                 $c['buttons'][$id]['text']  = trim($post["text_$id"] ?? $c['buttons'][$id]['text']);
-                $c['buttons'][$id]['color'] = $post["color_$id"] ?? 'none';
-                $c['buttons'][$id]['row']   = max(1, (int)($post["row_$id"] ?? 1));
+                $c['buttons'][$id]['color'] = isStyle($col) ? $col : 'none';
+                $c['buttons'][$id]['dot']   = trim($post["dot_$id"] ?? '');
+                $c['buttons'][$id]['order'] = max(1, (int)($post["order_$id"] ?? 1));
+                $c['buttons'][$id]['icon']  = trim($post["icon_$id"] ?? '');
                 $c['buttons'][$id]['on']    = !empty($post["on_$id"]);
             }
         });
         go('دکمه‌ها ذخیره شد.');
+    }
+
+    if ($a === 'save_glass') {
+        $post = $_POST;
+        cfgSet(function (&$c) use ($post) {
+            foreach (array_keys($c['glass_colors']) as $role) {
+                $v = $post['g_' . $role] ?? 'none';
+                $c['glass_colors'][$role] = isStyle($v) ? $v : 'none';
+            }
+        });
+        go('رنگ دکمه‌های شیشه‌ای ذخیره شد.');
+    }
+
+    if ($a === 'save_sales') {
+        $post = $_POST;
+        cfgSet(function (&$c) use ($post) {
+            $c['sales']['on']        = !empty($post['sales_on']);
+            $c['sales']['chat_id']   = trim($post['sales_chat'] ?? '');
+            $c['sales']['template']  = $post['sales_tpl'] ?? '';
+            $c['sales']['show_user'] = !empty($post['sales_user']);
+        });
+        go('تنظیمات کانال فروش ذخیره شد.');
+    }
+
+    if ($a === 'test_sales') {
+        $s = cfg()['sales'];
+        if (empty($s['chat_id'])) go('اول آیدی کانال را بگذارید.', 'err');
+        $r = sendMsg(BOT_TOKEN, $s['chat_id'], strtr($s['template'], [
+            '{product}' => 'محصول نمونه', '{code}' => 'or_test123', '{amount}' => '50,000',
+            '{currency}' => 'تومان', '{count}' => '7', '{limit}' => '100', '{remaining}' => '93',
+            '{limit_part}' => " از 100\n🎯 باقی‌مانده: <b>93</b>", '{user}' => '@example',
+            '{user_id}' => '123456', '{date}' => nowStr(),
+        ]));
+        go(!empty($r['ok']) ? 'پیام آزمایشی ارسال شد.' : 'خطا: ' . ($r['description'] ?? ''),
+           !empty($r['ok']) ? 'ok' : 'err');
+    }
+
+    if ($a === 'broadcast_child') {
+        $text = trim($_POST['text'] ?? '');
+        if ($text === '') go('متن خالی است.', 'err');
+        $ids = $_POST['bots'] ?? null;
+        [$sent, $fail] = broadcastToChildBots($text, is_array($ids) && $ids ? $ids : null);
+        go("ارسال به ربات‌های زیرمجموعه — موفق: {$sent} | ناموفق: {$fail}");
     }
 
     // ---- متن‌ها ----
@@ -279,15 +327,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($a === 'approve_order') {
         [$ok, $res] = Order::approve($_POST['id'] ?? '', ADMIN_ID);
         if (!$ok) go($res, 'err');
-        $o = $res;
-        if ($o['type'] === 'topup') {
-            sendMsg(BOT_TOKEN, $o['user_id'],
-                "✅ کیف پول شما <b>" . fmtNum($o['amount']) . "</b> تومان شارژ شد.\n💰 موجودی جدید: <b>" .
-                fmtNum(getUser($o['user_id'])['balance'] ?? 0) . "</b> تومان");
-        } else {
-            sendMsg(BOT_TOKEN, $o['user_id'], T('approved'));
-            deliverProduct($o['user_id'], $o['user_id'], $o['product_id']);
-        }
+        completeApprovedOrder($res);   // اطلاع به کاربر + تحویل + اعلام در کانال فروش
         go('سفارش تایید شد و به کاربر اطلاع داده شد.');
     }
     if ($a === 'reject_order') {
@@ -436,6 +476,15 @@ margin:4px 0;box-shadow:0 1px 3px rgba(0,0,0,.1)}
 padding:9px;border:1px solid #edf2f7;border-radius:10px;margin-bottom:8px}
 .srow input,.srow select{padding:8px;font-size:12.5px}
 .tgrid{display:grid;gap:14px}
+.note{background:#e8f0fe;border-right:4px solid #667eea;border-radius:10px;padding:12px 14px;
+margin-bottom:14px;font-size:12.5px;line-height:1.95;color:#2d3748}
+.tbar{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:6px}
+.tbar button{background:#edf2f7;border:0;border-radius:7px;padding:5px 10px;font-size:11.5px;
+cursor:pointer;font-family:inherit;color:#4a5568}
+.tbar button:hover{background:#dde5ef}
+.pbtn.pb-b{background:#3182ce;color:#fff}
+.pbtn.pb-g{background:#38a169;color:#fff}
+.pbtn.pb-r{background:#e53e3e;color:#fff}
 @media(max-width:760px){.brow,.srow{grid-template-columns:1fr 1fr;gap:6px}}
 @media(max-width:640px){.card .body{padding:15px}header h1{font-size:18px}}
 </style>
@@ -458,6 +507,7 @@ $tabs = [
   'support'   => '📞 پشتیبانی',
   'bots'      => '🤖 ربات‌های اپلودر',
   'channels'  => '📢 کانال‌ها',
+  'referral'  => '👥 رفرال',
   'users'     => '👥 کاربران',
   'settings'  => '⚙️ تنظیمات',
 ];
@@ -621,66 +671,105 @@ foreach ($tabs as $k => $l): ?>
 
 <?php // ================= دکمه‌ها ================= ?>
 <?php elseif ($tab === 'buttons'): ?>
-  <div class="card"><h2>🎨 دکمه‌های ربات</h2><div class="body">
+  <div class="card"><h2>🎨 دکمه‌های منو</h2><div class="body">
+    <div class="note">
+      از <b>Bot API 9.4</b> (۹ فوریه ۲۰۲۶) تلگرام فیلد <code>style</code> را به دکمه‌ها اضافه کرد؛
+      رنگ <b>واقعی</b> روی هر دو نوع دکمه (منو و شیشه‌ای) کار می‌کند:
+      🔵 <code>primary</code> · 🟢 <code>success</code> · 🔴 <code>danger</code>.
+      دایره ایموجی برای کلاینت‌های قدیمی‌تر است که هنوز رنگ را نشان نمی‌دهند.
+    </div>
+
     <form method="post">
       <input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="tab" value="buttons">
       <input type="hidden" name="action" value="save_buttons">
 
       <div class="grid2" style="margin-bottom:16px">
-        <div><label>حالت نمایش دکمه‌ها</label>
+        <div><label>حالت نمایش</label>
           <select name="mode">
             <option value="menu"  <?= $C['ui']['mode'] === 'menu' ? 'selected' : '' ?>>منو — کیبورد پایین صفحه</option>
             <option value="glass" <?= $C['ui']['mode'] === 'glass' ? 'selected' : '' ?>>شیشه‌ای — زیر پیام</option>
           </select></div>
-        <div><label>&nbsp;</label>
-          <label style="font-weight:500"><input type="checkbox" name="show_color" style="width:auto"
-            <?= !empty($C['ui']['show_color_in_menu']) ? 'checked' : '' ?>> نمایش دایره رنگی در حالت منو</label></div>
+        <div><label>چیدمان ردیف‌ها</label>
+          <input name="layout" value="<?= h($C['ui']['layout'] ?? '1') ?>" placeholder="2,1,1" style="direction:ltr">
+          <div class="muted" style="margin-top:4px">مثلا <code>2,1,1</code> = ردیف اول ۲ دکمه، بعدی ۱، بعدی ۱</div></div>
       </div>
+      <label style="font-weight:500;margin-bottom:14px">
+        <input type="checkbox" name="show_dot" style="width:auto" <?= !empty($C['ui']['show_dot']) ? 'checked' : '' ?>>
+        نمایش دایره رنگی کنار متن (برای کلاینت‌های قدیمی)</label>
 
-      <p class="muted" style="margin-bottom:10px">ایموجی، متن، رنگ و ردیف هر دکمه را می‌توانید عوض کنید. دکمه‌های هم‌ردیف کنار هم می‌آیند.</p>
-
-      <div style="display:grid;grid-template-columns:44px 1fr 100px 70px 60px 46px;gap:8px;
+      <div style="display:grid;grid-template-columns:44px 1fr 100px 56px 60px 46px;gap:8px;
                   font-size:11.5px;color:#718096;font-weight:700;padding:0 10px 6px">
-        <div>ایموجی</div><div>متن دکمه</div><div>رنگ</div><div>ردیف</div><div>فعال</div><div></div>
+        <div>ایموجی</div><div>متن دکمه</div><div>رنگ واقعی</div><div>دایره</div><div>ترتیب</div><div>فعال</div>
       </div>
-
       <?php foreach ($C['buttons'] as $id => $b): ?>
       <div class="brow">
-        <input name="emoji_<?= h($id) ?>" value="<?= h($b['emoji']) ?>" style="text-align:center">
+        <input name="emoji_<?= h($id) ?>" value="<?= h($b['emoji'] ?? '') ?>" style="text-align:center">
         <input name="text_<?= h($id) ?>" value="<?= h($b['text']) ?>">
         <select name="color_<?= h($id) ?>">
-          <?php foreach (colorMap() as $ck => $ce): ?>
-            <option value="<?= h($ck) ?>" <?= $b['color'] === $ck ? 'selected' : '' ?>><?= $ce ?: '—' ?> <?= h($ck) ?></option>
+          <?php foreach (styleMap() as $sk => $sl): ?>
+            <option value="<?= h($sk) ?>" <?= ($b['color'] ?? '') === $sk ? 'selected' : '' ?>><?= h($sl) ?></option>
           <?php endforeach; ?>
         </select>
-        <input name="row_<?= h($id) ?>" type="number" min="1" max="20" value="<?= (int)$b['row'] ?>">
+        <select name="dot_<?= h($id) ?>">
+          <?php foreach (dotMap() as $d): ?>
+            <option value="<?= h($d) ?>" <?= ($b['dot'] ?? '') === $d ? 'selected' : '' ?>><?= $d ?: '—' ?></option>
+          <?php endforeach; ?>
+        </select>
+        <input name="order_<?= h($id) ?>" type="number" min="1" max="50" value="<?= (int)($b['order'] ?? 1) ?>">
         <input type="checkbox" name="on_<?= h($id) ?>" <?= !empty($b['on']) ? 'checked' : '' ?> style="width:auto">
-        <span class="muted"><?= h($id) ?></span>
       </div>
       <?php endforeach; ?>
 
-      <div style="margin-top:14px"><button class="btn g">ذخیره دکمه‌ها</button></div>
+      <div style="margin-top:14px"><button class="btn g">ذخیره دکمه‌های منو</button></div>
     </form>
 
     <div class="prev">
-      <div class="muted" style="margin-bottom:8px">پیش‌نمایش (<?= $C['ui']['mode'] === 'glass' ? 'شیشه‌ای' : 'منو' ?>):</div>
-      <?php
-      $rows = [];
-      foreach ($C['buttons'] as $b) { if (!empty($b['on'])) $rows[(int)$b['row']][] = $b; }
-      ksort($rows);
-      foreach ($rows as $r): ?>
+      <div class="muted" style="margin-bottom:8px">پیش‌نمایش — <?= $C['ui']['mode'] === 'glass' ? 'شیشه‌ای' : 'منو' ?>
+        (چیدمان <?= h($C['ui']['layout'] ?? '') ?>):</div>
+      <?php foreach (layoutRows(activeButtons(), $C['ui']['layout'] ?? '') as $r): ?>
         <div class="pgrid">
-          <?php foreach ($r as $b): ?>
-            <div class="pbtn"><?= h(btnLabel($b)) ?></div>
+          <?php foreach ($r as $b):
+            $cls = ['primary' => 'pb-b', 'success' => 'pb-g', 'danger' => 'pb-r'][$b['color'] ?? ''] ?? ''; ?>
+            <div class="pbtn <?= $cls ?>"><?= h(btnLabel($b)) ?></div>
           <?php endforeach; ?>
         </div>
       <?php endforeach; ?>
     </div>
   </div></div>
 
+  <div class="card"><h2>💠 رنگ دکمه‌های شیشه‌ای</h2><div class="body">
+    <p class="muted" style="margin-bottom:12px">رنگ همه دکمه‌های داخل ربات بر اساس نقششان — شامل بخش محصول، پرداخت، پنل و ربات‌های اپلودر.</p>
+    <form method="post">
+      <input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="tab" value="buttons">
+      <input type="hidden" name="action" value="save_glass">
+      <div class="grid2">
+        <?php
+        $roleLabels = [
+          'buy' => '🛒 خرید و دریافت محصول', 'confirm' => '✅ تایید', 'cancel' => '↩️ انصراف',
+          'reject' => '🗑 رد و حذف', 'nav' => '◀️ بازگشت و منو', 'info' => 'ℹ️ اطلاعات و آمار',
+          'admin' => '👑 پنل مدیریت', 'link' => '🔗 لینک دریافت محتوا', 'support' => '📞 پشتیبانی',
+          'join' => '📢 کانال عضویت اجباری', 'joined' => '✅ عضو شدم', 'upload' => '📤 آپلود',
+        ];
+        foreach ($roleLabels as $role => $lbl): ?>
+          <div><label><?= $lbl ?></label>
+            <select name="g_<?= h($role) ?>">
+              <?php foreach (styleMap() as $sk => $sl): ?>
+                <option value="<?= h($sk) ?>" <?= ($C['glass_colors'][$role] ?? 'none') === $sk ? 'selected' : '' ?>><?= h($sl) ?></option>
+              <?php endforeach; ?>
+            </select></div>
+        <?php endforeach; ?>
+      </div>
+      <div style="margin-top:14px"><button class="btn g">ذخیره رنگ دکمه‌های شیشه‌ای</button></div>
+    </form>
+  </div></div>
+
 <?php // ================= متن‌ها ================= ?>
 <?php elseif ($tab === 'texts'): ?>
   <div class="card"><h2>📝 متن‌های ربات</h2><div class="body">
+    <div class="note">
+      روی هر متن می‌توانید <b>نقل‌قول</b> بگذارید: متن را انتخاب کنید و دکمه <b>❝ نقل‌قول</b> را بزنید.
+      <code>&lt;blockquote&gt;</code> نقل‌قول ساده و <code>&lt;blockquote expandable&gt;</code> نقل‌قول جمع‌شونده می‌سازد.
+    </div>
     <p class="muted" style="margin-bottom:14px;line-height:1.9">
       متغیرهای قابل استفاده — حساب کاربری: <code>{id}</code> <code>{name}</code> <code>{username}</code>
       <code>{balance}</code> <code>{orders}</code> <code>{referrals}</code> <code>{ref_earned}</code> <code>{joined}</code><br>
@@ -702,7 +791,17 @@ foreach ($tabs as $k => $l): ?>
       ];
       foreach ($labels as $k => $l): ?>
         <div><label><?= $l ?></label>
-          <textarea name="t_<?= h($k) ?>"><?= h($C['texts'][$k] ?? '') ?></textarea></div>
+          <div class="tbar">
+            <button type="button" onclick="wrapSel('t_<?= h($k) ?>','<blockquote>','</blockquote>')">❝ نقل‌قول</button>
+            <button type="button" onclick="wrapSel('t_<?= h($k) ?>','<blockquote expandable>','</blockquote>')">❝ نقل‌قول بازشو</button>
+            <button type="button" onclick="wrapSel('t_<?= h($k) ?>','<b>','</b>')"><b>پررنگ</b></button>
+            <button type="button" onclick="wrapSel('t_<?= h($k) ?>','<i>','</i>')"><i>کج</i></button>
+            <button type="button" onclick="wrapSel('t_<?= h($k) ?>','<u>','</u>')"><u>زیرخط</u></button>
+            <button type="button" onclick="wrapSel('t_<?= h($k) ?>','<s>','</s>')"><s>خط‌خورده</s></button>
+            <button type="button" onclick="wrapSel('t_<?= h($k) ?>','<tg-spoiler>','</tg-spoiler>')">🫥 اسپویلر</button>
+            <button type="button" onclick="wrapSel('t_<?= h($k) ?>','<code>','</code>')">&lt;/&gt; کد</button>
+          </div>
+          <textarea id="t_<?= h($k) ?>" name="t_<?= h($k) ?>"><?= h($C['texts'][$k] ?? '') ?></textarea></div>
       <?php endforeach; ?>
       </div>
       <div style="margin-top:16px"><button class="btn g">ذخیره متن‌ها</button></div>
@@ -888,15 +987,149 @@ foreach ($tabs as $k => $l): ?>
     </table></div><?php endif; ?>
   </div></div>
 
+<?php // ================= رفرال ================= ?>
+<?php elseif ($tab === 'referral'):
+  $refCount = []; $refEarn = [];
+  foreach ($users as $u) {
+      if (!empty($u['referrer'])) $refCount[(string)$u['referrer']] = ($refCount[(string)$u['referrer']] ?? 0) + 1;
+      if (!empty($u['ref_earned'])) $refEarn[(string)$u['telegram_id']] = (float)$u['ref_earned'];
+  }
+  arsort($refCount);
+  $totalEarn = array_sum($refEarn);
+  $withRef = count(array_filter($users, fn($u) => !empty($u['referrer'])));
+?>
+  <div class="stats">
+    <div class="stat"><div class="n"><?= count($refCount) ?></div><div class="l">👤 معرف فعال</div></div>
+    <div class="stat"><div class="n"><?= $withRef ?></div><div class="l">👥 کاربر معرفی‌شده</div></div>
+    <div class="stat"><div class="n"><?= fmtNum($totalEarn) ?></div><div class="l">💵 پورسانت پرداختی</div></div>
+    <div class="stat"><div class="n"><?= h($C['referral']['percent']) ?>%</div><div class="l">📈 درصد فعلی</div></div>
+  </div>
+
+  <div class="card"><h2>⚙️ تنظیم رفرال</h2><div class="body">
+    <form method="post">
+      <input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="tab" value="referral">
+      <input type="hidden" name="action" value="save_settings">
+      <input type="hidden" name="usdt" value="<?= h($C['wallets']['usdt']) ?>">
+      <input type="hidden" name="trx" value="<?= h($C['wallets']['trx']) ?>">
+      <input type="hidden" name="card" value="<?= h($C['wallets']['card']) ?>">
+      <input type="hidden" name="card_name" value="<?= h($C['wallets']['card_name']) ?>">
+      <input type="hidden" name="del_sec" value="<?= (int)$C['uploader']['delete_seconds'] ?>">
+      <?php if (!empty($C['uploader']['force_join'])): ?><input type="hidden" name="force_join" value="1"><?php endif; ?>
+      <?php if (!empty($C['uploader']['protect_content'])): ?><input type="hidden" name="protect" value="1"><?php endif; ?>
+      <div class="grid2">
+        <div><label>درصد پورسانت از هر خرید</label>
+          <input name="ref_percent" type="number" min="0" max="100" step="0.5" value="<?= h($C['referral']['percent']) ?>"></div>
+        <div><label>&nbsp;</label><label style="font-weight:500">
+          <input type="checkbox" name="ref_on" style="width:auto" <?= !empty($C['referral']['on']) ? 'checked' : '' ?>>
+          سیستم معرفی فعال باشد</label></div>
+      </div>
+      <div style="margin-top:14px"><button class="btn g">ذخیره</button></div>
+    </form>
+  </div></div>
+
+  <div class="card"><h2>🏆 برترین معرف‌ها</h2><div class="body">
+    <?php if (!$refCount): ?><div class="empty">هنوز کسی زیرمجموعه نگرفته.</div>
+    <?php else: ?><div class="scroll"><table>
+      <tr><th>#</th><th>معرف</th><th>آیدی</th><th>تعداد زیرمجموعه</th><th>پورسانت دریافتی</th><th>موجودی</th></tr>
+      <?php $i = 1; foreach (array_slice($refCount, 0, 50, true) as $rid => $cnt): ?>
+      <tr><td><?= $i++ ?></td>
+        <td><?= h(uLabel($users, $rid)) ?></td>
+        <td><code><?= h($rid) ?></code></td>
+        <td><b><?= $cnt ?></b></td>
+        <td><?= h(fmtNum($refEarn[$rid] ?? 0)) ?></td>
+        <td><?= h(fmtNum($users[$rid]['balance'] ?? 0)) ?></td></tr>
+      <?php endforeach; ?>
+    </table></div><?php endif; ?>
+  </div></div>
+
+  <div class="card"><h2>📢 کانال اعلام فروش</h2><div class="body">
+    <div class="note">
+      هر خرید موفق به‌صورت خودکار در یک کانال جدا اعلام می‌شود — با
+      <b>کد خرید</b>، <b>مبلغ</b> و <b>تعداد ممبر فروخته‌شده</b>.
+      ربات مادر باید در آن کانال ادمین باشد.
+    </div>
+    <form method="post">
+      <input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="tab" value="referral">
+      <input type="hidden" name="action" value="save_sales">
+      <div class="grid2">
+        <div><label>آیدی کانال اعلام فروش</label>
+          <input name="sales_chat" value="<?= h($C['sales']['chat_id']) ?>" placeholder="@saleschannel یا -100..." style="direction:ltr"></div>
+        <div><label>گزینه‌ها</label>
+          <label style="font-weight:500"><input type="checkbox" name="sales_on" style="width:auto"
+            <?= !empty($C['sales']['on']) ? 'checked' : '' ?>> اعلام فروش فعال باشد</label>
+          <label style="font-weight:500"><input type="checkbox" name="sales_user" style="width:auto"
+            <?= !empty($C['sales']['show_user']) ? 'checked' : '' ?>> نمایش نام خریدار</label></div>
+      </div>
+      <div style="margin-top:12px">
+        <label>قالب پیام</label>
+        <div class="tbar">
+          <button type="button" onclick="wrapSel('sales_tpl','<blockquote>','</blockquote>')">❝ نقل‌قول</button>
+          <button type="button" onclick="wrapSel('sales_tpl','<blockquote expandable>','</blockquote>')">❝ بازشو</button>
+          <button type="button" onclick="wrapSel('sales_tpl','<b>','</b>')"><b>پررنگ</b></button>
+          <button type="button" onclick="wrapSel('sales_tpl','<code>','</code>')">&lt;/&gt; کد</button>
+        </div>
+        <textarea id="sales_tpl" name="sales_tpl" style="min-height:140px"><?= h($C['sales']['template']) ?></textarea>
+        <div class="muted" style="margin-top:6px;line-height:1.9">
+          متغیرها: <code>{product}</code> <code>{code}</code> <code>{amount}</code> <code>{currency}</code>
+          <code>{count}</code> <code>{limit}</code> <code>{remaining}</code> <code>{limit_part}</code>
+          <code>{user}</code> <code>{user_id}</code> <code>{date}</code>
+        </div>
+      </div>
+      <div style="margin-top:14px">
+        <button class="btn g">ذخیره</button>
+      </div>
+    </form>
+    <form method="post" style="margin-top:10px">
+      <input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="tab" value="referral">
+      <input type="hidden" name="action" value="test_sales">
+      <button class="btn b sm">ارسال پیام آزمایشی به کانال</button>
+    </form>
+  </div></div>
+
 <?php // ================= کاربران ================= ?>
 <?php elseif ($tab === 'users'): ?>
   <div class="card"><h2>📢 پیام همگانی</h2><div class="body">
     <form method="post" onsubmit="return confirm('ارسال به همه کاربران؟')">
       <input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="tab" value="users">
       <input type="hidden" name="action" value="broadcast">
-      <textarea name="text" placeholder="متن پیام… (تگ HTML تلگرام مجاز است)" required></textarea>
+      <div class="tbar">
+        <button type="button" onclick="wrapSel('bc_master','<blockquote>','</blockquote>')">❝ نقل‌قول</button>
+        <button type="button" onclick="wrapSel('bc_master','<blockquote expandable>','</blockquote>')">❝ بازشو</button>
+        <button type="button" onclick="wrapSel('bc_master','<b>','</b>')"><b>پررنگ</b></button>
+        <button type="button" onclick="wrapSel('bc_master','<tg-spoiler>','</tg-spoiler>')">🫥 اسپویلر</button>
+      </div>
+      <textarea id="bc_master" name="text" placeholder="متن پیام… (تگ HTML تلگرام مجاز است)" required></textarea>
       <div style="margin-top:12px"><button class="btn b">ارسال به <?= count($users) ?> کاربر</button></div>
     </form>
+  </div></div>
+
+  <div class="card"><h2>🤖 پیام همگانی به ربات‌های زیرمجموعه</h2><div class="body">
+    <div class="note">
+      این پیام با توکن <b>خود ربات اپلودر</b> فرستاده می‌شود، پس به کسانی هم می‌رسد
+      که فقط با ربات فرعی چت کرده‌اند و ربات مادر را استارت نکرده‌اند.
+    </div>
+    <?php if (!$bots): ?><div class="empty">هنوز ربات اپلودری ندارید.</div>
+    <?php else: ?>
+    <form method="post" onsubmit="return confirm('ارسال به کاربران ربات‌های انتخاب‌شده؟')">
+      <input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="tab" value="users">
+      <input type="hidden" name="action" value="broadcast_child">
+      <label>ربات‌های مقصد (هیچ‌کدام = همه)</label>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:12px">
+        <?php foreach ($bots as $b): ?>
+          <label style="font-weight:500;background:#edf2f7;padding:7px 12px;border-radius:9px">
+            <input type="checkbox" name="bots[]" value="<?= h($b['id']) ?>" style="width:auto">
+            @<?= h($b['username']) ?> (<?= count(load('bots/' . $b['id'] . '/users')) ?>)
+          </label>
+        <?php endforeach; ?>
+      </div>
+      <div class="tbar">
+        <button type="button" onclick="wrapSel('bc_child','<blockquote>','</blockquote>')">❝ نقل‌قول</button>
+        <button type="button" onclick="wrapSel('bc_child','<b>','</b>')"><b>پررنگ</b></button>
+      </div>
+      <textarea id="bc_child" name="text" placeholder="متن پیام…" required></textarea>
+      <div style="margin-top:12px"><button class="btn b">ارسال به ربات‌های زیرمجموعه</button></div>
+    </form>
+    <?php endif; ?>
   </div></div>
 
   <div class="card"><h2>👥 کاربران (<?= count($users) ?>)</h2><div class="body">
@@ -980,5 +1213,19 @@ foreach ($tabs as $k => $l): ?>
 <?php endif; ?>
 
 </div>
+
+<script>
+// انتخاب متن را داخل تگ می‌پیچد (نقل‌قول، پررنگ، ...)
+function wrapSel(id, open, close) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  var s = el.selectionStart, e = el.selectionEnd, v = el.value;
+  var sel = v.substring(s, e) || 'متن';
+  el.value = v.substring(0, s) + open + sel + close + v.substring(e);
+  el.focus();
+  el.selectionStart = s + open.length;
+  el.selectionEnd   = s + open.length + sel.length;
+}
+</script>
 </body>
 </html>
