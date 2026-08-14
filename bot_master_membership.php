@@ -1,47 +1,36 @@
 <?php
 /**
- * 🛍️💎 سیستم فروش ممبرشیپ — ربات مادر + ربات‌های فرعی اپلودری
+ * 🛍️ ربات فروشگاه + ربات‌های اپلودر عمومی
  *
- * یک فایل، همه قابلیت‌ها:
- *  - فروش ممبرشیپ با USDT / TRX / تومان
- *  - تایید پرداخت فقط توسط ادمین (با رسید)
- *  - اتصال خودکار به ربات اپلودری بعد از تایید
- *  - کد دسترسی یکتا و قابل اعتبارسنجی
- *  - محدودیت تعداد اعضا
- *  - ربات‌های فرعی: آپلود تکی/گروهی، آمار، همگانی، تنظیمات
- *  - دکمه‌های رنگی 🟢🔴🔵 + ایموجی پریمیوم
+ * ربات مادر : فروشگاه کامل با منوی دکمه‌ای (کیبورد)، کیف پول، زیرمجموعه‌گیری،
+ *             پیگیری سفارش، پشتیبانی ۱۰ روشه، و پنل مدیریت کامل
+ * ربات فرعی : اپلودر عمومی — فایل می‌گیرد، لینک می‌سازد؛ کاربر با کلیک روی لینک
+ *             اول در کانال‌های اجباری عضو می‌شود، بعد فایل را می‌گیرد و
+ *             فایل بعد از N ثانیه خودکار حذف می‌شود
  *
- * Webhook ربات مادر : https://DOMAIN/bot_master_membership.php
- * Webhook ربات فرعی : https://DOMAIN/bot_master_membership.php?bot=<BOT_ID>
+ * Webhook مادر : https://DOMAIN/bot_master_membership.php
+ * Webhook فرعی : https://DOMAIN/bot_master_membership.php?bot=<BOT_ID>
+ * Cron حذف     : https://DOMAIN/bot_master_membership.php?cron=<CRON_KEY>
  */
 
 // ============================================================
-// ⚙️ تنظیمات
+// ⚙️ تنظیمات پایه
 // ============================================================
 
 if (!defined('BOT_TOKEN')) define('BOT_TOKEN', '8580931982:AAHQb5vGDnG6n9vFWqBMpPWksRiuyhsWv_g');
 if (!defined('ADMIN_ID'))  define('ADMIN_ID',  8213021584);
 if (!defined('DATA_DIR'))  define('DATA_DIR',  __DIR__ . '/data_master');
+if (!defined('CRON_KEY'))  define('CRON_KEY',  'change-this-cron-key');
 
 if (!is_dir(DATA_DIR)) @mkdir(DATA_DIR, 0755, true);
-if (!is_dir(DATA_DIR . '/bots')) @mkdir(DATA_DIR . '/bots', 0755, true);
 
-$EMOJI = [
-    'shop' => '🛍️', 'member' => '👥', 'money' => '💰', 'lock' => '🔒',
-    'check' => '✅', 'error' => '❌', 'warning' => '⚠️', 'star' => '⭐',
-    'rocket' => '🚀', 'wallet' => '💳', 'chart' => '📊', 'bot' => '🤖',
-    'upload' => '📤', 'file' => '📁', 'settings' => '⚙️', 'delete' => '🗑️',
-    'premium' => '✨', 'crown' => '👑', 'fire' => '🔥', 'link' => '🔗',
-    'clock' => '⏳', 'receipt' => '🧾', 'back' => '◀️',
-];
+@ignore_user_abort(true);
 
 // ============================================================
-// 📚 لایه ذخیره‌سازی (نوشتن اتمیک)
+// 📚 ذخیره‌سازی اتمیک
 // ============================================================
 
-function dataPath($file) {
-    return DATA_DIR . '/' . $file . '.json';
-}
+function dataPath($file) { return DATA_DIR . '/' . $file . '.json'; }
 
 function load($file) {
     $path = dataPath($file);
@@ -56,39 +45,33 @@ function save($file, $data) {
     $path = dataPath($file);
     $dir  = dirname($path);
     if (!is_dir($dir)) @mkdir($dir, 0755, true);
-    $tmp = $path . '.' . getmypid() . '.tmp';
+    $tmp  = $path . '.' . getmypid() . '.tmp';
     $json = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     if (file_put_contents($tmp, $json, LOCK_EX) === false) return false;
-    return rename($tmp, $path); // اتمیک: نوشتن ناقص هرگز دیده نمی‌شود
+    return rename($tmp, $path);
 }
 
-/** اجرای یک تغییر روی فایل با قفل انحصاری تا دو درخواست همزمان همدیگر را پاک نکنند */
+/** تغییر با قفل انحصاری تا درخواست‌های همزمان همدیگر را پاک نکنند */
 function mutate($file, callable $fn) {
     $lockPath = dataPath($file) . '.lock';
     $dir = dirname($lockPath);
     if (!is_dir($dir)) @mkdir($dir, 0755, true);
     $fp = fopen($lockPath, 'c');
-    if ($fp) { flock($fp, LOCK_EX); }
-    $data = load($file);
-    $result = $fn($data);   // $data با ارجاع تغییر می‌کند
+    if ($fp) flock($fp, LOCK_EX);
+    $data   = load($file);
+    $result = $fn($data);
     save($file, $data);
     if ($fp) { flock($fp, LOCK_UN); fclose($fp); }
     return $result;
 }
 
-function uid($prefix) {
-    return $prefix . '_' . base_convert((string)time(), 10, 36) . bin2hex(random_bytes(3));
-}
-
+function uid($p) { return $p . '_' . base_convert((string)time(), 10, 36) . bin2hex(random_bytes(3)); }
 function genCode($len = 10) {
     return substr(rtrim(strtr(base64_encode(random_bytes(16)), '+/', 'ab'), '='), 0, $len);
 }
-
-function h($s) {
-    return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
-}
-
-function nowStr() { return date('Y-m-d H:i:s'); }
+function h($s)      { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
+function nowStr()   { return date('Y-m-d H:i:s'); }
+function fmtNum($n) { return rtrim(rtrim(number_format((float)$n, 2, '.', ','), '0'), '.'); }
 
 // ============================================================
 // 🔌 تلگرام API
@@ -97,10 +80,10 @@ function nowStr() { return date('Y-m-d H:i:s'); }
 function tg($token, $method, $data = []) {
     $ch = curl_init("https://api.telegram.org/bot{$token}/{$method}");
     curl_setopt_array($ch, [
-        CURLOPT_POST           => true,
-        CURLOPT_POSTFIELDS     => http_build_query($data),
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => http_build_query($data),
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT        => 20,
+        CURLOPT_TIMEOUT => 20,
         CURLOPT_CONNECTTIMEOUT => 10,
     ]);
     $res = curl_exec($ch);
@@ -110,60 +93,65 @@ function tg($token, $method, $data = []) {
     return is_array($out) ? $out : ['ok' => false, 'description' => 'bad response'];
 }
 
-function kb($rows) {
+/** کیبورد شیشه‌ای (زیر پیام) */
+function inlineKb($rows) {
     $rows = array_values(array_filter($rows, fn($r) => !empty($r)));
-    return $rows ? json_encode(['inline_keyboard' => $rows]) : null;
+    return $rows ? ['inline_keyboard' => $rows] : null;
 }
 
-function sendMsg($token, $chatId, $text, $rows = null, $extra = []) {
+/** منوی دکمه‌ای (پایین صفحه، کنار کادر تایپ) */
+function menuKb($rows) {
+    $rows = array_values(array_filter($rows, fn($r) => !empty($r)));
+    return $rows ? [
+        'keyboard' => $rows,
+        'resize_keyboard' => true,
+        'is_persistent' => true,
+    ] : ['remove_keyboard' => true];
+}
+
+function sendMsg($token, $chatId, $text, $markup = null, $extra = []) {
     $data = array_merge([
         'chat_id' => $chatId,
         'text' => $text,
         'parse_mode' => 'HTML',
         'disable_web_page_preview' => 'true',
     ], $extra);
-    $markup = $rows ? kb($rows) : null;
-    if ($markup) $data['reply_markup'] = $markup;
+    if ($markup) $data['reply_markup'] = is_string($markup) ? $markup : json_encode($markup);
     return tg($token, 'sendMessage', $data);
 }
 
-function editMsg($token, $chatId, $msgId, $text, $rows = null) {
+function editMsg($token, $chatId, $msgId, $text, $markup = null) {
     $data = [
-        'chat_id' => $chatId,
-        'message_id' => $msgId,
-        'text' => $text,
-        'parse_mode' => 'HTML',
-        'disable_web_page_preview' => 'true',
+        'chat_id' => $chatId, 'message_id' => $msgId, 'text' => $text,
+        'parse_mode' => 'HTML', 'disable_web_page_preview' => 'true',
     ];
-    $markup = $rows ? kb($rows) : null;
-    if ($markup) $data['reply_markup'] = $markup;
+    if ($markup) $data['reply_markup'] = is_string($markup) ? $markup : json_encode($markup);
     $res = tg($token, 'editMessageText', $data);
-    // اگر پیام قابل ویرایش نبود (مثلا پیام عکس) پیام تازه بفرست
-    if (empty($res['ok'])) sendMsg($token, $chatId, $text, $rows);
+    if (empty($res['ok'])) sendMsg($token, $chatId, $text, $markup);
     return $res;
 }
 
 function answerCb($token, $cbId, $text = '', $alert = false) {
     return tg($token, 'answerCallbackQuery', [
-        'callback_query_id' => $cbId,
-        'text' => $text,
+        'callback_query_id' => $cbId, 'text' => $text,
         'show_alert' => $alert ? 'true' : 'false',
     ]);
 }
 
+function delMsg($token, $chatId, $msgId) {
+    return tg($token, 'deleteMessage', ['chat_id' => $chatId, 'message_id' => $msgId]);
+}
+
 function sendFile($token, $chatId, $type, $fileId, $caption = '', $protect = false) {
     $map = [
-        'document' => ['sendDocument', 'document'],
-        'photo'    => ['sendPhoto', 'photo'],
-        'video'    => ['sendVideo', 'video'],
-        'audio'    => ['sendAudio', 'audio'],
-        'voice'    => ['sendVoice', 'voice'],
-        'animation'=> ['sendAnimation', 'animation'],
-        'sticker'  => ['sendSticker', 'sticker'],
+        'document' => ['sendDocument', 'document'], 'photo' => ['sendPhoto', 'photo'],
+        'video' => ['sendVideo', 'video'],          'audio' => ['sendAudio', 'audio'],
+        'voice' => ['sendVoice', 'voice'],          'animation' => ['sendAnimation', 'animation'],
+        'sticker' => ['sendSticker', 'sticker'],    'video_note' => ['sendVideoNote', 'video_note'],
     ];
     [$method, $field] = $map[$type] ?? $map['document'];
     $data = ['chat_id' => $chatId, $field => $fileId];
-    if ($caption !== '' && $type !== 'sticker') {
+    if ($caption !== '' && !in_array($type, ['sticker', 'video_note'], true)) {
         $data['caption'] = $caption;
         $data['parse_mode'] = 'HTML';
     }
@@ -171,947 +159,1231 @@ function sendFile($token, $chatId, $type, $fileId, $caption = '', $protect = fal
     return tg($token, $method, $data);
 }
 
-// ============================================================
-// 🎨 دکمه‌های رنگی
-// ============================================================
-
-function bGreen($label, $data) { return ['text' => "🟢 $label", 'callback_data' => $data]; }
-function bRed($label, $data)   { return ['text' => "🔴 $label", 'callback_data' => $data]; }
-function bBlue($label, $data)  { return ['text' => "🔵 $label", 'callback_data' => $data]; }
-function bUrl($label, $url)    { return ['text' => $label, 'url' => $url]; }
-
-// ============================================================
-// 🗂️ تنظیمات فروشگاه
-// ============================================================
-
-function shopSettings() {
-    $s = load('settings');
-    return array_merge([
-        'wallet_usdt'  => 'آدرس کیف پول USDT را در پنل وارد کنید',
-        'wallet_trx'   => 'آدرس کیف پول TRX را در پنل وارد کنید',
-        'card_number'  => 'شماره کارت را در پنل وارد کنید',
-        'welcome_text' => '',
-        'support'      => '',
-        'domain'       => '',
-    ], $s);
-}
-
-function walletFor($currency) {
-    $s = shopSettings();
-    $c = strtoupper(trim($currency));
-    if ($c === 'USDT') return ['USDT (TRC20)', $s['wallet_usdt']];
-    if ($c === 'TRX')  return ['TRX', $s['wallet_trx']];
-    return ['کارت به کارت', $s['card_number']];
+function extractFile($msg) {
+    if (!empty($msg['document']))   return ['document', $msg['document']['file_id'], $msg['document']['file_name'] ?? 'file'];
+    if (!empty($msg['video']))      return ['video', $msg['video']['file_id'], $msg['video']['file_name'] ?? 'video'];
+    if (!empty($msg['audio']))      return ['audio', $msg['audio']['file_id'], $msg['audio']['title'] ?? 'audio'];
+    if (!empty($msg['voice']))      return ['voice', $msg['voice']['file_id'], 'voice'];
+    if (!empty($msg['animation']))  return ['animation', $msg['animation']['file_id'], 'animation'];
+    if (!empty($msg['video_note'])) return ['video_note', $msg['video_note']['file_id'], 'video_note'];
+    if (!empty($msg['sticker']))    return ['sticker', $msg['sticker']['file_id'], 'sticker'];
+    if (!empty($msg['photo']))      { $p = $msg['photo']; return ['photo', $p[count($p) - 1]['file_id'], 'photo']; }
+    return null;
 }
 
 // ============================================================
-// 👤 کاربران
+// 🎨 پیکربندی — رنگ‌ها، دکمه‌ها، متن‌ها، پشتیبانی
+// ============================================================
+
+function colorMap() {
+    return [
+        'green'  => '🟢', 'blue'   => '🔵', 'red'    => '🔴',
+        'yellow' => '🟡', 'purple' => '🟣', 'orange' => '🟠',
+        'white'  => '⚪️', 'black'  => '⚫️', 'brown'  => '🟤',
+        'none'   => '',
+    ];
+}
+
+function defaultConfig() {
+    return [
+        // menu = دکمه‌های منو (کیبورد پایین) | glass = دکمه شیشه‌ای زیر پیام
+        'ui' => ['mode' => 'menu', 'show_color_in_menu' => false],
+
+        'buttons' => [
+            'buy'      => ['emoji' => '🛒', 'text' => 'خرید محصول',                    'color' => 'green', 'row' => 1, 'on' => true],
+            'account'  => ['emoji' => '👤', 'text' => 'حساب کاربری',                   'color' => 'blue',  'row' => 2, 'on' => true],
+            'topup'    => ['emoji' => '➕', 'text' => 'افزایش موجودی',                 'color' => 'blue',  'row' => 2, 'on' => true],
+            'referral' => ['emoji' => '👥', 'text' => 'زیر مجموعه گیری',               'color' => 'red',   'row' => 3, 'on' => true],
+            'orders'   => ['emoji' => '📊', 'text' => 'پیگیری سفارش',                  'color' => 'blue',  'row' => 4, 'on' => true],
+            'support'  => ['emoji' => '📞', 'text' => 'پشتیبانی',                      'color' => 'blue',  'row' => 4, 'on' => true],
+            'trust'    => ['emoji' => '💚', 'text' => 'چطوری میتوانم به شما اعتماد کنم','color' => 'red',   'row' => 5, 'on' => true],
+        ],
+
+        'texts' => [
+            'welcome'      => "👋 سلام {name} عزیز\nبه فروشگاه ما خوش آمدید.\n\nاز منوی پایین یکی از گزینه‌ها را انتخاب کنید.",
+            'account'      => "👤 <b>حساب کاربری</b>\n\n🆔 آیدی: <code>{id}</code>\n👤 نام: {name}\n📛 یوزرنیم: {username}\n\n💰 موجودی: <b>{balance}</b> تومان\n🛒 خریدها: {orders}\n👥 زیرمجموعه: {referrals}\n💵 درآمد معرفی: {ref_earned} تومان\n\n📅 عضویت: {joined}",
+            'trust'        => "💚 <b>چرا می‌توانید به ما اعتماد کنید؟</b>\n\n✅ سال‌ها سابقه فعالیت\n✅ تحویل آنی و خودکار\n✅ پشتیبانی ۲۴ ساعته\n✅ ضمانت بازگشت وجه\n✅ هزاران مشتری راضی\n\nبرای مشاهده نظرات مشتریان به کانال ما مراجعه کنید.",
+            'support'      => "📞 <b>پشتیبانی</b>\n\nاز روش‌های زیر می‌توانید با ما در ارتباط باشید:",
+            'orders_empty' => "📊 هنوز سفارشی ثبت نکرده‌اید.",
+            'orders_head'  => "📊 <b>سفارش‌های شما</b>\n",
+            'referral'     => "👥 <b>زیر مجموعه گیری</b>\n\nبا دعوت دوستان خود <b>{percent}%</b> از هر خرید آن‌ها را دریافت کنید.\n\n🔗 لینک اختصاصی شما:\n{link}\n\n👥 تعداد زیرمجموعه: <b>{referrals}</b>\n💵 درآمد شما: <b>{ref_earned}</b> تومان",
+            'topup'        => "➕ <b>افزایش موجودی</b>\n\nمبلغ مورد نظر را به تومان وارد کنید (فقط عدد):",
+            'buy_empty'    => "🛒 در حال حاضر محصولی برای فروش موجود نیست.",
+            'buy_head'     => "🛒 <b>محصولات</b>\n\nیکی از محصولات زیر را انتخاب کنید:\n",
+            'pay_info'     => "💳 <b>اطلاعات پرداخت</b>\n\n{title}\nمبلغ: <b>{amount} {currency}</b>\nروش: {method}\n\n💠 مقصد پرداخت:\n<code>{wallet}</code>\n\n🧾 شناسه سفارش: <code>{id}</code>\n\n⚠️ بعد از واریز، دکمه «ارسال رسید» را بزنید.",
+            'receipt_ask'  => "🧾 لطفا رسید پرداخت را بفرستید.\n\nمی‌توانید <b>عکس رسید</b> یا <b>کد تراکنش</b> ارسال کنید.",
+            'receipt_ok'   => "✅ رسید شما ثبت شد.\n\n⏳ پس از تایید ادمین اطلاع داده می‌شود.",
+            'approved'     => "✅ <b>سفارش شما تایید شد!</b>",
+            'rejected'     => "❌ سفارش شما تایید نشد.\nدر صورت نیاز با پشتیبانی تماس بگیرید.",
+            'no_balance'   => "❌ موجودی شما کافی نیست.\nموجودی فعلی: {balance} تومان",
+            'banned'       => "🚫 دسترسی شما مسدود شده است.",
+        ],
+
+        // ۱۰ روش پشتیبانی — مستقیم و غیرمستقیم
+        'support_methods' => [
+            ['on' => true,  'kind' => 'direct',   'type' => 'url',    'emoji' => '💬', 'label' => 'چت مستقیم با پشتیبان', 'value' => ''],
+            ['on' => true,  'kind' => 'direct',   'type' => 'ticket', 'emoji' => '🎫', 'label' => 'ارسال تیکت در ربات',   'value' => ''],
+            ['on' => true,  'kind' => 'direct',   'type' => 'phone',  'emoji' => '☎️', 'label' => 'تماس تلفنی',            'value' => ''],
+            ['on' => true,  'kind' => 'direct',   'type' => 'url',    'emoji' => '📱', 'label' => 'واتساپ',                'value' => ''],
+            ['on' => false, 'kind' => 'direct',   'type' => 'url',    'emoji' => '✈️', 'label' => 'ایتا',                  'value' => ''],
+            ['on' => true,  'kind' => 'indirect', 'type' => 'url',    'emoji' => '📢', 'label' => 'کانال اطلاع‌رسانی',     'value' => ''],
+            ['on' => true,  'kind' => 'indirect', 'type' => 'url',    'emoji' => '👥', 'label' => 'گروه گفتگو',            'value' => ''],
+            ['on' => true,  'kind' => 'indirect', 'type' => 'text',   'emoji' => '❓', 'label' => 'سوالات متداول',         'value' => "❓ <b>سوالات متداول</b>\n\nهنوز متنی تنظیم نشده است."],
+            ['on' => false, 'kind' => 'indirect', 'type' => 'url',    'emoji' => '🌐', 'label' => 'وب‌سایت',               'value' => ''],
+            ['on' => false, 'kind' => 'indirect', 'type' => 'text',   'emoji' => '📧', 'label' => 'ایمیل',                 'value' => ''],
+        ],
+
+        'referral' => ['on' => true, 'percent' => 10],
+
+        'wallets' => [
+            'usdt' => '', 'trx' => '', 'card' => '', 'card_name' => '',
+        ],
+
+        // پیش‌فرض ربات‌های اپلودر — روی هر ربات جدید اعمال می‌شود
+        'uploader' => [
+            'delete_seconds'  => 30,
+            'protect_content' => true,
+            'force_join'      => true,
+            'inline_wait'     => true,
+            'start_text'      => "👋 سلام {name}\n\nاین ربات فایل‌های ما را برای شما ارسال می‌کند.\nبرای دریافت فایل روی لینکی که دریافت کرده‌اید کلیک کنید.",
+            'join_text'       => "🔒 برای دریافت فایل، ابتدا در کانال‌های زیر عضو شوید:",
+            'joined_btn'      => "✅ عضو شدم",
+            'warn_text'       => "⚠️ این فایل تا <b>{sec} ثانیه</b> دیگر حذف می‌شود.\nلطفا آن را ذخیره یا فوروارد کنید.",
+            'deleted_text'    => "🗑 فایل حذف شد.\nبرای دریافت دوباره، روی لینک کلیک کنید.",
+            'expired_text'    => "❌ این لینک معتبر نیست یا حذف شده است.",
+        ],
+    ];
+}
+
+function cfg($refresh = false) {
+    static $c = null;
+    if ($c === null || $refresh) {
+        $saved = load('config');
+        $c = array_replace_recursive(defaultConfig(), is_array($saved) ? $saved : []);
+        // این دو باید جایگزین شوند نه ادغام عمقی
+        if (!empty($saved['support_methods'])) $c['support_methods'] = $saved['support_methods'];
+        if (!empty($saved['buttons']))         $c['buttons'] = array_replace_recursive(defaultConfig()['buttons'], $saved['buttons']);
+    }
+    return $c;
+}
+
+function cfgSet(callable $fn) {
+    mutate('config', function (&$c) use ($fn) {
+        if (!is_array($c) || !$c) $c = defaultConfig();
+        $fn($c);
+    });
+    cfg(true);   // کش را تازه کن وگرنه ادامه همین درخواست مقدار قدیمی را می‌بیند
+}
+
+function T($key, $vars = []) {
+    $t = cfg()['texts'][$key] ?? '';
+    foreach ($vars as $k => $v) $t = str_replace('{' . $k . '}', (string)$v, $t);
+    return $t;
+}
+
+/** برچسب نهایی یک دکمه بر اساس حالت نمایش */
+function btnLabel($b, $forceMode = null) {
+    $mode = $forceMode ?: cfg()['ui']['mode'];
+    $col  = colorMap()[$b['color'] ?? 'none'] ?? '';
+    if ($mode === 'glass') return trim($col . ' ' . $b['text']);
+    if (!empty(cfg()['ui']['show_color_in_menu'])) return trim($col . ' ' . $b['emoji'] . ' ' . $b['text']);
+    return trim(($b['emoji'] ?? '') . ' ' . $b['text']);
+}
+
+/** ساخت منو/کیبورد اصلی بر اساس تنظیمات */
+function mainKeyboard() {
+    $c = cfg();
+    $rows = [];
+    foreach ($c['buttons'] as $id => $b) {
+        if (empty($b['on'])) continue;
+        $rows[(int)($b['row'] ?? 99)][] = ['id' => $id, 'b' => $b];
+    }
+    ksort($rows);
+
+    if ($c['ui']['mode'] === 'glass') {
+        $out = [];
+        foreach ($rows as $r) {
+            $line = [];
+            foreach ($r as $item) $line[] = ['text' => btnLabel($item['b']), 'callback_data' => 'menu_' . $item['id']];
+            $out[] = $line;
+        }
+        return inlineKb($out);
+    }
+
+    $out = [];
+    foreach ($rows as $r) {
+        $line = [];
+        foreach ($r as $item) $line[] = ['text' => btnLabel($item['b'])];
+        $out[] = $line;
+    }
+    return menuKb($out);
+}
+
+/** تشخیص اینکه کاربر کدام دکمه منو را زده */
+function findMenuAction($text) {
+    $text = trim($text);
+    if ($text === '') return null;
+    foreach (cfg()['buttons'] as $id => $b) {
+        if (empty($b['on'])) continue;
+        if (btnLabel($b) === $text) return $id;
+        if (btnLabel($b, 'menu') === $text) return $id;
+        if (btnLabel($b, 'glass') === $text) return $id;
+        if (trim($b['text']) === $text) return $id;
+    }
+    return null;
+}
+
+// ============================================================
+// 👤 کاربران، کیف پول، زیرمجموعه
 // ============================================================
 
 function getUser($id) {
-    $users = load('users');
-    return $users[(string)$id] ?? null;
+    $u = load('users');
+    return $u[(string)$id] ?? null;
 }
 
-function touchUser($id, $username, $firstName = '') {
-    return mutate('users', function (&$users) use ($id, $username, $firstName) {
+function touchUser($id, $username = '', $firstName = '', $referrer = null) {
+    return mutate('users', function (&$users) use ($id, $username, $firstName, $referrer) {
         $k = (string)$id;
+        $isNew = !isset($users[$k]);
         $users[$k] = array_merge([
             'telegram_id' => (int)$id,
-            'joined_at'   => nowStr(),
+            'balance'     => 0,
+            'referrer'    => null,
+            'ref_earned'  => 0,
             'banned'      => false,
+            'joined_at'   => nowStr(),
         ], $users[$k] ?? [], [
             'username'   => $username,
             'first_name' => $firstName,
             'seen_at'    => nowStr(),
         ]);
+        // معرف فقط یک بار و فقط برای کاربر جدید ثبت می‌شود
+        if ($isNew && $referrer && (int)$referrer !== (int)$id && isset($users[(string)$referrer])) {
+            $users[$k]['referrer'] = (int)$referrer;
+        }
         return $users[$k];
     });
 }
 
-function userIsBanned($id) {
-    $u = getUser($id);
-    return $u && !empty($u['banned']);
-}
-
-// ============================================================
-// 🧠 وضعیت گفتگو (State)
-// ============================================================
-
-function getState($userId) {
-    $s = load('states');
-    return $s[(string)$userId] ?? null;
-}
-
-function setState($userId, $action, $payload = []) {
-    mutate('states', function (&$s) use ($userId, $action, $payload) {
-        $s[(string)$userId] = ['action' => $action, 'data' => $payload, 'at' => nowStr()];
+function addBalance($userId, $amount) {
+    mutate('users', function (&$users) use ($userId, $amount) {
+        $k = (string)$userId;
+        if (!isset($users[$k])) return;
+        $users[$k]['balance'] = round((float)$users[$k]['balance'] + (float)$amount, 2);
     });
 }
 
-function clearState($userId) {
-    mutate('states', function (&$s) use ($userId) {
-        unset($s[(string)$userId]);
+function countReferrals($userId) {
+    $n = 0;
+    foreach (load('users') as $u) if ((int)($u['referrer'] ?? 0) === (int)$userId) $n++;
+    return $n;
+}
+
+function payReferralCommission($buyerId, $amount) {
+    $u = getUser($buyerId);
+    if (!$u || empty($u['referrer'])) return;
+    $c = cfg()['referral'];
+    if (empty($c['on'])) return;
+    $commission = round((float)$amount * ((float)$c['percent'] / 100), 2);
+    if ($commission <= 0) return;
+    addBalance($u['referrer'], $commission);
+    mutate('users', function (&$users) use ($u, $commission) {
+        $k = (string)$u['referrer'];
+        if (isset($users[$k])) $users[$k]['ref_earned'] = round((float)($users[$k]['ref_earned'] ?? 0) + $commission, 2);
     });
+    sendMsg(BOT_TOKEN, $u['referrer'],
+        "🎉 یکی از زیرمجموعه‌های شما خرید کرد!\n💵 پورسانت شما: <b>" . fmtNum($commission) . "</b> تومان");
 }
 
 // ============================================================
-// 🛍️ ممبرشیپ
+// 🧠 وضعیت گفتگو
 // ============================================================
 
-class MembershipManager
+function getState($uid) { $s = load('states'); return $s[(string)$uid] ?? null; }
+function setState($uid, $action, $data = []) {
+    mutate('states', function (&$s) use ($uid, $action, $data) {
+        $s[(string)$uid] = ['action' => $action, 'data' => $data, 'at' => nowStr()];
+    });
+}
+function clearState($uid) { mutate('states', function (&$s) use ($uid) { unset($s[(string)$uid]); }); }
+
+// ============================================================
+// 🛒 محصولات
+// ============================================================
+
+class Product
 {
-    public static function all() {
-        return load('memberships');
-    }
+    public static function all() { return load('products'); }
 
-    public static function get($id) {
-        $all = load('memberships');
-        return $all[$id] ?? null;
-    }
+    public static function get($id) { $a = load('products'); return $a[$id] ?? null; }
 
-    public static function create($name, $price, $currency, $limit = 0, $desc = '') {
-        $id = uid('m');
-        mutate('memberships', function (&$all) use ($id, $name, $price, $currency, $limit, $desc) {
-            $all[$id] = [
-                'id'         => $id,
-                'name'       => $name,
-                'desc'       => $desc,
-                'price'      => (float)$price,
-                'currency'   => $currency,
-                'limit'      => (int)$limit,
-                'members'    => [],
-                'bot_id'     => null,
-                'active'     => true,
-                'created_at' => nowStr(),
+    public static function create($name, $price, $currency, $limit = 0, $desc = '', $botId = null) {
+        $id = uid('pr');
+        mutate('products', function (&$a) use ($id, $name, $price, $currency, $limit, $desc, $botId) {
+            $a[$id] = [
+                'id' => $id, 'name' => $name, 'desc' => $desc,
+                'price' => (float)$price, 'currency' => $currency,
+                'limit' => (int)$limit, 'buyers' => [],
+                'bot_id' => $botId, 'link_code' => '',
+                'active' => true, 'created_at' => nowStr(),
             ];
         });
         return self::get($id);
     }
 
-    public static function isFull($m) {
-        return ((int)$m['limit']) > 0 && count($m['members']) >= (int)$m['limit'];
+    public static function isFull($p) {
+        return ((int)$p['limit']) > 0 && count($p['buyers']) >= (int)$p['limit'];
     }
 
-    public static function isMember($membershipId, $userId) {
-        $m = self::get($membershipId);
-        if (!$m) return false;
-        return in_array((int)$userId, array_map('intval', $m['members']), true);
+    public static function hasBought($pid, $uid) {
+        $p = self::get($pid);
+        return $p && in_array((int)$uid, array_map('intval', $p['buyers']), true);
     }
 
-    public static function addMember($membershipId, $userId) {
-        return mutate('memberships', function (&$all) use ($membershipId, $userId) {
-            if (!isset($all[$membershipId])) return false;
-            $members = array_map('intval', $all[$membershipId]['members']);
-            if (!in_array((int)$userId, $members, true)) {
-                $members[] = (int)$userId;
-                $all[$membershipId]['members'] = array_values($members);
-            }
-            return true;
+    public static function addBuyer($pid, $uid) {
+        mutate('products', function (&$a) use ($pid, $uid) {
+            if (!isset($a[$pid])) return;
+            $b = array_map('intval', $a[$pid]['buyers']);
+            if (!in_array((int)$uid, $b, true)) { $b[] = (int)$uid; $a[$pid]['buyers'] = array_values($b); }
         });
-    }
-
-    public static function removeMember($membershipId, $userId) {
-        mutate('memberships', function (&$all) use ($membershipId, $userId) {
-            if (!isset($all[$membershipId])) return;
-            $all[$membershipId]['members'] = array_values(array_filter(
-                array_map('intval', $all[$membershipId]['members']),
-                fn($u) => $u !== (int)$userId
-            ));
-        });
-    }
-
-    public static function stats($id) {
-        $m = self::get($id);
-        if (!$m) return null;
-        $count = count($m['members']);
-        return [
-            'name'      => $m['name'],
-            'members'   => $count,
-            'limit'     => (int)$m['limit'],
-            'available' => ((int)$m['limit']) > 0 ? max(0, (int)$m['limit'] - $count) : '∞',
-            'price'     => $m['price'],
-            'currency'  => $m['currency'],
-        ];
     }
 }
 
 // ============================================================
-// 🤖 ربات‌های فرعی
+// 🧾 سفارش‌ها (خرید محصول + شارژ کیف پول)
 // ============================================================
 
-class BotManager
+class Order
 {
-    public static function all() { return load('bots'); }
+    const PENDING = 'pending', REVIEW = 'review', APPROVED = 'approved', REJECTED = 'rejected';
 
-    public static function get($id) {
-        $all = load('bots');
-        return $all[$id] ?? null;
-    }
+    public static function all() { return load('orders'); }
+    public static function get($id) { $a = load('orders'); return $a[$id] ?? null; }
 
-    public static function create($token, $username, $membershipId = null) {
-        $id = uid('b');
-        mutate('bots', function (&$all) use ($id, $token, $username, $membershipId) {
-            $all[$id] = [
-                'id'            => $id,
-                'token'         => $token,
-                'username'      => ltrim($username, '@'),
-                'membership_id' => $membershipId,
-                'active'        => true,
-                'created_at'    => nowStr(),
-            ];
-        });
-        if ($membershipId) {
-            mutate('memberships', function (&$all) use ($membershipId, $id) {
-                if (isset($all[$membershipId])) $all[$membershipId]['bot_id'] = $id;
-            });
-        }
-        return self::get($id);
-    }
-
-    public static function botFor($membershipId) {
-        $m = MembershipManager::get($membershipId);
-        if (!$m || empty($m['bot_id'])) return null;
-        return self::get($m['bot_id']);
-    }
-}
-
-// ============================================================
-// 🔗 کدهای دسترسی — پل بین ممبرشیپ و ربات اپلودری
-// ============================================================
-
-class AccessManager
-{
-    /** ساخت کد دسترسی یکتا و ذخیره آن (باگ قبلی: کد ساخته می‌شد ولی ذخیره نمی‌شد) */
-    public static function issue($membershipId, $userId, $botId) {
-        $code = genCode(12);
-        mutate('access', function (&$all) use ($code, $membershipId, $userId, $botId) {
-            $all[$code] = [
-                'code'          => $code,
-                'membership_id' => $membershipId,
-                'user_id'       => (int)$userId,
-                'bot_id'        => $botId,
-                'created_at'    => nowStr(),
-                'used_at'       => null,
-                'revoked'       => false,
-            ];
-        });
-        return $code;
-    }
-
-    public static function get($code) {
-        $all = load('access');
-        return $all[$code] ?? null;
-    }
-
-    /** کد فعال کاربر برای این ممبرشیپ، اگر نبود بساز */
-    public static function ensure($membershipId, $userId, $botId) {
-        $all = load('access');
-        foreach ($all as $code => $a) {
-            if ($a['membership_id'] === $membershipId
-                && (int)$a['user_id'] === (int)$userId
-                && empty($a['revoked'])) {
-                return $code;
-            }
-        }
-        return self::issue($membershipId, $userId, $botId);
-    }
-
-    public static function markUsed($code) {
-        mutate('access', function (&$all) use ($code) {
-            if (isset($all[$code]) && empty($all[$code]['used_at'])) {
-                $all[$code]['used_at'] = nowStr();
-            }
-        });
-    }
-
-    /**
-     * اعتبارسنجی کامل: کد وجود دارد، باطل نشده، متعلق به همین کاربر است،
-     * و کاربر واقعا عضو تایید‌شده ممبرشیپ است.
-     */
-    public static function validate($code, $userId) {
-        $a = self::get($code);
-        if (!$a) return [false, 'کد دسترسی معتبر نیست.'];
-        if (!empty($a['revoked'])) return [false, 'این کد دسترسی باطل شده است.'];
-        if ((int)$a['user_id'] !== (int)$userId) return [false, 'این لینک برای حساب دیگری صادر شده است.'];
-        if (!MembershipManager::isMember($a['membership_id'], $userId)) {
-            return [false, 'عضویت شما فعال نیست.'];
-        }
-        return [true, $a];
-    }
-
-    public static function linkFor($membershipId, $userId) {
-        $bot = BotManager::botFor($membershipId);
-        if (!$bot) return null;
-        $code = self::ensure($membershipId, $userId, $bot['id']);
-        return "https://t.me/{$bot['username']}?start={$code}";
-    }
-}
-
-// ============================================================
-// 💳 پرداخت‌ها
-// ============================================================
-
-class PaymentManager
-{
-    const PENDING  = 'pending';   // ساخته شده، منتظر رسید کاربر
-    const REVIEW   = 'review';    // رسید آمده، منتظر تایید ادمین
-    const APPROVED = 'approved';  // ادمین تایید کرد
-    const REJECTED = 'rejected';  // ادمین رد کرد
-
-    public static function all() { return load('payments'); }
-
-    public static function get($id) {
-        $all = load('payments');
-        return $all[$id] ?? null;
-    }
-
-    public static function create($userId, $username, $membershipId, $amount, $currency) {
-        $id = uid('p'); // یکتا — باگ قبلی: time() برای دو خرید همزمان یکسان می‌شد
-        mutate('payments', function (&$all) use ($id, $userId, $username, $membershipId, $amount, $currency) {
-            $all[$id] = [
-                'id'            => $id,
-                'user_id'       => (int)$userId,
-                'username'      => $username,
-                'membership_id' => $membershipId,
-                'amount'        => (float)$amount,
-                'currency'      => $currency,
-                'status'        => self::PENDING,
-                'receipt_type'  => null,
-                'receipt'       => null,
-                'created_at'    => nowStr(),
-                'decided_at'    => null,
-                'decided_by'    => null,
+    public static function create($userId, $username, $type, $productId, $amount, $currency) {
+        $id = uid('or');
+        mutate('orders', function (&$a) use ($id, $userId, $username, $type, $productId, $amount, $currency) {
+            $a[$id] = [
+                'id' => $id, 'user_id' => (int)$userId, 'username' => $username,
+                'type' => $type,                 // product | topup
+                'product_id' => $productId,
+                'amount' => (float)$amount, 'currency' => $currency,
+                'status' => self::PENDING,
+                'receipt_type' => null, 'receipt' => null,
+                'created_at' => nowStr(), 'decided_at' => null, 'decided_by' => null,
             ];
         });
         return $id;
     }
 
     public static function attachReceipt($id, $type, $value) {
-        return mutate('payments', function (&$all) use ($id, $type, $value) {
-            if (!isset($all[$id])) return false;
-            if ($all[$id]['status'] !== self::PENDING) return false;
-            $all[$id]['receipt_type'] = $type;
-            $all[$id]['receipt']      = $value;
-            $all[$id]['status']       = self::REVIEW;
-            $all[$id]['receipt_at']   = nowStr();
+        return mutate('orders', function (&$a) use ($id, $type, $value) {
+            if (!isset($a[$id]) || $a[$id]['status'] !== self::PENDING) return false;
+            $a[$id]['receipt_type'] = $type;
+            $a[$id]['receipt'] = $value;
+            $a[$id]['status'] = self::REVIEW;
             return true;
         });
     }
 
-    /**
-     * تایید پرداخت — فقط از مسیرهایی صدا زده می‌شود که هویت ادمین چک شده.
-     * برگشت: [موفق؟, پیام]
-     */
     public static function approve($id, $adminId) {
-        $ok = mutate('payments', function (&$all) use ($id, $adminId) {
-            if (!isset($all[$id])) return 'notfound';
-            if (in_array($all[$id]['status'], [self::APPROVED, self::REJECTED], true)) return 'done';
-            $all[$id]['status']     = self::APPROVED;
-            $all[$id]['decided_at'] = nowStr();
-            $all[$id]['decided_by'] = (int)$adminId;
+        $r = mutate('orders', function (&$a) use ($id, $adminId) {
+            if (!isset($a[$id])) return 'notfound';
+            if (in_array($a[$id]['status'], [self::APPROVED, self::REJECTED], true)) return 'done';
+            $a[$id]['status'] = self::APPROVED;
+            $a[$id]['decided_at'] = nowStr();
+            $a[$id]['decided_by'] = (int)$adminId;
             return 'ok';
         });
+        if ($r === 'notfound') return [false, 'سفارش پیدا نشد.'];
+        if ($r === 'done')     return [false, 'این سفارش قبلا بررسی شده است.'];
 
-        if ($ok === 'notfound') return [false, 'پرداخت پیدا نشد.'];
-        if ($ok === 'done')     return [false, 'این پرداخت قبلا بررسی شده است.'];
+        $o = self::get($id);
 
-        $p = self::get($id);
-        $m = MembershipManager::get($p['membership_id']);
-        if (!$m) return [false, 'ممبرشیپ پیدا نشد.'];
-
-        if (MembershipManager::isFull($m) && !MembershipManager::isMember($m['id'], $p['user_id'])) {
-            return [false, 'ظرفیت این ممبرشیپ تکمیل است.'];
+        if ($o['type'] === 'topup') {
+            addBalance($o['user_id'], $o['amount']);
+            return [true, $o];
         }
 
-        MembershipManager::addMember($p['membership_id'], $p['user_id']);
-        return [true, $p];
+        $p = Product::get($o['product_id']);
+        if (!$p) return [false, 'محصول پیدا نشد.'];
+        if (Product::isFull($p) && !Product::hasBought($p['id'], $o['user_id'])) {
+            return [false, 'ظرفیت این محصول تکمیل است.'];
+        }
+        Product::addBuyer($p['id'], $o['user_id']);
+        payReferralCommission($o['user_id'], $o['amount']);
+        return [true, $o];
     }
 
     public static function reject($id, $adminId) {
-        $ok = mutate('payments', function (&$all) use ($id, $adminId) {
-            if (!isset($all[$id])) return 'notfound';
-            if (in_array($all[$id]['status'], [self::APPROVED, self::REJECTED], true)) return 'done';
-            $all[$id]['status']     = self::REJECTED;
-            $all[$id]['decided_at'] = nowStr();
-            $all[$id]['decided_by'] = (int)$adminId;
+        $r = mutate('orders', function (&$a) use ($id, $adminId) {
+            if (!isset($a[$id])) return 'notfound';
+            if (in_array($a[$id]['status'], [self::APPROVED, self::REJECTED], true)) return 'done';
+            $a[$id]['status'] = self::REJECTED;
+            $a[$id]['decided_at'] = nowStr();
+            $a[$id]['decided_by'] = (int)$adminId;
             return 'ok';
         });
-        if ($ok === 'notfound') return [false, 'پرداخت پیدا نشد.'];
-        if ($ok === 'done')     return [false, 'این پرداخت قبلا بررسی شده است.'];
+        if ($r === 'notfound') return [false, 'سفارش پیدا نشد.'];
+        if ($r === 'done')     return [false, 'این سفارش قبلا بررسی شده است.'];
         return [true, self::get($id)];
+    }
+
+    public static function forUser($uid) {
+        $out = [];
+        foreach (self::all() as $o) if ((int)$o['user_id'] === (int)$uid) $out[] = $o;
+        usort($out, fn($a, $b) => strcmp($b['created_at'], $a['created_at']));
+        return $out;
     }
 
     public static function countBy($status) {
         $n = 0;
-        foreach (self::all() as $p) if ($p['status'] === $status) $n++;
+        foreach (self::all() as $o) if ($o['status'] === $status) $n++;
         return $n;
     }
+
+    public static function statusLabel($s) {
+        return [
+            'pending'  => '⏳ منتظر رسید',
+            'review'   => '🧾 در حال بررسی',
+            'approved' => '✅ تایید شده',
+            'rejected' => '❌ رد شده',
+        ][$s] ?? '—';
+    }
 }
 
 // ============================================================
-// 📤 داده ربات فرعی
+// 🤖 ربات‌های اپلودر
 // ============================================================
 
-function botFile($botId, $name) { return 'bots/' . $botId . '/' . $name; }
-
-function botSettings($botId) {
-    return array_merge([
-        'welcome'         => "سلام {name} 👋\nبه ربات اختصاصی اعضا خوش آمدید.",
-        'protect_content' => false,
-        'caption'         => '',
-    ], load(botFile($botId, 'settings')));
-}
-
-class FileManager
+class BotManager
 {
-    public static function addFile($botId, $fileId, $name, $type, $batchCode = null) {
-        $code = genCode(10);
-        mutate(botFile($botId, 'files'), function (&$all) use ($code, $fileId, $name, $type, $batchCode) {
-            $all[$code] = [
-                'code'       => $code,
-                'file_id'    => $fileId,
-                'file_name'  => $name,
-                'file_type'  => $type,
-                'batch_code' => $batchCode,
-                'downloads'  => 0,
-                'created_at' => nowStr(),
+    public static function all() { return load('bots'); }
+    public static function get($id) { $a = load('bots'); return $a[$id] ?? null; }
+
+    public static function create($token, $username) {
+        $id = uid('b');
+        mutate('bots', function (&$a) use ($id, $token, $username) {
+            $a[$id] = [
+                'id' => $id, 'token' => $token, 'username' => ltrim($username, '@'),
+                'active' => true, 'created_at' => nowStr(),
+                'settings' => cfg()['uploader'],   // تنظیمات پیش‌فرض روی هر ربات جدید
             ];
         });
-        return $code;
+        return self::get($id);
     }
 
-    public static function getFile($botId, $code) {
-        $all = load(botFile($botId, 'files'));
-        return $all[$code] ?? null;
+    /** تنظیمات یک ربات: مقادیر خودش روی پیش‌فرض ربات مادر سوار می‌شود */
+    public static function settings($botId) {
+        $b = self::get($botId);
+        $base = cfg()['uploader'];
+        return array_merge($base, is_array($b['settings'] ?? null) ? $b['settings'] : []);
     }
 
-    public static function listFiles($botId) {
-        return load(botFile($botId, 'files'));
-    }
-
-    public static function countDownload($botId, $code) {
-        mutate(botFile($botId, 'files'), function (&$all) use ($code) {
-            if (isset($all[$code])) $all[$code]['downloads'] = (int)$all[$code]['downloads'] + 1;
+    public static function setSetting($botId, $key, $value) {
+        mutate('bots', function (&$a) use ($botId, $key, $value) {
+            if (!isset($a[$botId])) return;
+            if (!is_array($a[$botId]['settings'] ?? null)) $a[$botId]['settings'] = [];
+            $a[$botId]['settings'][$key] = $value;
         });
-    }
-
-    public static function startBatch($botId, $title = '') {
-        $code = genCode(10);
-        mutate(botFile($botId, 'batches'), function (&$all) use ($code, $title) {
-            $all[$code] = [
-                'code' => $code, 'title' => $title ?: 'مجموعه فایل',
-                'files' => [], 'downloads' => 0, 'created_at' => nowStr(),
-            ];
-        });
-        return $code;
-    }
-
-    public static function addToBatch($botId, $batchCode, $fileCode) {
-        mutate(botFile($botId, 'batches'), function (&$all) use ($batchCode, $fileCode) {
-            if (isset($all[$batchCode])) $all[$batchCode]['files'][] = $fileCode;
-        });
-    }
-
-    public static function getBatch($botId, $code) {
-        $all = load(botFile($botId, 'batches'));
-        return $all[$code] ?? null;
-    }
-
-    public static function listBatches($botId) {
-        return load(botFile($botId, 'batches'));
     }
 }
 
-function botUserTouch($botId, $userId, $username) {
-    mutate(botFile($botId, 'users'), function (&$all) use ($userId, $username) {
+// ============================================================
+// 📢 کانال‌های عضویت اجباری (سراسری — از ربات مادر)
+// ============================================================
+
+class Channels
+{
+    public static function all() { return load('channels'); }
+
+    public static function add($chatId, $title, $url) {
+        $id = uid('ch');
+        mutate('channels', function (&$a) use ($id, $chatId, $title, $url) {
+            $a[$id] = ['id' => $id, 'chat_id' => $chatId, 'title' => $title, 'url' => $url, 'on' => true];
+        });
+        return $id;
+    }
+
+    public static function remove($id) {
+        mutate('channels', function (&$a) use ($id) { unset($a[$id]); });
+    }
+
+    /**
+     * کانال‌هایی که کاربر هنوز عضو نشده.
+     *
+     * اگر بررسی ممکن نباشد (ربات در کانال ادمین نیست) کانال را
+     * «عضو نشده» حساب می‌کنیم — یعنی قفل بسته می‌ماند. اگر برعکس عمل
+     * می‌کردیم، یک کانال بدتنظیم بی‌سروصدا کل عضویت اجباری را خاموش می‌کرد.
+     */
+    public static function missing($token, $userId) {
+        $missing = [];
+        foreach (self::all() as $ch) {
+            if (empty($ch['on'])) continue;
+            $r = tg($token, 'getChatMember', ['chat_id' => $ch['chat_id'], 'user_id' => $userId]);
+            if (empty($r['ok'])) { $ch['unverifiable'] = true; $missing[] = $ch; continue; }
+            $status = $r['result']['status'] ?? '';
+            if (!in_array($status, ['member', 'administrator', 'creator'], true)) $missing[] = $ch;
+        }
+        return $missing;
+    }
+
+    /** بررسی سلامت: آیا این ربات می‌تواند عضویت کانال‌ها را چک کند؟ */
+    public static function health($token) {
+        $out = [];
+        foreach (self::all() as $ch) {
+            $r = tg($token, 'getChatMember', ['chat_id' => $ch['chat_id'], 'user_id' => (int)ADMIN_ID]);
+            $out[$ch['id']] = [
+                'title' => $ch['title'],
+                'ok'    => !empty($r['ok']),
+                'error' => $r['description'] ?? '',
+            ];
+        }
+        return $out;
+    }
+}
+
+// ============================================================
+// 🔗 لینک‌های اپلودر
+// ============================================================
+
+class Links
+{
+    public static function file($botId) { return 'bots/' . $botId . '/links'; }
+
+    public static function all($botId) { return load(self::file($botId)); }
+    public static function get($botId, $code) { $a = load(self::file($botId)); return $a[$code] ?? null; }
+
+    public static function create($botId, $files, $title = '') {
+        $code = genCode(12);
+        mutate(self::file($botId), function (&$a) use ($code, $files, $title) {
+            $a[$code] = [
+                'code' => $code, 'title' => $title,
+                'files' => $files,            // [['type'=>..,'file_id'=>..,'name'=>..,'caption'=>..], ...]
+                'clicks' => 0, 'delivered' => 0,
+                'active' => true, 'created_at' => nowStr(),
+            ];
+        });
+        return $code;
+    }
+
+    public static function hit($botId, $code, $field) {
+        mutate(self::file($botId), function (&$a) use ($code, $field) {
+            if (isset($a[$code])) $a[$code][$field] = (int)($a[$code][$field] ?? 0) + 1;
+        });
+    }
+
+    public static function remove($botId, $code) {
+        mutate(self::file($botId), function (&$a) use ($code) { unset($a[$code]); });
+    }
+
+    public static function url($botId, $code) {
+        $b = BotManager::get($botId);
+        return $b ? "https://t.me/{$b['username']}?start={$code}" : null;
+    }
+}
+
+function botUserTouch($botId, $userId, $username, $firstName = '') {
+    mutate('bots/' . $botId . '/users', function (&$a) use ($userId, $username, $firstName) {
         $k = (string)$userId;
-        $all[$k] = array_merge(['joined_at' => nowStr()], $all[$k] ?? [], [
-            'id' => (int)$userId, 'username' => $username, 'seen_at' => nowStr(),
+        $a[$k] = array_merge(['joined_at' => nowStr()], $a[$k] ?? [], [
+            'id' => (int)$userId, 'username' => $username,
+            'first_name' => $firstName, 'seen_at' => nowStr(),
         ]);
     });
 }
 
 // ============================================================
-// 👑 اعلان به ادمین
+// 🗑 صف حذف خودکار پیام‌ها
 // ============================================================
 
-function notifyAdminPayment($paymentId) {
-    global $EMOJI;
-    $p = PaymentManager::get($paymentId);
-    if (!$p) return;
-    $m = MembershipManager::get($p['membership_id']);
-    $memName = $m ? $m['name'] : '—';
-    $uname = $p['username'] ? '@' . $p['username'] : '—';
+function scheduleDelete($botId, $chatId, $msgIds, $seconds, $noticeId = null) {
+    $due = time() + max(1, (int)$seconds);
+    mutate('delqueue', function (&$q) use ($botId, $chatId, $msgIds, $due, $noticeId) {
+        $q[] = [
+            'bot_id' => $botId, 'chat_id' => $chatId,
+            'msg_ids' => array_values(array_filter($msgIds)),
+            'notice_id' => $noticeId, 'due' => $due,
+        ];
+    });
+}
 
-    $text  = "{$EMOJI['receipt']} <b>درخواست تایید پرداخت</b>\n\n";
-    $text .= "کاربر: " . h($uname) . " (<code>{$p['user_id']}</code>)\n";
-    $text .= "ممبرشیپ: " . h($memName) . "\n";
-    $text .= "مبلغ: " . h($p['amount']) . ' ' . h($p['currency']) . "\n";
-    $text .= "شناسه: <code>" . h($p['id']) . "</code>\n";
-    $text .= "زمان: " . h($p['created_at']) . "\n\n";
-    if ($p['receipt_type'] === 'text') {
-        $text .= "{$EMOJI['premium']} رسید:\n<code>" . h($p['receipt']) . "</code>";
-    } else {
-        $text .= "{$EMOJI['premium']} رسید: تصویر (پایین ارسال شد)";
+/** حذف موارد سررسیدشده — در هر درخواست و در cron صدا زده می‌شود */
+function processDeleteQueue($limit = 60) {
+    $due = [];
+    mutate('delqueue', function (&$q) use (&$due, $limit) {
+        if (!$q) return;
+        $now = time();
+        $keep = [];
+        foreach ($q as $item) {
+            if (count($due) < $limit && (int)$item['due'] <= $now) $due[] = $item;
+            else $keep[] = $item;
+        }
+        $q = array_values($keep);
+    });
+
+    foreach ($due as $item) {
+        $bot = BotManager::get($item['bot_id']);
+        $token = $bot ? $bot['token'] : BOT_TOKEN;
+        foreach ($item['msg_ids'] as $mid) delMsg($token, $item['chat_id'], $mid);
+        if (!empty($item['notice_id'])) delMsg($token, $item['chat_id'], $item['notice_id']);
+        $set = $bot ? BotManager::settings($item['bot_id']) : cfg()['uploader'];
+        if (!empty($set['deleted_text'])) sendMsg($token, $item['chat_id'], $set['deleted_text']);
     }
+    return count($due);
+}
+
+/**
+ * اگر سرور اجازه بدهد، پاسخ را می‌بندد و در پس‌زمینه صبر می‌کند تا دقیقا سر وقت حذف کند.
+ * توجه: این کار یک worker را تا پایان مهلت نگه می‌دارد؛ برای ترافیک بالا
+ * بهتر است inline_wait را خاموش کنید و به‌جایش cron را هر دقیقه صدا بزنید.
+ */
+function tryImmediateDelete($botId, $chatId, $msgIds, $seconds, $noticeId = null) {
+    $set = BotManager::settings($botId);
+    if (empty($set['inline_wait'])) return false;
+    if (!function_exists('fastcgi_finish_request')) return false;
+    if ($seconds > 180) return false;     // مهلت طولانی → فقط از صف/کران استفاده کن
+
+    scheduleDelete($botId, $chatId, $msgIds, $seconds, $noticeId);
+    echo json_encode(['ok' => true]);
+    @fastcgi_finish_request();
+    @set_time_limit($seconds + 30);
+    sleep((int)$seconds);
+    processDeleteQueue();
+    exit;
+}
+
+// ============================================================
+// 🏠 ربات مادر — صفحه‌ها
+// ============================================================
+
+function showHome($uid, $chatId, $firstName) {
+    sendMsg(BOT_TOKEN, $chatId, T('welcome', ['name' => h($firstName)]), mainKeyboard());
+}
+
+function showAccount($uid, $chatId) {
+    $u = getUser($uid) ?: [];
+    $orders = 0;
+    foreach (Order::forUser($uid) as $o) if ($o['status'] === Order::APPROVED) $orders++;
+
+    $text = T('account', [
+        'id'         => $uid,
+        'name'       => h($u['first_name'] ?? '—'),
+        'username'   => !empty($u['username']) ? '@' . h($u['username']) : '—',
+        'balance'    => fmtNum($u['balance'] ?? 0),
+        'orders'     => $orders,
+        'referrals'  => countReferrals($uid),
+        'ref_earned' => fmtNum($u['ref_earned'] ?? 0),
+        'joined'     => h($u['joined_at'] ?? '—'),
+    ]);
+    sendMsg(BOT_TOKEN, $chatId, $text, inlineKb([
+        [['text' => '➕ افزایش موجودی', 'callback_data' => 'menu_topup']],
+        [['text' => '📊 سفارش‌های من', 'callback_data' => 'menu_orders']],
+    ]));
+}
+
+function showProducts($uid, $chatId) {
+    $prods = array_filter(Product::all(), fn($p) => !empty($p['active']));
+    if (!$prods) { sendMsg(BOT_TOKEN, $chatId, T('buy_empty')); return; }
+
+    $text = T('buy_head') . "\n";
+    $rows = [];
+    foreach ($prods as $p) {
+        $cnt  = count($p['buyers']);
+        $cap  = ((int)$p['limit']) > 0 ? "{$cnt}/{$p['limit']}" : "{$cnt}/∞";
+        $full = Product::isFull($p);
+        $text .= "\n💠 <b>" . h($p['name']) . "</b>\n";
+        if (!empty($p['desc'])) $text .= "   " . h($p['desc']) . "\n";
+        $text .= "   💰 " . fmtNum($p['price']) . ' ' . h($p['currency']) . "  |  👥 {$cap}\n";
+
+        if (Product::hasBought($p['id'], $uid)) {
+            $rows[] = [['text' => '📦 دریافت مجدد — ' . $p['name'], 'callback_data' => 'redeliver_' . $p['id']]];
+        } elseif ($full) {
+            $rows[] = [['text' => '🔴 تکمیل ظرفیت — ' . $p['name'], 'callback_data' => 'full_' . $p['id']]];
+        } else {
+            $rows[] = [['text' => '🟢 خرید ' . $p['name'] . ' — ' . fmtNum($p['price']) . ' ' . $p['currency'],
+                        'callback_data' => 'buy_' . $p['id']]];
+        }
+    }
+    sendMsg(BOT_TOKEN, $chatId, $text, inlineKb($rows));
+}
+
+function showOrders($uid, $chatId) {
+    $orders = Order::forUser($uid);
+    if (!$orders) { sendMsg(BOT_TOKEN, $chatId, T('orders_empty')); return; }
+
+    $text = T('orders_head') . "\n";
+    foreach (array_slice($orders, 0, 15) as $o) {
+        $title = $o['type'] === 'topup'
+            ? '➕ شارژ کیف پول'
+            : '🛒 ' . h(Product::get($o['product_id'])['name'] ?? '—');
+        $text .= "\n" . Order::statusLabel($o['status']) . "\n";
+        $text .= "   {$title}\n";
+        $text .= "   💰 " . fmtNum($o['amount']) . ' ' . h($o['currency']) . "\n";
+        $text .= "   🧾 <code>" . h($o['id']) . "</code>\n";
+        $text .= "   📅 " . h($o['created_at']) . "\n";
+    }
+    sendMsg(BOT_TOKEN, $chatId, $text);
+}
+
+function showReferral($uid, $chatId) {
+    $u  = getUser($uid) ?: [];
+    $me = tg(BOT_TOKEN, 'getMe', []);
+    $un = $me['result']['username'] ?? '';
+    $link = $un ? "https://t.me/{$un}?start=ref{$uid}" : '—';
+
+    sendMsg(BOT_TOKEN, $chatId, T('referral', [
+        'percent'    => cfg()['referral']['percent'],
+        'link'       => $link,
+        'referrals'  => countReferrals($uid),
+        'ref_earned' => fmtNum($u['ref_earned'] ?? 0),
+    ]));
+}
+
+function showSupport($uid, $chatId) {
+    $methods = cfg()['support_methods'];
+    $rows = [];
+    $direct = []; $indirect = [];
+
+    foreach ($methods as $i => $m) {
+        if (empty($m['on'])) continue;
+        $label = trim(($m['emoji'] ?? '') . ' ' . ($m['label'] ?? ''));
+        if ($m['type'] === 'url' && !empty($m['value'])) {
+            $btn = ['text' => $label, 'url' => $m['value']];
+        } else {
+            $btn = ['text' => $label, 'callback_data' => 'sup_' . $i];
+        }
+        if (($m['kind'] ?? 'direct') === 'direct') $direct[] = $btn; else $indirect[] = $btn;
+    }
+
+    $text = T('support');
+    if ($direct) {
+        $text .= "\n\n🟢 <b>ارتباط مستقیم</b>";
+        foreach (array_chunk($direct, 2) as $c) $rows[] = $c;
+    }
+    if ($indirect) {
+        $text .= "\n🔵 <b>ارتباط غیر مستقیم</b>";
+        foreach (array_chunk($indirect, 2) as $c) $rows[] = $c;
+    }
+    if (!$rows) { sendMsg(BOT_TOKEN, $chatId, "📞 هنوز راه ارتباطی تنظیم نشده است."); return; }
+
+    sendMsg(BOT_TOKEN, $chatId, $text, inlineKb($rows));
+}
+
+function startTopup($uid, $chatId) {
+    setState($uid, 'topup_amount');
+    sendMsg(BOT_TOKEN, $chatId, T('topup'), inlineKb([[['text' => '🔴 انصراف', 'callback_data' => 'cancel']]]));
+}
+
+function walletFor($currency) {
+    $w = cfg()['wallets'];
+    $c = strtoupper(trim($currency));
+    if ($c === 'USDT') return ['USDT (TRC20)', $w['usdt'] ?: 'تنظیم نشده'];
+    if ($c === 'TRX')  return ['TRX', $w['trx'] ?: 'تنظیم نشده'];
+    $card = $w['card'] ?: 'تنظیم نشده';
+    if (!empty($w['card_name'])) $card .= "\nبه نام: " . $w['card_name'];
+    return ['کارت به کارت', $card];
+}
+
+function createOrderAndAsk($uid, $chatId, $username, $type, $productId, $amount, $currency, $title) {
+    $oid = Order::create($uid, $username, $type, $productId, $amount, $currency);
+    [$method, $wallet] = walletFor($currency);
+    $text = T('pay_info', [
+        'title' => $title, 'amount' => fmtNum($amount), 'currency' => h($currency),
+        'method' => $method, 'wallet' => h($wallet), 'id' => h($oid),
+    ]);
+    sendMsg(BOT_TOKEN, $chatId, $text, inlineKb([
+        [['text' => '🟢 ارسال رسید', 'callback_data' => 'rcpt_' . $oid]],
+        [['text' => '🔴 انصراف', 'callback_data' => 'ocancel_' . $oid]],
+    ]));
+    return $oid;
+}
+
+function deliverProduct($uid, $chatId, $productId) {
+    $p = Product::get($productId);
+    if (!$p) return;
+    if (!empty($p['bot_id']) && !empty($p['link_code'])) {
+        $url = Links::url($p['bot_id'], $p['link_code']);
+        if ($url) {
+            sendMsg(BOT_TOKEN, $chatId,
+                "📦 <b>" . h($p['name']) . "</b>\n\n🔗 لینک دریافت محتوا:\n{$url}",
+                inlineKb([[['text' => '🚀 دریافت محتوا', 'url' => $url]]]));
+            return;
+        }
+    }
+    sendMsg(BOT_TOKEN, $chatId, "📦 <b>" . h($p['name']) . "</b>\n\n✅ خرید شما ثبت شد. برای دریافت با پشتیبانی تماس بگیرید.");
+}
+
+function notifyAdminOrder($orderId) {
+    $o = Order::get($orderId);
+    if (!$o) return;
+    $title = $o['type'] === 'topup' ? '➕ شارژ کیف پول' : ('🛒 ' . (Product::get($o['product_id'])['name'] ?? '—'));
+    $uname = $o['username'] ? '@' . $o['username'] : '—';
+
+    $text  = "🧾 <b>سفارش جدید — منتظر تایید</b>\n\n";
+    $text .= "👤 کاربر: " . h($uname) . " (<code>{$o['user_id']}</code>)\n";
+    $text .= "📦 {$title}\n";
+    $text .= "💰 " . fmtNum($o['amount']) . ' ' . h($o['currency']) . "\n";
+    $text .= "🧾 <code>" . h($o['id']) . "</code>\n";
+    $text .= "📅 " . h($o['created_at']) . "\n\n";
+    $text .= $o['receipt_type'] === 'text'
+        ? "رسید:\n<code>" . h($o['receipt']) . "</code>"
+        : "رسید: تصویر ↓";
 
     $rows = [[
-        bGreen('تایید', 'adm_ok_' . $p['id']),
-        bRed('رد', 'adm_no_' . $p['id']),
+        ['text' => '🟢 تایید', 'callback_data' => 'aok_' . $o['id']],
+        ['text' => '🔴 رد',   'callback_data' => 'ano_' . $o['id']],
     ]];
 
-    if ($p['receipt_type'] === 'photo') {
+    if ($o['receipt_type'] === 'photo') {
         tg(BOT_TOKEN, 'sendPhoto', [
-            'chat_id' => ADMIN_ID, 'photo' => $p['receipt'],
+            'chat_id' => ADMIN_ID, 'photo' => $o['receipt'],
             'caption' => $text, 'parse_mode' => 'HTML',
-            'reply_markup' => kb($rows),
+            'reply_markup' => json_encode(inlineKb($rows)),
         ]);
     } else {
-        sendMsg(BOT_TOKEN, ADMIN_ID, $text, $rows);
+        sendMsg(BOT_TOKEN, ADMIN_ID, $text, inlineKb($rows));
     }
 }
 
 // ============================================================
-// 🏠 ربات مادر — نمایش‌ها
-// ============================================================
-
-function masterStart($userId, $chatId, $username, $firstName) {
-    global $EMOJI;
-    touchUser($userId, $username, $firstName);
-    clearState($userId);
-
-    $s = shopSettings();
-    $text = "{$EMOJI['crown']} <b>خوش آمدید " . h($firstName) . "</b>\n\n";
-    if (!empty($s['welcome_text'])) {
-        $text .= h($s['welcome_text']) . "\n\n";
-    } else {
-        $text .= "{$EMOJI['shop']} <b>فروشگاه ممبرشیپ</b>\n\n";
-    }
-
-    $memberships = MembershipManager::all();
-    $active = array_filter($memberships, fn($m) => !empty($m['active']));
-
-    if (!$active) {
-        $rows = ($userId === ADMIN_ID) ? [[bBlue('پنل مدیریت', 'adm_home')]] : null;
-        sendMsg(BOT_TOKEN, $chatId, $text . "{$EMOJI['clock']} هنوز ممبرشیپی ثبت نشده است.", $rows);
-        return;
-    }
-
-    $rows = [];
-    foreach ($active as $m) {
-        $count = count($m['members']);
-        $cap   = ((int)$m['limit']) > 0 ? "{$count}/{$m['limit']}" : "{$count}/∞";
-        $mine  = MembershipManager::isMember($m['id'], $userId);
-        $full  = MembershipManager::isFull($m);
-
-        $text .= "{$EMOJI['money']} <b>" . h($m['name']) . "</b>\n";
-        if (!empty($m['desc'])) $text .= "   " . h($m['desc']) . "\n";
-        $text .= "   قیمت: " . h($m['price']) . ' ' . h($m['currency']) . "\n";
-        $text .= "   اعضا: {$cap}" . ($full ? " {$EMOJI['lock']} تکمیل" : "") . "\n\n";
-
-        // باگ قبلی: همه دکمه‌ها فقط «خرید» بودند و اسم ممبرشیپ روی دکمه نمی‌آمد
-        if ($mine) {
-            $rows[] = [bBlue('دریافت لینک — ' . $m['name'], 'mylink_' . $m['id'])];
-        } elseif ($full) {
-            $rows[] = [bRed('تکمیل ظرفیت — ' . $m['name'], 'full_' . $m['id'])];
-        } else {
-            $rows[] = [bGreen('خرید ' . $m['name'] . ' — ' . $m['price'] . ' ' . $m['currency'], 'buy_' . $m['id'])];
-        }
-    }
-
-    $rows[] = [bBlue('عضویت‌های من', 'my_subs')];
-    if (!empty($s['support'])) $rows[] = [bUrl('💬 پشتیبانی', 't.me/' . ltrim($s['support'], '@'))];
-    if ($userId === ADMIN_ID)  $rows[] = [bBlue('پنل مدیریت', 'adm_home')];
-
-    sendMsg(BOT_TOKEN, $chatId, $text, $rows);
-}
-
-function showMySubs($userId, $chatId, $msgId = null) {
-    global $EMOJI;
-    $mine = [];
-    foreach (MembershipManager::all() as $m) {
-        if (MembershipManager::isMember($m['id'], $userId)) $mine[] = $m;
-    }
-
-    if (!$mine) {
-        $text = "{$EMOJI['member']} <b>عضویت‌های من</b>\n\nهنوز عضویتی ندارید.";
-        $rows = [[bBlue('بازگشت', 'home')]];
-    } else {
-        $text = "{$EMOJI['member']} <b>عضویت‌های من</b>\n\n";
-        $rows = [];
-        foreach ($mine as $m) {
-            $text .= "{$EMOJI['check']} " . h($m['name']) . "\n";
-            $rows[] = [bBlue('لینک ' . $m['name'], 'mylink_' . $m['id'])];
-        }
-        $rows[] = [bBlue('بازگشت', 'home')];
-    }
-
-    if ($msgId) editMsg(BOT_TOKEN, $chatId, $msgId, $text, $rows);
-    else sendMsg(BOT_TOKEN, $chatId, $text, $rows);
-}
-
-function sendAccessLink($userId, $chatId, $membershipId) {
-    global $EMOJI;
-    $m = MembershipManager::get($membershipId);
-    if (!$m) { sendMsg(BOT_TOKEN, $chatId, "{$EMOJI['error']} ممبرشیپ پیدا نشد."); return; }
-
-    if (!MembershipManager::isMember($membershipId, $userId)) {
-        sendMsg(BOT_TOKEN, $chatId, "{$EMOJI['error']} شما عضو این ممبرشیپ نیستید.");
-        return;
-    }
-
-    $link = AccessManager::linkFor($membershipId, $userId);
-    if (!$link) {
-        sendMsg(BOT_TOKEN, $chatId,
-            "{$EMOJI['warning']} هنوز ربات اپلودری به این ممبرشیپ وصل نشده است.\nلطفا با پشتیبانی تماس بگیرید.");
-        return;
-    }
-
-    $text  = "{$EMOJI['check']} <b>" . h($m['name']) . "</b>\n\n";
-    $text .= "{$EMOJI['link']} لینک دسترسی اختصاصی شما:\n{$link}\n\n";
-    $text .= "{$EMOJI['warning']} این لینک فقط با همین حساب کار می‌کند.";
-
-    sendMsg(BOT_TOKEN, $chatId, $text, [[bUrl('🚀 ورود به ربات', $link)]]);
-}
-
-function startPurchase($userId, $chatId, $username, $membershipId) {
-    global $EMOJI;
-    $m = MembershipManager::get($membershipId);
-    if (!$m || empty($m['active'])) {
-        sendMsg(BOT_TOKEN, $chatId, "{$EMOJI['error']} این ممبرشیپ در دسترس نیست.");
-        return;
-    }
-    if (MembershipManager::isMember($membershipId, $userId)) {
-        sendAccessLink($userId, $chatId, $membershipId);
-        return;
-    }
-    if (MembershipManager::isFull($m)) {
-        sendMsg(BOT_TOKEN, $chatId, "{$EMOJI['lock']} ظرفیت این ممبرشیپ تکمیل شده است.");
-        return;
-    }
-
-    $paymentId = PaymentManager::create($userId, $username, $membershipId, $m['price'], $m['currency']);
-    [$label, $wallet] = walletFor($m['currency']);
-
-    $text  = "{$EMOJI['wallet']} <b>اطلاعات پرداخت</b>\n\n";
-    $text .= "ممبرشیپ: " . h($m['name']) . "\n";
-    $text .= "مبلغ: <b>" . h($m['price']) . ' ' . h($m['currency']) . "</b>\n";
-    $text .= "روش: " . h($label) . "\n\n";
-    $text .= "{$EMOJI['premium']} مقصد پرداخت:\n<code>" . h($wallet) . "</code>\n\n";
-    $text .= "شناسه سفارش: <code>" . h($paymentId) . "</code>\n\n";
-    $text .= "{$EMOJI['warning']} بعد از واریز، دکمه زیر را بزنید و رسید (عکس یا کد تراکنش) را بفرستید.\n";
-    $text .= "عضویت شما پس از <b>تایید ادمین</b> فعال می‌شود.";
-
-    $rows = [
-        [bGreen('پرداخت کردم، ارسال رسید', 'pay_rcpt_' . $paymentId)],
-        [bRed('انصراف', 'pay_cancel_' . $paymentId)],
-    ];
-    sendMsg(BOT_TOKEN, $chatId, $text, $rows);
-}
-
-// ============================================================
-// 👑 پنل ادمین داخل تلگرام
+// 👑 پنل ادمین در تلگرام
 // ============================================================
 
 function admHome($chatId, $msgId = null) {
-    global $EMOJI;
-    $mems = MembershipManager::all();
-    $bots = BotManager::all();
-    $users = load('users');
-
-    $text  = "{$EMOJI['crown']} <b>پنل مدیریت</b>\n\n";
-    $text .= "{$EMOJI['member']} کاربران: " . count($users) . "\n";
-    $text .= "{$EMOJI['shop']} ممبرشیپ‌ها: " . count($mems) . "\n";
-    $text .= "{$EMOJI['bot']} ربات‌ها: " . count($bots) . "\n";
-    $text .= "{$EMOJI['clock']} در انتظار بررسی: " . PaymentManager::countBy(PaymentManager::REVIEW) . "\n";
-    $text .= "{$EMOJI['check']} تایید شده: " . PaymentManager::countBy(PaymentManager::APPROVED) . "\n";
+    $text  = "👑 <b>پنل مدیریت</b>\n\n";
+    $text .= "👥 کاربران: " . count(load('users')) . "\n";
+    $text .= "🛒 محصولات: " . count(Product::all()) . "\n";
+    $text .= "🤖 ربات‌های اپلودر: " . count(BotManager::all()) . "\n";
+    $text .= "📢 کانال‌های اجباری: " . count(Channels::all()) . "\n";
+    $text .= "⏳ منتظر تایید: " . Order::countBy(Order::REVIEW) . "\n";
+    $text .= "✅ سفارش موفق: " . Order::countBy(Order::APPROVED) . "\n";
 
     $rows = [
-        [bBlue('ممبرشیپ‌ها', 'adm_mems'), bBlue('ربات‌ها', 'adm_bots')],
-        [bBlue('پرداخت‌های در انتظار', 'adm_pays')],
-        [bGreen('افزودن ممبرشیپ', 'adm_addmem'), bGreen('افزودن ربات', 'adm_addbot')],
-        [bBlue('پیام همگانی', 'adm_bc'), bBlue('تنظیمات', 'adm_set')],
-        [bBlue('بازگشت', 'home')],
+        [['text' => '🧾 سفارش‌ها', 'callback_data' => 'adm_orders'],
+         ['text' => '🛒 محصولات', 'callback_data' => 'adm_prods']],
+        [['text' => '🤖 ربات‌ها', 'callback_data' => 'adm_bots'],
+         ['text' => '📢 کانال‌ها', 'callback_data' => 'adm_chans']],
+        [['text' => '🎨 دکمه‌ها', 'callback_data' => 'adm_btns'],
+         ['text' => '📝 متن‌ها', 'callback_data' => 'adm_texts']],
+        [['text' => '💳 کیف پول', 'callback_data' => 'adm_wallets'],
+         ['text' => '📞 پشتیبانی', 'callback_data' => 'adm_sup']],
+        [['text' => '📢 پیام همگانی', 'callback_data' => 'adm_bc']],
     ];
-
-    if ($msgId) editMsg(BOT_TOKEN, $chatId, $msgId, $text, $rows);
-    else sendMsg(BOT_TOKEN, $chatId, $text, $rows);
+    if ($msgId) editMsg(BOT_TOKEN, $chatId, $msgId, $text, inlineKb($rows));
+    else sendMsg(BOT_TOKEN, $chatId, $text, inlineKb($rows));
 }
 
-function admMems($chatId, $msgId) {
-    global $EMOJI;
-    $mems = MembershipManager::all();
-    $text = "{$EMOJI['shop']} <b>ممبرشیپ‌ها</b>\n\n";
+function admOrders($chatId, $msgId) {
+    $pending = array_filter(Order::all(), fn($o) => $o['status'] === Order::REVIEW);
+    $text = "🧾 <b>سفارش‌های منتظر تایید</b>\n";
     $rows = [];
-    if (!$mems) {
-        $text .= "موردی ثبت نشده.";
+    if (!$pending) {
+        $text .= "\nموردی در انتظار نیست.";
     } else {
-        foreach ($mems as $m) {
-            $bot = BotManager::botFor($m['id']);
-            $cap = ((int)$m['limit']) > 0 ? count($m['members']) . '/' . $m['limit'] : count($m['members']) . '/∞';
-            $text .= ($m['active'] ? $EMOJI['check'] : $EMOJI['error']) . " <b>" . h($m['name']) . "</b>\n";
-            $text .= "   " . h($m['price']) . ' ' . h($m['currency']) . " | اعضا: {$cap}\n";
-            $text .= "   ربات: " . ($bot ? '@' . h($bot['username']) : 'وصل نشده') . "\n\n";
-            $rows[] = [bRed('حذف ' . $m['name'], 'adm_delmem_' . $m['id'])];
+        foreach (array_slice($pending, 0, 8, true) as $o) {
+            $title = $o['type'] === 'topup' ? 'شارژ' : (Product::get($o['product_id'])['name'] ?? '—');
+            $text .= "\n👤 " . h($o['username'] ?: $o['user_id']) . " — " . h($title) . "\n";
+            $text .= "   💰 " . fmtNum($o['amount']) . ' ' . h($o['currency']) . "\n";
+            $rows[] = [
+                ['text' => '🟢 تایید ' . mb_substr($title, 0, 12), 'callback_data' => 'aok_' . $o['id']],
+                ['text' => '🔴 رد', 'callback_data' => 'ano_' . $o['id']],
+            ];
         }
     }
-    $rows[] = [bGreen('افزودن ممبرشیپ', 'adm_addmem')];
-    $rows[] = [bBlue('بازگشت', 'adm_home')];
-    editMsg(BOT_TOKEN, $chatId, $msgId, $text, $rows);
+    $rows[] = [['text' => '◀️ بازگشت', 'callback_data' => 'adm_home']];
+    editMsg(BOT_TOKEN, $chatId, $msgId, $text, inlineKb($rows));
+}
+
+function admBtns($chatId, $msgId) {
+    $c = cfg();
+    $text  = "🎨 <b>تنظیم دکمه‌ها</b>\n\n";
+    $text .= "حالت فعلی: <b>" . ($c['ui']['mode'] === 'glass' ? 'شیشه‌ای (زیر پیام)' : 'منو (کیبورد پایین)') . "</b>\n\n";
+    foreach ($c['buttons'] as $id => $b) {
+        $text .= (!empty($b['on']) ? '✅' : '❌') . ' ' . colorMap()[$b['color']] . ' ' . h($b['emoji'] . ' ' . $b['text']) . "\n";
+    }
+    $text .= "\nبرای ویرایش دقیق‌تر از پنل وب استفاده کنید.";
+
+    $rows = [
+        [['text' => $c['ui']['mode'] === 'glass' ? '🔄 تبدیل به منو' : '🔄 تبدیل به شیشه‌ای',
+          'callback_data' => 'adm_mode']],
+    ];
+    foreach ($c['buttons'] as $id => $b) {
+        $rows[] = [
+            ['text' => (!empty($b['on']) ? '✅ ' : '❌ ') . $b['text'], 'callback_data' => 'adm_btog_' . $id],
+            ['text' => colorMap()[$b['color']] . ' رنگ', 'callback_data' => 'adm_bcol_' . $id],
+        ];
+    }
+    $rows[] = [['text' => '◀️ بازگشت', 'callback_data' => 'adm_home']];
+    editMsg(BOT_TOKEN, $chatId, $msgId, $text, inlineKb($rows));
+}
+
+function admTexts($chatId, $msgId) {
+    $rows = [];
+    $labels = [
+        'welcome' => 'خوش‌آمد', 'account' => 'حساب کاربری', 'trust' => 'اعتماد',
+        'support' => 'پشتیبانی', 'referral' => 'زیرمجموعه', 'topup' => 'شارژ',
+        'buy_head' => 'سر محصولات', 'orders_head' => 'سر سفارش‌ها',
+    ];
+    foreach ($labels as $k => $l) $rows[] = [['text' => '📝 ' . $l, 'callback_data' => 'adm_txt_' . $k]];
+    $rows[] = [['text' => '◀️ بازگشت', 'callback_data' => 'adm_home']];
+    editMsg(BOT_TOKEN, $chatId, $msgId, "📝 <b>ویرایش متن‌ها</b>\n\nکدام متن را می‌خواهید عوض کنید؟", inlineKb($rows));
+}
+
+function admChans($chatId, $msgId) {
+    $chs = Channels::all();
+    $text = "📢 <b>کانال‌های عضویت اجباری</b>\n\nاین کانال‌ها روی <b>همه</b> ربات‌های اپلودر اعمال می‌شوند.\n";
+    $rows = [];
+    if (!$chs) $text .= "\nکانالی ثبت نشده.";
+    foreach ($chs as $ch) {
+        $text .= "\n" . (!empty($ch['on']) ? '✅' : '❌') . ' ' . h($ch['title']) . " — <code>" . h($ch['chat_id']) . "</code>";
+        $rows[] = [['text' => '🔴 حذف ' . $ch['title'], 'callback_data' => 'adm_chdel_' . $ch['id']]];
+    }
+    $rows[] = [['text' => '🟢 افزودن کانال', 'callback_data' => 'adm_chadd']];
+    $rows[] = [['text' => '◀️ بازگشت', 'callback_data' => 'adm_home']];
+    editMsg(BOT_TOKEN, $chatId, $msgId, $text, inlineKb($rows));
 }
 
 function admBots($chatId, $msgId) {
-    global $EMOJI;
     $bots = BotManager::all();
-    $text = "{$EMOJI['bot']} <b>ربات‌های فرعی</b>\n\n";
+    $text = "🤖 <b>ربات‌های اپلودر</b>\n";
     $rows = [];
-    if (!$bots) {
-        $text .= "رباتی ثبت نشده.";
-    } else {
-        foreach ($bots as $b) {
-            $m = $b['membership_id'] ? MembershipManager::get($b['membership_id']) : null;
-            $text .= "{$EMOJI['bot']} @" . h($b['username']) . "\n";
-            $text .= "   ممبرشیپ: " . ($m ? h($m['name']) : 'وصل نشده') . "\n";
-            $text .= "   فایل‌ها: " . count(FileManager::listFiles($b['id'])) . "\n\n";
-            $rows[] = [bRed('حذف @' . $b['username'], 'adm_delbot_' . $b['id'])];
-        }
+    if (!$bots) $text .= "\nرباتی ثبت نشده.";
+    foreach ($bots as $b) {
+        $s = BotManager::settings($b['id']);
+        $text .= "\n🤖 @" . h($b['username']) . "\n";
+        $text .= "   🔗 لینک‌ها: " . count(Links::all($b['id'])) . "  |  🗑 حذف بعد از {$s['delete_seconds']} ثانیه\n";
+        $rows[] = [['text' => '⚙️ @' . $b['username'], 'callback_data' => 'adm_bot_' . $b['id']]];
     }
-    $rows[] = [bGreen('افزودن ربات', 'adm_addbot')];
-    $rows[] = [bBlue('بازگشت', 'adm_home')];
-    editMsg(BOT_TOKEN, $chatId, $msgId, $text, $rows);
+    $rows[] = [['text' => '🟢 افزودن ربات', 'callback_data' => 'adm_addbot']];
+    $rows[] = [['text' => '◀️ بازگشت', 'callback_data' => 'adm_home']];
+    editMsg(BOT_TOKEN, $chatId, $msgId, $text, inlineKb($rows));
 }
 
-function admPays($chatId, $msgId) {
-    global $EMOJI;
-    $pays = PaymentManager::all();
-    $pending = array_filter($pays, fn($p) => $p['status'] === PaymentManager::REVIEW);
+function admBotOne($chatId, $msgId, $botId) {
+    $b = BotManager::get($botId);
+    if (!$b) { admBots($chatId, $msgId); return; }
+    $s = BotManager::settings($botId);
 
-    $text = "{$EMOJI['receipt']} <b>پرداخت‌های در انتظار</b>\n\n";
-    $rows = [];
-    if (!$pending) {
-        $text .= "موردی در انتظار نیست.";
-    } else {
-        foreach (array_slice($pending, 0, 10, true) as $p) {
-            $m = MembershipManager::get($p['membership_id']);
-            $text .= "{$EMOJI['clock']} " . h($p['username'] ? '@' . $p['username'] : $p['user_id']) . "\n";
-            $text .= "   " . ($m ? h($m['name']) : '—') . " | " . h($p['amount']) . ' ' . h($p['currency']) . "\n";
-            $text .= "   <code>" . h($p['id']) . "</code>\n\n";
-            $rows[] = [bGreen('تایید', 'adm_ok_' . $p['id']), bRed('رد', 'adm_no_' . $p['id'])];
-        }
-    }
-    $rows[] = [bBlue('بازگشت', 'adm_home')];
-    editMsg(BOT_TOKEN, $chatId, $msgId, $text, $rows);
-}
-
-function admSettings($chatId, $msgId) {
-    global $EMOJI;
-    $s = shopSettings();
-    $text  = "{$EMOJI['settings']} <b>تنظیمات فروشگاه</b>\n\n";
-    $text .= "USDT: <code>" . h($s['wallet_usdt']) . "</code>\n";
-    $text .= "TRX: <code>" . h($s['wallet_trx']) . "</code>\n";
-    $text .= "کارت: <code>" . h($s['card_number']) . "</code>\n";
-    $text .= "پشتیبانی: " . h($s['support'] ?: '—') . "\n";
+    $text  = "⚙️ <b>@" . h($b['username']) . "</b>\n\n";
+    $text .= "🗑 حذف خودکار: <b>{$s['delete_seconds']}</b> ثانیه\n";
+    $text .= "🔒 عضویت اجباری: " . (!empty($s['force_join']) ? 'روشن' : 'خاموش') . "\n";
+    $text .= "🛡 محافظت فایل: " . (!empty($s['protect_content']) ? 'روشن' : 'خاموش') . "\n";
+    $text .= "🔗 لینک‌ها: " . count(Links::all($botId)) . "\n";
 
     $rows = [
-        [bBlue('ویرایش USDT', 'adm_set_wallet_usdt'), bBlue('ویرایش TRX', 'adm_set_wallet_trx')],
-        [bBlue('ویرایش کارت', 'adm_set_card_number')],
-        [bBlue('ویرایش پشتیبانی', 'adm_set_support'), bBlue('متن خوش‌آمد', 'adm_set_welcome_text')],
-        [bBlue('بازگشت', 'adm_home')],
+        [['text' => '⏱ زمان حذف', 'callback_data' => 'adm_bsec_' . $botId]],
+        [['text' => (!empty($s['force_join']) ? '🔴 خاموش کردن' : '🟢 روشن کردن') . ' عضویت اجباری',
+          'callback_data' => 'adm_bfj_' . $botId]],
+        [['text' => (!empty($s['protect_content']) ? '🔴 خاموش کردن' : '🟢 روشن کردن') . ' محافظت',
+          'callback_data' => 'adm_bpc_' . $botId]],
+        [['text' => '🔴 حذف ربات', 'callback_data' => 'adm_bdel_' . $botId]],
+        [['text' => '◀️ بازگشت', 'callback_data' => 'adm_bots']],
     ];
-    editMsg(BOT_TOKEN, $chatId, $msgId, $text, $rows);
+    editMsg(BOT_TOKEN, $chatId, $msgId, $text, inlineKb($rows));
 }
 
 // ============================================================
-// 🎬 ربات مادر — پردازش آپدیت
+// 🎬 ربات مادر — پردازش
 // ============================================================
 
 function masterHandle($update) {
-    global $EMOJI;
 
-    // ---------- Callback ----------
+    // ---------------- Callback ----------------
     if (isset($update['callback_query'])) {
         $cb     = $update['callback_query'];
-        $userId = (int)$cb['from']['id'];
-        $chatId = $cb['message']['chat']['id'] ?? $userId;
+        $uid    = (int)$cb['from']['id'];
+        $chatId = $cb['message']['chat']['id'] ?? $uid;
         $msgId  = $cb['message']['message_id'] ?? null;
         $data   = $cb['data'] ?? '';
         $uname  = $cb['from']['username'] ?? '';
+        $fname  = $cb['from']['first_name'] ?? '';
         $cbId   = $cb['id'];
+        $isAdmin = ($uid === ADMIN_ID);
 
-        if (userIsBanned($userId)) { answerCb(BOT_TOKEN, $cbId, 'دسترسی شما مسدود است.', true); return; }
+        $u = getUser($uid);
+        if ($u && !empty($u['banned'])) { answerCb(BOT_TOKEN, $cbId, T('banned'), true); return; }
 
-        $isAdmin = ($userId === ADMIN_ID);
+        // --- دکمه‌های منو در حالت شیشه‌ای ---
+        if (str_starts_with($data, 'menu_')) {
+            $act = substr($data, 5);
+            answerCb(BOT_TOKEN, $cbId);
+            runMenuAction($act, $uid, $chatId, $uname, $fname);
+            return;
+        }
 
-        // ---- عمومی ----
-        if ($data === 'home') {
+        if ($data === 'cancel') {
+            clearState($uid);
+            answerCb(BOT_TOKEN, $cbId, 'لغو شد');
+            if ($msgId) editMsg(BOT_TOKEN, $chatId, $msgId, "❌ لغو شد.");
+            return;
+        }
+
+        // --- پشتیبانی متنی ---
+        if (str_starts_with($data, 'sup_')) {
+            $i = (int)substr($data, 4);
+            $m = cfg()['support_methods'][$i] ?? null;
             answerCb(BOT_TOKEN, $cbId);
-            masterStart($userId, $chatId, $uname, $cb['from']['first_name'] ?? '');
+            if (!$m) return;
+            if ($m['type'] === 'ticket') {
+                setState($uid, 'ticket');
+                sendMsg(BOT_TOKEN, $chatId, "🎫 پیام خود را بنویسید تا برای پشتیبانی ارسال شود:",
+                    inlineKb([[['text' => '🔴 انصراف', 'callback_data' => 'cancel']]]));
+                return;
+            }
+            if ($m['type'] === 'phone') {
+                sendMsg(BOT_TOKEN, $chatId, "☎️ <b>" . h($m['label']) . "</b>\n\n<code>" . h($m['value'] ?: 'تنظیم نشده') . "</code>");
+                return;
+            }
+            sendMsg(BOT_TOKEN, $chatId, $m['value'] ?: 'متنی تنظیم نشده است.');
             return;
         }
-        if ($data === 'my_subs') {
+
+        // --- خرید ---
+        if (str_starts_with($data, 'full_')) { answerCb(BOT_TOKEN, $cbId, '🔴 ظرفیت تکمیل شده است.', true); return; }
+
+        if (str_starts_with($data, 'redeliver_')) {
             answerCb(BOT_TOKEN, $cbId);
-            showMySubs($userId, $chatId, $msgId);
+            $pid = substr($data, 10);
+            if (Product::hasBought($pid, $uid)) deliverProduct($uid, $chatId, $pid);
             return;
         }
-        if (str_starts_with($data, 'full_')) {
-            answerCb(BOT_TOKEN, $cbId, "{$EMOJI['lock']} ظرفیت تکمیل شده است.", true);
-            return;
-        }
-        if (str_starts_with($data, 'mylink_')) {
-            answerCb(BOT_TOKEN, $cbId);
-            sendAccessLink($userId, $chatId, substr($data, 7));
-            return;
-        }
+
         if (str_starts_with($data, 'buy_')) {
             answerCb(BOT_TOKEN, $cbId);
-            startPurchase($userId, $chatId, $uname, substr($data, 4));
-            return;
-        }
-        if (str_starts_with($data, 'pay_rcpt_')) {
-            $pid = substr($data, 9);
-            $p = PaymentManager::get($pid);
-            if (!$p || (int)$p['user_id'] !== $userId) {
-                answerCb(BOT_TOKEN, $cbId, "{$EMOJI['error']} سفارش نامعتبر.", true); return;
+            $pid = substr($data, 4);
+            $p = Product::get($pid);
+            if (!$p || empty($p['active'])) { sendMsg(BOT_TOKEN, $chatId, "❌ این محصول در دسترس نیست."); return; }
+            if (Product::hasBought($pid, $uid)) { deliverProduct($uid, $chatId, $pid); return; }
+            if (Product::isFull($p)) { sendMsg(BOT_TOKEN, $chatId, "🔴 ظرفیت این محصول تکمیل شده است."); return; }
+
+            $bal = (float)(getUser($uid)['balance'] ?? 0);
+            $rows = [];
+            if (strtoupper($p['currency']) === 'تومان' || $p['currency'] === 'تومان') {
+                $rows[] = [['text' => '💰 پرداخت از کیف پول (' . fmtNum($bal) . ' تومان)', 'callback_data' => 'wpay_' . $pid]];
             }
-            if ($p['status'] !== PaymentManager::PENDING) {
-                answerCb(BOT_TOKEN, $cbId, 'این سفارش قبلا ثبت شده.', true); return;
-            }
-            answerCb(BOT_TOKEN, $cbId);
-            setState($userId, 'await_receipt', ['payment_id' => $pid]);
+            $rows[] = [['text' => '💳 پرداخت مستقیم', 'callback_data' => 'dpay_' . $pid]];
+            $rows[] = [['text' => '🔴 انصراف', 'callback_data' => 'cancel']];
+
             sendMsg(BOT_TOKEN, $chatId,
-                "{$EMOJI['receipt']} لطفا رسید پرداخت را ارسال کنید.\n\n" .
-                "می‌توانید <b>عکس رسید</b> بفرستید یا <b>کد تراکنش (TxID)</b> را بنویسید.",
-                [[bRed('انصراف', 'pay_cancel_' . $pid)]]);
-            return;
-        }
-        if (str_starts_with($data, 'pay_cancel_')) {
-            $pid = substr($data, 11);
-            $p = PaymentManager::get($pid);
-            if ($p && (int)$p['user_id'] === $userId) clearState($userId);
-            answerCb(BOT_TOKEN, $cbId, 'لغو شد.');
-            if ($msgId) editMsg(BOT_TOKEN, $chatId, $msgId, "{$EMOJI['error']} سفارش لغو شد.", [[bBlue('بازگشت', 'home')]]);
+                "🛒 <b>" . h($p['name']) . "</b>\n💰 " . fmtNum($p['price']) . ' ' . h($p['currency']) .
+                "\n\nروش پرداخت را انتخاب کنید:", inlineKb($rows));
             return;
         }
 
-        // ---- ادمین ----
-        if (str_starts_with($data, 'adm_')) {
-            if (!$isAdmin) { answerCb(BOT_TOKEN, $cbId, "{$EMOJI['lock']} دسترسی ندارید.", true); return; }
+        if (str_starts_with($data, 'wpay_')) {
+            $pid = substr($data, 5);
+            $p = Product::get($pid);
+            if (!$p) { answerCb(BOT_TOKEN, $cbId, 'محصول پیدا نشد', true); return; }
+            $bal = (float)(getUser($uid)['balance'] ?? 0);
+            if ($bal < (float)$p['price']) {
+                answerCb(BOT_TOKEN, $cbId, '❌ موجودی کافی نیست', true);
+                sendMsg(BOT_TOKEN, $chatId, T('no_balance', ['balance' => fmtNum($bal)]),
+                    inlineKb([[['text' => '➕ افزایش موجودی', 'callback_data' => 'menu_topup']]]));
+                return;
+            }
+            if (Product::isFull($p)) { answerCb(BOT_TOKEN, $cbId, 'ظرفیت تکمیل است', true); return; }
 
-            if ($data === 'adm_home')  { answerCb(BOT_TOKEN, $cbId); admHome($chatId, $msgId); return; }
-            if ($data === 'adm_mems')  { answerCb(BOT_TOKEN, $cbId); admMems($chatId, $msgId); return; }
-            if ($data === 'adm_bots')  { answerCb(BOT_TOKEN, $cbId); admBots($chatId, $msgId); return; }
-            if ($data === 'adm_pays')  { answerCb(BOT_TOKEN, $cbId); admPays($chatId, $msgId); return; }
-            if ($data === 'adm_set')   { answerCb(BOT_TOKEN, $cbId); admSettings($chatId, $msgId); return; }
+            addBalance($uid, -$p['price']);
+            $oid = Order::create($uid, $uname, 'product', $pid, $p['price'], $p['currency']);
+            Order::attachReceipt($oid, 'text', 'پرداخت از کیف پول');
+            Order::approve($oid, ADMIN_ID);
+            answerCb(BOT_TOKEN, $cbId, '✅ خرید انجام شد');
+            sendMsg(BOT_TOKEN, $chatId, T('approved'));
+            deliverProduct($uid, $chatId, $pid);
+            return;
+        }
 
-            if ($data === 'adm_addmem') {
-                answerCb(BOT_TOKEN, $cbId);
-                setState(ADMIN_ID, 'mem_name', []);
-                sendMsg(BOT_TOKEN, $chatId, "{$EMOJI['shop']} نام ممبرشیپ را بفرستید:", [[bRed('انصراف', 'adm_cancel')]]);
-                return;
-            }
-            if ($data === 'adm_addbot') {
-                answerCb(BOT_TOKEN, $cbId);
-                setState(ADMIN_ID, 'bot_token', []);
-                sendMsg(BOT_TOKEN, $chatId, "{$EMOJI['bot']} توکن ربات اپلودری را از @BotFather بگیرید و بفرستید:", [[bRed('انصراف', 'adm_cancel')]]);
-                return;
-            }
-            if ($data === 'adm_bc') {
-                answerCb(BOT_TOKEN, $cbId);
-                setState(ADMIN_ID, 'broadcast', []);
-                sendMsg(BOT_TOKEN, $chatId, "📢 متن پیام همگانی را بفرستید:", [[bRed('انصراف', 'adm_cancel')]]);
-                return;
-            }
-            if ($data === 'adm_cancel') {
-                clearState(ADMIN_ID);
-                answerCb(BOT_TOKEN, $cbId, 'لغو شد.');
-                admHome($chatId, $msgId);
-                return;
-            }
-            if (str_starts_with($data, 'adm_set_')) {
-                $key = substr($data, 8);
-                $allowed = ['wallet_usdt', 'wallet_trx', 'card_number', 'support', 'welcome_text'];
-                if (!in_array($key, $allowed, true)) { answerCb(BOT_TOKEN, $cbId, 'نامعتبر'); return; }
-                answerCb(BOT_TOKEN, $cbId);
-                setState(ADMIN_ID, 'set_value', ['key' => $key]);
-                sendMsg(BOT_TOKEN, $chatId, "{$EMOJI['settings']} مقدار جدید <b>" . h($key) . "</b> را بفرستید:", [[bRed('انصراف', 'adm_cancel')]]);
-                return;
-            }
-
-            // تایید / رد پرداخت — تنها مسیر تایید، و فقط برای ادمین
-            if (str_starts_with($data, 'adm_ok_')) {
-                $pid = substr($data, 7);
-                [$ok, $res] = PaymentManager::approve($pid, $userId);
-                if (!$ok) { answerCb(BOT_TOKEN, $cbId, $res, true); return; }
-
-                $p = $res;
-                $m = MembershipManager::get($p['membership_id']);
-                $link = AccessManager::linkFor($p['membership_id'], $p['user_id']);
-
-                $userText  = "{$EMOJI['check']} <b>پرداخت شما تایید شد!</b>\n\n";
-                $userText .= "ممبرشیپ: " . h($m['name']) . "\n";
-                if ($link) {
-                    $userText .= "\n{$EMOJI['link']} لینک دسترسی اختصاصی شما:\n{$link}";
-                    sendMsg(BOT_TOKEN, $p['user_id'], $userText, [[bUrl('🚀 ورود به ربات', $link)]]);
-                } else {
-                    $userText .= "\n{$EMOJI['warning']} ربات اپلودری هنوز وصل نشده. به زودی لینک ارسال می‌شود.";
-                    sendMsg(BOT_TOKEN, $p['user_id'], $userText);
-                }
-
-                answerCb(BOT_TOKEN, $cbId, "{$EMOJI['check']} تایید شد");
-                if ($msgId) {
-                    editMsg(BOT_TOKEN, $chatId, $msgId,
-                        "{$EMOJI['check']} پرداخت <code>" . h($pid) . "</code> تایید شد.\nکاربر عضو «" . h($m['name']) . "» شد.",
-                        [[bBlue('پنل', 'adm_home')]]);
-                }
-                return;
-            }
-            if (str_starts_with($data, 'adm_no_')) {
-                $pid = substr($data, 7);
-                [$ok, $res] = PaymentManager::reject($pid, $userId);
-                if (!$ok) { answerCb(BOT_TOKEN, $cbId, $res, true); return; }
-                sendMsg(BOT_TOKEN, $res['user_id'],
-                    "{$EMOJI['error']} پرداخت شما تایید نشد.\nشناسه: <code>" . h($pid) . "</code>\nدر صورت نیاز با پشتیبانی تماس بگیرید.");
-                answerCb(BOT_TOKEN, $cbId, 'رد شد');
-                if ($msgId) editMsg(BOT_TOKEN, $chatId, $msgId, "{$EMOJI['error']} پرداخت <code>" . h($pid) . "</code> رد شد.", [[bBlue('پنل', 'adm_home')]]);
-                return;
-            }
-            if (str_starts_with($data, 'adm_delmem_')) {
-                $mid = substr($data, 11);
-                mutate('memberships', function (&$all) use ($mid) { unset($all[$mid]); });
-                answerCb(BOT_TOKEN, $cbId, 'حذف شد');
-                admMems($chatId, $msgId);
-                return;
-            }
-            if (str_starts_with($data, 'adm_delbot_')) {
-                $bid = substr($data, 11);
-                mutate('bots', function (&$all) use ($bid) { unset($all[$bid]); });
-                mutate('memberships', function (&$all) use ($bid) {
-                    foreach ($all as $k => $m) if (($m['bot_id'] ?? null) === $bid) $all[$k]['bot_id'] = null;
-                });
-                answerCb(BOT_TOKEN, $cbId, 'حذف شد');
-                admBots($chatId, $msgId);
-                return;
-            }
-            if (str_starts_with($data, 'adm_linkbot_')) {
-                // adm_linkbot_<botId>_<memId>
-                $rest = substr($data, 12);
-                $pos = strrpos($rest, '|');
-                if ($pos === false) { answerCb(BOT_TOKEN, $cbId, 'نامعتبر'); return; }
-                $bid = substr($rest, 0, $pos);
-                $mid = substr($rest, $pos + 1);
-                mutate('bots', function (&$all) use ($bid, $mid) {
-                    if (isset($all[$bid])) $all[$bid]['membership_id'] = $mid;
-                });
-                mutate('memberships', function (&$all) use ($bid, $mid) {
-                    if (isset($all[$mid])) $all[$mid]['bot_id'] = $bid;
-                });
-                answerCb(BOT_TOKEN, $cbId, "{$EMOJI['check']} وصل شد");
-                admBots($chatId, $msgId);
-                return;
-            }
-
+        if (str_starts_with($data, 'dpay_')) {
             answerCb(BOT_TOKEN, $cbId);
+            $pid = substr($data, 5);
+            $p = Product::get($pid);
+            if (!$p) return;
+            createOrderAndAsk($uid, $chatId, $uname, 'product', $pid, $p['price'], $p['currency'], '🛒 ' . h($p['name']));
+            return;
+        }
+
+        if (str_starts_with($data, 'rcpt_')) {
+            $oid = substr($data, 5);
+            $o = Order::get($oid);
+            if (!$o || (int)$o['user_id'] !== $uid) { answerCb(BOT_TOKEN, $cbId, 'سفارش نامعتبر', true); return; }
+            if ($o['status'] !== Order::PENDING) { answerCb(BOT_TOKEN, $cbId, 'قبلا ثبت شده', true); return; }
+            answerCb(BOT_TOKEN, $cbId);
+            setState($uid, 'receipt', ['order' => $oid]);
+            sendMsg(BOT_TOKEN, $chatId, T('receipt_ask'), inlineKb([[['text' => '🔴 انصراف', 'callback_data' => 'cancel']]]));
+            return;
+        }
+
+        if (str_starts_with($data, 'ocancel_')) {
+            clearState($uid);
+            answerCb(BOT_TOKEN, $cbId, 'لغو شد');
+            if ($msgId) editMsg(BOT_TOKEN, $chatId, $msgId, "❌ سفارش لغو شد.");
+            return;
+        }
+
+        // ---------------- ادمین ----------------
+        if (str_starts_with($data, 'aok_') || str_starts_with($data, 'ano_') || str_starts_with($data, 'adm_')) {
+            if (!$isAdmin) { answerCb(BOT_TOKEN, $cbId, '🔒 دسترسی ندارید.', true); return; }
+        } else {
+            answerCb(BOT_TOKEN, $cbId);
+            return;
+        }
+
+        if (str_starts_with($data, 'aok_')) {
+            $oid = substr($data, 4);
+            [$ok, $res] = Order::approve($oid, $uid);
+            if (!$ok) { answerCb(BOT_TOKEN, $cbId, $res, true); return; }
+            $o = $res;
+            if ($o['type'] === 'topup') {
+                sendMsg(BOT_TOKEN, $o['user_id'],
+                    "✅ کیف پول شما <b>" . fmtNum($o['amount']) . "</b> تومان شارژ شد.\n" .
+                    "💰 موجودی جدید: <b>" . fmtNum(getUser($o['user_id'])['balance'] ?? 0) . "</b> تومان");
+            } else {
+                sendMsg(BOT_TOKEN, $o['user_id'], T('approved'));
+                deliverProduct($o['user_id'], $o['user_id'], $o['product_id']);
+            }
+            answerCb(BOT_TOKEN, $cbId, '✅ تایید شد');
+            if ($msgId) editMsg(BOT_TOKEN, $chatId, $msgId, "✅ سفارش <code>" . h($oid) . "</code> تایید شد.",
+                inlineKb([[['text' => '👑 پنل', 'callback_data' => 'adm_home']]]));
+            return;
+        }
+
+        if (str_starts_with($data, 'ano_')) {
+            $oid = substr($data, 4);
+            [$ok, $res] = Order::reject($oid, $uid);
+            if (!$ok) { answerCb(BOT_TOKEN, $cbId, $res, true); return; }
+            sendMsg(BOT_TOKEN, $res['user_id'], T('rejected'));
+            answerCb(BOT_TOKEN, $cbId, 'رد شد');
+            if ($msgId) editMsg(BOT_TOKEN, $chatId, $msgId, "❌ سفارش <code>" . h($oid) . "</code> رد شد.",
+                inlineKb([[['text' => '👑 پنل', 'callback_data' => 'adm_home']]]));
+            return;
+        }
+
+        // منوهای ادمین
+        if ($data === 'adm_home')   { answerCb(BOT_TOKEN, $cbId); admHome($chatId, $msgId); return; }
+        if ($data === 'adm_orders') { answerCb(BOT_TOKEN, $cbId); admOrders($chatId, $msgId); return; }
+        if ($data === 'adm_btns')   { answerCb(BOT_TOKEN, $cbId); admBtns($chatId, $msgId); return; }
+        if ($data === 'adm_texts')  { answerCb(BOT_TOKEN, $cbId); admTexts($chatId, $msgId); return; }
+        if ($data === 'adm_chans')  { answerCb(BOT_TOKEN, $cbId); admChans($chatId, $msgId); return; }
+        if ($data === 'adm_bots')   { answerCb(BOT_TOKEN, $cbId); admBots($chatId, $msgId); return; }
+
+        if ($data === 'adm_mode') {
+            cfgSet(function (&$c) { $c['ui']['mode'] = ($c['ui']['mode'] === 'glass') ? 'menu' : 'glass'; });
+            answerCb(BOT_TOKEN, $cbId, '✅ حالت عوض شد');
+            admBtns($chatId, $msgId);
+            sendMsg(BOT_TOKEN, $chatId, "منوی جدید:", mainKeyboard());
+            return;
+        }
+
+        if (str_starts_with($data, 'adm_btog_')) {
+            $id = substr($data, 9);
+            cfgSet(function (&$c) use ($id) {
+                if (isset($c['buttons'][$id])) $c['buttons'][$id]['on'] = empty($c['buttons'][$id]['on']);
+            });
+            answerCb(BOT_TOKEN, $cbId, '✅');
+            admBtns($chatId, $msgId);
+            return;
+        }
+
+        if (str_starts_with($data, 'adm_bcol_')) {
+            $id = substr($data, 9);
+            $keys = array_keys(colorMap());
+            cfgSet(function (&$c) use ($id, $keys) {
+                if (!isset($c['buttons'][$id])) return;
+                $cur = array_search($c['buttons'][$id]['color'], $keys, true);
+                $c['buttons'][$id]['color'] = $keys[(($cur === false ? 0 : $cur) + 1) % count($keys)];
+            });
+            answerCb(BOT_TOKEN, $cbId, '🎨');
+            admBtns($chatId, $msgId);
+            return;
+        }
+
+        if (str_starts_with($data, 'adm_txt_')) {
+            $key = substr($data, 8);
+            answerCb(BOT_TOKEN, $cbId);
+            setState(ADMIN_ID, 'edit_text', ['key' => $key]);
+            $cur = cfg()['texts'][$key] ?? '';
+            sendMsg(BOT_TOKEN, $chatId,
+                "📝 متن فعلی:\n\n<code>" . h($cur) . "</code>\n\nمتن جدید را بفرستید:",
+                inlineKb([[['text' => '🔴 انصراف', 'callback_data' => 'cancel']]]));
+            return;
+        }
+
+        if ($data === 'adm_chadd') {
+            answerCb(BOT_TOKEN, $cbId);
+            setState(ADMIN_ID, 'chan_add');
+            sendMsg(BOT_TOKEN, $chatId,
+                "📢 آیدی کانال را بفرستید.\n\nمثال: <code>@mychannel</code> یا <code>-1001234567890</code>\n\n" .
+                "⚠️ ربات‌های اپلودر باید در کانال <b>ادمین</b> باشند.",
+                inlineKb([[['text' => '🔴 انصراف', 'callback_data' => 'cancel']]]));
+            return;
+        }
+
+        if (str_starts_with($data, 'adm_chdel_')) {
+            Channels::remove(substr($data, 10));
+            answerCb(BOT_TOKEN, $cbId, 'حذف شد');
+            admChans($chatId, $msgId);
+            return;
+        }
+
+        if ($data === 'adm_addbot') {
+            answerCb(BOT_TOKEN, $cbId);
+            setState(ADMIN_ID, 'bot_token');
+            sendMsg(BOT_TOKEN, $chatId, "🤖 توکن ربات اپلودر را بفرستید:",
+                inlineKb([[['text' => '🔴 انصراف', 'callback_data' => 'cancel']]]));
+            return;
+        }
+
+        if (str_starts_with($data, 'adm_bot_'))  { answerCb(BOT_TOKEN, $cbId); admBotOne($chatId, $msgId, substr($data, 8)); return; }
+
+        if (str_starts_with($data, 'adm_bfj_')) {
+            $bid = substr($data, 8);
+            $s = BotManager::settings($bid);
+            BotManager::setSetting($bid, 'force_join', empty($s['force_join']));
+            answerCb(BOT_TOKEN, $cbId, '✅');
+            admBotOne($chatId, $msgId, $bid);
+            return;
+        }
+        if (str_starts_with($data, 'adm_bpc_')) {
+            $bid = substr($data, 8);
+            $s = BotManager::settings($bid);
+            BotManager::setSetting($bid, 'protect_content', empty($s['protect_content']));
+            answerCb(BOT_TOKEN, $cbId, '✅');
+            admBotOne($chatId, $msgId, $bid);
+            return;
+        }
+        if (str_starts_with($data, 'adm_bsec_')) {
+            $bid = substr($data, 9);
+            answerCb(BOT_TOKEN, $cbId);
+            setState(ADMIN_ID, 'bot_sec', ['bot' => $bid]);
+            sendMsg(BOT_TOKEN, $chatId, "⏱ چند ثانیه بعد فایل حذف شود؟ (عدد، مثلا 30)",
+                inlineKb([[['text' => '🔴 انصراف', 'callback_data' => 'cancel']]]));
+            return;
+        }
+        if (str_starts_with($data, 'adm_bdel_')) {
+            $bid = substr($data, 9);
+            $b = BotManager::get($bid);
+            if ($b) tg($b['token'], 'deleteWebhook', []);
+            mutate('bots', function (&$a) use ($bid) { unset($a[$bid]); });
+            answerCb(BOT_TOKEN, $cbId, 'حذف شد');
+            admBots($chatId, $msgId);
+            return;
+        }
+
+        if ($data === 'adm_bc') {
+            answerCb(BOT_TOKEN, $cbId);
+            setState(ADMIN_ID, 'broadcast');
+            sendMsg(BOT_TOKEN, $chatId, "📢 متن پیام همگانی را بفرستید:",
+                inlineKb([[['text' => '🔴 انصراف', 'callback_data' => 'cancel']]]));
+            return;
+        }
+
+        if ($data === 'adm_wallets' || $data === 'adm_sup' || $data === 'adm_prods') {
+            answerCb(BOT_TOKEN, $cbId);
+            editMsg(BOT_TOKEN, $chatId, $msgId,
+                "🌐 این بخش در <b>پنل وب</b> کامل‌تر است.\n\nآدرس: <code>admin_panel.php</code>",
+                inlineKb([[['text' => '◀️ بازگشت', 'callback_data' => 'adm_home']]]));
             return;
         }
 
@@ -1119,318 +1391,332 @@ function masterHandle($update) {
         return;
     }
 
-    // ---------- Message ----------
+    // ---------------- Message ----------------
     if (!isset($update['message'])) return;
 
-    $msg     = $update['message'];
-    $userId  = (int)($msg['from']['id'] ?? 0);
-    $chatId  = $msg['chat']['id'] ?? $userId;
-    $uname   = $msg['from']['username'] ?? '';
-    $fname   = $msg['from']['first_name'] ?? '';
-    $text    = trim($msg['text'] ?? '');
-    if (!$userId) return;
+    $msg    = $update['message'];
+    $uid    = (int)($msg['from']['id'] ?? 0);
+    $chatId = $msg['chat']['id'] ?? $uid;
+    $uname  = $msg['from']['username'] ?? '';
+    $fname  = $msg['from']['first_name'] ?? '';
+    $text   = trim($msg['text'] ?? '');
+    if (!$uid) return;
 
-    if (userIsBanned($userId)) return;
-    touchUser($userId, $uname, $fname);
+    // /start [ref…]
+    if (str_starts_with($text, '/start')) {
+        $arg = trim(explode(' ', $text, 2)[1] ?? '');
+        $ref = (str_starts_with($arg, 'ref')) ? (int)substr($arg, 3) : null;
+        touchUser($uid, $uname, $fname, $ref);
+        clearState($uid);
+        showHome($uid, $chatId, $fname);
+        return;
+    }
 
-    if ($text === '/start') { masterStart($userId, $chatId, $uname, $fname); return; }
+    touchUser($uid, $uname, $fname);
+    $u = getUser($uid);
+    if ($u && !empty($u['banned'])) { sendMsg(BOT_TOKEN, $chatId, T('banned')); return; }
+
     if ($text === '/panel' || $text === '/admin') {
-        if ($userId !== ADMIN_ID) { sendMsg(BOT_TOKEN, $chatId, "{$EMOJI['lock']} دسترسی ندارید."); return; }
+        if ($uid !== ADMIN_ID) { sendMsg(BOT_TOKEN, $chatId, "🔒 دسترسی ندارید."); return; }
         admHome($chatId);
         return;
     }
-    if ($text === '/cancel') { clearState($userId); sendMsg(BOT_TOKEN, $chatId, "لغو شد."); return; }
-    if ($text === '/id')     { sendMsg(BOT_TOKEN, $chatId, "آیدی عددی شما: <code>{$userId}</code>"); return; }
+    if ($text === '/id')     { sendMsg(BOT_TOKEN, $chatId, "🆔 <code>{$uid}</code>"); return; }
+    if ($text === '/cancel') { clearState($uid); sendMsg(BOT_TOKEN, $chatId, "❌ لغو شد.", mainKeyboard()); return; }
+    if ($text === '/menu')   { showHome($uid, $chatId, $fname); return; }
 
-    $state = getState($userId);
-    if (!$state) return;
+    // --- دکمه منو زده شد؟ ---
+    $act = findMenuAction($text);
+    if ($act) { clearState($uid); runMenuAction($act, $uid, $chatId, $uname, $fname); return; }
 
-    $action = $state['action'];
-    $sd     = $state['data'] ?? [];
+    // --- ادامه گفتگو ---
+    $st = getState($uid);
+    if (!$st) return;
+    $action = $st['action'];
+    $sd     = $st['data'] ?? [];
 
-    // ---- رسید پرداخت ----
-    if ($action === 'await_receipt') {
-        $pid = $sd['payment_id'] ?? '';
-        $p   = PaymentManager::get($pid);
-        if (!$p || (int)$p['user_id'] !== $userId) { clearState($userId); return; }
+    if ($action === 'receipt') {
+        $oid = $sd['order'] ?? '';
+        $o = Order::get($oid);
+        if (!$o || (int)$o['user_id'] !== $uid) { clearState($uid); return; }
 
-        $type = null; $value = null;
-        if (!empty($msg['photo'])) {
-            $photos = $msg['photo'];
-            $type  = 'photo';
-            $value = $photos[count($photos) - 1]['file_id'];
-        } elseif ($text !== '') {
-            $type = 'text'; $value = $text;
-        }
+        $type = null; $val = null;
+        if (!empty($msg['photo'])) { $p = $msg['photo']; $type = 'photo'; $val = $p[count($p) - 1]['file_id']; }
+        elseif ($text !== '')      { $type = 'text';  $val = $text; }
 
-        if (!$type) {
-            sendMsg(BOT_TOKEN, $chatId, "{$EMOJI['warning']} لطفا عکس رسید یا کد تراکنش را بفرستید.");
+        if (!$type) { sendMsg(BOT_TOKEN, $chatId, "⚠️ عکس رسید یا کد تراکنش بفرستید."); return; }
+        if (!Order::attachReceipt($oid, $type, $val)) {
+            clearState($uid);
+            sendMsg(BOT_TOKEN, $chatId, "❌ این سفارش دیگر قابل ویرایش نیست.");
             return;
         }
+        clearState($uid);
+        sendMsg(BOT_TOKEN, $chatId, T('receipt_ok'), mainKeyboard());
+        notifyAdminOrder($oid);
+        return;
+    }
 
-        if (!PaymentManager::attachReceipt($pid, $type, $value)) {
-            clearState($userId);
-            sendMsg(BOT_TOKEN, $chatId, "{$EMOJI['error']} این سفارش دیگر قابل ویرایش نیست.");
+    if ($action === 'topup_amount') {
+        $amt = (float)str_replace(',', '', $text);
+        if ($amt <= 0) { sendMsg(BOT_TOKEN, $chatId, "⚠️ یک عدد معتبر بفرستید."); return; }
+        clearState($uid);
+        createOrderAndAsk($uid, $chatId, $uname, 'topup', null, $amt, 'تومان', '➕ شارژ کیف پول');
+        return;
+    }
+
+    if ($action === 'ticket') {
+        if ($text === '') return;
+        clearState($uid);
+        sendMsg(BOT_TOKEN, ADMIN_ID,
+            "🎫 <b>تیکت جدید</b>\n\n👤 " . h($uname ? '@' . $uname : $fname) . " (<code>{$uid}</code>)\n\n" . h($text),
+            inlineKb([[['text' => '💬 پاسخ', 'callback_data' => 'reply_' . $uid]]]));
+        sendMsg(BOT_TOKEN, $chatId, "✅ پیام شما برای پشتیبانی ارسال شد.", mainKeyboard());
+        return;
+    }
+
+    // ---- ادمین ----
+    if ($uid !== ADMIN_ID) return;
+
+    if ($action === 'edit_text') {
+        $key = $sd['key'] ?? '';
+        if (!array_key_exists($key, defaultConfig()['texts'])) { clearState($uid); return; }
+        cfgSet(function (&$c) use ($key, $text) { $c['texts'][$key] = $text; });
+        clearState($uid);
+        sendMsg(BOT_TOKEN, $chatId, "✅ متن ذخیره شد.", mainKeyboard());
+        return;
+    }
+
+    if ($action === 'chan_add') {
+        $chat = $text;
+        $r = tg(BOT_TOKEN, 'getChat', ['chat_id' => $chat]);
+        if (empty($r['ok'])) {
+            sendMsg(BOT_TOKEN, $chatId, "❌ کانال پیدا نشد: " . h($r['description'] ?? '') . "\nدوباره بفرستید.");
             return;
         }
-
-        clearState($userId);
-        sendMsg(BOT_TOKEN, $chatId,
-            "{$EMOJI['check']} رسید شما ثبت شد.\n\n{$EMOJI['clock']} پس از <b>تایید ادمین</b> لینک دسترسی برایتان ارسال می‌شود.",
-            [[bBlue('عضویت‌های من', 'my_subs')]]);
-        notifyAdminPayment($pid);
-        return;
-    }
-
-    // ---- ویزارد ادمین ----
-    if ($userId !== ADMIN_ID) return;
-
-    if ($action === 'mem_name') {
-        if ($text === '') return;
-        setState($userId, 'mem_price', ['name' => $text]);
-        sendMsg(BOT_TOKEN, $chatId, "{$EMOJI['money']} قیمت را بفرستید (فقط عدد):", [[bRed('انصراف', 'adm_cancel')]]);
-        return;
-    }
-    if ($action === 'mem_price') {
-        if (!is_numeric(str_replace(',', '', $text))) {
-            sendMsg(BOT_TOKEN, $chatId, "{$EMOJI['error']} فقط عدد بفرستید."); return;
-        }
-        $sd['price'] = (float)str_replace(',', '', $text);
-        setState($userId, 'mem_currency', $sd);
-        sendMsg(BOT_TOKEN, $chatId, "واحد پول را بفرستید: <code>USDT</code> یا <code>TRX</code> یا <code>تومان</code>", [[bRed('انصراف', 'adm_cancel')]]);
-        return;
-    }
-    if ($action === 'mem_currency') {
-        if ($text === '') return;
-        $sd['currency'] = $text;
-        setState($userId, 'mem_limit', $sd);
-        sendMsg(BOT_TOKEN, $chatId, "{$EMOJI['member']} محدودیت تعداد اعضا را بفرستید (<code>0</code> = نامحدود):", [[bRed('انصراف', 'adm_cancel')]]);
-        return;
-    }
-    if ($action === 'mem_limit') {
-        if (!ctype_digit($text)) { sendMsg(BOT_TOKEN, $chatId, "{$EMOJI['error']} فقط عدد صحیح."); return; }
-        $m = MembershipManager::create($sd['name'], $sd['price'], $sd['currency'], (int)$text);
-        clearState($userId);
-        sendMsg(BOT_TOKEN, $chatId,
-            "{$EMOJI['check']} ممبرشیپ ساخته شد.\n\n" .
-            "نام: " . h($m['name']) . "\nقیمت: " . h($m['price']) . ' ' . h($m['currency']) . "\n" .
-            "محدودیت: " . ((int)$m['limit'] > 0 ? $m['limit'] : 'نامحدود'),
-            [[bGreen('افزودن ربات به این ممبرشیپ', 'adm_addbot')], [bBlue('پنل', 'adm_home')]]);
+        $title = $r['result']['title'] ?? $chat;
+        $un    = $r['result']['username'] ?? '';
+        $url   = $un ? "https://t.me/{$un}" : ($r['result']['invite_link'] ?? '');
+        Channels::add($chat, $title, $url);
+        clearState($uid);
+        sendMsg(BOT_TOKEN, $chatId, "✅ کانال «" . h($title) . "» اضافه شد.\n\n⚠️ ربات‌های اپلودر را در این کانال ادمین کنید.");
         return;
     }
 
     if ($action === 'bot_token') {
-        $token = $text;
-        if (!preg_match('/^\d{6,}:[A-Za-z0-9_\-]{30,}$/', $token)) {
-            sendMsg(BOT_TOKEN, $chatId, "{$EMOJI['error']} فرمت توکن درست نیست. دوباره بفرستید."); return;
+        if (!preg_match('/^\d{6,}:[A-Za-z0-9_\-]{30,}$/', $text)) {
+            sendMsg(BOT_TOKEN, $chatId, "❌ فرمت توکن درست نیست."); return;
         }
-        $me = tg($token, 'getMe', []);
-        if (empty($me['ok'])) {
-            sendMsg(BOT_TOKEN, $chatId, "{$EMOJI['error']} توکن معتبر نیست: " . h($me['description'] ?? '')); return;
-        }
-        $username = $me['result']['username'];
+        $me = tg($text, 'getMe', []);
+        if (empty($me['ok'])) { sendMsg(BOT_TOKEN, $chatId, "❌ توکن معتبر نیست."); return; }
+        $bot = BotManager::create($text, $me['result']['username']);
 
-        $mems = MembershipManager::all();
-        if (!$mems) {
-            clearState($userId);
-            sendMsg(BOT_TOKEN, $chatId, "{$EMOJI['warning']} اول یک ممبرشیپ بسازید.", [[bGreen('افزودن ممبرشیپ', 'adm_addmem')]]);
-            return;
+        $base = (isset($_SERVER['HTTP_HOST']))
+            ? 'https://' . $_SERVER['HTTP_HOST'] . rtrim(dirname($_SERVER['SCRIPT_NAME']), '/')
+            : '';
+        $hook = '';
+        if ($base) {
+            $url = $base . '/' . basename(__FILE__) . '?bot=' . $bot['id'];
+            $r = tg($text, 'setWebhook', ['url' => $url, 'drop_pending_updates' => 'true']);
+            $hook = !empty($r['ok']) ? "\n✅ وبهوک تنظیم شد." : "\n⚠️ وبهوک تنظیم نشد: " . h($r['description'] ?? '');
         }
-
-        $bot = BotManager::create($token, $username, null);
-
-        // تنظیم خودکار وبهوک ربات فرعی
-        $domain = shopSettings()['domain'];
-        if (!$domain) {
-            $domain = (isset($_SERVER['HTTP_HOST']) ? 'https://' . $_SERVER['HTTP_HOST'] . dirname($_SERVER['SCRIPT_NAME']) : '');
-        }
-        $hookMsg = '';
-        if ($domain) {
-            $url = rtrim($domain, '/') . '/' . basename(__FILE__) . '?bot=' . $bot['id'];
-            $r = tg($token, 'setWebhook', ['url' => $url, 'drop_pending_updates' => 'true']);
-            $hookMsg = !empty($r['ok'])
-                ? "\n{$EMOJI['check']} وبهوک تنظیم شد."
-                : "\n{$EMOJI['warning']} وبهوک تنظیم نشد: " . h($r['description'] ?? '');
-        }
-
-        clearState($userId);
-        $rows = [];
-        foreach ($mems as $m) {
-            $rows[] = [bGreen('اتصال به ' . $m['name'], 'adm_linkbot_' . $bot['id'] . '|' . $m['id'])];
-        }
-        $rows[] = [bBlue('پنل', 'adm_home')];
-
+        clearState($uid);
         sendMsg(BOT_TOKEN, $chatId,
-            "{$EMOJI['check']} ربات <b>@" . h($username) . "</b> ثبت شد." . $hookMsg .
-            "\n\nحالا انتخاب کنید به کدام ممبرشیپ وصل شود:", $rows);
+            "✅ ربات <b>@" . h($bot['username']) . "</b> اضافه شد." . $hook .
+            "\n\nحالا داخل همان ربات فایل بفرستید تا لینک بسازد.",
+            inlineKb([[['text' => '⚙️ تنظیمات ربات', 'callback_data' => 'adm_bot_' . $bot['id']]]]));
         return;
     }
 
-    if ($action === 'set_value') {
-        $key = $sd['key'] ?? '';
-        $allowed = ['wallet_usdt', 'wallet_trx', 'card_number', 'support', 'welcome_text'];
-        if (!in_array($key, $allowed, true)) { clearState($userId); return; }
-        mutate('settings', function (&$s) use ($key, $text) { $s[$key] = $text; });
-        clearState($userId);
-        sendMsg(BOT_TOKEN, $chatId, "{$EMOJI['check']} ذخیره شد.", [[bBlue('تنظیمات', 'adm_set')], [bBlue('پنل', 'adm_home')]]);
+    if ($action === 'bot_sec') {
+        if (!ctype_digit($text)) { sendMsg(BOT_TOKEN, $chatId, "⚠️ فقط عدد."); return; }
+        BotManager::setSetting($sd['bot'], 'delete_seconds', max(5, (int)$text));
+        clearState($uid);
+        sendMsg(BOT_TOKEN, $chatId, "✅ زمان حذف روی {$text} ثانیه تنظیم شد.");
         return;
     }
 
     if ($action === 'broadcast') {
         if ($text === '') return;
-        clearState($userId);
-        $users = load('users');
+        clearState($uid);
         $sent = 0; $fail = 0;
-        foreach ($users as $u) {
-            if (!empty($u['banned'])) continue;
-            $r = sendMsg(BOT_TOKEN, $u['telegram_id'], $text);
+        foreach (load('users') as $u2) {
+            if (!empty($u2['banned'])) continue;
+            $r = sendMsg(BOT_TOKEN, $u2['telegram_id'], $text);
             if (!empty($r['ok'])) $sent++; else $fail++;
-            usleep(50000); // ~20 پیام در ثانیه — جلوگیری از محدودیت تلگرام
+            usleep(50000);
         }
-        sendMsg(BOT_TOKEN, $chatId, "📢 ارسال شد.\n{$EMOJI['check']} موفق: {$sent}\n{$EMOJI['error']} ناموفق: {$fail}", [[bBlue('پنل', 'adm_home')]]);
+        sendMsg(BOT_TOKEN, $chatId, "📢 موفق: {$sent} | ناموفق: {$fail}");
         return;
     }
 }
 
-// ============================================================
-// 🤖 ربات فرعی (اپلودر)
-// ============================================================
-
-function childStateKey($botId) { return botFile($botId, 'states'); }
-
-function childGetState($botId, $userId) {
-    $s = load(childStateKey($botId));
-    return $s[(string)$userId] ?? null;
+/** اجرای عملیات یک دکمه منو */
+function runMenuAction($act, $uid, $chatId, $uname, $fname) {
+    switch ($act) {
+        case 'buy':      showProducts($uid, $chatId); break;
+        case 'account':  showAccount($uid, $chatId); break;
+        case 'topup':    startTopup($uid, $chatId); break;
+        case 'referral': showReferral($uid, $chatId); break;
+        case 'orders':   showOrders($uid, $chatId); break;
+        case 'support':  showSupport($uid, $chatId); break;
+        case 'trust':    sendMsg(BOT_TOKEN, $chatId, T('trust')); break;
+        default:         showHome($uid, $chatId, $fname); break;
+    }
 }
-function childSetState($botId, $userId, $action, $payload = []) {
-    mutate(childStateKey($botId), function (&$s) use ($userId, $action, $payload) {
-        $s[(string)$userId] = ['action' => $action, 'data' => $payload];
+
+// ============================================================
+// 🤖 ربات اپلودر — عمومی، فقط آپلود و تحویل فایل
+// ============================================================
+
+function childState($botId, $uid) { $s = load('bots/' . $botId . '/states'); return $s[(string)$uid] ?? null; }
+function childSetState($botId, $uid, $action, $data = []) {
+    mutate('bots/' . $botId . '/states', function (&$s) use ($uid, $action, $data) {
+        $s[(string)$uid] = ['action' => $action, 'data' => $data];
     });
 }
-function childClearState($botId, $userId) {
-    mutate(childStateKey($botId), function (&$s) use ($userId) { unset($s[(string)$userId]); });
+function childClearState($botId, $uid) {
+    mutate('bots/' . $botId . '/states', function (&$s) use ($uid) { unset($s[(string)$uid]); });
 }
 
-function extractFile($msg) {
-    if (!empty($msg['document']))  return ['document', $msg['document']['file_id'], $msg['document']['file_name'] ?? 'file'];
-    if (!empty($msg['video']))     return ['video', $msg['video']['file_id'], $msg['video']['file_name'] ?? 'video'];
-    if (!empty($msg['audio']))     return ['audio', $msg['audio']['file_id'], $msg['audio']['title'] ?? 'audio'];
-    if (!empty($msg['voice']))     return ['voice', $msg['voice']['file_id'], 'voice'];
-    if (!empty($msg['animation'])) return ['animation', $msg['animation']['file_id'], 'animation'];
-    if (!empty($msg['photo']))     { $p = $msg['photo']; return ['photo', $p[count($p) - 1]['file_id'], 'photo']; }
-    return null;
-}
-
-function childMenu($bot, $chatId, $userId, $msgId = null) {
-    global $EMOJI;
-    $isOwner = ($userId === ADMIN_ID);
-    $m = $bot['membership_id'] ? MembershipManager::get($bot['membership_id']) : null;
-
-    $text  = "{$EMOJI['crown']} <b>ربات اعضا</b>\n\n";
-    if ($m) $text .= "ممبرشیپ: " . h($m['name']) . "\n";
-    $files = FileManager::listFiles($bot['id']);
-    $text .= "{$EMOJI['file']} فایل‌ها: " . count($files) . "\n";
-
-    $rows = [[bBlue('فایل‌های من', 'c_files')]];
-    if ($isOwner) {
-        $rows[] = [bGreen('آپلود فایل', 'c_up'), bGreen('آپلود گروهی', 'c_batch')];
-        $rows[] = [bBlue('آمار', 'c_stats'), bBlue('پیام همگانی', 'c_bc')];
+/** صفحه عضویت اجباری */
+function showJoinGate($bot, $chatId, $missing, $code) {
+    $s = BotManager::settings($bot['id']);
+    $rows = [];
+    $broken = false;
+    foreach ($missing as $ch) {
+        if (!empty($ch['url'])) $rows[] = [['text' => '📢 ' . $ch['title'], 'url' => $ch['url']]];
+        if (!empty($ch['unverifiable'])) $broken = true;
     }
+    $rows[] = [['text' => $s['joined_btn'], 'callback_data' => 'jchk_' . $code]];
 
-    if ($msgId) editMsg($bot['token'], $chatId, $msgId, $text, $rows);
-    else sendMsg($bot['token'], $chatId, $text, $rows);
+    $text = $s['join_text'];
+    if ($broken) {
+        // ربات در کانال ادمین نیست — به ادمین خبر بده، کاربر را سردرگم نگذار
+        $text .= "\n\n⚠️ اگر عضو هستید ولی خطا می‌گیرید، به پشتیبانی اطلاع دهید.";
+        notifyChannelProblem($bot);
+    }
+    sendMsg($bot['token'], $chatId, $text, inlineKb($rows));
 }
 
-function childSendAllFiles($bot, $chatId) {
-    global $EMOJI;
-    $files = FileManager::listFiles($bot['id']);
-    $set   = botSettings($bot['id']);
-    if (!$files) {
-        sendMsg($bot['token'], $chatId, "{$EMOJI['file']} هنوز فایلی آپلود نشده است.");
+/** حداکثر هر ۶ ساعت یک بار به ادمین هشدار می‌دهد که ربات در کانال ادمین نیست */
+function notifyChannelProblem($bot) {
+    $flag = 'bots/' . $bot['id'] . '/health';
+    $st = load($flag);
+    if (!empty($st['warned_at']) && (time() - (int)$st['warned_at']) < 21600) return;
+    save($flag, ['warned_at' => time()]);
+    sendMsg(BOT_TOKEN, ADMIN_ID,
+        "⚠️ <b>مشکل عضویت اجباری</b>\n\nربات <b>@" . h($bot['username']) . "</b> نمی‌تواند عضویت کانال‌ها را بررسی کند.\n\n" .
+        "این ربات را در همه کانال‌های اجباری <b>ادمین</b> کنید، وگرنه هیچ کاربری فایل دریافت نمی‌کند.");
+}
+
+/** تحویل فایل‌های یک لینک + زمان‌بندی حذف */
+function deliverLink($bot, $chatId, $uid, $code) {
+    $s    = BotManager::settings($bot['id']);
+    $link = Links::get($bot['id'], $code);
+
+    if (!$link || empty($link['active'])) {
+        sendMsg($bot['token'], $chatId, $s['expired_text']);
         return;
     }
-    $n = 0;
-    foreach ($files as $f) {
-        $cap = $set['caption'] ?: ($f['file_name'] ?? '');
-        sendFile($bot['token'], $chatId, $f['file_type'], $f['file_id'], $cap, !empty($set['protect_content']));
-        FileManager::countDownload($bot['id'], $f['code']);
-        $n++;
-        usleep(60000);
-        if ($n >= 50) break; // سقف امن در یک درخواست
+
+    Links::hit($bot['id'], $code, 'delivered');
+
+    $msgIds = [];
+    foreach ($link['files'] as $f) {
+        $r = sendFile($bot['token'], $chatId, $f['type'], $f['file_id'],
+                      $f['caption'] ?? '', !empty($s['protect_content']));
+        if (!empty($r['ok'])) $msgIds[] = $r['result']['message_id'];
+        usleep(40000);
     }
-    sendMsg($bot['token'], $chatId, "{$EMOJI['check']} {$n} فایل ارسال شد.");
+
+    if (!$msgIds) { sendMsg($bot['token'], $chatId, $s['expired_text']); return; }
+
+    $sec = max(5, (int)$s['delete_seconds']);
+    $warn = sendMsg($bot['token'], $chatId, str_replace('{sec}', $sec, $s['warn_text']));
+    $warnId = $warn['result']['message_id'] ?? null;
+
+    // اگر سرور اجازه بدهد دقیقا سر وقت حذف می‌کند، وگرنه از صف استفاده می‌شود
+    tryImmediateDelete($bot['id'], $chatId, $msgIds, $sec, $warnId);
+    scheduleDelete($bot['id'], $chatId, $msgIds, $sec, $warnId);
 }
 
 function childHandle($botId, $update) {
-    global $EMOJI;
-
     $bot = BotManager::get($botId);
     if (!$bot || empty($bot['active'])) return;
     $token = $bot['token'];
+    $s     = BotManager::settings($botId);
 
     // ---------- Callback ----------
     if (isset($update['callback_query'])) {
         $cb     = $update['callback_query'];
-        $userId = (int)$cb['from']['id'];
-        $chatId = $cb['message']['chat']['id'] ?? $userId;
+        $uid    = (int)$cb['from']['id'];
+        $chatId = $cb['message']['chat']['id'] ?? $uid;
         $msgId  = $cb['message']['message_id'] ?? null;
         $data   = $cb['data'] ?? '';
         $cbId   = $cb['id'];
-        $isOwner = ($userId === ADMIN_ID);
+        $isOwner = ($uid === ADMIN_ID);
 
-        $isMember = $bot['membership_id']
-            ? MembershipManager::isMember($bot['membership_id'], $userId)
-            : false;
-
-        if (!$isOwner && !$isMember) {
-            answerCb($token, $cbId, "{$EMOJI['lock']} عضویت شما فعال نیست.", true);
+        if (str_starts_with($data, 'jchk_')) {
+            $code = substr($data, 5);
+            $missing = !empty($s['force_join']) ? Channels::missing($token, $uid) : [];
+            if ($missing) {
+                answerCb($token, $cbId, '❌ هنوز در همه کانال‌ها عضو نشده‌اید.', true);
+                return;
+            }
+            answerCb($token, $cbId, '✅ عضویت تایید شد');
+            if ($msgId) delMsg($token, $chatId, $msgId);
+            deliverLink($bot, $chatId, $uid, $code);
             return;
         }
-
-        if ($data === 'c_home')  { answerCb($token, $cbId); childMenu($bot, $chatId, $userId, $msgId); return; }
-        if ($data === 'c_files') { answerCb($token, $cbId); childSendAllFiles($bot, $chatId); return; }
 
         if (!$isOwner) { answerCb($token, $cbId); return; }
 
-        if ($data === 'c_up') {
+        if ($data === 'u_single') {
             answerCb($token, $cbId);
-            childSetState($botId, $userId, 'upload');
-            sendMsg($token, $chatId, "{$EMOJI['upload']} فایل را بفرستید.", [[bRed('انصراف', 'c_cancel')]]);
+            childSetState($botId, $uid, 'single');
+            sendMsg($token, $chatId, "📤 فایل را بفرستید تا لینک بسازم.",
+                inlineKb([[['text' => '🔴 انصراف', 'callback_data' => 'u_cancel']]]));
             return;
         }
-        if ($data === 'c_batch') {
+        if ($data === 'u_batch') {
             answerCb($token, $cbId);
-            $batch = FileManager::startBatch($botId);
-            childSetState($botId, $userId, 'batch', ['batch' => $batch, 'count' => 0]);
-            sendMsg($token, $chatId, "{$EMOJI['upload']} فایل‌ها را یکی‌یکی بفرستید. در پایان /done را بزنید.", [[bRed('انصراف', 'c_cancel')]]);
+            childSetState($botId, $uid, 'batch', ['files' => []]);
+            sendMsg($token, $chatId, "📤 فایل‌ها را یکی‌یکی بفرستید.\nدر پایان /done را بزنید.",
+                inlineKb([[['text' => '🔴 انصراف', 'callback_data' => 'u_cancel']]]));
             return;
         }
-        if ($data === 'c_bc') {
-            answerCb($token, $cbId);
-            childSetState($botId, $userId, 'bc');
-            sendMsg($token, $chatId, "📢 متن پیام همگانی را بفرستید:", [[bRed('انصراف', 'c_cancel')]]);
-            return;
-        }
-        if ($data === 'c_cancel') {
-            childClearState($botId, $userId);
+        if ($data === 'u_cancel') {
+            childClearState($botId, $uid);
             answerCb($token, $cbId, 'لغو شد');
-            childMenu($bot, $chatId, $userId, $msgId);
+            childMenu($bot, $chatId);
             return;
         }
-        if ($data === 'c_stats') {
+        if ($data === 'u_links') {
             answerCb($token, $cbId);
-            $files = FileManager::listFiles($botId);
-            $users = load(botFile($botId, 'users'));
-            $dl = 0; foreach ($files as $f) $dl += (int)$f['downloads'];
-            $m = $bot['membership_id'] ? MembershipManager::get($bot['membership_id']) : null;
-            $text  = "{$EMOJI['chart']} <b>آمار</b>\n\n";
-            $text .= "{$EMOJI['member']} کاربران ربات: " . count($users) . "\n";
-            $text .= "{$EMOJI['file']} فایل‌ها: " . count($files) . "\n";
-            $text .= "{$EMOJI['upload']} دانلودها: {$dl}\n";
-            if ($m) $text .= "{$EMOJI['shop']} اعضای ممبرشیپ: " . count($m['members']) . "\n";
-            editMsg($token, $chatId, $msgId, $text, [[bBlue('بازگشت', 'c_home')]]);
+            $links = Links::all($botId);
+            if (!$links) { sendMsg($token, $chatId, "🔗 هنوز لینکی نساخته‌اید."); return; }
+            $text = "🔗 <b>لینک‌های ساخته‌شده</b>\n";
+            foreach (array_slice(array_reverse($links, true), 0, 20, true) as $c => $l) {
+                $text .= "\n📦 " . h($l['title'] ?: (count($l['files']) . ' فایل')) . "\n";
+                $text .= "   " . Links::url($botId, $c) . "\n";
+                $text .= "   👁 " . (int)$l['clicks'] . "  |  📥 " . (int)$l['delivered'] . "\n";
+            }
+            sendMsg($token, $chatId, $text);
             return;
         }
+        if ($data === 'u_stats') {
+            answerCb($token, $cbId);
+            $links = Links::all($botId);
+            $users = load('bots/' . $botId . '/users');
+            $cl = 0; $dl = 0;
+            foreach ($links as $l) { $cl += (int)$l['clicks']; $dl += (int)$l['delivered']; }
+            editMsg($token, $chatId, $msgId,
+                "📊 <b>آمار</b>\n\n👥 کاربران: " . count($users) . "\n🔗 لینک‌ها: " . count($links) .
+                "\n👁 کلیک: {$cl}\n📥 تحویل: {$dl}\n🗑 حذف بعد از: {$s['delete_seconds']} ثانیه",
+                inlineKb([[['text' => '◀️ بازگشت', 'callback_data' => 'u_home']]]));
+            return;
+        }
+        if ($data === 'u_home') { answerCb($token, $cbId); childMenu($bot, $chatId, $msgId); return; }
 
         answerCb($token, $cbId);
         return;
@@ -1439,122 +1725,124 @@ function childHandle($botId, $update) {
     // ---------- Message ----------
     if (!isset($update['message'])) return;
     $msg    = $update['message'];
-    $userId = (int)($msg['from']['id'] ?? 0);
-    $chatId = $msg['chat']['id'] ?? $userId;
+    $uid    = (int)($msg['from']['id'] ?? 0);
+    $chatId = $msg['chat']['id'] ?? $uid;
     $uname  = $msg['from']['username'] ?? '';
     $fname  = $msg['from']['first_name'] ?? '';
     $text   = trim($msg['text'] ?? '');
-    if (!$userId) return;
+    if (!$uid) return;
 
-    $isOwner = ($userId === ADMIN_ID);
+    $isOwner = ($uid === ADMIN_ID);
+    botUserTouch($botId, $uid, $uname, $fname);
 
     // ---- /start [code] ----
     if (str_starts_with($text, '/start')) {
-        $parts = explode(' ', $text, 2);
-        $code  = trim($parts[1] ?? '');
-
-        if ($isOwner) {
-            botUserTouch($botId, $userId, $uname);
-            childMenu($bot, $chatId, $userId);
-            return;
-        }
-
-        // عضو موجود بدون کد
-        if ($code === '' && $bot['membership_id'] && MembershipManager::isMember($bot['membership_id'], $userId)) {
-            botUserTouch($botId, $userId, $uname);
-            $set = botSettings($botId);
-            sendMsg($token, $chatId, str_replace('{name}', h($fname), $set['welcome']));
-            childMenu($bot, $chatId, $userId);
-            return;
-        }
+        $code = trim(explode(' ', $text, 2)[1] ?? '');
 
         if ($code === '') {
-            sendMsg($token, $chatId,
-                "{$EMOJI['lock']} این ربات مخصوص اعضاست.\n\nبرای دریافت دسترسی ابتدا ممبرشیپ را از ربات فروش تهیه کنید.");
+            sendMsg($token, $chatId, str_replace('{name}', h($fname), $s['start_text']));
+            if ($isOwner) childMenu($bot, $chatId);
             return;
         }
 
-        [$ok, $res] = AccessManager::validate($code, $userId);
-        if (!$ok) {
-            sendMsg($token, $chatId, "{$EMOJI['error']} " . h($res));
-            return;
+        $link = Links::get($botId, $code);
+        if (!$link || empty($link['active'])) { sendMsg($token, $chatId, $s['expired_text']); return; }
+
+        Links::hit($botId, $code, 'clicks');
+
+        // 🔒 قفل عضویت اجباری — کانال‌ها از ربات مادر می‌آیند
+        if (!empty($s['force_join'])) {
+            $missing = Channels::missing($token, $uid);
+            if ($missing) { showJoinGate($bot, $chatId, $missing, $code); return; }
         }
 
-        AccessManager::markUsed($code);
-        botUserTouch($botId, $userId, $uname);
-        $set = botSettings($botId);
+        deliverLink($bot, $chatId, $uid, $code);
+        return;
+    }
+
+    if (!$isOwner) return;   // ربات عمومی است ولی فقط مالک می‌تواند آپلود کند
+
+    if ($text === '/panel' || $text === '/menu') { childMenu($bot, $chatId); return; }
+
+    $st = childState($botId, $uid);
+    if (!$st) return;
+
+    if ($st['action'] === 'single') {
+        $f = extractFile($msg);
+        if (!$f) { sendMsg($token, $chatId, "⚠️ یک فایل بفرستید."); return; }
+        [$type, $fid, $name] = $f;
+        $code = Links::create($botId, [[
+            'type' => $type, 'file_id' => $fid, 'name' => $name,
+            'caption' => $msg['caption'] ?? '',
+        ]], $name);
+        childClearState($botId, $uid);
+        $url = Links::url($botId, $code);
         sendMsg($token, $chatId,
-            "{$EMOJI['check']} دسترسی شما فعال شد!\n\n" . str_replace('{name}', h($fname), $set['welcome']));
-        childMenu($bot, $chatId, $userId);
+            "✅ <b>لینک ساخته شد</b>\n\n📦 " . h($name) . "\n\n🔗 <code>{$url}</code>\n\n" .
+            "کاربر با کلیک روی این لینک، بعد از عضویت در کانال‌ها فایل را می‌گیرد و " .
+            "بعد از <b>{$s['delete_seconds']} ثانیه</b> فایل حذف می‌شود.",
+            inlineKb([[['text' => '📤 آپلود بعدی', 'callback_data' => 'u_single']],
+                      [['text' => '◀️ منو', 'callback_data' => 'u_home']]]));
         return;
     }
 
-    if (!$isOwner) {
-        // اعضا فقط منو دارند
-        if ($bot['membership_id'] && MembershipManager::isMember($bot['membership_id'], $userId)) {
-            childMenu($bot, $chatId, $userId);
-        }
-        return;
-    }
+    if ($st['action'] === 'batch') {
+        $files = $st['data']['files'] ?? [];
 
-    // ---- مالک ----
-    $st = childGetState($botId, $userId);
-    if (!$st) {
-        if ($text === '/panel') childMenu($bot, $chatId, $userId);
-        return;
-    }
-    $action = $st['action'];
-    $sd     = $st['data'] ?? [];
-
-    if ($action === 'upload') {
-        $f = extractFile($msg);
-        if (!$f) { sendMsg($token, $chatId, "{$EMOJI['warning']} یک فایل بفرستید."); return; }
-        [$type, $fileId, $name] = $f;
-        FileManager::addFile($botId, $fileId, $name, $type);
-        childClearState($botId, $userId);
-        sendMsg($token, $chatId, "{$EMOJI['check']} فایل «" . h($name) . "» ذخیره شد.", [[bBlue('منو', 'c_home')]]);
-        return;
-    }
-
-    if ($action === 'batch') {
         if ($text === '/done') {
-            childClearState($botId, $userId);
-            sendMsg($token, $chatId, "{$EMOJI['check']} مجموعه با " . (int)$sd['count'] . " فایل ذخیره شد.", [[bBlue('منو', 'c_home')]]);
+            if (!$files) { sendMsg($token, $chatId, "⚠️ هیچ فایلی نفرستادید."); return; }
+            $code = Links::create($botId, $files, count($files) . ' فایل');
+            childClearState($botId, $uid);
+            $url = Links::url($botId, $code);
+            sendMsg($token, $chatId,
+                "✅ <b>لینک گروهی ساخته شد</b>\n\n📦 " . count($files) . " فایل\n\n🔗 <code>{$url}</code>",
+                inlineKb([[['text' => '◀️ منو', 'callback_data' => 'u_home']]]));
             return;
         }
-        $f = extractFile($msg);
-        if (!$f) { sendMsg($token, $chatId, "{$EMOJI['warning']} فایل بفرستید یا /done بزنید."); return; }
-        [$type, $fileId, $name] = $f;
-        $fc = FileManager::addFile($botId, $fileId, $name, $type, $sd['batch']);
-        FileManager::addToBatch($botId, $sd['batch'], $fc);
-        $sd['count'] = (int)$sd['count'] + 1;
-        childSetState($botId, $userId, 'batch', $sd);
-        sendMsg($token, $chatId, "{$EMOJI['check']} " . $sd['count'] . " فایل ثبت شد. (/done برای پایان)");
-        return;
-    }
 
-    if ($action === 'bc') {
-        if ($text === '') return;
-        childClearState($botId, $userId);
-        $users = load(botFile($botId, 'users'));
-        $sent = 0; $fail = 0;
-        foreach ($users as $u) {
-            $r = sendMsg($token, $u['id'], $text);
-            if (!empty($r['ok'])) $sent++; else $fail++;
-            usleep(50000);
-        }
-        sendMsg($token, $chatId, "📢 موفق: {$sent} | ناموفق: {$fail}", [[bBlue('منو', 'c_home')]]);
+        $f = extractFile($msg);
+        if (!$f) { sendMsg($token, $chatId, "⚠️ فایل بفرستید یا /done بزنید."); return; }
+        [$type, $fid, $name] = $f;
+        $files[] = ['type' => $type, 'file_id' => $fid, 'name' => $name, 'caption' => $msg['caption'] ?? ''];
+        childSetState($botId, $uid, 'batch', ['files' => $files]);
+        sendMsg($token, $chatId, "✅ " . count($files) . " فایل ثبت شد. (/done برای پایان)");
         return;
     }
 }
 
+function childMenu($bot, $chatId, $msgId = null) {
+    $s = BotManager::settings($bot['id']);
+    $text  = "🤖 <b>پنل اپلودر @" . h($bot['username']) . "</b>\n\n";
+    $text .= "🔗 لینک‌ها: " . count(Links::all($bot['id'])) . "\n";
+    $text .= "🗑 حذف خودکار: {$s['delete_seconds']} ثانیه\n";
+    $text .= "🔒 عضویت اجباری: " . (!empty($s['force_join']) ? 'روشن' : 'خاموش') . "\n\n";
+    $text .= "فایل بفرستید تا لینک بسازم.";
+
+    $rows = [
+        [['text' => '📤 آپلود تکی', 'callback_data' => 'u_single'],
+         ['text' => '📦 آپلود گروهی', 'callback_data' => 'u_batch']],
+        [['text' => '🔗 لینک‌های من', 'callback_data' => 'u_links'],
+         ['text' => '📊 آمار', 'callback_data' => 'u_stats']],
+    ];
+    if ($msgId) editMsg($bot['token'], $chatId, $msgId, $text, inlineKb($rows));
+    else sendMsg($bot['token'], $chatId, $text, inlineKb($rows));
+}
+
 // ============================================================
-// 🎯 ورودی Webhook
+// 🎯 ورودی
 // ============================================================
 
-// پنل ادمین این فایل را به عنوان کتابخانه include می‌کند؛ در آن حالت
-// وبهوک نباید اجرا شود (تا منطق داده در دو جا کپی و واگرا نشود).
 if (defined('MEMBERSHIP_LIB_ONLY')) return;
+
+// اجرای صف حذف — با cron یا در هر درخواست
+if (isset($_GET['cron'])) {
+    http_response_code(200);
+    if (!hash_equals(CRON_KEY, (string)$_GET['cron'])) { echo 'forbidden'; exit; }
+    echo 'deleted: ' . processDeleteQueue(200);
+    exit;
+}
+
+processDeleteQueue(20);
 
 $raw = file_get_contents('php://input');
 $update = json_decode($raw, true);
@@ -1567,7 +1855,7 @@ if (is_array($update)) {
         if ($botId) childHandle($botId, $update);
         else        masterHandle($update);
     } catch (Throwable $e) {
-        error_log('[membership-bot] ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
+        error_log('[shop-bot] ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
     }
 }
 
