@@ -1,0 +1,72 @@
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# PHP
+composer.lock
+vendor/
+.env
+.env.local
+
+# Logs
+storage/logs/*
+!storage/logs/.gitkeep
+
+# Uploads
+public/assets/uploads/*
+storage/uploads/*
+!public/assets/uploads/.gitkeep
+!storage/uploads/.gitkeep
+
+# Database
+*.sql
+!src/database/schema.sql
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary
+*.tmp
+*.temp
+.cache
+
+# Node (if used)
+node_modules/
+npm-debug.log
+
+# Python (from old project)
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+env/
+ENV/
+
+# Configuration (keep example)
+!src/config/config.php.example
