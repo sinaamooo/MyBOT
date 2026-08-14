@@ -32,9 +32,8 @@
 
 ### الزامات
 - PHP 7.4+
-- MySQL 5.7+
 - cURL
-- Shell Access
+- دسترسی فایل سیستم (بدون نیاز به MySQL)
 
 ### مراحل نصب
 
@@ -44,36 +43,28 @@ git clone <repository-url> mybot
 cd mybot
 ```
 
-#### 2. پیکربندی
-ویرایش فایل `src/config/config.php` و تنظیم:
-```php
-define('BOT_TOKEN', 'YOUR_BOT_TOKEN');
-define('ADMIN_ID', YOUR_ADMIN_ID);
-define('DB_HOST', 'localhost');
-define('DB_USER', 'your_db_user');
-define('DB_PASS', 'your_db_password');
-define('DB_NAME', 'telegram_shop');
-define('WEBHOOK_URL', 'https://yourdomain.com/bot.php');
-```
+#### 2. پیکربندی (سریع)
+اگر فایل `src/config/config.php` را نیاز نیست تغییر دهید (اطلاعات از قبل تنظیم شده است).
 
-#### 3. اجرای نصب‌کننده
+#### 3. اجرای اعداد سریع
 ```bash
-php install.php
+# اختیاری: برای ایجاد دایرکتوری‌ها و فایل‌های داده
+php quick-setup.php
 ```
 
-اسکریپت نصب مراحل زیر را انجام می‌دهد:
-- ✅ اتصال به دیتابیس
-- ✅ ایجاد دیتابیس
-- ✅ ایجاد جداول
-- ✅ ایجاد کاربر مدیریت
-- ✅ ایجاد دایرکتوری‌های مورد نیاز
-- ✅ تست اتصال ربات
-
-#### 4. تنظیم Webhook
-```bash
-# اجرای این دستور در terminal (جایی که curl موجود است)
-curl -X POST https://api.telegram.org/bot[BOT_TOKEN]/setWebhook?url=https://yourdomain.com/bot.php
+یا به صفحه وب بروید:
 ```
+https://yourdomain.com/setup.php
+```
+
+#### 4. تنظیم Webhook (از وب)
+بجای استفاده از terminal، می‌توانید از صفحه `setup.php` استفاده کنید:
+- رفتن به: `https://yourdomain.com/setup.php`
+- دکمه "تست اتصال" کلیک کنید
+- URL webhook را وارد کنید (مثل: `https://yourdomain.com/bot.php`)
+- دکمه "تنظیم Webhook" کلیک کنید
+
+**بدون نیاز به terminal!**
 
 ## 📁 ساختار پروژه
 

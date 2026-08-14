@@ -7,12 +7,10 @@ session_start();
 
 require_once __DIR__ . '/../../src/config/config.php';
 require_once __DIR__ . '/../../src/classes/Logger.php';
-require_once __DIR__ . '/../../src/classes/Database.php';
-require_once __DIR__ . '/../../src/classes/User.php';
+require_once __DIR__ . '/../../src/classes/FileStorage.php';
 
 use TelegramShop\Classes\Logger;
-use TelegramShop\Classes\Database;
-use TelegramShop\Classes\User;
+use TelegramShop\Classes\FileStorage;
 
 // Check if admin is logged in
 if (!isset($_SESSION['admin_id'])) {
@@ -27,12 +25,12 @@ if ($adminId != ADMIN_ID) {
     exit;
 }
 
-$db = new Database();
+$storage = new FileStorage();
 
 // Get statistics
-$totalUsers = $db->getAll('users');
-$totalPurchases = $db->getAll('purchases');
-$totalSales = $db->getAll('sales');
+$totalUsers = $storage->getAll('users');
+$totalPurchases = $storage->getAll('purchases');
+$totalSales = $storage->getAll('sales');
 
 $userCount = count($totalUsers);
 $purchaseCount = count($totalPurchases);

@@ -5,15 +5,15 @@
 
 require_once __DIR__ . '/../src/config/config.php';
 require_once __DIR__ . '/../src/classes/Logger.php';
-require_once __DIR__ . '/../src/classes/Database.php';
+require_once __DIR__ . '/../src/classes/FileStorage.php';
 require_once __DIR__ . '/../src/classes/TelegramAPI.php';
-require_once __DIR__ . '/../src/classes/User.php';
+require_once __DIR__ . '/../src/classes/UserFile.php';
 require_once __DIR__ . '/../src/classes/UIBuilder.php';
 
 use TelegramShop\Classes\Logger;
-use TelegramShop\Classes\Database;
+use TelegramShop\Classes\FileStorage;
 use TelegramShop\Classes\TelegramAPI;
-use TelegramShop\Classes\User;
+use TelegramShop\Classes\UserFile;
 use TelegramShop\Classes\UIBuilder;
 
 try {
@@ -58,11 +58,11 @@ function handleMessage($message, $api) {
     Logger::info("Message from user $userId: $text");
 
     // Create or get user
-    $user = new User($userId);
+    $user = new UserFile($userId);
     if (!$user->exists()) {
         $firstName = $message['from']['first_name'] ?? 'User';
         $username = $message['from']['username'] ?? null;
-        User::create($userId, $firstName, $username);
+        UserFile::create($userId, $firstName, $username);
     }
 
     // Handle commands
@@ -92,7 +92,7 @@ function handleCommand($command, $chatId, $userId, $api) {
 }
 
 function handleStart($chatId, $userId, $api) {
-    $user = new User($userId);
+    $user = new UserFile($userId);
     $userData = $user->getData();
 
     $welcomeText = sprintf(
@@ -125,7 +125,7 @@ function handleHelp($chatId, $api) {
 }
 
 function handleBalance($chatId, $userId, $api) {
-    $user = new User($userId);
+    $user = new UserFile($userId);
     $userData = $user->getData();
 
     $balanceText = sprintf(
@@ -187,7 +187,7 @@ function handleActionCallback($action, $chatId, $userId, $messageId, $api) {
             break;
 
         case 'action_history':
-            $user = new User($userId);
+            $user = new UserFile($userId);
             $purchases = $user->getPurchases();
 
             if (empty($purchases)) {
@@ -232,7 +232,7 @@ function handleActionCallback($action, $chatId, $userId, $messageId, $api) {
 
 function handlePaymentCallback($action, $chatId, $userId, $messageId, $api) {
     $method = str_replace('payment_', '', $action);
-    $user = new User($userId);
+    $user = new UserFile($userId);
 
     if ($user->setPaymentMethod($method)) {
         $api->answerCallbackQuery($callbackQuery['id'], "✅ روش پرداخت تغییر یافت");
@@ -264,8 +264,8 @@ function handleAdminCallback($action, $chatId, $userId, $messageId, $api) {
             break;
 
         case 'admin_users':
-            $db = new Database();
-            $totalUsers = $db->getAll('users');
+            $storage = new FileStorage();
+            $totalUsers = $storage->getAll('users');
             $text = "👥 <b>مدیریت کاربران</b>\n\n" .
                     "تعداد کاربران: " . count($totalUsers);
             $api->sendMessage($chatId, $text);

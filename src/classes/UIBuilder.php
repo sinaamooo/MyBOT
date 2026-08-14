@@ -2,6 +2,8 @@
 
 namespace TelegramShop\Classes;
 
+require_once __DIR__ . '/UserFile.php';
+
 class UIBuilder {
     public static function inlineButton($text, $callbackData, $color = 'blue', $emoji = null) {
         if ($emoji) {
@@ -34,7 +36,7 @@ class UIBuilder {
     }
 
     public static function mainMenu($userId) {
-        $user = new User($userId);
+        $user = new UserFile($userId);
         $emoji = EMOJI_PREMIUM;
 
         $balance = $user->getBalance();
@@ -88,7 +90,7 @@ class UIBuilder {
     }
 
     public static function settingsMenu($userId) {
-        $user = new User($userId);
+        $user = new UserFile($userId);
         $userData = $user->getData();
         $emoji = EMOJI_PREMIUM;
 
