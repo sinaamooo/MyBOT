@@ -36,8 +36,6 @@ mb_internal_encoding('UTF-8');
 // Config (token / admin set as requested)
 // ============================================================
 const BOT_TOKEN = '8759780599:AAEsFbf8h_oFR4ms4KFNqhqHNjTV0FxD3Lo';
-const BOT_USERNAME = 'GiftIx1bot';
-const REPORTS_CHANNEL = 'GiftIx1_Reports';
 const DB_PATH = __DIR__ . '/giftix.db';
 const OFFSET_FILE = __DIR__ . '/.giftix_update_offset';
 const DAILY_DEPOSIT_LIMIT = 900_000;
@@ -51,12 +49,12 @@ $ADMINS = [
     8213021584 => 'owner',
 ];
 
-// Empty = join-gate disabled. To require membership again, list channel usernames here
-// (without @) AND make sure the bot itself is an ADMIN of each channel first — Telegram's
-// getChatMember call fails for a bot that isn't a member/admin of the channel, and this bot
-// treats that failure as "not joined", which is what caused users to get stuck even after
-// actually joining.
-$REQUIRED_CHANNELS = [];
+// The values below are only the built-in fallback defaults. All of them (required channel,
+// reports channel, bot username, support contact, deposit card, trust channel) are editable
+// live from the admin panel -> "تنظیمات ربات" without touching this file — see botSetting()
+// and BOT_SETTINGS_FIELDS further down.
+const DEFAULT_BOT_USERNAME = 'GiftIx1bot';
+const DEFAULT_REPORTS_CHANNEL = 'GiftIx1_Reports';
 
 $BASE_PRICES = [
     'ton' => 298_225,
@@ -234,6 +232,53 @@ function settingSet(string $key, string $value): void
     $stmt = db()->prepare('INSERT INTO settings (key, value) VALUES (?, ?)
         ON CONFLICT(key) DO UPDATE SET value = excluded.value');
     $stmt->execute([$key, $value]);
+}
+
+function settingDelete(string $key): void
+{
+    $stmt = db()->prepare('DELETE FROM settings WHERE key = ?');
+    $stmt->execute([$key]);
+}
+
+// ============================================================
+// Admin-editable bot settings (channel, contact, deposit-card info) — stored in `settings`
+// under a "bs_" prefix so an admin can change them from the panel instead of editing this file.
+// ============================================================
+const BOT_SETTINGS_FIELDS = [
+    'required_channels' => ['label' => 'کانال(های) اجباری عضویت', 'hint' => 'با کاما جدا کنید، بدون @ — خالی یعنی الزام عضویت غیرفعاله', 'default' => ''],
+    'reports_channel' => ['label' => 'کانال گزارش‌ها و پشتیبان‌گیری', 'hint' => 'بدون @', 'default' => DEFAULT_REPORTS_CHANNEL],
+    'bot_username' => ['label' => 'یوزرنیم ربات', 'hint' => 'بدون @ — برای ساخت لینک دعوت زیرمجموعه‌گیری', 'default' => DEFAULT_BOT_USERNAME],
+    'support_username' => ['label' => 'یوزرنیم پشتیبانی', 'hint' => 'بدون @ — در بخش پشتیبانی نمایش داده می‌شود', 'default' => ''],
+    'card_number' => ['label' => 'شماره کارت واریزی', 'hint' => '', 'default' => '6037-9918-1234-5678'],
+    'card_holder' => ['label' => 'نام صاحب کارت', 'hint' => '', 'default' => 'فروشگاه GiftIx'],
+    'trust_channel' => ['label' => 'کانال نماد اعتماد', 'hint' => 'بدون @ — اختیاری، در بخش پشتیبانی نمایش داده می‌شود', 'default' => ''],
+];
+
+function botSetting(string $key): string
+{
+    $value = settingGet('bs_' . $key);
+    return $value !== null ? $value : (BOT_SETTINGS_FIELDS[$key]['default'] ?? '');
+}
+
+function setBotSetting(string $key, string $value): void
+{
+    // Storing '' would make botSetting() return '' forever instead of falling back to the
+    // field's default (settingGet only returns null for a row that doesn't exist at all),
+    // so clearing a value deletes the row instead of writing an empty string.
+    if ($value === '') {
+        settingDelete('bs_' . $key);
+        return;
+    }
+    settingSet('bs_' . $key, $value);
+}
+
+function requiredChannels(): array
+{
+    $raw = botSetting('required_channels');
+    if ($raw === '') {
+        return [];
+    }
+    return array_values(array_filter(array_map(fn($c) => ltrim(trim($c), '@'), explode(',', $raw))));
 }
 
 // ============================================================
@@ -560,6 +605,7 @@ function adminKeyboard(): array
         [glassButton('تراکنش‌ها', 'admin_transactions', 'purple')],
         [glassButton('تیکت‌ها', 'admin_tickets', 'red')],
         [glassButton('مدیریت قیمت‌ها', 'admin_price', 'yellow')],
+        [glassButton('تنظیمات ربات', 'admin_settings', 'orange')],
         [glassButton('چیدمان دکمه‌ها', 'admin_layout', 'purple')],
         [glassButton('ارسال همگانی', 'admin_broadcast', 'blue')],
         [glassButton('پشتیبان‌گیری', 'admin_backup', 'green')],
@@ -870,9 +916,8 @@ function saveState(int $tgId): void
 // ============================================================
 function getNotMemberChannels(int $tgId): array
 {
-    global $REQUIRED_CHANNELS;
     $notMember = [];
-    foreach ($REQUIRED_CHANNELS as $ch) {
+    foreach (requiredChannels() as $ch) {
         $status = getChatMemberStatus($ch, $tgId);
         if (!in_array($status, ['member', 'administrator', 'creator'], true)) {
             $notMember[] = $ch;
@@ -1161,7 +1206,7 @@ function cbWallet(array $ctx): void
         . h('سطح: ' . $user['level']) . "\n"
         . h('تعداد زیرمجموعه: ' . $refCount) . "\n\n"
         . quoteBlock(h('کد معرف شما: ') . b(h($user['referral_code'])) . "\n"
-            . h('لینک دعوت: https://t.me/' . BOT_USERNAME . '?start=ref_' . $user['referral_code']));
+            . h('لینک دعوت: https://t.me/' . botSetting('bot_username') . '?start=ref_' . $user['referral_code']));
 
     editMessageText($ctx['chatId'], $ctx['messageId'], $text, kbWithSection('wallet', [
         [glassButton('افزایش موجودی', 'deposit', 'green')],
@@ -1227,6 +1272,14 @@ function cbSupport(array $ctx): void
     $st = &state($tgId);
     $st['step'] = 'support_message';
     $text = b(h('پشتیبانی')) . "\n\n" . quoteBlock(h('پیام خود را برای تیم پشتیبانی ارسال کنید، در اسرع وقت پاسخ داده می‌شود.'));
+    $supportUsername = botSetting('support_username');
+    $trustChannel = botSetting('trust_channel');
+    if ($supportUsername !== '') {
+        $text .= "\n\n" . h('تماس مستقیم: @' . $supportUsername);
+    }
+    if ($trustChannel !== '') {
+        $text .= "\n" . h('کانال نماد اعتماد: @' . $trustChannel);
+    }
     editMessageText($ctx['chatId'], $ctx['messageId'], $text, kb([backRow('main_menu')]));
 }
 
@@ -1574,6 +1627,57 @@ function handleAdminPriceEditSend(array $message, int $adminTgId): void
 }
 
 // ============================================================
+// Admin: bot settings editor (required channel, reports channel, bot username, support
+// contact, deposit card, trust channel) — no source edits needed.
+// ============================================================
+function cbAdminSettings(array $ctx): void
+{
+    $lines = [b(h('تنظیمات ربات')), h('برای تغییر هرکدوم، روی دکمه‌ی مربوطه بزنید.')];
+    $rows = [];
+    foreach (BOT_SETTINGS_FIELDS as $key => $field) {
+        $value = botSetting($key);
+        $lines[] = quoteBlock(h($field['label']) . "\n" . b(h($value !== '' ? $value : '(خالی)')));
+        $rows[] = [glassButton('ویرایش: ' . $field['label'], 'admin_settings_edit_' . $key, 'blue')];
+    }
+    $rows[] = backRow('admin_panel');
+    editMessageText($ctx['chatId'], $ctx['messageId'], implode("\n", $lines), kb($rows));
+}
+
+function cbAdminSettingsEditStart(array $ctx, string $data): void
+{
+    $key = substr($data, strlen('admin_settings_edit_'));
+    if (!isset(BOT_SETTINGS_FIELDS[$key])) {
+        return;
+    }
+    $field = BOT_SETTINGS_FIELDS[$key];
+    $st = &state($ctx['tgId']);
+    $st['data']['bot_setting_key'] = $key;
+    $st['step'] = 'bot_setting_edit';
+
+    $text = b(h($field['label'])) . "\n"
+        . ($field['hint'] !== '' ? h($field['hint']) . "\n" : '')
+        . h('مقدار فعلی: ') . b(h(botSetting($key) !== '' ? botSetting($key) : '(خالی)')) . "\n\n"
+        . quoteBlock(h('مقدار جدید را ارسال کنید. برای پاک‌کردن و برگشت به پیش‌فرض، فقط - بفرستید.'));
+    editMessageText($ctx['chatId'], $ctx['messageId'], $text, kb([backRow('admin_settings')]));
+}
+
+function handleAdminSettingEditSend(array $message, int $adminTgId): void
+{
+    $st = &state($adminTgId);
+    $key = $st['data']['bot_setting_key'] ?? null;
+    $st['step'] = null;
+    $st['data']['bot_setting_key'] = null;
+    if (!$key || !isset(BOT_SETTINGS_FIELDS[$key])) {
+        return;
+    }
+    $text = trim((string) ($message['text'] ?? ''));
+    $value = ($text === '-') ? '' : ltrim($text, '@');
+    setBotSetting($key, $value);
+    logAdminAction($adminTgId, 'bot_setting_update', null, ['key' => $key, 'value' => $value]);
+    sendMessage($message['chat']['id'], b(pe('check') . ' ' . h('تنظیمات بروزرسانی شد.')), adminKeyboard());
+}
+
+// ============================================================
 // Admin: menu/button layout builder
 // ============================================================
 function cbAdminLayout(array $ctx): void
@@ -1830,7 +1934,7 @@ function runBackup(): ?string
     $stmt->execute([basename($filename), $size, nowTehran()]);
 
     $caption = b(h('پشتیبان‌گیری')) . "\n" . h(nowTehran());
-    sendDocumentFile('@' . REPORTS_CHANNEL, $filename, $caption);
+    sendDocumentFile('@' . botSetting('reports_channel'), $filename, $caption);
     return $filename;
 }
 
@@ -1965,8 +2069,8 @@ function handleTextInput(array $message, array $user, ?string $step): void
         $st['step'] = 'deposit_receipt';
         sendMessage($chatId, h('مبلغ ' . fmtN($amount) . ' تومان ثبت شد.') . "\n\n"
             . quoteBlock(h('لطفاً تصویر فیش واریزی را ارسال کنید.') . "\n"
-                . h('شماره کارت: ') . b('6037-9918-1234-5678') . "\n"
-                . h('به نام: ') . b(h('فروشگاه GiftIx'))));
+                . h('شماره کارت: ') . b(h(botSetting('card_number'))) . "\n"
+                . h('به نام: ') . b(h(botSetting('card_holder')))));
         return;
     }
 
@@ -2224,6 +2328,8 @@ function handleCallbackQuery(array $cq): void
         case str_starts_with($data, 'admin_ticket_reply_'): cbAdminTicketReplyStart($ctx, $data); return;
         case str_starts_with($data, 'admin_ticket_close_'): cbAdminTicketClose($ctx, $data); return;
         case $data === 'admin_price': cbAdminPrice($ctx); return;
+        case $data === 'admin_settings': cbAdminSettings($ctx); return;
+        case str_starts_with($data, 'admin_settings_edit_'): cbAdminSettingsEditStart($ctx, $data); return;
         case $data === 'admin_layout': cbAdminLayout($ctx); return;
         case str_starts_with($data, 'admin_layout_sec_'): cbAdminLayoutSection($ctx, $data); return;
         case str_starts_with($data, 'admin_layout_add_'): cbAdminLayoutAddStart($ctx, $data); return;
@@ -2292,6 +2398,10 @@ function handleMessage(array $message): void
     }
     if (!empty($st['price_edit']) && isAdmin($tgId)) {
         handleAdminPriceEditSend($message, $tgId);
+        return;
+    }
+    if (($st['step'] ?? null) === 'bot_setting_edit' && isAdmin($tgId)) {
+        handleAdminSettingEditSend($message, $tgId);
         return;
     }
 
