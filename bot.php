@@ -91,6 +91,104 @@ function btnRow(...$buttons) {
     return [$buttons];
 }
 
+// ============================================
+// 🤖 مدیریت ربات‌های فرعی
+// ============================================
+
+function apiSubBot($token, $method, $data) {
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, "https://api.telegram.org/bot$token/$method");
+    curl_setopt($ch, CURLOPT_POST, 1);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($data));
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+    $result = curl_exec($ch);
+    $err = curl_error($ch);
+    curl_close($ch);
+    return json_decode($result, true) ?: ['ok' => false, 'error' => $err];
+}
+
+function restrictUser($token, $chatId, $userId) {
+    return apiSubBot($token, 'restrictChatMember', [
+        'chat_id' => $chatId,
+        'user_id' => $userId,
+        'permissions' => json_encode([
+            'can_send_messages' => false,
+            'can_send_media_messages' => false,
+            'can_send_other_messages' => false,
+            'can_add_web_page_previews' => false
+        ])
+    ]);
+}
+
+function unrestrictUser($token, $chatId, $userId) {
+    return apiSubBot($token, 'restrictChatMember', [
+        'chat_id' => $chatId,
+        'user_id' => $userId,
+        'permissions' => json_encode([
+            'can_send_messages' => true,
+            'can_send_media_messages' => true,
+            'can_send_polls' => true,
+            'can_add_web_page_previews' => true,
+            'can_change_info' => false,
+            'can_invite_users' => true,
+            'can_pin_messages' => false
+        ])
+    ]);
+}
+
+function getSubBotInfo($token) {
+    return apiSubBot($token, 'getMe', []);
+}
+
+function getSubBots() {
+    return load('subbots');
+}
+
+function getSubBot($id) {
+    $subbots = getSubBots();
+    return $subbots[$id] ?? null;
+}
+
+function saveSubBot($id, $data) {
+    $subbots = getSubBots();
+    $subbots[$id] = array_merge($subbots[$id] ?? [], $data);
+    save('subbots', $subbots);
+}
+
+function deleteSubBot($id) {
+    $subbots = getSubBots();
+    unset($subbots[$id]);
+    save('subbots', $subbots);
+}
+
+// کانال‌های اجباری
+function getChannels() {
+    return load('channels');
+}
+
+function getChannel($id) {
+    $channels = getChannels();
+    return $channels[$id] ?? null;
+}
+
+function saveChannel($id, $data) {
+    $channels = getChannels();
+    $channels[$id] = array_merge($channels[$id] ?? [], $data);
+    save('channels', $channels);
+}
+
+function deleteChannel($id) {
+    $channels = getChannels();
+    unset($channels[$id]);
+    save('channels', $channels);
+}
+
+function getChannelsByBot($botId) {
+    $channels = getChannels();
+    return array_filter($channels, fn($c) => $c['bot_id'] == $botId);
+}
+
 // منوی اصلی
 function mainMenu($userId, $EMOJI) {
     $user = getUser($userId);
@@ -186,6 +284,45 @@ function adminPanel($EMOJI) {
         btn('💰 فروش‌ها', 'admin_sales', $EMOJI['money']),
         btn('📊 گزارش', 'admin_report', $EMOJI['chart']),
         btn('◀️ بازگشت', 'menu', ''),
+    ];
+
+    return [$text, $buttons];
+}
+
+// منوی مدیریت ربات‌های فرعی
+function subBotsMenu($EMOJI) {
+    $subbots = getSubBots();
+    $text = "<b>{$EMOJI['bot']} ربات‌های فرعی</b>\n\n";
+    $text .= "تعداد: " . count($subbots) . "\n\n";
+
+    foreach ($subbots as $bot) {
+        $status = $bot['status'] == 'active' ? '✅' : '❌';
+        $text .= "$status <code>{$bot['name']}</code> (@{$bot['username']})\n";
+    }
+
+    $buttons = [
+        btn('➕ افزودن ربات جدید', 'add_subbot', ''),
+        btn('◀️ بازگشت', 'admin_panel', ''),
+    ];
+
+    return [$text, $buttons];
+}
+
+// منوی مدیریت کانال‌ها
+function channelsMenu($EMOJI) {
+    $channels = getChannels();
+    $text = "<b>{$EMOJI['channel']} کانال‌های اجباری</b>\n\n";
+    $text .= "تعداد: " . count($channels) . "\n\n";
+
+    foreach ($channels as $ch) {
+        $status = $ch['is_active'] ? '✅' : '❌';
+        $text .= "$status <i>{$ch['channel_name']}</i>\n";
+        $text .= "   🤖 {$ch['bot_id']}\n";
+    }
+
+    $buttons = [
+        btn('➕ افزودن کانال', 'add_channel', ''),
+        btn('◀️ بازگشت', 'admin_panel', ''),
     ];
 
     return [$text, $buttons];
@@ -294,6 +431,72 @@ if (isset($input['message'])) {
             $txt .= "📈 سود: " . number_format($profit) . "\n";
             $txt .= "<b>💰 کل: " . number_format($total) . "</b>";
             sendMsg($chatId, $txt);
+        }
+    }
+    // اقدامات خاص ادمین
+    elseif ($userId == ADMIN_ID) {
+        $action = getUser($userId)['action'] ?? null;
+
+        // افزودن ربات فرعی
+        if ($action == 'adding_subbot') {
+            $token = trim($text);
+            if (preg_match('/^\d+:[A-Za-z0-9_-]+$/', $token)) {
+                $info = getSubBotInfo($token);
+                if ($info['ok'] ?? false) {
+                    $botId = 'bot_' . time();
+                    saveSubBot($botId, [
+                        'id' => $botId,
+                        'name' => $info['result']['first_name'] ?? 'ربات',
+                        'username' => $info['result']['username'] ?? 'unknown',
+                        'token' => $token,
+                        'owner_id' => $userId,
+                        'status' => 'active',
+                        'created_at' => date('Y-m-d H:i:s')
+                    ]);
+                    saveUser($userId, ['action' => null]);
+                    sendMsg($chatId, "{$EMOJI['check']} ربات {$info['result']['first_name']} اضافه شد!\n\n🆔 شناسه: <code>$botId</code>");
+                } else {
+                    sendMsg($chatId, "{$EMOJI['error']} توکن نامعتبر!");
+                }
+            } else {
+                sendMsg($chatId, "{$EMOJI['warning']} فرمت توکن نادرست!");
+            }
+        }
+
+        // افزودن کانال - مرحله 1: شناسه ربات
+        elseif ($action == 'adding_channel_1') {
+            $botId = trim($text);
+            if (getSubBot($botId)) {
+                saveUser($userId, ['action' => 'adding_channel_2', 'selected_bot' => $botId]);
+                sendMsg($chatId, "{$EMOJI['channel']} شناسه کانال را بفرستید:\n\n<i>مثال:</i>\n<code>-1001234567890</code>");
+            } else {
+                sendMsg($chatId, "{$EMOJI['error']} ربات فرعی یافت نشد!");
+            }
+        }
+
+        // افزودن کانال - مرحله 2: شناسه کانال
+        elseif ($action == 'adding_channel_2') {
+            $channelId = trim($text);
+            if (preg_match('/^-?\d+$/', $channelId)) {
+                $userData = getUser($userId);
+                $botId = $userData['selected_bot'] ?? null;
+                $chId = 'ch_' . time();
+
+                saveChannel($chId, [
+                    'id' => $chId,
+                    'bot_id' => $botId,
+                    'channel_id' => intval($channelId),
+                    'channel_name' => 'کانال ' . $channelId,
+                    'is_mandatory' => true,
+                    'is_active' => true,
+                    'created_at' => date('Y-m-d H:i:s')
+                ]);
+
+                saveUser($userId, ['action' => null, 'selected_bot' => null]);
+                sendMsg($chatId, "{$EMOJI['check']} کانال اضافه شد!");
+            } else {
+                sendMsg($chatId, "{$EMOJI['error']} شناسه کانال نامعتبر!");
+            }
         }
     }
 }
@@ -407,6 +610,30 @@ if (isset($input['callback_query'])) {
             $txt .= "{$EMOJI['money']} فروش‌ها: " . count($sales) . "\n";
             $txt .= "📈 درصد سود: " . PROFIT_PERCENT . "%\n";
             editMsg($chatId, $msgId, $txt, [[btn('◀️ بازگشت', 'admin_panel', '')]]);
+        }
+    }
+    elseif ($data == 'admin_subbots') {
+        if ($userId == ADMIN_ID) {
+            list($txt, $btns) = subBotsMenu($EMOJI);
+            editMsg($chatId, $msgId, $txt, $btns);
+        }
+    }
+    elseif ($data == 'admin_channels') {
+        if ($userId == ADMIN_ID) {
+            list($txt, $btns) = channelsMenu($EMOJI);
+            editMsg($chatId, $msgId, $txt, $btns);
+        }
+    }
+    elseif ($data == 'add_subbot') {
+        if ($userId == ADMIN_ID) {
+            sendMsg($chatId, "{$EMOJI['bot']} توکن ربات فرعی را بفرستید:\n\n<i>مثال:</i>\n<code>8580931982:AAHQb5vGDnG6n9vFWqBMpPWksRiuyhsWv_g</code>");
+            saveUser($userId, ['action' => 'adding_subbot']);
+        }
+    }
+    elseif ($data == 'add_channel') {
+        if ($userId == ADMIN_ID) {
+            sendMsg($chatId, "{$EMOJI['channel']} شناسه ربات فرعی را بفرستید:\n\n<i>مثال:</i>\n<code>bot1</code>");
+            saveUser($userId, ['action' => 'adding_channel_1']);
         }
     }
 }

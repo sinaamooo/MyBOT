@@ -17,6 +17,18 @@ function save($file, $data) {
     file_put_contents(DATA_DIR . "/$file.json", json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
 }
 
+function apiSubBot($token, $method, $data) {
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, "https://api.telegram.org/bot$token/$method");
+    curl_setopt($ch, CURLOPT_POST, 1);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($data));
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+    $result = curl_exec($ch);
+    curl_close($ch);
+    return json_decode($result, true) ?: ['ok' => false];
+}
+
 // logout
 if (isset($_GET['action']) && $_GET['action'] == 'logout') {
     session_destroy();
@@ -25,13 +37,44 @@ if (isset($_GET['action']) && $_GET['action'] == 'logout') {
 }
 
 // login
-if ($_POST) {
+$error = '';
+if ($_POST && !isset($_POST['action'])) {
     $id = intval($_POST['admin_id'] ?? 0);
     if ($id == ADMIN_ID) {
         $_SESSION['admin_id'] = $id;
         $_SESSION['login_time'] = time();
     } else {
         $error = '❌ کد مدیر نادرست';
+    }
+}
+
+// مدیریت ربات‌های فرعی
+if ($_POST && isset($_POST['action']) && $_SESSION['admin_id'] == ADMIN_ID) {
+    $action = $_POST['action'];
+
+    if ($action == 'delete_subbot') {
+        $subbots = load('subbots');
+        $botId = $_POST['bot_id'] ?? '';
+        unset($subbots[$botId]);
+        save('subbots', $subbots);
+        $success = '✅ ربات حذف شد';
+    }
+    elseif ($action == 'toggle_subbot') {
+        $subbots = load('subbots');
+        $botId = $_POST['bot_id'] ?? '';
+        if (isset($subbots[$botId])) {
+            $subbots[$botId]['status'] = $subbots[$botId]['status'] == 'active' ? 'inactive' : 'active';
+            save('subbots', $subbots);
+            $success = '✅ وضعیت تغییر یافت';
+        }
+    }
+
+    if ($action == 'delete_channel') {
+        $channels = load('channels');
+        $channelId = $_POST['channel_id'] ?? '';
+        unset($channels[$channelId]);
+        save('channels', $channels);
+        $success = '✅ کانال حذف شد';
     }
 }
 
@@ -395,16 +438,33 @@ $logged_in = isset($_SESSION['admin_id']) && $_SESSION['admin_id'] == ADMIN_ID;
                                 <th>نام</th>
                                 <th>نام‌کاربری</th>
                                 <th>شناسه</th>
+                                <th>کانال‌ها</th>
                                 <th>وضعیت</th>
+                                <th>عملیات</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <?php foreach ($subbots as $bot): ?>
+                            <?php foreach ($subbots as $bot):
+                                $botChannels = array_filter($channels, fn($c) => $c['bot_id'] == $bot['id']);
+                            ?>
                             <tr>
                                 <td><?php echo htmlspecialchars($bot['name'] ?? ''); ?></td>
                                 <td>@<?php echo htmlspecialchars($bot['username'] ?? ''); ?></td>
                                 <td><code><?php echo substr($bot['id'] ?? '', -8); ?></code></td>
+                                <td><?php echo count($botChannels); ?> کانال</td>
                                 <td><?php echo ($bot['status'] == 'active' ? '🟢 فعال' : '⚫ غیرفعال'); ?></td>
+                                <td>
+                                    <form method="POST" style="display: inline;">
+                                        <input type="hidden" name="action" value="toggle_subbot">
+                                        <input type="hidden" name="bot_id" value="<?php echo $bot['id']; ?>">
+                                        <button type="submit" style="background: #667eea; padding: 5px 10px; color: white; border: none; border-radius: 4px; cursor: pointer; margin: 0 2px;">🔄</button>
+                                    </form>
+                                    <form method="POST" style="display: inline;">
+                                        <input type="hidden" name="action" value="delete_subbot">
+                                        <input type="hidden" name="bot_id" value="<?php echo $bot['id']; ?>">
+                                        <button type="submit" onclick="return confirm('حذف می‌شود؟')" style="background: #ff6b6b; padding: 5px 10px; color: white; border: none; border-radius: 4px; cursor: pointer; margin: 0 2px;">🗑️</button>
+                                    </form>
+                                </td>
                             </tr>
                             <?php endforeach; ?>
                         </tbody>
@@ -422,16 +482,28 @@ $logged_in = isset($_SESSION['admin_id']) && $_SESSION['admin_id'] == ADMIN_ID;
                         <thead>
                             <tr>
                                 <th>کانال</th>
+                                <th>شناسه</th>
                                 <th>ربات فرعی</th>
                                 <th>وضعیت</th>
+                                <th>عملیات</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <?php foreach ($channels as $ch): ?>
+                            <?php foreach ($channels as $ch):
+                                $bot = $subbots[$ch['bot_id']] ?? null;
+                            ?>
                             <tr>
-                                <td><?php echo htmlspecialchars($ch['name'] ?? ''); ?></td>
-                                <td><?php echo htmlspecialchars($ch['bot_name'] ?? 'نامشخص'); ?></td>
+                                <td><?php echo htmlspecialchars($ch['channel_name'] ?? ''); ?></td>
+                                <td><code><?php echo $ch['channel_id']; ?></code></td>
+                                <td><?php echo $bot ? $bot['name'] : '❌'; ?></td>
                                 <td><?php echo ($ch['is_active'] ?? true ? '🟢 فعال' : '⚫ غیرفعال'); ?></td>
+                                <td>
+                                    <form method="POST" style="display: inline;">
+                                        <input type="hidden" name="action" value="delete_channel">
+                                        <input type="hidden" name="channel_id" value="<?php echo $ch['id']; ?>">
+                                        <button type="submit" onclick="return confirm('حذف می‌شود؟')" style="background: #ff6b6b; padding: 5px 10px; color: white; border: none; border-radius: 4px; cursor: pointer;">🗑️</button>
+                                    </form>
+                                </td>
                             </tr>
                             <?php endforeach; ?>
                         </tbody>
