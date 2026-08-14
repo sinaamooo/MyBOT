@@ -6,6 +6,7 @@
 session_start();
 
 define('ADMIN_ID', 8213021584);
+define('ADMIN_PASSWORD', 'admin123456');
 define('DATA_DIR', __DIR__ . '/data');
 
 function load($file) {
@@ -40,11 +41,13 @@ if (isset($_GET['action']) && $_GET['action'] == 'logout') {
 $error = '';
 if ($_POST && !isset($_POST['action'])) {
     $id = intval($_POST['admin_id'] ?? 0);
-    if ($id == ADMIN_ID) {
+    $password = $_POST['password'] ?? '';
+
+    if ($id == ADMIN_ID && $password == ADMIN_PASSWORD) {
         $_SESSION['admin_id'] = $id;
         $_SESSION['login_time'] = time();
     } else {
-        $error = '❌ کد مدیر نادرست';
+        $error = '❌ کد مدیر یا رمز عبور نادرست';
     }
 }
 
@@ -522,12 +525,12 @@ $logged_in = isset($_SESSION['admin_id']) && $_SESSION['admin_id'] == ADMIN_ID;
                 <?php endif; ?>
                 <form method="POST">
                     <div class="form-group">
-                        <label>کد مدیر</label>
+                        <label>🆔 کد مدیر</label>
                         <input type="text" name="admin_id" placeholder="8213021584" required autofocus>
                     </div>
                     <div class="form-group">
-                        <label>رمز عبور</label>
-                        <input type="password" name="pin" placeholder="••••••" required>
+                        <label>🔑 رمز عبور</label>
+                        <input type="password" name="password" placeholder="••••••" required>
                     </div>
                     <button type="submit">ورود 🚀</button>
                 </form>
