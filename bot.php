@@ -11,9 +11,11 @@
  * 3. Point Telegram's webhook at this file's public URL, either by:
  *      - visiting: https://yourdomain.com/bot.php?setup_webhook=1&url=https://yourdomain.com/bot.php
  *      - or calling Telegram's setWebhook API yourself.
- * 4. EDIT THE PLACEHOLDER CONSTANTS BELOW before going live:
- *      REQUIRED_CHANNEL, REPORTS_CHANNEL, BOT_USERNAME, SUPPORT_USERNAME,
- *      CARD_NUMBER, CARD_HOLDER.
+ * 4. The constants below (REQUIRED_CHANNEL, REPORTS_CHANNEL, BOT_USERNAME,
+ *    SUPPORT_USERNAME, CARD_NUMBER, CARD_HOLDER, TRUST_CHANNEL) are only the
+ *    first-run seed values - after that, edit them from the admin panel
+ *    ("⚙️ تنظیمات فروشگاه" for the identity/card fields, "📢 عضویت اجباری"
+ *    for channels) instead of touching this file again.
  *    The bot token / admin id were supplied by the owner and are already
  *    filled in.
  *
@@ -1180,7 +1182,7 @@ function join_text(array &$DATA): string {
     $list = implode("\n", array_map(fn($c) => "@{$c}", $DATA['required_channels']));
     return T('join', ['{channels}' => $list]);
 }
-function trust_text(): string { return T('trust', ['{channel}' => TRUST_CHANNEL]); }
+function trust_text(array &$DATA): string { return T('trust', ['{channel}' => $DATA['settings']['trust_channel']]); }
 function confirm_username_text(string $username): string { return T('confirm_username', ['{username}' => $username]); }
 
 function premium_invoice_text($plan, $price, $username, $disc, $final): string {
@@ -1324,10 +1326,10 @@ function price_display(array $order): string {
     return fmt($order['price']) . ' تومان';
 }
 
-function report_text(string $buyer_name, array $order): string {
+function report_text(array &$DATA, string $buyer_name, array $order): string {
     [$label, $emoji, $qty] = order_report_fields($order);
     return T('report', ['{buyer_name}' => $buyer_name, '{label}' => $label, '{emoji}' => $emoji, '{qty}' => $qty,
-        '{price}' => price_display($order), '{date}' => persian_now_str(), '{bot_username}' => BOT_USERNAME]);
+        '{price}' => price_display($order), '{date}' => persian_now_str(), '{bot_username}' => $DATA['settings']['bot_username']]);
 }
 
 function order_status_text(array $order): string {
@@ -1546,8 +1548,8 @@ function daily_limit_exceeded_text(int $remaining): string {
     return T('daily_limit_exceeded', ['{remaining}' => fmt($remaining)]);
 }
 
-function card_details_text(int $amount): string {
-    return T('card_details', ['{amount}' => fmt($amount), '{card_number}' => CARD_NUMBER, '{card_holder}' => CARD_HOLDER]);
+function card_details_text(array &$DATA, int $amount): string {
+    return T('card_details', ['{amount}' => fmt($amount), '{card_number}' => $DATA['settings']['card_number'], '{card_holder}' => $DATA['settings']['card_holder']]);
 }
 
 function admin_topup_caption($user, int $amount, string $req_id): string {
@@ -1577,10 +1579,10 @@ function account_text(array &$DATA, $user): string {
 
 function referral_text(array &$DATA, $user): string {
     $u = get_user($DATA, $user['id']);
-    $link = 'https://t.me/' . BOT_USERNAME . '?start=ref_' . $user['id'];
+    $link = 'https://t.me/' . $DATA['settings']['bot_username'] . '?start=ref_' . $user['id'];
     return T('referral', ['{link}' => $link, '{referrals}' => $u['referrals'], '{discount}' => fmt($u['discount_balance']),
         '{score}' => $u['score'], '{commission_percent}' => REFERRAL_COMMISSION_PERCENT,
-        '{points_required}' => REFERRAL_POINTS_REQUIRED, '{trust_channel}' => TRUST_CHANNEL]);
+        '{points_required}' => REFERRAL_POINTS_REQUIRED, '{trust_channel}' => $DATA['settings']['trust_channel']]);
 }
 
 function referral_notification_text(string $invited_name, bool $point_awarded, int $total_referrals = 0, int $total_discount = 0, int $total_score = 0): string {
@@ -2051,7 +2053,7 @@ function custom_product_invoice_kb(bool $discount_applied = false): array {
         [ibtn($slug, 'custom_product_invoice_discount'), ibtn('btn_cancel', 'custom_product_invoice_cancel')],
     ]);
 }
-function support_kb(): array { return ikb([[ibtn('btn_support_direct', null, 'https://t.me/' . SUPPORT_USERNAME), ibtn('btn_support_indirect', 'support_indirect')]]); }
+function support_kb(array &$DATA): array { return ikb([[ibtn('btn_support_direct', null, 'https://t.me/' . $DATA['settings']['support_username']), ibtn('btn_support_indirect', 'support_indirect')]]); }
 function support_indirect_kb(): array { return ikb([[ibtn('btn_back', 'support_back')]]); }
 function admin_support_kb(string $ticket_id): array { return ikb([[ibtn('btn_admin_reply', "support_reply_{$ticket_id}")]]); }
 function join_kb(array &$DATA): array {
@@ -2063,7 +2065,7 @@ function join_kb(array &$DATA): array {
     $rows[] = [ibtn('btn_check_membership', 'check_membership')];
     return ikb($rows);
 }
-function report_kb(): array { return ikb([[ibtn('btn_report_buy', null, 'https://t.me/' . BOT_USERNAME)]]); }
+function report_kb(array &$DATA): array { return ikb([[ibtn('btn_report_buy', null, 'https://t.me/' . $DATA['settings']['bot_username'])]]); }
 function track_kb(): array { return ikb([[ibtn('btn_track_have_code', 'track_have_code')]]); }
 function track_ask_code_kb(): array { return ikb([[ibtn('btn_back', 'track_back')]]); }
 function invite_kb(): array { return ikb([[ibtn('btn_referral_claim', 'referral_claim_reward')]]); }
@@ -2097,6 +2099,7 @@ function admin_panel_buttons(array &$DATA): array {
         btn('🧩 چیدمان دکمه‌های شیشه‌ای', 'admin_layout_menu'),
         btn('📢 عضویت اجباری', 'admin_channels_menu'),
         btn('🛒 مدیریت محصولات', 'admin_products_menu'),
+        btn('⚙️ تنظیمات فروشگاه', 'admin_settings_menu'),
     ];
 }
 
@@ -2161,6 +2164,41 @@ function admin_channel_add_ask_text(): string {
 }
 
 function admin_channel_add_ask_kb(): array { return ikb([[ibtn('btn_back', 'admin_channels_menu_back')]]); }
+
+/* ---- store identity/settings admin management ---- */
+
+const SETTINGS_META = [
+    'reports_channel'  => ['label' => 'کانال ریپورت فروش', 'hint' => 'یوزرنیم کانالی که گزارش خریدهای موفق توش پست می‌شه (بدون @). ربات باید توش ادمین باشه.'],
+    'bot_username'     => ['label' => 'یوزرنیم ربات', 'hint' => 'یوزرنیم خود ربات (بدون @) — برای ساخت لینک دعوت رفرال و چند دکمه دیگه استفاده می‌شه.'],
+    'support_username' => ['label' => 'یوزرنیم پشتیبانی', 'hint' => 'یوزرنیمی که دکمه «ارتباط مستقیم» پشتیبانی بهش وصل می‌شه (بدون @).'],
+    'card_number'      => ['label' => 'شماره کارت', 'hint' => 'شماره کارت بانکی که برای واریز تومانی به کاربر نشون داده می‌شه.'],
+    'card_holder'      => ['label' => 'نام صاحب کارت', 'hint' => 'نام و نام‌خانوادگی صاحب کارت بانکی.'],
+    'trust_channel'    => ['label' => 'کانال اعتمادسازی', 'hint' => 'یوزرنیم کانالی که تو متن «چطور اعتماد کنم» و متن رفرال معرفی می‌شه (بدون @).'],
+];
+
+function admin_settings_text(array &$DATA): string {
+    $lines = [];
+    foreach (SETTINGS_META as $key => $meta) {
+        $lines[] = "• {$meta['label']}: " . $DATA['settings'][$key];
+    }
+    return "⚙️ تنظیمات فروشگاه\n\n" . implode("\n", $lines) . "\n\nبرای تغییر هرکدوم، روی دکمه‌ی مربوطه بزن:";
+}
+
+function admin_settings_kb(): array {
+    $rows = [];
+    foreach (SETTINGS_META as $key => $meta) {
+        $rows[] = [btn("✏️ {$meta['label']}", "admin_setting_pick_{$key}")];
+    }
+    $rows[] = [ibtn('btn_back', 'admin_panel_back')];
+    return ikb($rows);
+}
+
+function admin_setting_detail_text(array &$DATA, string $key): string {
+    $meta = SETTINGS_META[$key];
+    return "✏️ {$meta['label']}\n\n{$meta['hint']}\n\nمقدار فعلی:\n" . $DATA['settings'][$key] . "\n\nمقدار جدید رو بفرست:";
+}
+
+function admin_setting_ask_kb(): array { return ikb([[ibtn('btn_back', 'admin_settings_menu_back')]]); }
 
 /* ---- custom products admin management ---- */
 
@@ -2420,6 +2458,15 @@ function default_data(): array {
         'layout' => [],
         'ton_price_cache' => ['base' => 298225, 'fetched_at' => 0],
         'trx_price_cache' => ['base' => 9500, 'fetched_at' => 0],
+        // owner-identity placeholders, editable from the admin panel instead of the source
+        'settings' => [
+            'reports_channel' => REPORTS_CHANNEL,
+            'bot_username' => BOT_USERNAME,
+            'support_username' => SUPPORT_USERNAME,
+            'card_number' => CARD_NUMBER,
+            'card_holder' => CARD_HOLDER,
+            'trust_channel' => TRUST_CHANNEL,
+        ],
     ];
     recalc_prices($data);
     return $data;
@@ -2457,14 +2504,15 @@ function load_data(): array {
     foreach (['users', 'user_names', 'orders', 'topup_requests', 'pending_referrals', 'support_tickets',
               'admin_waiting_reject', 'admin_waiting_support_reply', 'user_state', 'gifts_prices',
               'premium_prices', 'base_premium_prices', 'profit_percent', 'texts', 'buttons', 'layout',
-              'required_channels', 'custom_gifts', 'custom_products'] as $k) {
+              'required_channels', 'custom_gifts', 'custom_products', 'settings'] as $k) {
         if (!is_array($data[$k] ?? null)) $data[$k] = $defaults[$k];
     }
     if (!is_array($data['ton_price_cache'] ?? null)) $data['ton_price_cache'] = $defaults['ton_price_cache'];
     if (!is_array($data['trx_price_cache'] ?? null)) $data['trx_price_cache'] = $defaults['trx_price_cache'];
-    // Deep-merge so a product's key added after an admin's save (e.g. 'trx')
-    // is always present, without ever dropping an admin's own edited values.
+    // Deep-merge so a key added after an admin's save (e.g. 'trx', or a new
+    // setting) is always present, without ever dropping an admin's own edits.
     $data['profit_percent'] = array_replace($defaults['profit_percent'], $data['profit_percent']);
+    $data['settings'] = array_replace($defaults['settings'], $data['settings']);
     recalc_prices($data);
     if (isset($decoded['gifts_prices']) && is_array($decoded['gifts_prices'])) {
         $known_gifts = all_gifts($data);
@@ -2797,6 +2845,23 @@ function handle_text(array $msg, array &$DATA): void {
             $ust['state'] = null;
             return;
         }
+        if ($state !== null && str_starts_with($state, 'admin_awaiting_setting_')) {
+            $key = substr($state, strlen('admin_awaiting_setting_'));
+            if (!isset(SETTINGS_META[$key])) { $ust['state'] = null; send_message($chat_id, 'این تنظیم پیدا نشد.', admin_back_kb()); return; }
+            $val = trim($text);
+            if (in_array($key, ['reports_channel', 'bot_username', 'support_username', 'trust_channel'], true)) {
+                $val = preg_replace('#^https?://t\.me/#i', '', $val);
+                $val = ltrim($val, '@');
+            }
+            if ($val === '') {
+                send_message($chat_id, "❌ مقدار خالی مجاز نیست.\n\n" . admin_setting_detail_text($DATA, $key), admin_setting_ask_kb(), 'HTML');
+                return;
+            }
+            $DATA['settings'][$key] = $val;
+            $ust['state'] = null;
+            send_message($chat_id, "✅ «" . SETTINGS_META[$key]['label'] . "» تغییر کرد.", admin_settings_kb());
+            return;
+        }
         if ($state !== null && str_starts_with($state, 'admin_awaiting_layout_')) {
             $key = substr($state, strlen('admin_awaiting_layout_'));
             $ust['state'] = null;
@@ -2938,7 +3003,7 @@ function handle_text(array $msg, array &$DATA): void {
         use_daily_limit($DATA, $uid, $amount);
         $ust['pending_topup'] = ['amount' => $amount];
         $ust['state'] = null;
-        send_message($chat_id, card_details_text($amount), card_details_kb(), 'HTML');
+        send_message($chat_id, card_details_text($DATA, $amount), card_details_kb(), 'HTML');
         return;
     }
 
@@ -3117,9 +3182,9 @@ function handle_text(array $msg, array &$DATA): void {
 
     if ($menu_slug === 'menu_account') { send_message($chat_id, account_text($DATA, $user), null, 'HTML'); return; }
     if ($menu_slug === 'menu_referral') { send_message($chat_id, referral_text($DATA, $user), invite_kb(), 'HTML'); return; }
-    if ($menu_slug === 'menu_support') { send_message($chat_id, T('support'), support_kb(), 'HTML'); return; }
+    if ($menu_slug === 'menu_support') { send_message($chat_id, T('support'), support_kb($DATA), 'HTML'); return; }
     if ($menu_slug === 'menu_track') { send_message($chat_id, T('track'), track_kb(), 'HTML'); return; }
-    if ($menu_slug === 'menu_trust') { send_message($chat_id, trust_text(), null, 'HTML'); return; }
+    if ($menu_slug === 'menu_trust') { send_message($chat_id, trust_text($DATA), null, 'HTML'); return; }
     if ($menu_slug === 'menu_admin' && $chat_id == ADMIN_CHAT_ID) { send_message($chat_id, admin_panel_text($DATA), admin_panel_kb($DATA)); return; }
 
     send_message($chat_id, 'این بخش هنوز تکمیل نشده.');
@@ -3428,7 +3493,7 @@ function handle_callback(array $cq, array &$DATA): void {
         $pending = $ust['pending_topup'] ?? [];
         $amount = $pending['amount'] ?? 0;
         $ust['state'] = null;
-        edit_message_text($chat_id, $message_id, card_details_text($amount), card_details_kb(), 'HTML');
+        edit_message_text($chat_id, $message_id, card_details_text($DATA, $amount), card_details_kb(), 'HTML');
         return;
     }
 
@@ -3474,7 +3539,7 @@ function handle_callback(array $cq, array &$DATA): void {
         send_message($order['chat_id'], $msgText, buy_product_kb(), 'HTML');
 
         $buyer_name = $order['buyer_name'] ?? 'کاربر';
-        send_message('@' . REPORTS_CHANNEL, report_text($buyer_name, $order), report_kb(), 'HTML');
+        send_message('@' . $DATA['settings']['reports_channel'], report_text($DATA, $buyer_name, $order), report_kb($DATA), 'HTML');
         return;
     }
 
@@ -3567,7 +3632,7 @@ function handle_callback(array $cq, array &$DATA): void {
 
     /* ---- support ---- */
     if ($data === 'support_indirect') { $ust['state'] = 'awaiting_support_message'; edit_message_text($chat_id, $message_id, T('support_indirect'), support_indirect_kb(), 'HTML'); return; }
-    if ($data === 'support_back') { $ust['state'] = null; edit_message_text($chat_id, $message_id, T('support'), support_kb(), 'HTML'); return; }
+    if ($data === 'support_back') { $ust['state'] = null; edit_message_text($chat_id, $message_id, T('support'), support_kb($DATA), 'HTML'); return; }
 
     if (str_starts_with($data, 'support_reply_')) {
         $ticket_id = substr($data, strlen('support_reply_'));
@@ -3938,6 +4003,18 @@ function handle_callback(array $cq, array &$DATA): void {
         $ch = substr($data, strlen('admin_channel_del_'));
         $DATA['required_channels'] = array_values(array_diff($DATA['required_channels'], [$ch]));
         edit_message_text($chat_id, $message_id, admin_channels_text($DATA), admin_channels_kb($DATA));
+        return;
+    }
+
+    /* ---- store settings ---- */
+    if ($data === 'admin_settings_menu') { $ust['state'] = null; edit_message_text($chat_id, $message_id, admin_settings_text($DATA), admin_settings_kb()); return; }
+    if ($data === 'admin_settings_menu_back') { $ust['state'] = null; edit_message_text($chat_id, $message_id, admin_settings_text($DATA), admin_settings_kb()); return; }
+
+    if (str_starts_with($data, 'admin_setting_pick_')) {
+        $key = substr($data, strlen('admin_setting_pick_'));
+        if (!isset(SETTINGS_META[$key])) return;
+        $ust['state'] = "admin_awaiting_setting_{$key}";
+        edit_message_text($chat_id, $message_id, admin_setting_detail_text($DATA, $key), admin_setting_ask_kb(), 'HTML');
         return;
     }
 
