@@ -968,6 +968,172 @@ class Channels
 }
 
 // ============================================================
+// 🤝 ربات‌های شریک (سورس مستقل) — فقط عضویت اجباری
+// ============================================================
+
+class Partner
+{
+    public static function all() { return load('partners'); }
+    public static function get($id) { $a = load('partners'); return $a[$id] ?? null; }
+
+    public static function create($name, $botUsername, $ownerId = 0) {
+        $id  = uid('pt');
+        $key = 'pk_' . bin2hex(random_bytes(20));
+        mutate('partners', function (&$a) use ($id, $key, $name, $botUsername, $ownerId) {
+            $a[$id] = [
+                'id' => $id, 'name' => $name, 'key' => $key,
+                'bot_username' => ltrim($botUsername, '@'), 'owner_id' => (int)$ownerId,
+                'active' => true, 'created_at' => nowStr(),
+                'checks' => 0, 'passed' => 0, 'last_seen' => null,
+            ];
+        });
+        return self::get($id);
+    }
+
+    /** پیدا کردن شریک از روی کلید — مقایسه زمان‌ثابت */
+    public static function byKey($key) {
+        if (!is_string($key) || strlen($key) < 20) return null;
+        foreach (self::all() as $p) {
+            if (hash_equals((string)$p['key'], $key)) return $p;
+        }
+        return null;
+    }
+
+    public static function rotateKey($id) {
+        $key = 'pk_' . bin2hex(random_bytes(20));
+        mutate('partners', function (&$a) use ($id, $key) {
+            if (isset($a[$id])) $a[$id]['key'] = $key;
+        });
+        return $key;
+    }
+
+    public static function remove($id) {
+        mutate('partners', function (&$a) use ($id) { unset($a[$id]); });
+    }
+
+    public static function bump($id, $passed) {
+        mutate('partners', function (&$a) use ($id, $passed) {
+            if (!isset($a[$id])) return;
+            $a[$id]['checks'] = (int)$a[$id]['checks'] + 1;
+            if ($passed) $a[$id]['passed'] = (int)$a[$id]['passed'] + 1;
+            $a[$id]['last_seen'] = nowStr();
+        });
+    }
+
+    /**
+     * محدودیت نرخ ساده — جلوی سیل درخواست را می‌گیرد بدون اینکه
+     * ربات‌های سالم را کند کند. پنجره ۶۰ ثانیه‌ای.
+     */
+    public static function rateOk($id, $limit = 600) {
+        $win = (int)(time() / 60);
+        return mutate('ratelimit', function (&$a) use ($id, $win, $limit) {
+            if (($a[$id]['win'] ?? -1) !== $win) $a[$id] = ['win' => $win, 'n' => 0];
+            $a[$id]['n']++;
+            if (count($a) > 200) $a = array_slice($a, -100, null, true);  // نگهداری سبک
+            return $a[$id]['n'] <= $limit;
+        });
+    }
+}
+
+// ============================================================
+// 🎯 کمپین‌ها — سفارش ممبر: کانال قفل می‌ماند تا سهمیه پر شود
+// ============================================================
+
+class Campaign
+{
+    public static function all() { return load('campaigns'); }
+    public static function get($id) { $a = load('campaigns'); return $a[$id] ?? null; }
+
+    public static function create($title, $chatId, $url, $target, $partners = [], $bots = [], $note = '') {
+        $id = uid('cm');
+        mutate('campaigns', function (&$a) use ($id, $title, $chatId, $url, $target, $partners, $bots, $note) {
+            $a[$id] = [
+                'id' => $id, 'title' => $title, 'chat_id' => $chatId, 'url' => $url,
+                'target' => max(0, (int)$target), 'joined' => [],
+                'partners' => array_values($partners), 'bots' => array_values($bots),
+                'note' => $note, 'active' => true,
+                'created_at' => nowStr(), 'done_at' => null,
+            ];
+        });
+        return self::get($id);
+    }
+
+    public static function isDone($c) {
+        return ((int)$c['target']) > 0 && count($c['joined']) >= (int)$c['target'];
+    }
+
+    public static function remaining($c) {
+        return ((int)$c['target']) > 0 ? max(0, (int)$c['target'] - count($c['joined'])) : '∞';
+    }
+
+    /** کمپین‌های فعالی که برای این ربات/شریک باید قفل شوند */
+    public static function activeFor($botId = null, $partnerId = null) {
+        $out = [];
+        foreach (self::all() as $c) {
+            if (empty($c['active']) || self::isDone($c)) continue;
+            if ($botId !== null) {
+                $sc = $c['bots'] ?? [];
+                if ($sc && !in_array($botId, $sc, true)) continue;
+            }
+            if ($partnerId !== null) {
+                $sp = $c['partners'] ?? [];
+                if ($sp && !in_array($partnerId, $sp, true)) continue;
+            }
+            $out[] = $c;
+        }
+        return $out;
+    }
+
+    /** ثبت یک عضو تازه — هر کاربر فقط یک بار برای هر کمپین شمرده می‌شود */
+    public static function credit($id, $userId) {
+        return mutate('campaigns', function (&$a) use ($id, $userId) {
+            if (!isset($a[$id]) || empty($a[$id]['active'])) return false;
+            $j = array_map('intval', $a[$id]['joined']);
+            if (in_array((int)$userId, $j, true)) return false;
+            $t = (int)$a[$id]['target'];
+            if ($t > 0 && count($j) >= $t) return false;
+            $j[] = (int)$userId;
+            $a[$id]['joined'] = array_values($j);
+            if ($t > 0 && count($j) >= $t) $a[$id]['done_at'] = nowStr();
+            return true;
+        });
+    }
+
+    public static function remove($id) {
+        mutate('campaigns', function (&$a) use ($id) { unset($a[$id]); });
+    }
+}
+
+/**
+ * کانال‌هایی که کاربر باید عضو شود = کانال‌های ثابت + کمپین‌های فعال.
+ * برگشت: [missing[], creditable[]] — creditable شناسه کمپین‌هایی که
+ * کاربر تازه عضوشان شده و باید شمرده شوند.
+ */
+function requiredMissing($userId, $botId = null, $partnerId = null) {
+    $missing = [];
+    $creditable = [];
+
+    if ($botId !== null) {
+        foreach (Channels::missing($userId, $botId) as $m) $missing[] = $m;
+    }
+
+    foreach (Campaign::activeFor($botId, $partnerId) as $c) {
+        $res = Channels::isMemberOf($c['chat_id'], $userId);
+        if (!$res['ok']) {
+            $missing[] = ['title' => $c['title'], 'url' => $c['url'],
+                          'chat_id' => $c['chat_id'], 'unverifiable' => true, 'error' => $res['error']];
+            continue;
+        }
+        if (!$res['member']) {
+            $missing[] = ['title' => $c['title'], 'url' => $c['url'], 'chat_id' => $c['chat_id']];
+        } else {
+            $creditable[] = $c['id'];
+        }
+    }
+    return [$missing, $creditable];
+}
+
+// ============================================================
 // 🔗 لینک‌های اپلودر
 // ============================================================
 
@@ -2232,11 +2398,15 @@ function childHandle($botId, $update) {
 
         if (str_starts_with($data, 'jchk_')) {
             $code = substr($data, 5);
-            $missing = !empty($s['force_join']) ? Channels::missing($uid, $botId) : [];
-            if ($missing) {
-                answerCb($token, $cbId, '❌ هنوز در همه کانال‌ها عضو نشده‌اید.', true);
-                return;
+            $creditable = [];
+            if (!empty($s['force_join'])) {
+                [$missing, $creditable] = requiredMissing($uid, $botId);
+                if ($missing) {
+                    answerCb($token, $cbId, '❌ هنوز در همه کانال‌ها عضو نشده‌اید.', true);
+                    return;
+                }
             }
+            foreach ($creditable as $cid) Campaign::credit($cid, $uid);
             answerCb($token, $cbId, '✅ عضویت تایید شد');
             if ($msgId) delMsg($token, $chatId, $msgId);
             deliverLink($bot, $chatId, $uid, $code);
@@ -2324,10 +2494,11 @@ function childHandle($botId, $update) {
 
         Links::hit($botId, $code, 'clicks');
 
-        // 🔒 قفل عضویت اجباری — کانال‌ها از ربات مادر می‌آیند
+        // 🔒 قفل عضویت اجباری — کانال‌های ثابت + کمپین‌های فعال
         if (!empty($s['force_join'])) {
-            $missing = Channels::missing($uid, $botId);
+            [$missing, $creditable] = requiredMissing($uid, $botId);
             if ($missing) { showJoinGate($bot, $chatId, $missing, $code); return; }
+            foreach ($creditable as $cid) Campaign::credit($cid, $uid);
         }
 
         deliverLink($bot, $chatId, $uid, $code);
@@ -2433,10 +2604,78 @@ function childMenu($bot, $chatId, $msgId = null) {
 }
 
 // ============================================================
+// 🌐 API عضویت اجباری — برای ربات‌های شریک با سورس مستقل
+// ============================================================
+
+function apiOut($data, $code = 200) {
+    http_response_code($code);
+    header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: no-store');
+    echo json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    exit;
+}
+
+function handleApi($action) {
+    $key = $_POST['key'] ?? $_GET['key'] ?? '';
+    $p   = Partner::byKey($key);
+
+    if (!$p)                 apiOut(['ok' => false, 'error' => 'invalid_key'], 401);
+    if (empty($p['active'])) apiOut(['ok' => false, 'error' => 'partner_disabled'], 403);
+    if (!Partner::rateOk($p['id'])) apiOut(['ok' => false, 'error' => 'rate_limited'], 429);
+
+    // ---- فهرست کانال‌هایی که این شریک باید قفل کند ----
+    if ($action === 'channels') {
+        $out = [];
+        foreach (Campaign::activeFor(null, $p['id']) as $c) {
+            $out[] = ['title' => $c['title'], 'url' => $c['url'],
+                      'remaining' => Campaign::remaining($c)];
+        }
+        apiOut(['ok' => true, 'channels' => $out]);
+    }
+
+    // ---- بررسی عضویت یک کاربر ----
+    if ($action === 'check') {
+        $userId = (int)($_POST['user_id'] ?? $_GET['user_id'] ?? 0);
+        if ($userId <= 0) apiOut(['ok' => false, 'error' => 'bad_user_id'], 400);
+
+        [$missing, $creditable] = requiredMissing($userId, null, $p['id']);
+
+        $allowed = empty($missing);
+        if ($allowed) {
+            // فقط وقتی همه شرط‌ها برقرار است، عضویت‌ها شمرده می‌شوند
+            foreach ($creditable as $cid) Campaign::credit($cid, $userId);
+        }
+        Partner::bump($p['id'], $allowed);
+
+        $list = [];
+        foreach ($missing as $m) {
+            $list[] = ['title' => $m['title'], 'url' => $m['url'] ?? '',
+                       'unverifiable' => !empty($m['unverifiable'])];
+        }
+        apiOut([
+            'ok' => true,
+            'allowed' => $allowed,
+            'missing' => $list,
+            'message' => $allowed ? '' : 'برای ادامه، در کانال‌های زیر عضو شوید.',
+        ]);
+    }
+
+    apiOut(['ok' => false, 'error' => 'unknown_action'], 400);
+}
+
+// ============================================================
 // 🎯 ورودی
 // ============================================================
 
 if (defined('MEMBERSHIP_LIB_ONLY')) return;
+
+if (isset($_GET['api'])) {
+    try { handleApi((string)$_GET['api']); }
+    catch (Throwable $e) {
+        error_log('[api] ' . $e->getMessage());
+        apiOut(['ok' => false, 'error' => 'server_error'], 500);
+    }
+}
 
 // اجرای صف حذف — با cron یا در هر درخواست
 if (isset($_GET['cron'])) {

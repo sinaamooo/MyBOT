@@ -299,6 +299,65 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         go('چیدمان اعمال شد.');
     }
 
+    // ---- شرکا ----
+    if ($a === 'add_partner') {
+        $name = trim($_POST['name'] ?? '');
+        if ($name === '') go('نام لازم است.', 'err');
+        $p = Partner::create($name, trim($_POST['bot_username'] ?? ''), (int)($_POST['owner_id'] ?? 0));
+        go('شریک «' . $name . '» ساخته شد. کلید API پایین صفحه است.');
+    }
+    if ($a === 'del_partner')    { Partner::remove($_POST['id'] ?? ''); go('شریک حذف شد.'); }
+    if ($a === 'rotate_key')     { Partner::rotateKey($_POST['id'] ?? ''); go('کلید عوض شد — کلید قبلی دیگر کار نمی‌کند.'); }
+    if ($a === 'toggle_partner') {
+        $id = $_POST['id'] ?? '';
+        mutate('partners', function (&$x) use ($id) {
+            if (isset($x[$id])) $x[$id]['active'] = empty($x[$id]['active']);
+        });
+        go('وضعیت شریک تغییر کرد.');
+    }
+
+    // ---- کمپین‌ها (سفارش ممبر) ----
+    if ($a === 'add_campaign') {
+        $chat   = trim($_POST['chat_id'] ?? '');
+        $target = (int)($_POST['target'] ?? 0);
+        if ($chat === '' || $target <= 0) go('آیدی کانال و تعداد ممبر لازم است.', 'err');
+
+        $r = tg(BOT_TOKEN, 'getChat', ['chat_id' => $chat], 8);
+        if (empty($r['ok'])) go('کانال پیدا نشد: ' . ($r['description'] ?? '') . ' — ربات مادر را در کانال ادمین کنید.', 'err');
+        $title = trim($_POST['title'] ?? '') ?: ($r['result']['title'] ?? $chat);
+        $un    = $r['result']['username'] ?? '';
+        $url   = trim($_POST['url'] ?? '') ?: ($un ? "https://t.me/$un" : '');
+        if (!$url) {
+            $inv = tg(BOT_TOKEN, 'createChatInviteLink', ['chat_id' => $chat, 'name' => 'کمپین'], 8);
+            if (!empty($inv['ok'])) $url = $inv['result']['invite_link'];
+        }
+        Campaign::create($title, $chat, $url, $target,
+                         (array)($_POST['partners'] ?? []), (array)($_POST['bots'] ?? []),
+                         trim($_POST['note'] ?? ''));
+        go('کمپین «' . $title . '» ساخته شد — ' . $target . ' ممبر.');
+    }
+    if ($a === 'del_campaign') { Campaign::remove($_POST['id'] ?? ''); go('کمپین حذف شد.'); }
+    if ($a === 'toggle_campaign') {
+        $id = $_POST['id'] ?? '';
+        mutate('campaigns', function (&$x) use ($id) {
+            if (isset($x[$id])) $x[$id]['active'] = empty($x[$id]['active']);
+        });
+        go('وضعیت کمپین تغییر کرد.');
+    }
+    if ($a === 'edit_campaign') {
+        $id = $_POST['id'] ?? '';
+        $post = $_POST;
+        mutate('campaigns', function (&$x) use ($id, $post) {
+            if (!isset($x[$id])) return;
+            $x[$id]['target']   = max(0, (int)($post['target'] ?? 0));
+            $x[$id]['title']    = trim($post['title'] ?? $x[$id]['title']);
+            $x[$id]['url']      = trim($post['url'] ?? $x[$id]['url']);
+            $x[$id]['partners'] = array_values((array)($post['partners'] ?? []));
+            $x[$id]['bots']     = array_values((array)($post['bots'] ?? []));
+        });
+        go('کمپین به‌روزرسانی شد.');
+    }
+
     // ---- مدیران ربات اپلودر ----
     if ($a === 'add_bot_admin') {
         $bid = $_POST['id'] ?? '';
@@ -510,7 +569,9 @@ $products = Product::all();
 $bots     = BotManager::all();
 $orders   = Order::all();
 $users    = load('users');
-$channels = Channels::all();
+$channels  = Channels::all();
+$partners  = Partner::all();
+$campaigns = Campaign::all();
 
 uasort($orders, fn($a, $b) => strcmp($b['created_at'] ?? '', $a['created_at'] ?? ''));
 $pending  = array_filter($orders, fn($o) => $o['status'] === Order::REVIEW);
@@ -606,6 +667,11 @@ margin:4px 0;box-shadow:0 1px 3px rgba(0,0,0,.1)}
 padding:9px;border:1px solid #edf2f7;border-radius:10px;margin-bottom:8px}
 .srow input,.srow select{padding:8px;font-size:12.5px}
 .tgrid{display:grid;gap:14px}
+.bar{height:9px;background:#edf2f7;border-radius:20px;overflow:hidden}
+.bar-in{height:100%;background:linear-gradient(90deg,#667eea,#38a169);border-radius:20px;transition:width .3s}
+pre.code{background:#2d3748;color:#e2e8f0;padding:13px;border-radius:10px;font-size:11.5px;
+line-height:1.75;overflow-x:auto;direction:ltr;text-align:left;white-space:pre;margin:0}
+details summary::-webkit-details-marker{display:none}
 .note{background:#e8f0fe;border-right:4px solid #667eea;border-radius:10px;padding:12px 14px;
 margin-bottom:14px;font-size:12.5px;line-height:1.95;color:#2d3748}
 .tbar{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:6px}
@@ -637,6 +703,8 @@ $tabs = [
   'support'   => '📞 پشتیبانی',
   'bots'      => '🤖 ربات‌های اپلودر',
   'channels'  => '📢 کانال‌ها',
+  'campaigns' => '🎯 سفارش ممبر',
+  'partners'  => '🤝 ربات‌های شریک',
   'referral'  => '👥 رفرال',
   'users'     => '👥 کاربران',
   'settings'  => '⚙️ تنظیمات',
@@ -1344,6 +1412,228 @@ foreach ($tabs as $k => $l): ?>
       <?php endforeach; ?>
     </table></div><?php endif; ?>
   </div></div>
+
+<?php // ================= سفارش ممبر (کمپین) ================= ?>
+<?php elseif ($tab === 'campaigns'): ?>
+  <div class="card"><h2>🎯 ثبت سفارش ممبر</h2><div class="body">
+    <div class="note">
+      کانال مشتری تا رسیدن به تعداد سفارش، در بخش <b>عضویت اجباری</b> قفل می‌شود —
+      هم در ربات‌های اپلودر خودمان، هم در ربات‌های شریک.
+      به‌محض پر شدن سهمیه، کانال خودکار از قفل خارج می‌شود.<br>
+      ⚠️ <b>ربات مادر</b> باید در کانال مشتری ادمین باشد تا بتواند عضویت را بشمارد.
+    </div>
+    <form method="post">
+      <input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="tab" value="campaigns">
+      <input type="hidden" name="action" value="add_campaign">
+      <div class="grid2">
+        <div><label>آیدی یا یوزرنیم کانال مشتری</label>
+          <input name="chat_id" required placeholder="@customer یا -100..." style="direction:ltr"></div>
+        <div><label>تعداد ممبر سفارش</label><input name="target" type="number" min="1" required placeholder="1000"></div>
+        <div><label>عنوان (خالی = از خود کانال)</label><input name="title" placeholder="کانال مشتری"></div>
+        <div><label>لینک عضویت (خالی = خودکار)</label><input name="url" placeholder="https://t.me/..." style="direction:ltr"></div>
+      </div>
+      <div style="margin-top:12px"><label>یادداشت</label><input name="note" placeholder="سفارش آقای X — فاکتور ۱۲۳"></div>
+
+      <div style="margin-top:12px"><label>روی کدام ربات‌های اپلودر؟ (خالی = همه)</label>
+        <div style="display:flex;flex-wrap:wrap;gap:9px">
+          <?php foreach ($bots as $bb): ?>
+            <label style="font-weight:500;background:#edf2f7;padding:7px 12px;border-radius:9px">
+              <input type="checkbox" name="bots[]" value="<?= h($bb['id']) ?>" style="width:auto"> @<?= h($bb['username']) ?></label>
+          <?php endforeach; ?>
+          <?php if (!$bots): ?><span class="muted">رباتی ندارید.</span><?php endif; ?>
+        </div></div>
+
+      <div style="margin-top:12px"><label>روی کدام ربات‌های شریک؟ (خالی = همه)</label>
+        <div style="display:flex;flex-wrap:wrap;gap:9px">
+          <?php foreach ($partners as $pp): ?>
+            <label style="font-weight:500;background:#edf2f7;padding:7px 12px;border-radius:9px">
+              <input type="checkbox" name="partners[]" value="<?= h($pp['id']) ?>" style="width:auto"> <?= h($pp['name']) ?></label>
+          <?php endforeach; ?>
+          <?php if (!$partners): ?><span class="muted">شریکی ندارید.</span><?php endif; ?>
+        </div></div>
+
+      <div style="margin-top:14px"><button class="btn g">ثبت سفارش</button></div>
+    </form>
+  </div></div>
+
+  <?php foreach ($campaigns as $c):
+    $done = Campaign::isDone($c);
+    $cnt  = count($c['joined']);
+    $pct  = ((int)$c['target']) > 0 ? min(100, round($cnt * 100 / (int)$c['target'])) : 0; ?>
+  <div class="card">
+    <h2>
+      <?= $done ? '✅' : (!empty($c['active']) ? '🎯' : '⏸') ?> <?= h($c['title']) ?>
+      — <?= $cnt ?> / <?= (int)$c['target'] ?>
+      <?= $done ? '<span class="badge green">تکمیل</span>' : '' ?>
+    </h2>
+    <div class="body">
+      <div class="bar"><div class="bar-in" style="width:<?= $pct ?>%"></div></div>
+      <div class="muted" style="margin:6px 0 14px">
+        <?= $pct ?>% · باقی‌مانده: <b><?= h(Campaign::remaining($c)) ?></b> ·
+        <code><?= h($c['chat_id']) ?></code>
+        <?= !empty($c['note']) ? ' · ' . h($c['note']) : '' ?>
+        <?= !empty($c['done_at']) ? ' · تکمیل در ' . h($c['done_at']) : '' ?>
+      </div>
+
+      <form method="post">
+        <input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="tab" value="campaigns">
+        <input type="hidden" name="action" value="edit_campaign"><input type="hidden" name="id" value="<?= h($c['id']) ?>">
+        <div class="grid2">
+          <div><label>عنوان</label><input name="title" value="<?= h($c['title']) ?>"></div>
+          <div><label>تعداد سفارش</label><input name="target" type="number" min="1" value="<?= (int)$c['target'] ?>"></div>
+          <div><label>لینک عضویت</label><input name="url" value="<?= h($c['url']) ?>" style="direction:ltr"></div>
+        </div>
+        <div style="margin-top:10px"><label>ربات‌های اپلودر (خالی = همه)</label>
+          <div style="display:flex;flex-wrap:wrap;gap:8px">
+            <?php foreach ($bots as $bb): ?>
+              <label style="font-weight:500;background:#edf2f7;padding:6px 11px;border-radius:8px">
+                <input type="checkbox" name="bots[]" value="<?= h($bb['id']) ?>" style="width:auto"
+                  <?= in_array($bb['id'], $c['bots'] ?? [], true) ? 'checked' : '' ?>> @<?= h($bb['username']) ?></label>
+            <?php endforeach; ?>
+          </div></div>
+        <div style="margin-top:10px"><label>ربات‌های شریک (خالی = همه)</label>
+          <div style="display:flex;flex-wrap:wrap;gap:8px">
+            <?php foreach ($partners as $pp): ?>
+              <label style="font-weight:500;background:#edf2f7;padding:6px 11px;border-radius:8px">
+                <input type="checkbox" name="partners[]" value="<?= h($pp['id']) ?>" style="width:auto"
+                  <?= in_array($pp['id'], $c['partners'] ?? [], true) ? 'checked' : '' ?>> <?= h($pp['name']) ?></label>
+            <?php endforeach; ?>
+          </div></div>
+        <div style="margin-top:12px"><button class="btn g">ذخیره</button></div>
+      </form>
+
+      <div style="margin-top:12px;padding-top:12px;border-top:1px solid #edf2f7">
+        <form method="post" class="inline">
+          <input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="tab" value="campaigns">
+          <input type="hidden" name="action" value="toggle_campaign"><input type="hidden" name="id" value="<?= h($c['id']) ?>">
+          <button class="btn ghost sm"><?= !empty($c['active']) ? 'توقف' : 'ادامه' ?></button></form>
+        <form method="post" class="inline" onsubmit="return confirm('حذف کمپین؟')">
+          <input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="tab" value="campaigns">
+          <input type="hidden" name="action" value="del_campaign"><input type="hidden" name="id" value="<?= h($c['id']) ?>">
+          <button class="btn r sm">حذف</button></form>
+      </div>
+    </div>
+  </div>
+  <?php endforeach; ?>
+  <?php if (!$campaigns): ?><div class="card"><div class="body"><div class="empty">هنوز سفارشی ثبت نشده.</div></div></div><?php endif; ?>
+
+<?php // ================= ربات‌های شریک ================= ?>
+<?php elseif ($tab === 'partners'):
+  $apiBase = baseUrl() . '/bot_master_membership.php'; ?>
+  <div class="card"><h2>🤝 افزودن ربات شریک</h2><div class="body">
+    <div class="note">
+      برای رباتی که <b>سورس خودش را دارد</b> و می‌خواهد فقط از بخش <b>عضویت اجباری</b> ما استفاده کند.
+      توکن رباتشان را نمی‌گیریم — فقط یک کلید API می‌دهیم که با آن بپرسند
+      «این کاربر باید عضو کدام کانال‌ها شود؟».
+    </div>
+    <form method="post">
+      <input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="tab" value="partners">
+      <input type="hidden" name="action" value="add_partner">
+      <div class="grid2">
+        <div><label>نام شریک</label><input name="name" required placeholder="ربات فلانی"></div>
+        <div><label>یوزرنیم رباتشان (اختیاری)</label><input name="bot_username" placeholder="their_bot" style="direction:ltr"></div>
+        <div><label>آیدی عددی صاحبش (اختیاری)</label><input name="owner_id" type="number" style="direction:ltr"></div>
+      </div>
+      <div style="margin-top:14px"><button class="btn g">ساخت کلید API</button></div>
+    </form>
+  </div></div>
+
+  <?php foreach ($partners as $pt): ?>
+  <div class="card">
+    <h2><?= !empty($pt['active']) ? '🟢' : '🔴' ?> <?= h($pt['name']) ?>
+      <?= $pt['bot_username'] ? '— @' . h($pt['bot_username']) : '' ?></h2>
+    <div class="body">
+      <div class="grid2" style="margin-bottom:12px">
+        <div><label>کلید API</label>
+          <input value="<?= h($pt['key']) ?>" readonly onclick="this.select()" style="direction:ltr;background:#f7fafc"></div>
+        <div><label>آمار</label>
+          <div class="muted" style="padding-top:8px">
+            بررسی: <b><?= (int)$pt['checks'] ?></b> · موفق: <b><?= (int)$pt['passed'] ?></b>
+            <?= $pt['last_seen'] ? ' · آخرین: ' . h($pt['last_seen']) : '' ?>
+          </div></div>
+      </div>
+
+      <details>
+        <summary style="cursor:pointer;font-weight:700;font-size:13.5px;margin-bottom:8px">
+          📋 کدی که باید به شریک بدهید (کپی کنید)</summary>
+
+        <div class="muted" style="margin:10px 0 6px"><b>۱) آدرس‌ها</b></div>
+        <pre class="code">بررسی عضویت:
+POST <?= h($apiBase) ?>?api=check
+     key=<?= h($pt['key']) ?>&user_id=123456
+
+فهرست کانال‌ها:
+POST <?= h($apiBase) ?>?api=channels
+     key=<?= h($pt['key']) ?></pre>
+
+        <div class="muted" style="margin:12px 0 6px"><b>۲) پاسخ</b></div>
+        <pre class="code">{"ok":true,"allowed":false,
+ "missing":[{"title":"کانال ما","url":"https://t.me/..."}],
+ "message":"برای ادامه، در کانال‌های زیر عضو شوید."}</pre>
+
+        <div class="muted" style="margin:12px 0 6px"><b>۳) نمونه PHP</b></div>
+        <pre class="code">function joinGate($userId) {
+    $ch = curl_init('<?= h($apiBase) ?>?api=check');
+    curl_setopt_array($ch, [
+        CURLOPT_POST =&gt; true,
+        CURLOPT_POSTFIELDS =&gt; http_build_query([
+            'key' =&gt; '<?= h($pt['key']) ?>',
+            'user_id' =&gt; $userId,
+        ]),
+        CURLOPT_RETURNTRANSFER =&gt; true,
+        CURLOPT_TIMEOUT =&gt; 8,
+    ]);
+    $r = json_decode(curl_exec($ch), true);
+    curl_close($ch);
+    // اگر سرویس در دسترس نبود، قفل را باز نکنید
+    if (empty($r['ok'])) return ['allowed' =&gt; false, 'missing' =&gt; []];
+    return $r;
+}
+
+$gate = joinGate($userId);
+if (!$gate['allowed']) {
+    $rows = [];
+    foreach ($gate['missing'] as $m)
+        $rows[] = [['text' =&gt; '📢 ' . $m['title'], 'url' =&gt; $m['url']]];
+    $rows[] = [['text' =&gt; '✅ عضو شدم', 'callback_data' =&gt; 'recheck']];
+    // پیام «اول عضو شوید» را با این دکمه‌ها بفرستید
+} else {
+    // فایل/محتوا را بفرستید
+}</pre>
+
+        <div class="muted" style="margin:12px 0 6px"><b>۴) نمونه Python</b></div>
+        <pre class="code">import requests
+
+def join_gate(user_id):
+    try:
+        r = requests.post('<?= h($apiBase) ?>?api=check',
+                          data={'key': '<?= h($pt['key']) ?>',
+                                'user_id': user_id}, timeout=8).json()
+    except Exception:
+        return {'allowed': False, 'missing': []}
+    if not r.get('ok'):
+        return {'allowed': False, 'missing': []}
+    return r</pre>
+      </details>
+
+      <div style="margin-top:14px;padding-top:12px;border-top:1px solid #edf2f7">
+        <form method="post" class="inline">
+          <input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="tab" value="partners">
+          <input type="hidden" name="action" value="toggle_partner"><input type="hidden" name="id" value="<?= h($pt['id']) ?>">
+          <button class="btn ghost sm"><?= !empty($pt['active']) ? 'غیرفعال کن' : 'فعال کن' ?></button></form>
+        <form method="post" class="inline" onsubmit="return confirm('کلید قبلی از کار می‌افتد. مطمئنید؟')">
+          <input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="tab" value="partners">
+          <input type="hidden" name="action" value="rotate_key"><input type="hidden" name="id" value="<?= h($pt['id']) ?>">
+          <button class="btn b sm">🔄 تعویض کلید</button></form>
+        <form method="post" class="inline" onsubmit="return confirm('حذف شریک؟')">
+          <input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="tab" value="partners">
+          <input type="hidden" name="action" value="del_partner"><input type="hidden" name="id" value="<?= h($pt['id']) ?>">
+          <button class="btn r sm">حذف</button></form>
+      </div>
+    </div>
+  </div>
+  <?php endforeach; ?>
+  <?php if (!$partners): ?><div class="card"><div class="body"><div class="empty">هنوز شریکی اضافه نکرده‌اید.</div></div></div><?php endif; ?>
 
 <?php // ================= رفرال ================= ?>
 <?php elseif ($tab === 'referral'):
