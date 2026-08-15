@@ -135,10 +135,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($a === 'save_support') {
         $post = $_POST;
         cfgSet(function (&$c) use ($post) {
+            // دو دکمه اصلی
+            foreach (['direct', 'indirect'] as $mk) {
+                $c['support_main'][$mk]['emoji'] = trim($post["sm_emoji_$mk"] ?? '');
+                $c['support_main'][$mk]['text']  = trim($post["sm_text_$mk"] ?? $c['support_main'][$mk]['text']);
+                $col = $post["sm_color_$mk"] ?? 'none';
+                $c['support_main'][$mk]['color'] = isStyle($col) ? $col : 'none';
+                $c['support_main'][$mk]['icon']  = trim($post["sm_icon_$mk"] ?? '');
+                if ($mk === 'direct') $c['support_main'][$mk]['value'] = trim($post['sm_value_direct'] ?? '');
+            }
             $n = count($c['support_methods']);
             for ($i = 0; $i < $n; $i++) {
                 $c['support_methods'][$i]['on']    = !empty($post["s_on_$i"]);
-                $c['support_methods'][$i]['kind']  = ($post["s_kind_$i"] ?? 'direct') === 'indirect' ? 'indirect' : 'direct';
+                $c['support_methods'][$i]['kind']  = 'indirect';
                 $c['support_methods'][$i]['type']  = $post["s_type_$i"] ?? 'url';
                 $c['support_methods'][$i]['emoji'] = trim($post["s_emoji_$i"] ?? '');
                 $c['support_methods'][$i]['label'] = trim($post["s_label_$i"] ?? '');
@@ -842,27 +851,42 @@ foreach ($tabs as $k => $l): ?>
 
 <?php // ================= پشتیبانی ================= ?>
 <?php elseif ($tab === 'support'): ?>
-  <div class="card"><h2>📞 روش‌های ارتباط (۱۰ روش)</h2><div class="body">
-    <p class="muted" style="margin-bottom:12px;line-height:1.9">
-      <b>نوع:</b> لینک = دکمه‌ای که کاربر را به آدرس می‌برد ·
-      تیکت = کاربر داخل ربات پیام می‌نویسد و برای شما می‌آید ·
-      متن = نمایش یک متن · تلفن = نمایش شماره<br>
-      <b>دسته:</b> مستقیم و غیرمستقیم جدا از هم در ربات نشان داده می‌شوند.
-    </p>
+  <div class="card"><h2>📞 دو دکمه اصلی پشتیبانی</h2><div class="body">
+    <div class="note">
+      کاربر فقط <b>دو دکمه</b> می‌بیند: ارتباط مستقیم و ارتباط غیر مستقیم.<br>
+      <b>مستقیم</b> یک لینک است و کاربر را یک‌راست می‌برد.
+      <b>غیر مستقیم</b> فهرست پایین را باز می‌کند.
+    </div>
     <form method="post">
       <input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="tab" value="support">
       <input type="hidden" name="action" value="save_support">
-      <div style="display:grid;grid-template-columns:40px 90px 100px 60px 1fr 1.4fr;gap:8px;
+
+      <?php foreach (['direct' => '💬 ارتباط مستقیم', 'indirect' => '📨 ارتباط غیر مستقیم'] as $mk => $mlbl):
+        $m = $C['support_main'][$mk]; ?>
+        <h3 style="font-size:13.5px;margin:<?= $mk === 'direct' ? '0' : '18px' ?> 0 9px"><?= $mlbl ?></h3>
+        <div class="grid2">
+          <div><label>ایموجی</label><input name="sm_emoji_<?= $mk ?>" value="<?= h($m['emoji']) ?>" style="text-align:center"></div>
+          <div><label>متن دکمه</label><input name="sm_text_<?= $mk ?>" value="<?= h($m['text']) ?>"></div>
+          <div><label>رنگ</label><select name="sm_color_<?= $mk ?>">
+            <?php foreach (styleMap() as $sk => $sl): ?>
+              <option value="<?= h($sk) ?>" <?= ($m['color'] ?? '') === $sk ? 'selected' : '' ?>><?= h($sl) ?></option>
+            <?php endforeach; ?></select></div>
+          <div><label>✨ ایموجی پریمیوم</label><input name="sm_icon_<?= $mk ?>" value="<?= h($m['icon'] ?? '') ?>" style="direction:ltr"></div>
+          <?php if ($mk === 'direct'): ?>
+          <div style="grid-column:1/-1"><label>لینک مقصد</label>
+            <input name="sm_value_direct" value="<?= h($m['value']) ?>" placeholder="https://t.me/malakeBTC" style="direction:ltr"></div>
+          <?php endif; ?>
+        </div>
+      <?php endforeach; ?>
+
+      <h3 style="font-size:13.5px;margin:20px 0 9px">📨 گزینه‌های زیر «ارتباط غیر مستقیم»</h3>
+      <div style="display:grid;grid-template-columns:40px 100px 60px 1fr 1.4fr;gap:8px;
                   font-size:11.5px;color:#718096;font-weight:700;padding:0 9px 6px">
-        <div>فعال</div><div>دسته</div><div>نوع</div><div>ایموجی</div><div>عنوان</div><div>مقدار</div>
+        <div>فعال</div><div>نوع</div><div>ایموجی</div><div>عنوان</div><div>مقدار</div>
       </div>
       <?php foreach ($C['support_methods'] as $i => $m): ?>
-      <div class="srow">
+      <div class="srow" style="grid-template-columns:40px 100px 60px 1fr 1.4fr">
         <input type="checkbox" name="s_on_<?= $i ?>" <?= !empty($m['on']) ? 'checked' : '' ?> style="width:auto">
-        <select name="s_kind_<?= $i ?>">
-          <option value="direct"   <?= ($m['kind'] ?? '') === 'direct' ? 'selected' : '' ?>>🟢 مستقیم</option>
-          <option value="indirect" <?= ($m['kind'] ?? '') === 'indirect' ? 'selected' : '' ?>>🔵 غیرمستقیم</option>
-        </select>
         <select name="s_type_<?= $i ?>">
           <?php foreach (['url' => 'لینک', 'ticket' => 'تیکت', 'text' => 'متن', 'phone' => 'تلفن'] as $tk => $tl): ?>
             <option value="<?= $tk ?>" <?= ($m['type'] ?? '') === $tk ? 'selected' : '' ?>><?= $tl ?></option>
@@ -870,11 +894,20 @@ foreach ($tabs as $k => $l): ?>
         </select>
         <input name="s_emoji_<?= $i ?>" value="<?= h($m['emoji'] ?? '') ?>" style="text-align:center">
         <input name="s_label_<?= $i ?>" value="<?= h($m['label'] ?? '') ?>">
-        <input name="s_value_<?= $i ?>" value="<?= h($m['value'] ?? '') ?>" placeholder="https://t.me/... یا متن یا شماره">
+        <input name="s_value_<?= $i ?>" value="<?= h($m['value'] ?? '') ?>" placeholder="https://t.me/… یا متن یا شماره">
       </div>
       <?php endforeach; ?>
       <div style="margin-top:14px"><button class="btn g">ذخیره پشتیبانی</button></div>
     </form>
+
+    <div class="prev">
+      <div class="muted" style="margin-bottom:8px">پیش‌نمایش — چیزی که کاربر می‌بیند:</div>
+      <?php foreach (['direct', 'indirect'] as $mk):
+        $m = $C['support_main'][$mk];
+        $cls = ['primary'=>'pb-b','success'=>'pb-g','danger'=>'pb-r'][$m['color'] ?? ''] ?? ''; ?>
+        <div class="pbtn <?= $cls ?>"><?= h(trim($m['emoji'] . ' ' . $m['text'])) ?></div>
+      <?php endforeach; ?>
+    </div>
   </div></div>
 
 <?php // ================= ربات‌های اپلودر ================= ?>
