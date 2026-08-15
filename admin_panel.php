@@ -95,39 +95,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $a = $_POST['action'] ?? '';
 
     // ---- دکمه‌ها ----
-    if ($a === 'save_buttons') {
-        $ids = array_keys(cfg()['buttons']);
-        $post = $_POST;
-        if (!parseLayout($post['layout'] ?? '')) go('چیدمان نامعتبر است. مثال درست: 2,1,1', 'err');
-        cfgSet(function (&$c) use ($ids, $post) {
-            $c['ui']['mode']     = ($post['mode'] ?? 'menu') === 'glass' ? 'glass' : 'menu';
-            $c['ui']['layout']   = trim($post['layout'] ?? '1');
-            $c['ui']['show_dot'] = !empty($post['show_dot']);
-            foreach ($ids as $id) {
-                if (!isset($c['buttons'][$id])) continue;
-                $col = $post["color_$id"] ?? 'none';
-                $c['buttons'][$id]['emoji'] = trim($post["emoji_$id"] ?? '');
-                $c['buttons'][$id]['text']  = trim($post["text_$id"] ?? $c['buttons'][$id]['text']);
-                $c['buttons'][$id]['color'] = isStyle($col) ? $col : 'none';
-                $c['buttons'][$id]['dot']   = trim($post["dot_$id"] ?? '');
-                $c['buttons'][$id]['order'] = max(1, (int)($post["order_$id"] ?? 1));
-                $c['buttons'][$id]['icon']  = trim($post["icon_$id"] ?? '');
-                $c['buttons'][$id]['on']    = !empty($post["on_$id"]);
-            }
-        });
-        go('دکمه‌ها ذخیره شد.');
-    }
 
-    if ($a === 'save_glass') {
-        $post = $_POST;
-        cfgSet(function (&$c) use ($post) {
-            foreach (array_keys($c['glass_colors']) as $role) {
-                $v = $post['g_' . $role] ?? 'none';
-                $c['glass_colors'][$role] = isStyle($v) ? $v : 'none';
-            }
-        });
-        go('رنگ دکمه‌های شیشه‌ای ذخیره شد.');
-    }
 
     if ($a === 'save_sales') {
         $post = $_POST;
@@ -162,14 +130,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     // ---- متن‌ها ----
-    if ($a === 'save_texts') {
-        $keys = array_keys(defaultConfig()['texts']);
-        $post = $_POST;
-        cfgSet(function (&$c) use ($keys, $post) {
-            foreach ($keys as $k) if (isset($post['t_' . $k])) $c['texts'][$k] = $post['t_' . $k];
-        });
-        go('متن‌ها ذخیره شد.');
-    }
 
     // ---- پشتیبانی ----
     if ($a === 'save_support') {
@@ -263,41 +223,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     // ---- دکمه سفارشی ----
-    if ($a === 'add_button') {
-        $label = trim($_POST['btn_text'] ?? '');
-        if ($label === '') go('متن دکمه لازم است.', 'err');
-        $act = $_POST['btn_action'] ?? 'text';
-        if (!in_array($act, ['text', 'url', 'product'], true)) $act = 'text';
-        $post = $_POST;
-        $newId = 'c_' . bin2hex(random_bytes(4));
-        cfgSet(function (&$c) use ($newId, $label, $act, $post) {
-            $c['buttons'][$newId] = [
-                'emoji' => trim($post['btn_emoji'] ?? ''), 'text' => $label,
-                'color' => isStyle($post['btn_color'] ?? '') ? $post['btn_color'] : 'none',
-                'dot' => '', 'icon' => trim($post['btn_icon'] ?? ''),
-                'row' => max(0, (int)($post['btn_row'] ?? 0)),
-                'order' => max(1, (int)($post['btn_order'] ?? 50)),
-                'on' => true, 'action' => $act, 'value' => trim($post['btn_value'] ?? ''),
-            ];
-        });
-        go('دکمه «' . $label . '» ساخته شد.');
-    }
-    if ($a === 'del_button') {
-        $id = $_POST['id'] ?? '';
-        if (!str_starts_with($id, 'c_')) go('فقط دکمه‌های سفارشی حذف می‌شوند.', 'err');
-        cfgSet(function (&$c) use ($id) { unset($c['buttons'][$id]); });
-        go('دکمه حذف شد.');
-    }
-    if ($a === 'apply_layout') {
-        $lay = $_POST['layout'] ?? '';
-        if (!parseLayout($lay)) go('چیدمان نامعتبر. مثال: 3,2,1', 'err');
-        $map = applyLayoutToRows($lay);
-        cfgSet(function (&$c) use ($map, $lay) {
-            $c['ui']['layout'] = trim($lay);
-            foreach ($map as $bid => $row) if (isset($c['buttons'][$bid])) $c['buttons'][$bid]['row'] = $row;
-        });
-        go('چیدمان اعمال شد.');
-    }
 
     // ---- شرکا ----
     if ($a === 'add_partner') {
@@ -698,8 +623,6 @@ $tabs = [
   'dashboard' => '📊 داشبورد',
   'orders'    => '🧾 سفارش‌ها' . (count($pending) ? ' (' . count($pending) . ')' : ''),
   'products'  => '🛒 محصولات',
-  'buttons'   => '🎨 دکمه‌ها',
-  'texts'     => '📝 متن‌ها',
   'support'   => '📞 پشتیبانی',
   'bots'      => '🤖 ربات‌های اپلودر',
   'channels'  => '📢 کانال‌ها',
@@ -735,6 +658,15 @@ foreach ($tabs as $k => $l): ?>
       <?php foreach ($revenue as $cur => $amt): ?>
         <div class="stat"><div class="n"><?= h(fmtNum($amt)) ?></div><div class="l"><?= h($cur) ?></div></div>
       <?php endforeach; ?></div><?php endif; ?>
+  </div></div>
+
+  <div class="card"><h2>✏️ دکمه‌ها و متن‌ها</h2><div class="body">
+    <div class="note" style="margin:0">
+      ویرایش <b>دکمه‌ها</b>، <b>متن‌ها</b>، <b>رنگ‌ها</b> و <b>متن دکمه‌های ثابت</b>
+      حالا داخل <b>خود ربات</b> است — چون آنجا می‌توانید ایموجی پریمیوم و نقل‌قول
+      را مستقیم تایپ کنید.<br><br>
+      در ربات <code>/panel</code> را بزنید → 🎨 دکمه‌ها · 📝 متن‌ها · 💠 رنگ دکمه‌های شیشه‌ای
+    </div>
   </div></div>
 
   <div class="card"><h2>🔗 وبهوک و کران</h2><div class="body">
@@ -907,211 +839,6 @@ foreach ($tabs as $k => $l): ?>
   </div></div>
   <?php endforeach; ?>
   <?php if (!$products): ?><div class="card"><div class="body"><div class="empty">محصولی نساخته‌اید.</div></div></div><?php endif; ?>
-
-<?php // ================= دکمه‌ها ================= ?>
-<?php elseif ($tab === 'buttons'): ?>
-  <div class="card"><h2>🎨 دکمه‌های منو</h2><div class="body">
-    <div class="note">
-      از <b>Bot API 9.4</b> (۹ فوریه ۲۰۲۶) تلگرام فیلد <code>style</code> را به دکمه‌ها اضافه کرد؛
-      رنگ <b>واقعی</b> روی هر دو نوع دکمه (منو و شیشه‌ای) کار می‌کند:
-      🔵 <code>primary</code> · 🟢 <code>success</code> · 🔴 <code>danger</code>.
-      دایره ایموجی برای کلاینت‌های قدیمی‌تر است که هنوز رنگ را نشان نمی‌دهند.
-    </div>
-
-    <form method="post">
-      <input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="tab" value="buttons">
-      <input type="hidden" name="action" value="save_buttons">
-
-      <div class="grid2" style="margin-bottom:16px">
-        <div><label>حالت نمایش</label>
-          <select name="mode">
-            <option value="menu"  <?= $C['ui']['mode'] === 'menu' ? 'selected' : '' ?>>منو — کیبورد پایین صفحه</option>
-            <option value="glass" <?= $C['ui']['mode'] === 'glass' ? 'selected' : '' ?>>شیشه‌ای — زیر پیام</option>
-          </select></div>
-        <div><label>الگوی چیدمان (فقط برای دکمه «اعمال»)</label>
-          <input name="layout" value="<?= h($C['ui']['layout'] ?? '1') ?>" placeholder="3,2,1" style="direction:ltr"></div>
-      </div>
-      <label style="font-weight:500;margin-bottom:14px">
-        <input type="checkbox" name="show_dot" style="width:auto" <?= !empty($C['ui']['show_dot']) ? 'checked' : '' ?>>
-        نمایش دایره رنگی کنار متن (برای کلاینت‌های قدیمی)</label>
-
-      <div class="note">
-        <b>ردیف</b> تعیین می‌کند دکمه کجا بنشیند: هر دکمه‌ای که ردیف یکسان دارد، کنار هم می‌آید.
-        مثال: دو دکمه با ردیف <code>1</code> و یکی با ردیف <code>2</code> → دو تا بالا، یکی پایین.
-        هیچ محدودیتی روی تعداد ردیف‌ها نیست.
-      </div>
-      <div style="display:grid;grid-template-columns:44px 1fr 96px 52px 90px 52px 52px 40px;gap:7px;
-                  font-size:11px;color:#718096;font-weight:700;padding:0 10px 6px">
-        <div>ایموجی</div><div>متن دکمه</div><div>رنگ</div><div>دایره</div><div>✨ پریمیوم</div>
-        <div>ردیف</div><div>ترتیب</div><div>فعال</div>
-      </div>
-      <?php foreach ($C['buttons'] as $id => $b): ?>
-      <div class="brow brow8">
-        <input name="emoji_<?= h($id) ?>" value="<?= h($b['emoji'] ?? '') ?>" style="text-align:center">
-        <input name="text_<?= h($id) ?>" value="<?= h($b['text']) ?>">
-        <select name="color_<?= h($id) ?>">
-          <?php foreach (styleMap() as $sk => $sl): ?>
-            <option value="<?= h($sk) ?>" <?= ($b['color'] ?? '') === $sk ? 'selected' : '' ?>><?= h($sl) ?></option>
-          <?php endforeach; ?>
-        </select>
-        <select name="dot_<?= h($id) ?>">
-          <?php foreach (dotMap() as $d): ?>
-            <option value="<?= h($d) ?>" <?= ($b['dot'] ?? '') === $d ? 'selected' : '' ?>><?= $d ?: '—' ?></option>
-          <?php endforeach; ?>
-        </select>
-        <input name="icon_<?= h($id) ?>" value="<?= h($b['icon'] ?? '') ?>" placeholder="کد" style="direction:ltr">
-        <input name="row_<?= h($id) ?>" type="number" min="0" value="<?= (int)($b['row'] ?? 0) ?>">
-        <input name="order_<?= h($id) ?>" type="number" min="1" value="<?= (int)($b['order'] ?? 1) ?>">
-        <input type="checkbox" name="on_<?= h($id) ?>" <?= !empty($b['on']) ? 'checked' : '' ?> style="width:auto">
-      </div>
-      <?php endforeach; ?>
-
-      <div style="margin-top:14px"><button class="btn g">ذخیره دکمه‌های منو</button></div>
-    </form>
-
-    <form method="post" style="margin-top:10px;display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
-      <input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="tab" value="buttons">
-      <input type="hidden" name="action" value="apply_layout">
-      <div style="flex:1;min-width:190px"><label>اعمال سریع الگو روی ردیف‌ها</label>
-        <input name="layout" value="<?= h($C['ui']['layout'] ?? '') ?>" placeholder="3,2,1" style="direction:ltr"></div>
-      <button class="btn b">اعمال چیدمان</button>
-    </form>
-
-    <div class="prev">
-      <div class="muted" style="margin-bottom:8px">پیش‌نمایش زنده — <?= $C['ui']['mode'] === 'glass' ? 'شیشه‌ای' : 'منو' ?>:</div>
-      <?php foreach (menuRows() as $r): ?>
-        <div class="pgrid">
-          <?php foreach ($r as $b):
-            $cls = ['primary' => 'pb-b', 'success' => 'pb-g', 'danger' => 'pb-r'][$b['color'] ?? ''] ?? ''; ?>
-            <div class="pbtn <?= $cls ?>"><?= h(btnLabel($b)) ?></div>
-          <?php endforeach; ?>
-        </div>
-      <?php endforeach; ?>
-    </div>
-  </div></div>
-
-  <div class="card"><h2>➕ ساخت دکمه جدید</h2><div class="body">
-    <div class="note">
-      دکمه دلخواه بسازید — در همان منو/شیشه‌ای بالا نمایش داده می‌شود.
-      <b>متن</b> = نمایش یک متن · <b>لینک</b> = باز کردن آدرس · <b>محصول</b> = رفتن مستقیم به یک محصول.
-    </div>
-    <form method="post">
-      <input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="tab" value="buttons">
-      <input type="hidden" name="action" value="add_button">
-      <div class="grid2">
-        <div><label>ایموجی</label><input name="btn_emoji" style="text-align:center" placeholder="🎁"></div>
-        <div><label>متن دکمه</label><input name="btn_text" required placeholder="قوانین"></div>
-        <div><label>رنگ</label><select name="btn_color">
-          <?php foreach (styleMap() as $sk => $sl): ?><option value="<?= h($sk) ?>"><?= h($sl) ?></option><?php endforeach; ?>
-        </select></div>
-        <div><label>✨ ایموجی پریمیوم</label><input name="btn_icon" style="direction:ltr"></div>
-        <div><label>نوع</label><select name="btn_action">
-          <option value="text">متن</option><option value="url">لینک</option><option value="product">محصول</option>
-        </select></div>
-        <div><label>ردیف / ترتیب</label>
-          <div style="display:flex;gap:6px">
-            <input name="btn_row" type="number" min="0" value="0"><input name="btn_order" type="number" min="1" value="50">
-          </div></div>
-      </div>
-      <div style="margin-top:12px"><label>مقدار — متن، یا آدرس، یا شناسه محصول</label>
-        <textarea name="btn_value" placeholder="متن دلخواه… یا https://… یا pr_xxxx"></textarea>
-        <?php if ($products): ?>
-        <div class="muted" style="margin-top:5px">شناسه محصولات:
-          <?php foreach ($products as $pp): ?><code><?= h($pp['id']) ?></code> = <?= h($pp['name']) ?> &nbsp;<?php endforeach; ?>
-        </div><?php endif; ?>
-      </div>
-      <div style="margin-top:14px"><button class="btn g">ساخت دکمه</button></div>
-    </form>
-
-    <?php $custom = array_filter($C['buttons'], fn($k) => str_starts_with($k, 'c_'), ARRAY_FILTER_USE_KEY); ?>
-    <?php if ($custom): ?>
-    <div style="margin-top:16px"><div class="scroll"><table>
-      <tr><th>دکمه</th><th>نوع</th><th>مقدار</th><th>ردیف</th><th></th></tr>
-      <?php foreach ($custom as $cid => $cb): ?>
-      <tr><td><?= h(trim(($cb['emoji'] ?? '') . ' ' . $cb['text'])) ?></td>
-        <td><?= h(['text'=>'متن','url'=>'لینک','product'=>'محصول'][$cb['action'] ?? ''] ?? '—') ?></td>
-        <td class="muted"><?= h(mb_substr($cb['value'] ?? '', 0, 40)) ?></td>
-        <td><?= (int)($cb['row'] ?? 0) ?></td>
-        <td><form method="post" onsubmit="return confirm('حذف دکمه؟')">
-          <input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="tab" value="buttons">
-          <input type="hidden" name="action" value="del_button"><input type="hidden" name="id" value="<?= h($cid) ?>">
-          <button class="btn r sm">حذف</button></form></td></tr>
-      <?php endforeach; ?>
-    </table></div></div>
-    <?php endif; ?>
-  </div></div>
-
-  <div class="card"><h2>💠 رنگ دکمه‌های شیشه‌ای</h2><div class="body">
-    <p class="muted" style="margin-bottom:12px">رنگ همه دکمه‌های داخل ربات بر اساس نقششان — شامل بخش محصول، پرداخت، پنل و ربات‌های اپلودر.</p>
-    <form method="post">
-      <input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="tab" value="buttons">
-      <input type="hidden" name="action" value="save_glass">
-      <div class="grid2">
-        <?php
-        $roleLabels = [
-          'buy' => '🛒 خرید و دریافت محصول', 'confirm' => '✅ تایید', 'cancel' => '↩️ انصراف',
-          'reject' => '🗑 رد و حذف', 'nav' => '◀️ بازگشت و منو', 'info' => 'ℹ️ اطلاعات و آمار',
-          'admin' => '👑 پنل مدیریت', 'link' => '🔗 لینک دریافت محتوا', 'support' => '📞 پشتیبانی',
-          'join' => '📢 کانال عضویت اجباری', 'joined' => '✅ عضو شدم', 'upload' => '📤 آپلود',
-        ];
-        foreach ($roleLabels as $role => $lbl): ?>
-          <div><label><?= $lbl ?></label>
-            <select name="g_<?= h($role) ?>">
-              <?php foreach (styleMap() as $sk => $sl): ?>
-                <option value="<?= h($sk) ?>" <?= ($C['glass_colors'][$role] ?? 'none') === $sk ? 'selected' : '' ?>><?= h($sl) ?></option>
-              <?php endforeach; ?>
-            </select></div>
-        <?php endforeach; ?>
-      </div>
-      <div style="margin-top:14px"><button class="btn g">ذخیره رنگ دکمه‌های شیشه‌ای</button></div>
-    </form>
-  </div></div>
-
-<?php // ================= متن‌ها ================= ?>
-<?php elseif ($tab === 'texts'): ?>
-  <div class="card"><h2>📝 متن‌های ربات</h2><div class="body">
-    <div class="note">
-      روی هر متن می‌توانید <b>نقل‌قول</b> بگذارید: متن را انتخاب کنید و دکمه <b>❝ نقل‌قول</b> را بزنید.
-      <code>&lt;blockquote&gt;</code> نقل‌قول ساده و <code>&lt;blockquote expandable&gt;</code> نقل‌قول جمع‌شونده می‌سازد.
-    </div>
-    <p class="muted" style="margin-bottom:14px;line-height:1.9">
-      متغیرهای قابل استفاده — حساب کاربری: <code>{id}</code> <code>{name}</code> <code>{username}</code>
-      <code>{balance}</code> <code>{orders}</code> <code>{referrals}</code> <code>{ref_earned}</code> <code>{joined}</code><br>
-      زیرمجموعه: <code>{percent}</code> <code>{link}</code> — خوش‌آمد: <code>{name}</code>
-    </p>
-    <form method="post">
-      <input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="tab" value="texts">
-      <input type="hidden" name="action" value="save_texts">
-      <div class="tgrid">
-      <?php
-      $labels = [
-        'welcome' => '👋 پیام خوش‌آمد', 'account' => '👤 حساب کاربری', 'trust' => '💚 چرا به ما اعتماد کنید',
-        'support' => '📞 سربرگ پشتیبانی', 'referral' => '👥 زیر مجموعه گیری', 'topup' => '➕ افزایش موجودی',
-        'buy_head' => '🛒 سربرگ محصولات', 'buy_empty' => '🛒 وقتی محصولی نیست',
-        'orders_head' => '📊 سربرگ سفارش‌ها', 'orders_empty' => '📊 وقتی سفارشی نیست',
-        'pay_info' => '💳 اطلاعات پرداخت', 'receipt_ask' => '🧾 درخواست رسید',
-        'receipt_ok' => '✅ رسید ثبت شد', 'approved' => '✅ تایید سفارش',
-        'rejected' => '❌ رد سفارش', 'no_balance' => '❌ موجودی کافی نیست', 'banned' => '🚫 کاربر مسدود',
-      ];
-      foreach ($labels as $k => $l): ?>
-        <div><label><?= $l ?></label>
-          <div class="tbar">
-            <button type="button" onclick="wrapSel('t_<?= h($k) ?>','<blockquote>','</blockquote>')">❝ نقل‌قول</button>
-            <button type="button" onclick="wrapSel('t_<?= h($k) ?>','<blockquote expandable>','</blockquote>')">❝ نقل‌قول بازشو</button>
-            <button type="button" onclick="wrapSel('t_<?= h($k) ?>','<b>','</b>')"><b>پررنگ</b></button>
-            <button type="button" onclick="wrapSel('t_<?= h($k) ?>','<i>','</i>')"><i>کج</i></button>
-            <button type="button" onclick="wrapSel('t_<?= h($k) ?>','<u>','</u>')"><u>زیرخط</u></button>
-            <button type="button" onclick="wrapSel('t_<?= h($k) ?>','<s>','</s>')"><s>خط‌خورده</s></button>
-            <button type="button" onclick="wrapSel('t_<?= h($k) ?>','<tg-spoiler>','</tg-spoiler>')">🫥 اسپویلر</button>
-            <button type="button" onclick="wrapSel('t_<?= h($k) ?>','<code>','</code>')">&lt;/&gt; کد</button>
-            <button type="button" onclick="premEmoji('t_<?= h($k) ?>')">✨ ایموجی پریمیوم</button>
-          </div>
-          <textarea id="t_<?= h($k) ?>" name="t_<?= h($k) ?>"><?= h($C['texts'][$k] ?? '') ?></textarea></div>
-      <?php endforeach; ?>
-      </div>
-      <div style="margin-top:16px"><button class="btn g">ذخیره متن‌ها</button></div>
-    </form>
-  </div></div>
 
 <?php // ================= پشتیبانی ================= ?>
 <?php elseif ($tab === 'support'): ?>

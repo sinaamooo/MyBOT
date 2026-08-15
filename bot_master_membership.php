@@ -115,14 +115,26 @@ function inlineKb($rows) {
 }
 
 /** منوی دکمه‌ای (پایین صفحه، کنار کادر تایپ) */
+/**
+ * منوی کیبورد.
+ * is_persistent=true به کلاینت می‌گوید کیبورد را همیشه نشان بده و
+ * دکمه بستن را از کاربر می‌گیرد — یعنی کاربر گیر می‌کند.
+ * پس پیش‌فرض خاموش است تا کاربر بتواند کیبورد را ببندد.
+ */
 function menuKb($rows) {
     $rows = cleanRows($rows);
-    return $rows ? [
+    if (!$rows) return ['remove_keyboard' => true];
+    $kb = [
         'keyboard' => $rows,
         'resize_keyboard' => true,
-        'is_persistent' => true,
-    ] : ['remove_keyboard' => true];
+        'input_field_placeholder' => cfg()['ui']['placeholder'] ?? '',
+    ];
+    if (!empty(cfg()['ui']['persistent'])) $kb['is_persistent'] = true;
+    if ($kb['input_field_placeholder'] === '') unset($kb['input_field_placeholder']);
+    return $kb;
 }
+
+function removeKb() { return ['remove_keyboard' => true]; }
 
 /** خطای مربوط به style؟ (سرور Bot API قدیمی‌تر از 9.4) */
 function isStyleError($res) {
@@ -352,7 +364,9 @@ function defaultConfig() {
     return [
         // mode: menu = کیبورد پایین | glass = دکمه شیشه‌ای زیر پیام
         // layout: چیدمان دلخواه — مثلا "1,2,1,2,1" یعنی ردیف اول ۱ دکمه، دوم ۲ تا، ...
-        'ui' => ['mode' => 'menu', 'layout' => '1,2,1,2,1', 'product_layout' => '1', 'show_dot' => false],
+        'ui' => ['mode' => 'menu', 'layout' => '1,2,1,2,1', 'product_layout' => '1',
+                 'show_dot' => false, 'persistent' => false,
+                 'placeholder' => 'یک گزینه را انتخاب کنید…'],
 
         'buttons' => [
             'buy'      => ['emoji' => '🛒', 'text' => 'خرید محصول',                     'color' => 'success', 'dot' => '🟢', 'icon' => '', 'row' => 1, 'order' => 1, 'on' => true, 'action' => ''],
@@ -362,6 +376,28 @@ function defaultConfig() {
             'orders'   => ['emoji' => '📊', 'text' => 'پیگیری سفارش',                   'color' => 'primary', 'dot' => '🔵', 'icon' => '', 'row' => 4, 'order' => 5, 'on' => true, 'action' => ''],
             'support'  => ['emoji' => '📞', 'text' => 'پشتیبانی',                       'color' => 'primary', 'dot' => '🔵', 'icon' => '', 'row' => 4, 'order' => 6, 'on' => true, 'action' => ''],
             'trust'    => ['emoji' => '💚', 'text' => 'چطوری میتوانم به شما اعتماد کنم', 'color' => 'danger',  'dot' => '🔴', 'icon' => '', 'row' => 5, 'order' => 7, 'on' => true, 'action' => ''],
+        ],
+
+        // متن دکمه‌های ثابت ربات — همه از داخل ربات قابل ویرایش
+        'ui_texts' => [
+            'back'      => '◀️ بازگشت',
+            'home'      => '🏠 منوی اصلی',
+            'cancel'    => '🔴 انصراف',
+            'confirm'   => '🟢 تایید',
+            'reject'    => '🔴 رد',
+            'panel'     => '👑 پنل',
+            'buy'       => '🟢 خرید',
+            'redeliver' => '📦 دریافت مجدد',
+            'full'      => '🔴 تکمیل ظرفیت',
+            'receipt'   => '🟢 ارسال رسید',
+            'wallet_pay'=> '💰 پرداخت از کیف پول',
+            'direct_pay'=> '💳 پرداخت مستقیم',
+            'topup'     => '➕ افزایش موجودی',
+            'my_orders' => '📊 سفارش‌های من',
+            'enter_bot' => '🚀 ورود به ربات',
+            'get_link'  => '🔗 دریافت لینک',
+            'open'      => '🔗 باز کردن',
+            'hide_menu' => '❌ بستن منو',
         ],
 
         // رنگ همه دکمه‌های شیشه‌ای بر اساس نقششان
@@ -474,6 +510,13 @@ function cfgSet(callable $fn) {
         $fn($c);
     });
     cfg(true);   // کش را تازه کن وگرنه ادامه همین درخواست مقدار قدیمی را می‌بیند
+}
+
+/** متن دکمه‌های ثابت */
+function UT($key) {
+    $d = defaultConfig()['ui_texts'];
+    $v = cfg()['ui_texts'][$key] ?? ($d[$key] ?? $key);
+    return $v !== '' ? $v : ($d[$key] ?? $key);
 }
 
 function T($key, $vars = []) {
@@ -1251,6 +1294,17 @@ function showHome($uid, $chatId, $firstName) {
     sendMsg(BOT_TOKEN, $chatId, T('welcome', ['name' => h($firstName)]), mainKeyboard());
 }
 
+/** راهنمای بستن منو — یک بار برای هر کاربر */
+function hintHideOnce($uid, $chatId) {
+    if (cfg()['ui']['mode'] !== 'menu') return;
+    $u = getUser($uid);
+    if (!empty($u['hide_hint'])) return;
+    mutate('users', function (&$a) use ($uid) {
+        if (isset($a[(string)$uid])) $a[(string)$uid]['hide_hint'] = true;
+    });
+    sendMsg(BOT_TOKEN, $chatId, "ℹ️ برای بستن منو هر وقت خواستید /hide را بزنید.");
+}
+
 function showAccount($uid, $chatId) {
     $u = getUser($uid) ?: [];
     $orders = 0;
@@ -1267,17 +1321,17 @@ function showAccount($uid, $chatId) {
         'joined'     => h($u['joined_at'] ?? '—'),
     ]);
     sendMsg(BOT_TOKEN, $chatId, $text, inlineKb([
-        [['text' => '➕ افزایش موجودی', 'callback_data' => 'menu_topup', 'style' => gs('buy') ?: null]],
-        [['text' => '📊 سفارش‌های من', 'callback_data' => 'menu_orders', 'style' => gs('info') ?: null]],
+        [['text' => UT('topup'), 'callback_data' => 'menu_topup', 'style' => gs('buy') ?: null]],
+        [['text' => UT('my_orders'), 'callback_data' => 'menu_orders', 'style' => gs('info') ?: null]],
     ]));
 }
 
 function productBtn($p, $uid) {
     $emoji = $p['emoji'] ?? '💠';
     if (Product::hasBought($p['id'], $uid)) {
-        $b = btnCb(trim("📦 $emoji " . $p['name'] . ' — دریافت مجدد'), 'redeliver_' . $p['id'], 'link');
+        $b = btnCb(trim("$emoji " . $p['name'] . ' — ' . UT('redeliver')), 'redeliver_' . $p['id'], 'link');
     } elseif (Product::isFull($p)) {
-        $b = btnCb(trim("$emoji " . $p['name'] . ' — تکمیل'), 'full_' . $p['id'], 'reject');
+        $b = btnCb(trim("$emoji " . $p['name'] . ' — ' . UT('full')), 'full_' . $p['id'], 'reject');
     } else {
         $b = btnCb(trim("$emoji " . $p['name'] . ' — ' . fmtNum($p['price']) . ' ' . $p['currency']),
                    'buy_' . $p['id']);
@@ -1407,7 +1461,7 @@ function showSupport($uid, $chatId) {
 
 function startTopup($uid, $chatId) {
     setState($uid, 'topup_amount');
-    sendMsg(BOT_TOKEN, $chatId, T('topup'), inlineKb([[['text' => '🔴 انصراف', 'callback_data' => 'cancel', 'style' => gs('cancel') ?: null]]]));
+    sendMsg(BOT_TOKEN, $chatId, T('topup'), inlineKb([[['text' => UT('cancel'), 'callback_data' => 'cancel', 'style' => gs('cancel') ?: null]]]));
 }
 
 function walletFor($currency) {
@@ -1428,8 +1482,8 @@ function createOrderAndAsk($uid, $chatId, $username, $type, $productId, $amount,
         'method' => $method, 'wallet' => h($wallet), 'id' => h($oid),
     ]);
     sendMsg(BOT_TOKEN, $chatId, $text, inlineKb([
-        [['text' => '🟢 ارسال رسید', 'callback_data' => 'rcpt_' . $oid, 'style' => gs('confirm') ?: null]],
-        [['text' => '🔴 انصراف', 'callback_data' => 'ocancel_' . $oid, 'style' => gs('cancel') ?: null]],
+        [['text' => UT('receipt'), 'callback_data' => 'rcpt_' . $oid, 'style' => gs('confirm') ?: null]],
+        [['text' => UT('cancel'), 'callback_data' => 'ocancel_' . $oid, 'style' => gs('cancel') ?: null]],
     ]));
     return $oid;
 }
@@ -1442,7 +1496,7 @@ function deliverProduct($uid, $chatId, $productId) {
         if ($url) {
             sendMsg(BOT_TOKEN, $chatId,
                 "📦 <b>" . h($p['name']) . "</b>\n\n🔗 لینک دریافت محتوا:\n{$url}",
-                inlineKb([[['text' => '🚀 دریافت محتوا', 'url' => $url, 'style' => gs('link') ?: null]]]));
+                inlineKb([[['text' => UT('enter_bot'), 'url' => $url, 'style' => gs('link') ?: null]]]));
             return;
         }
     }
@@ -1523,8 +1577,8 @@ function notifyAdminOrder($orderId) {
         : "رسید: تصویر ↓";
 
     $rows = [[
-        ['text' => '🟢 تایید', 'callback_data' => 'aok_' . $o['id']],
-        ['text' => '🔴 رد',   'callback_data' => 'ano_' . $o['id']],
+        ['text' => UT('confirm'), 'callback_data' => 'aok_' . $o['id']],
+        ['text' => UT('reject'),   'callback_data' => 'ano_' . $o['id']],
     ]];
 
     if ($o['receipt_type'] === 'photo') {
@@ -1552,15 +1606,12 @@ function admHome($chatId, $msgId = null) {
     $text .= "✅ سفارش موفق: " . Order::countBy(Order::APPROVED) . "\n";
 
     $rows = [
-        [['text' => '🧾 سفارش‌ها', 'callback_data' => 'adm_orders', 'style' => gs('admin') ?: null],
-         ['text' => '🛒 محصولات', 'callback_data' => 'adm_prods', 'style' => gs('admin') ?: null]],
-        [['text' => '🤖 ربات‌ها', 'callback_data' => 'adm_bots', 'style' => gs('admin') ?: null],
-         ['text' => '📢 کانال‌ها', 'callback_data' => 'adm_chans', 'style' => gs('admin') ?: null]],
-        [['text' => '🎨 دکمه‌ها', 'callback_data' => 'adm_btns', 'style' => gs('admin') ?: null],
-         ['text' => '📝 متن‌ها', 'callback_data' => 'adm_texts', 'style' => gs('admin') ?: null]],
-        [['text' => '💳 کیف پول', 'callback_data' => 'adm_wallets', 'style' => gs('admin') ?: null],
-         ['text' => '📞 پشتیبانی', 'callback_data' => 'adm_sup', 'style' => gs('admin') ?: null]],
-        [['text' => '📢 پیام همگانی', 'callback_data' => 'adm_bc', 'style' => gs('admin') ?: null]],
+        [btnCb('🎨 دکمه‌ها', 'ebuttons', 'admin'), btnCb('📝 متن‌ها', 'etexts', 'admin')],
+        [btnCb('💠 رنگ دکمه‌های شیشه‌ای', 'eglass', 'admin')],
+        [btnCb('🧾 سفارش‌ها', 'adm_orders', 'admin'), btnCb('🤖 ربات‌ها', 'adm_bots', 'admin')],
+        [btnCb('📢 کانال‌ها', 'adm_chans', 'admin'), btnCb('📢 پیام همگانی', 'adm_bc', 'admin')],
+        [btnCb('🌐 پنل وب', 'adm_web', 'info')],
+        [btnCb(UT('home'), 'home', 'nav')],
     ];
     if ($msgId) editMsg(BOT_TOKEN, $chatId, $msgId, $text, inlineKb($rows));
     else sendMsg(BOT_TOKEN, $chatId, $text, inlineKb($rows));
@@ -1579,11 +1630,11 @@ function admOrders($chatId, $msgId) {
             $text .= "   💰 " . fmtNum($o['amount']) . ' ' . h($o['currency']) . "\n";
             $rows[] = [
                 ['text' => '🟢 تایید ' . mb_substr($title, 0, 12), 'callback_data' => 'aok_' . $o['id']],
-                ['text' => '🔴 رد', 'callback_data' => 'ano_' . $o['id']],
+                ['text' => UT('reject'), 'callback_data' => 'ano_' . $o['id']],
             ];
         }
     }
-    $rows[] = [['text' => '◀️ بازگشت', 'callback_data' => 'adm_home', 'style' => gs('admin') ?: null]];
+    $rows[] = [['text' => UT('back'), 'callback_data' => 'adm_home', 'style' => gs('admin') ?: null]];
     editMsg(BOT_TOKEN, $chatId, $msgId, $text, inlineKb($rows));
 }
 
@@ -1606,7 +1657,7 @@ function admBtns($chatId, $msgId) {
             ['text' => colorMap()[$b['color']] . ' رنگ', 'callback_data' => 'adm_bcol_' . $id],
         ];
     }
-    $rows[] = [['text' => '◀️ بازگشت', 'callback_data' => 'adm_home', 'style' => gs('admin') ?: null]];
+    $rows[] = [['text' => UT('back'), 'callback_data' => 'adm_home', 'style' => gs('admin') ?: null]];
     editMsg(BOT_TOKEN, $chatId, $msgId, $text, inlineKb($rows));
 }
 
@@ -1618,7 +1669,7 @@ function admTexts($chatId, $msgId) {
         'buy_head' => 'سر محصولات', 'orders_head' => 'سر سفارش‌ها',
     ];
     foreach ($labels as $k => $l) $rows[] = [['text' => '📝 ' . $l, 'callback_data' => 'adm_txt_' . $k, 'style' => gs('admin') ?: null]];
-    $rows[] = [['text' => '◀️ بازگشت', 'callback_data' => 'adm_home', 'style' => gs('admin') ?: null]];
+    $rows[] = [['text' => UT('back'), 'callback_data' => 'adm_home', 'style' => gs('admin') ?: null]];
     editMsg(BOT_TOKEN, $chatId, $msgId, "📝 <b>ویرایش متن‌ها</b>\n\nکدام متن را می‌خواهید عوض کنید؟", inlineKb($rows));
 }
 
@@ -1632,7 +1683,7 @@ function admChans($chatId, $msgId) {
         $rows[] = [['text' => '🔴 حذف ' . $ch['title'], 'callback_data' => 'adm_chdel_' . $ch['id']]];
     }
     $rows[] = [['text' => '🟢 افزودن کانال', 'callback_data' => 'adm_chadd', 'style' => gs('admin') ?: null]];
-    $rows[] = [['text' => '◀️ بازگشت', 'callback_data' => 'adm_home', 'style' => gs('admin') ?: null]];
+    $rows[] = [['text' => UT('back'), 'callback_data' => 'adm_home', 'style' => gs('admin') ?: null]];
     editMsg(BOT_TOKEN, $chatId, $msgId, $text, inlineKb($rows));
 }
 
@@ -1648,7 +1699,7 @@ function admBots($chatId, $msgId) {
         $rows[] = [['text' => '⚙️ @' . $b['username'], 'callback_data' => 'adm_bot_' . $b['id']]];
     }
     $rows[] = [['text' => '🟢 افزودن ربات', 'callback_data' => 'adm_addbot', 'style' => gs('admin') ?: null]];
-    $rows[] = [['text' => '◀️ بازگشت', 'callback_data' => 'adm_home', 'style' => gs('admin') ?: null]];
+    $rows[] = [['text' => UT('back'), 'callback_data' => 'adm_home', 'style' => gs('admin') ?: null]];
     editMsg(BOT_TOKEN, $chatId, $msgId, $text, inlineKb($rows));
 }
 
@@ -1670,9 +1721,192 @@ function admBotOne($chatId, $msgId, $botId) {
         [['text' => (!empty($s['protect_content']) ? '🔴 خاموش کردن' : '🟢 روشن کردن') . ' محافظت',
           'callback_data' => 'adm_bpc_' . $botId]],
         [['text' => '🔴 حذف ربات', 'callback_data' => 'adm_bdel_' . $botId, 'style' => gs('admin') ?: null]],
-        [['text' => '◀️ بازگشت', 'callback_data' => 'adm_bots', 'style' => gs('admin') ?: null]],
+        [['text' => UT('back'), 'callback_data' => 'adm_bots', 'style' => gs('admin') ?: null]],
     ];
     editMsg(BOT_TOKEN, $chatId, $msgId, $text, inlineKb($rows));
+}
+
+// ============================================================
+// ✏️ ویرایشگر داخل ربات — دکمه‌ها، متن‌ها، رنگ‌ها
+// ============================================================
+
+/** فهرست همه متن‌های قابل ویرایش با برچسب فارسی */
+function textLabels() {
+    return [
+        'welcome' => '👋 خوش‌آمد', 'account' => '👤 حساب کاربری',
+        'trust' => '💚 اعتماد', 'support' => '📞 سربرگ پشتیبانی',
+        'referral' => '👥 زیرمجموعه', 'topup' => '➕ افزایش موجودی',
+        'buy_head' => '🛒 سربرگ محصولات', 'buy_empty' => '🛒 محصولی نیست',
+        'orders_head' => '📊 سربرگ سفارش‌ها', 'orders_empty' => '📊 سفارشی نیست',
+        'pay_info' => '💳 اطلاعات پرداخت', 'receipt_ask' => '🧾 درخواست رسید',
+        'receipt_ok' => '✅ رسید ثبت شد', 'approved' => '✅ تایید سفارش',
+        'rejected' => '❌ رد سفارش', 'no_balance' => '❌ موجودی کم',
+        'banned' => '🚫 کاربر مسدود',
+    ];
+}
+
+function uiTextLabels() {
+    return [
+        'back' => 'بازگشت', 'home' => 'منوی اصلی', 'cancel' => 'انصراف',
+        'confirm' => 'تایید', 'reject' => 'رد', 'panel' => 'پنل',
+        'buy' => 'خرید', 'redeliver' => 'دریافت مجدد', 'full' => 'تکمیل ظرفیت',
+        'receipt' => 'ارسال رسید', 'wallet_pay' => 'پرداخت از کیف پول',
+        'direct_pay' => 'پرداخت مستقیم', 'topup' => 'افزایش موجودی',
+        'my_orders' => 'سفارش‌های من', 'enter_bot' => 'ورود به ربات',
+        'get_link' => 'دریافت لینک', 'open' => 'باز کردن', 'hide_menu' => 'بستن منو',
+    ];
+}
+
+function glassRoleLabels() {
+    return [
+        'buy' => '🛒 خرید محصول', 'confirm' => '✅ تایید', 'cancel' => '↩️ انصراف',
+        'reject' => '🗑 رد و حذف', 'nav' => '◀️ بازگشت و منو', 'info' => 'ℹ️ اطلاعات',
+        'admin' => '👑 پنل', 'link' => '🔗 لینک محتوا', 'support' => '📞 پشتیبانی',
+        'join' => '📢 کانال', 'joined' => '✅ عضو شدم', 'upload' => '📤 آپلود',
+    ];
+}
+
+function nextStyle($cur) {
+    $keys = array_keys(styleMap());
+    $i = array_search($cur, $keys, true);
+    return $keys[(($i === false ? 0 : $i) + 1) % count($keys)];
+}
+
+/** 🎨 فهرست دکمه‌های منو */
+function edButtons($chatId, $msgId) {
+    $c = cfg();
+    $text  = "🎨 <b>ویرایش دکمه‌ها</b>\n\n";
+    $text .= "حالت: <b>" . ($c['ui']['mode'] === 'glass' ? 'شیشه‌ای' : 'منو') . "</b>\n";
+    $text .= "کیبورد چسبان: <b>" . (!empty($c['ui']['persistent']) ? 'روشن' : 'خاموش') . "</b>\n\n";
+    $text .= "روی هر دکمه بزنید تا ویرایشش کنید:";
+
+    $rows = [];
+    foreach ($c['buttons'] as $id => $b) {
+        $col = styleMap()[$b['color'] ?? 'none'] ?? '';
+        $rows[] = [btnCb((!empty($b['on']) ? '✅ ' : '❌ ') . btnLabel($b, false) . '  ' . mb_substr($col, 0, 2),
+                         'eb_' . $id, 'info')];
+    }
+    $rows[] = [
+        btnCb($c['ui']['mode'] === 'glass' ? '🔄 به منو' : '🔄 به شیشه‌ای', 'ebmode', 'admin'),
+        btnCb('📐 چیدمان', 'eblay', 'admin'),
+    ];
+    $rows[] = [
+        btnCb(!empty($c['ui']['persistent']) ? '📌 چسبان: روشن' : '📌 چسبان: خاموش', 'ebpin', 'admin'),
+        btnCb('➕ دکمه جدید', 'ebnew', 'confirm'),
+    ];
+    $rows[] = [btnCb(UT('back'), 'adm_home', 'nav')];
+    editMsg(BOT_TOKEN, $chatId, $msgId, $text, inlineKb($rows));
+}
+
+/** 🎨 ویرایش یک دکمه */
+function edButton($chatId, $msgId, $id) {
+    $b = cfg()['buttons'][$id] ?? null;
+    if (!$b) { edButtons($chatId, $msgId); return; }
+
+    $text  = "🎨 <b>ویرایش دکمه</b>\n\n";
+    $text .= "نمایش: " . h(btnLabel($b, true)) . "\n";
+    $text .= "متن: <code>" . h($b['text']) . "</code>\n";
+    $text .= "ایموجی: " . h($b['emoji'] ?: '—') . "\n";
+    $text .= "رنگ: " . (styleMap()[$b['color'] ?? 'none'] ?? '—') . "\n";
+    $text .= "✨ پریمیوم: " . (!empty($b['icon']) ? '<code>' . h($b['icon']) . '</code>' : '—') . "\n";
+    $text .= "ردیف: " . (int)($b['row'] ?? 0) . "  |  ترتیب: " . (int)($b['order'] ?? 0) . "\n";
+    $text .= "وضعیت: " . (!empty($b['on']) ? '✅ روشن' : '❌ خاموش');
+    if (!empty($b['action'])) {
+        $text .= "\nنوع: " . h(['text' => 'متن', 'url' => 'لینک', 'product' => 'محصول'][$b['action']] ?? $b['action']);
+    }
+
+    $rows = [
+        [btnCb('✏️ متن', 'ebt_' . $id, 'admin'), btnCb('😀 ایموجی', 'ebe_' . $id, 'admin')],
+        [btnCb('🎨 رنگ', 'ebc_' . $id, 'admin'), btnCb('✨ پریمیوم', 'ebi_' . $id, 'admin')],
+        [btnCb('📐 ردیف', 'ebr_' . $id, 'admin'), btnCb('🔢 ترتیب', 'ebo_' . $id, 'admin')],
+        [btnCb(!empty($b['on']) ? '❌ خاموش کن' : '✅ روشن کن', 'ebx_' . $id, 'info')],
+    ];
+    if (!empty($b['action'])) {
+        $rows[] = [btnCb('📝 مقدار', 'ebv_' . $id, 'admin'), btnCb('🗑 حذف دکمه', 'ebd_' . $id, 'reject')];
+    }
+    $rows[] = [btnCb(UT('back'), 'ebuttons', 'nav')];
+    editMsg(BOT_TOKEN, $chatId, $msgId, $text, inlineKb($rows));
+}
+
+/** 📝 فهرست متن‌ها */
+function edTexts($chatId, $msgId, $page = 0) {
+    $labels = textLabels();
+    $keys = array_keys($labels);
+    $per = 8;
+    $slice = array_slice($keys, $page * $per, $per);
+
+    $rows = [];
+    foreach ($slice as $k) $rows[] = [btnCb($labels[$k], 'et_' . $k, 'info')];
+
+    $nav = [];
+    if ($page > 0) $nav[] = btnCb('⬅️ قبلی', 'ets_' . ($page - 1), 'nav');
+    if (($page + 1) * $per < count($keys)) $nav[] = btnCb('بعدی ➡️', 'ets_' . ($page + 1), 'nav');
+    if ($nav) $rows[] = $nav;
+    $rows[] = [btnCb('🔤 متن دکمه‌های ثابت', 'euis', 'admin')];
+    $rows[] = [btnCb(UT('back'), 'adm_home', 'nav')];
+
+    editMsg(BOT_TOKEN, $chatId, $msgId,
+        "📝 <b>ویرایش متن‌های ربات</b>\n\nمتن را انتخاب کنید. هنگام فرستادن متن جدید می‌توانید " .
+        "<b>ایموجی پریمیوم</b>، نقل‌قول و قالب‌بندی بگذارید — همه حفظ می‌شود.",
+        inlineKb($rows));
+}
+
+/** 📝 نمایش یک متن */
+function edText($chatId, $msgId, $key) {
+    $labels = textLabels();
+    if (!isset($labels[$key])) { edTexts($chatId, $msgId); return; }
+    $cur = cfg()['texts'][$key] ?? '';
+    $isQuoted = str_starts_with(trim($cur), '<blockquote');
+
+    $text  = "📝 <b>" . h($labels[$key]) . "</b>\n\n";
+    $text .= "<b>پیش‌نمایش:</b>\n" . ($cur !== '' ? $cur : '<i>خالی</i>') . "\n\n";
+    $text .= "<b>کد:</b>\n<code>" . h(mb_substr($cur, 0, 700)) . "</code>";
+
+    $rows = [
+        [btnCb('✏️ تغییر متن', 'ete_' . $key, 'confirm')],
+        [btnCb($isQuoted ? '❝ حذف نقل‌قول' : '❝ نقل‌قول', 'etq_' . $key, 'admin'),
+         btnCb('❝ نقل‌قول بازشو', 'etx_' . $key, 'admin')],
+        [btnCb('♻️ بازگردانی پیش‌فرض', 'etr_' . $key, 'reject')],
+        [btnCb(UT('back'), 'etexts', 'nav')],
+    ];
+    editMsg(BOT_TOKEN, $chatId, $msgId, $text, inlineKb($rows));
+}
+
+/** 🔤 متن دکمه‌های ثابت */
+function edUiTexts($chatId, $msgId, $page = 0) {
+    $labels = uiTextLabels();
+    $keys = array_keys($labels);
+    $per = 9;
+    $slice = array_slice($keys, $page * $per, $per);
+
+    $rows = [];
+    foreach (array_chunk($slice, 2) as $pair) {
+        $line = [];
+        foreach ($pair as $k) $line[] = btnCb(UT($k), 'eu_' . $k, 'info');
+        $rows[] = $line;
+    }
+    $nav = [];
+    if ($page > 0) $nav[] = btnCb('⬅️ قبلی', 'eus_' . ($page - 1), 'nav');
+    if (($page + 1) * $per < count($keys)) $nav[] = btnCb('بعدی ➡️', 'eus_' . ($page + 1), 'nav');
+    if ($nav) $rows[] = $nav;
+    $rows[] = [btnCb(UT('back'), 'etexts', 'nav')];
+
+    editMsg(BOT_TOKEN, $chatId, $msgId,
+        "🔤 <b>متن دکمه‌های ثابت</b>\n\nمتن دکمه‌هایی مثل «بازگشت»، «انصراف» و «تایید».\n" .
+        "می‌توانید ایموجی پریمیوم هم بگذارید.",
+        inlineKb($rows));
+}
+
+/** 💠 رنگ دکمه‌های شیشه‌ای */
+function edGlass($chatId, $msgId) {
+    $c = cfg()['glass_colors'];
+    $rows = [];
+    foreach (glassRoleLabels() as $role => $lbl) {
+        $rows[] = [btnCb($lbl . ' — ' . (styleMap()[$c[$role] ?? 'none'] ?? ''), 'egc_' . $role, 'info')];
+    }
+    $rows[] = [btnCb(UT('back'), 'adm_home', 'nav')];
+    editMsg(BOT_TOKEN, $chatId, $msgId,
+        "💠 <b>رنگ دکمه‌های شیشه‌ای</b>\n\nروی هرکدام بزنید تا رنگش عوض شود:", inlineKb($rows));
 }
 
 // ============================================================
@@ -1726,7 +1960,7 @@ function masterHandle($update) {
             if ($m['type'] === 'ticket') {
                 setState($uid, 'ticket');
                 sendMsg(BOT_TOKEN, $chatId, "🎫 پیام خود را بنویسید تا برای پشتیبانی ارسال شود:",
-                    inlineKb([[['text' => '🔴 انصراف', 'callback_data' => 'cancel', 'style' => gs('cancel') ?: null]]]));
+                    inlineKb([[['text' => UT('cancel'), 'callback_data' => 'cancel', 'style' => gs('cancel') ?: null]]]));
                 return;
             }
             if ($m['type'] === 'phone') {
@@ -1758,10 +1992,10 @@ function masterHandle($update) {
             $bal = (float)(getUser($uid)['balance'] ?? 0);
             $rows = [];
             if (strtoupper($p['currency']) === 'تومان' || $p['currency'] === 'تومان') {
-                $rows[] = [['text' => '💰 پرداخت از کیف پول (' . fmtNum($bal) . ' تومان)', 'callback_data' => 'wpay_' . $pid, 'style' => gs('buy') ?: null]];
+                $rows[] = [['text' => UT('wallet_pay') . ' (' . fmtNum($bal) . ')', 'callback_data' => 'wpay_' . $pid, 'style' => gs('buy') ?: null]];
             }
-            $rows[] = [['text' => '💳 پرداخت مستقیم', 'callback_data' => 'dpay_' . $pid, 'style' => gs('buy') ?: null]];
-            $rows[] = [['text' => '🔴 انصراف', 'callback_data' => 'cancel', 'style' => gs('cancel') ?: null]];
+            $rows[] = [['text' => UT('direct_pay'), 'callback_data' => 'dpay_' . $pid, 'style' => gs('buy') ?: null]];
+            $rows[] = [['text' => UT('cancel'), 'callback_data' => 'cancel', 'style' => gs('cancel') ?: null]];
 
             sendMsg(BOT_TOKEN, $chatId,
                 "🛒 <b>" . h($p['name']) . "</b>\n💰 " . fmtNum($p['price']) . ' ' . h($p['currency']) .
@@ -1777,7 +2011,7 @@ function masterHandle($update) {
             if ($bal < (float)$p['price']) {
                 answerCb(BOT_TOKEN, $cbId, '❌ موجودی کافی نیست', true);
                 sendMsg(BOT_TOKEN, $chatId, T('no_balance', ['balance' => fmtNum($bal)]),
-                    inlineKb([[['text' => '➕ افزایش موجودی', 'callback_data' => 'menu_topup', 'style' => gs('buy') ?: null]]]));
+                    inlineKb([[['text' => UT('topup'), 'callback_data' => 'menu_topup', 'style' => gs('buy') ?: null]]]));
                 return;
             }
             if (Product::isFull($p)) { answerCb(BOT_TOKEN, $cbId, 'ظرفیت تکمیل است', true); return; }
@@ -1809,7 +2043,7 @@ function masterHandle($update) {
             if ($o['status'] !== Order::PENDING) { answerCb(BOT_TOKEN, $cbId, 'قبلا ثبت شده', true); return; }
             answerCb(BOT_TOKEN, $cbId);
             setState($uid, 'receipt', ['order' => $oid]);
-            sendMsg(BOT_TOKEN, $chatId, T('receipt_ask'), inlineKb([[['text' => '🔴 انصراف', 'callback_data' => 'cancel', 'style' => gs('cancel') ?: null]]]));
+            sendMsg(BOT_TOKEN, $chatId, T('receipt_ask'), inlineKb([[['text' => UT('cancel'), 'callback_data' => 'cancel', 'style' => gs('cancel') ?: null]]]));
             return;
         }
 
@@ -1821,7 +2055,13 @@ function masterHandle($update) {
         }
 
         // ---------------- ادمین ----------------
-        if (str_starts_with($data, 'aok_') || str_starts_with($data, 'ano_') || str_starts_with($data, 'adm_')) {
+        // همه کال‌بک‌های مدیریتی — شامل ویرایشگر داخل ربات
+        $adminPrefixes = ['aok_', 'ano_', 'adm_', 'eb', 'et', 'eg', 'eu'];
+        $isAdminCb = false;
+        foreach ($adminPrefixes as $pref) {
+            if (str_starts_with($data, $pref)) { $isAdminCb = true; break; }
+        }
+        if ($isAdminCb) {
             if (!$isAdmin) { answerCb(BOT_TOKEN, $cbId, '🔒 دسترسی ندارید.', true); return; }
         } else {
             answerCb(BOT_TOKEN, $cbId);
@@ -1835,7 +2075,7 @@ function masterHandle($update) {
             completeApprovedOrder($res);
             answerCb(BOT_TOKEN, $cbId, '✅ تایید شد');
             if ($msgId) editMsg(BOT_TOKEN, $chatId, $msgId, "✅ سفارش <code>" . h($oid) . "</code> تایید شد.",
-                inlineKb([[['text' => '👑 پنل', 'callback_data' => 'adm_home', 'style' => gs('admin') ?: null]]]));
+                inlineKb([[['text' => UT('panel'), 'callback_data' => 'adm_home', 'style' => gs('admin') ?: null]]]));
             return;
         }
 
@@ -1846,7 +2086,154 @@ function masterHandle($update) {
             sendMsg(BOT_TOKEN, $res['user_id'], T('rejected'));
             answerCb(BOT_TOKEN, $cbId, 'رد شد');
             if ($msgId) editMsg(BOT_TOKEN, $chatId, $msgId, "❌ سفارش <code>" . h($oid) . "</code> رد شد.",
-                inlineKb([[['text' => '👑 پنل', 'callback_data' => 'adm_home', 'style' => gs('admin') ?: null]]]));
+                inlineKb([[['text' => UT('panel'), 'callback_data' => 'adm_home', 'style' => gs('admin') ?: null]]]));
+            return;
+        }
+
+        // ---------- ویرایشگر داخل ربات ----------
+        if ($data === 'ebuttons') { answerCb(BOT_TOKEN, $cbId); edButtons($chatId, $msgId); return; }
+        if ($data === 'etexts')   { answerCb(BOT_TOKEN, $cbId); edTexts($chatId, $msgId); return; }
+        if ($data === 'eglass')   { answerCb(BOT_TOKEN, $cbId); edGlass($chatId, $msgId); return; }
+        if ($data === 'euis')     { answerCb(BOT_TOKEN, $cbId); edUiTexts($chatId, $msgId); return; }
+        if (str_starts_with($data, 'ets_')) { answerCb(BOT_TOKEN, $cbId); edTexts($chatId, $msgId, (int)substr($data, 4)); return; }
+        if (str_starts_with($data, 'eus_')) { answerCb(BOT_TOKEN, $cbId); edUiTexts($chatId, $msgId, (int)substr($data, 4)); return; }
+        if (str_starts_with($data, 'eb_'))  { answerCb(BOT_TOKEN, $cbId); edButton($chatId, $msgId, substr($data, 3)); return; }
+        if (str_starts_with($data, 'et_'))  { answerCb(BOT_TOKEN, $cbId); edText($chatId, $msgId, substr($data, 3)); return; }
+
+        if ($data === 'ebmode') {
+            cfgSet(function (&$c) { $c['ui']['mode'] = ($c['ui']['mode'] === 'glass') ? 'menu' : 'glass'; });
+            answerCb(BOT_TOKEN, $cbId, '✅ حالت عوض شد');
+            edButtons($chatId, $msgId);
+            sendMsg(BOT_TOKEN, $chatId, '👇 منوی جدید:', mainKeyboard());
+            return;
+        }
+        if ($data === 'ebpin') {
+            cfgSet(function (&$c) { $c['ui']['persistent'] = empty($c['ui']['persistent']); });
+            $on = !empty(cfg()['ui']['persistent']);
+            answerCb(BOT_TOKEN, $cbId, $on ? 'چسبان روشن شد' : 'چسبان خاموش شد', true);
+            edButtons($chatId, $msgId);
+            sendMsg(BOT_TOKEN, $chatId,
+                $on ? '📌 کیبورد چسبان شد — کاربر نمی‌تواند ببنددش.'
+                    : '✅ کیبورد قابل بستن شد — کاربر می‌تواند ببنددش.',
+                mainKeyboard());
+            return;
+        }
+        if ($data === 'eblay') {
+            answerCb(BOT_TOKEN, $cbId);
+            setState(ADMIN_ID, 'ed_layout');
+            sendMsg(BOT_TOKEN, $chatId,
+                "📐 الگوی چیدمان را بفرستید.\n\nمثال: <code>2,1,1</code> یعنی ۲ دکمه بالا، بعد ۱، بعد ۱.\n" .
+                "الگو تکرار نمی‌شود؛ دکمه‌های اضافه تک‌تک می‌آیند.",
+                inlineKb([[btnCb(UT('cancel'), 'ebuttons', 'cancel')]]));
+            return;
+        }
+        if ($data === 'ebnew') {
+            answerCb(BOT_TOKEN, $cbId);
+            setState(ADMIN_ID, 'ed_newbtn');
+            sendMsg(BOT_TOKEN, $chatId,
+                "➕ متن دکمه جدید را بفرستید.\n\n(می‌توانید ایموجی پریمیوم هم بگذارید)",
+                inlineKb([[btnCb(UT('cancel'), 'ebuttons', 'cancel')]]));
+            return;
+        }
+
+        foreach ([['ebt_', 'ed_btext', '✏️ متن جدید دکمه را بفرستید (ایموجی پریمیوم مجاز است):'],
+                  ['ebe_', 'ed_bemoji', '😀 ایموجی جدید را بفرستید (یا خط تیره برای حذف):'],
+                  ['ebi_', 'ed_bicon', "✨ کد ایموجی پریمیوم را بفرستید.\nبا /emoji می‌گیرید. برای حذف خط تیره بفرستید."],
+                  ['ebr_', 'ed_brow', '📐 شماره ردیف را بفرستید (۰ = خودکار):'],
+                  ['ebo_', 'ed_border', '🔢 شماره ترتیب را بفرستید:'],
+                  ['ebv_', 'ed_bvalue', '📝 مقدار دکمه را بفرستید (متن، آدرس، یا شناسه محصول):']] as $it) {
+            [$pref, $act, $ask] = $it;
+            if (str_starts_with($data, $pref)) {
+                $bid = substr($data, strlen($pref));
+                if (!isset(cfg()['buttons'][$bid])) { answerCb(BOT_TOKEN, $cbId, 'دکمه پیدا نشد', true); return; }
+                answerCb(BOT_TOKEN, $cbId);
+                setState(ADMIN_ID, $act, ['btn' => $bid]);
+                sendMsg(BOT_TOKEN, $chatId, $ask, inlineKb([[btnCb(UT('cancel'), 'eb_' . $bid, 'cancel')]]));
+                return;
+            }
+        }
+
+        if (str_starts_with($data, 'ebc_')) {
+            $bid = substr($data, 4);
+            cfgSet(function (&$c) use ($bid) {
+                if (isset($c['buttons'][$bid])) $c['buttons'][$bid]['color'] = nextStyle($c['buttons'][$bid]['color'] ?? 'none');
+            });
+            answerCb(BOT_TOKEN, $cbId, '🎨');
+            edButton($chatId, $msgId, $bid);
+            return;
+        }
+        if (str_starts_with($data, 'ebx_')) {
+            $bid = substr($data, 4);
+            cfgSet(function (&$c) use ($bid) {
+                if (isset($c['buttons'][$bid])) $c['buttons'][$bid]['on'] = empty($c['buttons'][$bid]['on']);
+            });
+            answerCb(BOT_TOKEN, $cbId, '✅');
+            edButton($chatId, $msgId, $bid);
+            return;
+        }
+        if (str_starts_with($data, 'ebd_')) {
+            $bid = substr($data, 4);
+            if (!str_starts_with($bid, 'c_')) { answerCb(BOT_TOKEN, $cbId, 'فقط دکمه‌های ساخته‌شده حذف می‌شوند', true); return; }
+            cfgSet(function (&$c) use ($bid) { unset($c['buttons'][$bid]); });
+            answerCb(BOT_TOKEN, $cbId, 'حذف شد');
+            edButtons($chatId, $msgId);
+            return;
+        }
+
+        if (str_starts_with($data, 'ete_')) {
+            $k = substr($data, 4);
+            if (!isset(textLabels()[$k])) { answerCb(BOT_TOKEN, $cbId, 'نامعتبر', true); return; }
+            answerCb(BOT_TOKEN, $cbId);
+            setState(ADMIN_ID, 'edit_text', ['key' => $k]);
+            sendMsg(BOT_TOKEN, $chatId,
+                "✏️ متن جدید را بفرستید.\n\n✨ ایموجی پریمیوم، نقل‌قول و قالب‌بندی همه حفظ می‌شود.",
+                inlineKb([[btnCb(UT('cancel'), 'et_' . $k, 'cancel')]]));
+            return;
+        }
+        if (str_starts_with($data, 'etq_') || str_starts_with($data, 'etx_')) {
+            $exp = str_starts_with($data, 'etx_');
+            $k = substr($data, 4);
+            if (!isset(textLabels()[$k])) { answerCb(BOT_TOKEN, $cbId, 'نامعتبر', true); return; }
+            cfgSet(function (&$c) use ($k, $exp) {
+                $t = trim($c['texts'][$k] ?? '');
+                if (str_starts_with($t, '<blockquote')) {
+                    $t = preg_replace('#^<blockquote[^>]*>#', '', $t);
+                    $t = preg_replace('#</blockquote>$#', '', trim($t));
+                    if ($exp) $t = '<blockquote expandable>' . trim($t) . '</blockquote>';
+                } else {
+                    $t = ($exp ? '<blockquote expandable>' : '<blockquote>') . $t . '</blockquote>';
+                }
+                $c['texts'][$k] = trim($t);
+            });
+            answerCb(BOT_TOKEN, $cbId, '❝ اعمال شد');
+            edText($chatId, $msgId, $k);
+            return;
+        }
+        if (str_starts_with($data, 'etr_')) {
+            $k = substr($data, 4);
+            $d = defaultConfig()['texts'][$k] ?? null;
+            if ($d === null) { answerCb(BOT_TOKEN, $cbId, 'نامعتبر', true); return; }
+            cfgSet(function (&$c) use ($k, $d) { $c['texts'][$k] = $d; });
+            answerCb(BOT_TOKEN, $cbId, '♻️ بازگردانی شد');
+            edText($chatId, $msgId, $k);
+            return;
+        }
+        if (str_starts_with($data, 'eu_')) {
+            $k = substr($data, 3);
+            if (!isset(uiTextLabels()[$k])) { answerCb(BOT_TOKEN, $cbId, 'نامعتبر', true); return; }
+            answerCb(BOT_TOKEN, $cbId);
+            setState(ADMIN_ID, 'ed_uitext', ['key' => $k]);
+            sendMsg(BOT_TOKEN, $chatId,
+                "🔤 متن جدید دکمه «" . h(uiTextLabels()[$k]) . "» را بفرستید.\n\nمقدار فعلی: " . h(UT($k)),
+                inlineKb([[btnCb(UT('cancel'), 'euis', 'cancel')]]));
+            return;
+        }
+        if (str_starts_with($data, 'egc_')) {
+            $role = substr($data, 4);
+            if (!isset(glassRoleLabels()[$role])) { answerCb(BOT_TOKEN, $cbId, 'نامعتبر', true); return; }
+            cfgSet(function (&$c) use ($role) { $c['glass_colors'][$role] = nextStyle($c['glass_colors'][$role] ?? 'none'); });
+            answerCb(BOT_TOKEN, $cbId, '🎨');
+            edGlass($chatId, $msgId);
             return;
         }
 
@@ -1896,7 +2283,7 @@ function masterHandle($update) {
             $cur = cfg()['texts'][$key] ?? '';
             sendMsg(BOT_TOKEN, $chatId,
                 "📝 متن فعلی:\n\n<code>" . h($cur) . "</code>\n\nمتن جدید را بفرستید:",
-                inlineKb([[['text' => '🔴 انصراف', 'callback_data' => 'cancel', 'style' => gs('cancel') ?: null]]]));
+                inlineKb([[['text' => UT('cancel'), 'callback_data' => 'cancel', 'style' => gs('cancel') ?: null]]]));
             return;
         }
 
@@ -1906,7 +2293,7 @@ function masterHandle($update) {
             sendMsg(BOT_TOKEN, $chatId,
                 "📢 آیدی کانال را بفرستید.\n\nمثال: <code>@mychannel</code> یا <code>-1001234567890</code>\n\n" .
                 "⚠️ ربات‌های اپلودر باید در کانال <b>ادمین</b> باشند.",
-                inlineKb([[['text' => '🔴 انصراف', 'callback_data' => 'cancel', 'style' => gs('cancel') ?: null]]]));
+                inlineKb([[['text' => UT('cancel'), 'callback_data' => 'cancel', 'style' => gs('cancel') ?: null]]]));
             return;
         }
 
@@ -1921,7 +2308,7 @@ function masterHandle($update) {
             answerCb(BOT_TOKEN, $cbId);
             setState(ADMIN_ID, 'bot_token');
             sendMsg(BOT_TOKEN, $chatId, "🤖 توکن ربات اپلودر را بفرستید:",
-                inlineKb([[['text' => '🔴 انصراف', 'callback_data' => 'cancel', 'style' => gs('cancel') ?: null]]]));
+                inlineKb([[['text' => UT('cancel'), 'callback_data' => 'cancel', 'style' => gs('cancel') ?: null]]]));
             return;
         }
 
@@ -1948,7 +2335,7 @@ function masterHandle($update) {
             answerCb(BOT_TOKEN, $cbId);
             setState(ADMIN_ID, 'bot_sec', ['bot' => $bid]);
             sendMsg(BOT_TOKEN, $chatId, "⏱ چند ثانیه بعد فایل حذف شود؟ (عدد، مثلا 30)",
-                inlineKb([[['text' => '🔴 انصراف', 'callback_data' => 'cancel', 'style' => gs('cancel') ?: null]]]));
+                inlineKb([[['text' => UT('cancel'), 'callback_data' => 'cancel', 'style' => gs('cancel') ?: null]]]));
             return;
         }
         if (str_starts_with($data, 'adm_bdel_')) {
@@ -1965,15 +2352,18 @@ function masterHandle($update) {
             answerCb(BOT_TOKEN, $cbId);
             setState(ADMIN_ID, 'broadcast');
             sendMsg(BOT_TOKEN, $chatId, "📢 متن پیام همگانی را بفرستید:",
-                inlineKb([[['text' => '🔴 انصراف', 'callback_data' => 'cancel', 'style' => gs('cancel') ?: null]]]));
+                inlineKb([[['text' => UT('cancel'), 'callback_data' => 'cancel', 'style' => gs('cancel') ?: null]]]));
             return;
         }
 
-        if ($data === 'adm_wallets' || $data === 'adm_sup' || $data === 'adm_prods') {
+        if ($data === 'adm_web' || $data === 'adm_wallets' || $data === 'adm_sup' || $data === 'adm_prods') {
             answerCb(BOT_TOKEN, $cbId);
             editMsg(BOT_TOKEN, $chatId, $msgId,
-                "🌐 این بخش در <b>پنل وب</b> کامل‌تر است.\n\nآدرس: <code>admin_panel.php</code>",
-                inlineKb([[['text' => '◀️ بازگشت', 'callback_data' => 'adm_home', 'style' => gs('admin') ?: null]]]));
+                "🌐 <b>پنل وب</b>\n\nاین بخش‌ها در پنل وب هستند:\n\n" .
+                "🛒 محصولات · 💳 کیف پول · 📞 پشتیبانی\n" .
+                "🎯 سفارش ممبر · 🤝 ربات‌های شریک · 👥 رفرال · 👥 کاربران\n\n" .
+                "آدرس: <code>admin_panel.php</code>",
+                inlineKb([[btnCb(UT('back'), 'adm_home', 'nav')]]));
             return;
         }
 
@@ -1999,6 +2389,7 @@ function masterHandle($update) {
         touchUser($uid, $uname, $fname, $ref);
         clearState($uid);
         showHome($uid, $chatId, $fname);
+        hintHideOnce($uid, $chatId);
         return;
     }
 
@@ -2019,11 +2410,16 @@ function masterHandle($update) {
             "✨ <b>گرفتن کد ایموجی پریمیوم</b>\n\n" .
             "یک پیام بفرستید که ایموجی‌های پریمیوم مورد نظرتان داخلش باشد.\n" .
             "کد هرکدام را به شما می‌دهم تا در پنل استفاده کنید.",
-            inlineKb([[btnCb('🔴 انصراف', 'cancel', 'cancel')]]));
+            inlineKb([[btnCb(UT('cancel'), 'cancel', 'cancel')]]));
         return;
     }
     if ($text === '/cancel') { clearState($uid); sendMsg(BOT_TOKEN, $chatId, "❌ لغو شد.", mainKeyboard()); return; }
     if ($text === '/menu')   { showHome($uid, $chatId, $fname); return; }
+    if ($text === '/hide' || $text === UT('hide_menu')) {
+        sendMsg(BOT_TOKEN, $chatId,
+            "✅ منو بسته شد.\n\nبرای برگرداندنش /menu را بزنید.", removeKb());
+        return;
+    }
 
     // --- دکمه منو زده شد؟ ---
     $act = findMenuAction($text);
@@ -2104,6 +2500,113 @@ function masterHandle($update) {
         cfgSet(function (&$c) use ($key, $html) { $c['texts'][$key] = $html; });
         clearState($uid);
         sendMsg(BOT_TOKEN, $chatId, "✅ متن ذخیره شد.\n\n<b>پیش‌نمایش:</b>\n" . $html, mainKeyboard());
+        return;
+    }
+
+    // ---- ویرایشگر دکمه‌ها ----
+    if (str_starts_with($action, 'ed_b')) {
+        $bid = $sd['btn'] ?? '';
+        if (!isset(cfg()['buttons'][$bid])) { clearState($uid); return; }
+        $plain = trim($msg['text'] ?? '');
+        $ids   = customEmojiIds($msg);
+        $back  = inlineKb([[btnCb(UT('back'), 'eb_' . $bid, 'nav')]]);
+
+        if ($action === 'ed_btext') {
+            if ($plain === '') { sendMsg(BOT_TOKEN, $chatId, "⚠️ متن خالی است."); return; }
+            cfgSet(function (&$c) use ($bid, $plain, $ids) {
+                $c['buttons'][$bid]['text'] = $plain;
+                if ($ids) $c['buttons'][$bid]['icon'] = $ids[0];
+            });
+            clearState($uid);
+            sendMsg(BOT_TOKEN, $chatId,
+                "✅ متن دکمه شد: <b>" . h($plain) . "</b>" . ($ids ? "\n✨ ایموجی پریمیوم هم نشست." : ''),
+                $back);
+            sendMsg(BOT_TOKEN, $chatId, '👇 منوی به‌روز:', mainKeyboard());
+            return;
+        }
+        if ($action === 'ed_bemoji') {
+            $em = ($plain === '-' || $plain === '—') ? '' : $plain;
+            cfgSet(function (&$c) use ($bid, $em) { $c['buttons'][$bid]['emoji'] = $em; });
+            clearState($uid);
+            sendMsg(BOT_TOKEN, $chatId, "✅ ایموجی ذخیره شد.", $back);
+            sendMsg(BOT_TOKEN, $chatId, '👇 منوی به‌روز:', mainKeyboard());
+            return;
+        }
+        if ($action === 'ed_bicon') {
+            $ic = '';
+            if ($ids) $ic = $ids[0];
+            elseif (ctype_digit($plain)) $ic = $plain;
+            elseif ($plain === '-' || $plain === '—') $ic = '';
+            else { sendMsg(BOT_TOKEN, $chatId, "⚠️ یک ایموجی پریمیوم بفرستید، یا کد عددی، یا خط تیره."); return; }
+            cfgSet(function (&$c) use ($bid, $ic) { $c['buttons'][$bid]['icon'] = $ic; });
+            clearState($uid);
+            sendMsg(BOT_TOKEN, $chatId, $ic ? "✅ ایموجی پریمیوم نشست." : "✅ حذف شد.", $back);
+            return;
+        }
+        if ($action === 'ed_brow' || $action === 'ed_border') {
+            if (!ctype_digit($plain)) { sendMsg(BOT_TOKEN, $chatId, "⚠️ فقط عدد."); return; }
+            $f = ($action === 'ed_brow') ? 'row' : 'order';
+            $v = (int)$plain;
+            cfgSet(function (&$c) use ($bid, $f, $v) { $c['buttons'][$bid][$f] = $v; });
+            clearState($uid);
+            sendMsg(BOT_TOKEN, $chatId, "✅ ذخیره شد.", $back);
+            sendMsg(BOT_TOKEN, $chatId, '👇 منوی به‌روز:', mainKeyboard());
+            return;
+        }
+        if ($action === 'ed_bvalue') {
+            $html = msgHtml($msg);
+            cfgSet(function (&$c) use ($bid, $html, $plain) {
+                $c['buttons'][$bid]['value'] = (($c['buttons'][$bid]['action'] ?? '') === 'text') ? $html : $plain;
+            });
+            clearState($uid);
+            sendMsg(BOT_TOKEN, $chatId, "✅ مقدار ذخیره شد.", $back);
+            return;
+        }
+    }
+
+    if ($action === 'ed_layout') {
+        if (!parseLayout($text)) {
+            sendMsg(BOT_TOKEN, $chatId, "⚠️ چیدمان نامعتبر. مثال: <code>2,1,1</code>");
+            return;
+        }
+        $map = applyLayoutToRows($text);
+        cfgSet(function (&$c) use ($map, $text) {
+            $c['ui']['layout'] = trim($text);
+            foreach ($map as $b => $r) if (isset($c['buttons'][$b])) $c['buttons'][$b]['row'] = $r;
+        });
+        clearState($uid);
+        sendMsg(BOT_TOKEN, $chatId, "✅ چیدمان اعمال شد.", mainKeyboard());
+        return;
+    }
+
+    if ($action === 'ed_newbtn') {
+        $plain = trim($msg['text'] ?? '');
+        if ($plain === '') { sendMsg(BOT_TOKEN, $chatId, "⚠️ متن خالی است."); return; }
+        $ids = customEmojiIds($msg);
+        $nid = 'c_' . bin2hex(random_bytes(4));
+        cfgSet(function (&$c) use ($nid, $plain, $ids) {
+            $c['buttons'][$nid] = [
+                'emoji' => '', 'text' => $plain, 'color' => 'none', 'dot' => '',
+                'icon' => $ids ? $ids[0] : '', 'row' => 0, 'order' => 50,
+                'on' => true, 'action' => 'text', 'value' => 'این متن را از پنل عوض کنید.',
+            ];
+        });
+        clearState($uid);
+        sendMsg(BOT_TOKEN, $chatId,
+            "✅ دکمه <b>" . h($plain) . "</b> ساخته شد.\n\nحالا متن، رنگ و ردیفش را تنظیم کنید:",
+            inlineKb([[btnCb('⚙️ تنظیم دکمه', 'eb_' . $nid, 'admin')]]));
+        return;
+    }
+
+    if ($action === 'ed_uitext') {
+        $k = $sd['key'] ?? '';
+        if (!isset(uiTextLabels()[$k])) { clearState($uid); return; }
+        $plain = trim($msg['text'] ?? '');
+        if ($plain === '') { sendMsg(BOT_TOKEN, $chatId, "⚠️ متن خالی است."); return; }
+        cfgSet(function (&$c) use ($k, $plain) { $c['ui_texts'][$k] = $plain; });
+        clearState($uid);
+        sendMsg(BOT_TOKEN, $chatId, "✅ ذخیره شد: <b>" . h($plain) . "</b>",
+            inlineKb([[btnCb(UT('back'), 'euis', 'nav')]]));
         return;
     }
 
@@ -2282,7 +2785,7 @@ function runMenuAction($act, $uid, $chatId, $uname, $fname) {
                 return;
             case 'url':
                 sendMsg(BOT_TOKEN, $chatId, btnLabel($b),
-                    inlineKb([[btnUrl('🔗 باز کردن', $b['value'], 'link')]]));
+                    inlineKb([[btnUrl(UT('open'), $b['value'], 'link')]]));
                 return;
             case 'product':
                 $p = Product::get($b['value'] ?? '');
@@ -2419,14 +2922,14 @@ function childHandle($botId, $update) {
             answerCb($token, $cbId);
             childSetState($botId, $uid, 'single');
             sendMsg($token, $chatId, "📤 فایل را بفرستید تا لینک بسازم.",
-                inlineKb([[['text' => '🔴 انصراف', 'callback_data' => 'u_cancel', 'style' => gs('cancel') ?: null]]]));
+                inlineKb([[['text' => UT('cancel'), 'callback_data' => 'u_cancel', 'style' => gs('cancel') ?: null]]]));
             return;
         }
         if ($data === 'u_batch') {
             answerCb($token, $cbId);
             childSetState($botId, $uid, 'batch', ['files' => []]);
             sendMsg($token, $chatId, "📤 فایل‌ها را یکی‌یکی بفرستید.\nدر پایان /done را بزنید.",
-                inlineKb([[['text' => '🔴 انصراف', 'callback_data' => 'u_cancel', 'style' => gs('cancel') ?: null]]]));
+                inlineKb([[['text' => UT('cancel'), 'callback_data' => 'u_cancel', 'style' => gs('cancel') ?: null]]]));
             return;
         }
         if ($data === 'u_cancel') {
@@ -2457,7 +2960,7 @@ function childHandle($botId, $update) {
             editMsg($token, $chatId, $msgId,
                 "📊 <b>آمار</b>\n\n👥 کاربران: " . count($users) . "\n🔗 لینک‌ها: " . count($links) .
                 "\n👁 کلیک: {$cl}\n📥 تحویل: {$dl}\n🗑 حذف بعد از: {$s['delete_seconds']} ثانیه",
-                inlineKb([[['text' => '◀️ بازگشت', 'callback_data' => 'u_home', 'style' => gs('nav') ?: null]]]));
+                inlineKb([[['text' => UT('back'), 'callback_data' => 'u_home', 'style' => gs('nav') ?: null]]]));
             return;
         }
         if ($data === 'u_home') { answerCb($token, $cbId); childMenu($bot, $chatId, $msgId); return; }
