@@ -77,14 +77,14 @@ function fmtNum($n) { return rtrim(rtrim(number_format((float)$n, 2, '.', ','), 
 // 🔌 تلگرام API
 // ============================================================
 
-function tg($token, $method, $data = []) {
+function tg($token, $method, $data = [], $timeout = 20) {
     $ch = curl_init("https://api.telegram.org/bot{$token}/{$method}");
     curl_setopt_array($ch, [
         CURLOPT_POST => true,
         CURLOPT_POSTFIELDS => http_build_query($data),
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT => 20,
-        CURLOPT_CONNECTTIMEOUT => 10,
+        CURLOPT_TIMEOUT => max(3, (int)$timeout),
+        CURLOPT_CONNECTTIMEOUT => min(10, max(3, (int)$timeout)),
     ]);
     $res = curl_exec($ch);
     curl_close($ch);
@@ -189,6 +189,97 @@ function sendFile($token, $chatId, $type, $fileId, $caption = '', $protect = fal
     return tg($token, $method, $data);
 }
 
+/**
+ * تبدیل entityهای تلگرام به HTML — تا وقتی ادمین متن را داخل ربات می‌فرستد،
+ * ایموجی پریمیوم، پررنگ، نقل‌قول و لینک‌ها حفظ شوند.
+ * آفست‌های تلگرام بر حسب کد-یونیت UTF-16 است، پس در همان فضا کار می‌کنیم.
+ */
+function entitiesToHtml($text, $entities = null) {
+    if ($text === null || $text === '') return '';
+    if (empty($entities)) return htmlspecialchars($text, ENT_NOQUOTES, 'UTF-8');
+
+    $u16 = mb_convert_encoding($text, 'UTF-16LE', 'UTF-8');
+    $len = (int)(strlen($u16) / 2);
+
+    $open = array_fill(0, $len + 1, []);
+    $close = array_fill(0, $len + 1, []);
+
+    // entityهای بلندتر باید بیرونی‌تر بسته‌بندی شوند
+    usort($entities, function ($a, $b) {
+        if ($a['offset'] !== $b['offset']) return $a['offset'] <=> $b['offset'];
+        return $b['length'] <=> $a['length'];
+    });
+
+    foreach ($entities as $e) {
+        $o = (int)$e['offset'];
+        $l = (int)$e['length'];
+        if ($o < 0 || $l <= 0 || $o + $l > $len) continue;
+
+        $ot = null; $ct = null;
+        switch ($e['type']) {
+            case 'bold':          $ot = '<b>';  $ct = '</b>';  break;
+            case 'italic':        $ot = '<i>';  $ct = '</i>';  break;
+            case 'underline':     $ot = '<u>';  $ct = '</u>';  break;
+            case 'strikethrough': $ot = '<s>';  $ct = '</s>';  break;
+            case 'spoiler':       $ot = '<tg-spoiler>'; $ct = '</tg-spoiler>'; break;
+            case 'code':          $ot = '<code>'; $ct = '</code>'; break;
+            case 'pre':
+                $lang = !empty($e['language']) ? ' class="language-' . htmlspecialchars($e['language'], ENT_QUOTES, 'UTF-8') . '"' : '';
+                $ot = '<pre><code' . $lang . '>'; $ct = '</code></pre>'; break;
+            case 'blockquote':            $ot = '<blockquote>'; $ct = '</blockquote>'; break;
+            case 'expandable_blockquote': $ot = '<blockquote expandable>'; $ct = '</blockquote>'; break;
+            case 'text_link':
+                if (empty($e['url'])) break;
+                $ot = '<a href="' . htmlspecialchars($e['url'], ENT_QUOTES, 'UTF-8') . '">'; $ct = '</a>'; break;
+            case 'text_mention':
+                if (empty($e['user']['id'])) break;
+                $ot = '<a href="tg://user?id=' . (int)$e['user']['id'] . '">'; $ct = '</a>'; break;
+            case 'custom_emoji':
+                if (empty($e['custom_emoji_id'])) break;
+                $ot = '<tg-emoji emoji-id="' . htmlspecialchars($e['custom_emoji_id'], ENT_QUOTES, 'UTF-8') . '">';
+                $ct = '</tg-emoji>'; break;
+        }
+        if ($ot === null) continue;
+        $open[$o][]  = $ot;
+        array_unshift($close[$o + $l], $ct);   // بستن به ترتیب معکوس
+    }
+
+    $out = '';
+    for ($i = 0; $i < $len; $i++) {
+        foreach ($close[$i] as $t) $out .= $t;
+        foreach ($open[$i]  as $t) $out .= $t;
+        $ch = mb_convert_encoding(substr($u16, $i * 2, 2), 'UTF-8', 'UTF-16LE');
+        // نیمه بالای جفت جانشین را با نیمه بعدی بچسبان
+        $cp = unpack('v', substr($u16, $i * 2, 2))[1];
+        if ($cp >= 0xD800 && $cp <= 0xDBFF && $i + 1 < $len) {
+            // جفت جانشین یک کاراکتر است؛ تلگرام هرگز entity را وسط آن نمی‌شکند
+            $ch = mb_convert_encoding(substr($u16, $i * 2, 4), 'UTF-8', 'UTF-16LE');
+            $i++;
+        }
+        $out .= htmlspecialchars($ch, ENT_NOQUOTES, 'UTF-8');
+    }
+    foreach ($close[$len] as $t) $out .= $t;
+    return $out;
+}
+
+/** متن پیام ادمین را با حفظ قالب‌بندی و ایموجی پریمیوم برمی‌گرداند */
+function msgHtml($msg) {
+    $t = $msg['text'] ?? $msg['caption'] ?? '';
+    $e = $msg['entities'] ?? $msg['caption_entities'] ?? null;
+    return entitiesToHtml($t, $e);
+}
+
+/** شناسه‌های ایموجی پریمیوم داخل یک پیام */
+function customEmojiIds($msg) {
+    $out = [];
+    foreach (($msg['entities'] ?? $msg['caption_entities'] ?? []) as $e) {
+        if (($e['type'] ?? '') === 'custom_emoji' && !empty($e['custom_emoji_id'])) {
+            $out[$e['custom_emoji_id']] = true;
+        }
+    }
+    return array_keys($out);
+}
+
 function extractFile($msg) {
     if (!empty($msg['document']))   return ['document', $msg['document']['file_id'], $msg['document']['file_name'] ?? 'file'];
     if (!empty($msg['video']))      return ['video', $msg['video']['file_id'], $msg['video']['file_name'] ?? 'video'];
@@ -261,16 +352,16 @@ function defaultConfig() {
     return [
         // mode: menu = کیبورد پایین | glass = دکمه شیشه‌ای زیر پیام
         // layout: چیدمان دلخواه — مثلا "1,2,1,2,1" یعنی ردیف اول ۱ دکمه، دوم ۲ تا، ...
-        'ui' => ['mode' => 'menu', 'layout' => '1,2,1,2,1', 'show_dot' => false],
+        'ui' => ['mode' => 'menu', 'layout' => '1,2,1,2,1', 'product_layout' => '1', 'show_dot' => false],
 
         'buttons' => [
-            'buy'      => ['emoji' => '🛒', 'text' => 'خرید محصول',                     'color' => 'success', 'dot' => '🟢', 'order' => 1, 'on' => true],
-            'account'  => ['emoji' => '👤', 'text' => 'حساب کاربری',                    'color' => 'primary', 'dot' => '🔵', 'order' => 2, 'on' => true],
-            'topup'    => ['emoji' => '➕', 'text' => 'افزایش موجودی',                  'color' => 'primary', 'dot' => '🔵', 'order' => 3, 'on' => true],
-            'referral' => ['emoji' => '👥', 'text' => 'زیر مجموعه گیری',                'color' => 'danger',  'dot' => '🔴', 'order' => 4, 'on' => true],
-            'orders'   => ['emoji' => '📊', 'text' => 'پیگیری سفارش',                   'color' => 'primary', 'dot' => '🔵', 'order' => 5, 'on' => true],
-            'support'  => ['emoji' => '📞', 'text' => 'پشتیبانی',                       'color' => 'primary', 'dot' => '🔵', 'order' => 6, 'on' => true],
-            'trust'    => ['emoji' => '💚', 'text' => 'چطوری میتوانم به شما اعتماد کنم', 'color' => 'danger',  'dot' => '🔴', 'order' => 7, 'on' => true],
+            'buy'      => ['emoji' => '🛒', 'text' => 'خرید محصول',                     'color' => 'success', 'dot' => '🟢', 'icon' => '', 'row' => 1, 'order' => 1, 'on' => true, 'action' => ''],
+            'account'  => ['emoji' => '👤', 'text' => 'حساب کاربری',                    'color' => 'primary', 'dot' => '🔵', 'icon' => '', 'row' => 2, 'order' => 2, 'on' => true, 'action' => ''],
+            'topup'    => ['emoji' => '➕', 'text' => 'افزایش موجودی',                  'color' => 'primary', 'dot' => '🔵', 'icon' => '', 'row' => 2, 'order' => 3, 'on' => true, 'action' => ''],
+            'referral' => ['emoji' => '👥', 'text' => 'زیر مجموعه گیری',                'color' => 'danger',  'dot' => '🔴', 'icon' => '', 'row' => 3, 'order' => 4, 'on' => true, 'action' => ''],
+            'orders'   => ['emoji' => '📊', 'text' => 'پیگیری سفارش',                   'color' => 'primary', 'dot' => '🔵', 'icon' => '', 'row' => 4, 'order' => 5, 'on' => true, 'action' => ''],
+            'support'  => ['emoji' => '📞', 'text' => 'پشتیبانی',                       'color' => 'primary', 'dot' => '🔵', 'icon' => '', 'row' => 4, 'order' => 6, 'on' => true, 'action' => ''],
+            'trust'    => ['emoji' => '💚', 'text' => 'چطوری میتوانم به شما اعتماد کنم', 'color' => 'danger',  'dot' => '🔴', 'icon' => '', 'row' => 5, 'order' => 7, 'on' => true, 'action' => ''],
         ],
 
         // رنگ همه دکمه‌های شیشه‌ای بر اساس نقششان
@@ -350,6 +441,17 @@ function defaultConfig() {
             'warn_text'       => "⚠️ این فایل تا <b>{sec} ثانیه</b> دیگر حذف می‌شود.\nلطفا آن را ذخیره یا فوروارد کنید.",
             'deleted_text'    => "🗑 فایل حذف شد.\nبرای دریافت دوباره، روی لینک کلیک کنید.",
             'expired_text'    => "❌ این لینک معتبر نیست یا حذف شده است.",
+            'menu_text'       => "🤖 <b>پنل اپلودر</b>\n\n🔗 لینک‌ها: {links}\n🗑 حذف خودکار: {sec} ثانیه\n🔒 عضویت اجباری: {join}\n\nفایل بفرستید تا لینک بسازم.",
+            'buttons' => [
+                'single' => ['emoji' => '📤', 'text' => 'آپلود تکی',   'color' => 'success', 'icon' => '', 'row' => 1, 'order' => 1, 'on' => true],
+                'batch'  => ['emoji' => '📦', 'text' => 'آپلود گروهی', 'color' => 'success', 'icon' => '', 'row' => 1, 'order' => 2, 'on' => true],
+                'links'  => ['emoji' => '🔗', 'text' => 'لینک‌های من',  'color' => 'primary', 'icon' => '', 'row' => 2, 'order' => 3, 'on' => true],
+                'stats'  => ['emoji' => '📊', 'text' => 'آمار',        'color' => 'primary', 'icon' => '', 'row' => 2, 'order' => 4, 'on' => true],
+            ],
+            'glass_colors' => [
+                'join' => 'primary', 'joined' => 'success', 'nav' => 'primary',
+                'cancel' => 'danger', 'upload' => 'success', 'info' => 'primary',
+            ],
         ],
     ];
 }
@@ -400,34 +502,60 @@ function activeButtons() {
     return $list;
 }
 
-/** "1,2,1" → [1,2,1] ; مقادیر نامعتبر نادیده گرفته می‌شوند */
+/** "3,2,1" → [3,2,1] — ارقام نامعتبر نادیده گرفته می‌شوند (سقف ۸ = محدودیت خود تلگرام) */
 function parseLayout($str) {
     $out = [];
-    foreach (explode(',', (string)$str) as $n) {
-        $n = (int)trim($n);
+    foreach (preg_split('/[^0-9]+/', (string)$str) as $n) {
+        if ($n === '') continue;
+        $n = (int)$n;
         if ($n >= 1 && $n <= 8) $out[] = $n;
     }
     return $out;
 }
 
-/** چیدمان دکمه‌ها طبق الگوی دلخواه — مثلا 2,1,1 */
+/**
+ * چیدمان دقیقا همان چیزی است که نوشته‌اید: «3,2,1» یعنی ۳ تا بالا، ۲ تا وسط، ۱ تا آخر.
+ * اگر دکمه بیشتری از الگو بماند، هرکدام در ردیف خودش می‌آید (بدون تکرار الگو).
+ */
 function layoutRows(array $items, $layoutStr) {
     $layout = parseLayout($layoutStr);
     $rows = [];
     $i = 0; $n = count($items); $k = 0;
     while ($i < $n) {
-        $take = $layout ? $layout[min($k, count($layout) - 1)] : 1;
+        $take = ($k < count($layout)) ? $layout[$k] : 1;
         $rows[] = array_slice($items, $i, $take);
         $i += $take; $k++;
     }
     return $rows;
 }
 
+/** الگوی چیدمان را به شماره ردیف هر دکمه تبدیل می‌کند */
+function applyLayoutToRows($layoutStr) {
+    $items = activeButtons();
+    $rows = layoutRows($items, $layoutStr);
+    $map = [];
+    foreach ($rows as $r => $line) foreach ($line as $b) $map[$b['id']] = $r + 1;
+    return $map;
+}
+
+/** ردیف‌بندی نهایی: اگر دکمه‌ها شماره ردیف دارند از آن، وگرنه از الگو */
+function menuRows() {
+    $items = activeButtons();
+    $hasRows = false;
+    foreach ($items as $b) if (!empty($b['row'])) { $hasRows = true; break; }
+    if (!$hasRows) return layoutRows($items, cfg()['ui']['layout'] ?? '');
+
+    $byRow = [];
+    foreach ($items as $b) $byRow[(int)($b['row'] ?: 99)][] = $b;
+    ksort($byRow);
+    return array_values($byRow);
+}
+
 /** منوی اصلی — منو یا شیشه‌ای، با رنگ واقعی تلگرام */
 function mainKeyboard() {
     $c = cfg();
     $glass = ($c['ui']['mode'] === 'glass');
-    $rows = layoutRows(activeButtons(), $c['ui']['layout'] ?? '');
+    $rows = menuRows();
 
     $out = [];
     foreach ($rows as $r) {
@@ -550,6 +678,8 @@ class Product
                 'price' => (float)$price, 'currency' => $currency,
                 'limit' => (int)$limit, 'buyers' => [],
                 'bot_id' => $botId, 'link_code' => '',
+                'emoji' => '💠', 'color' => 'success', 'icon' => '',
+                'row' => 0, 'order' => 99,
                 'active' => true, 'created_at' => nowStr(),
             ];
         });
@@ -691,11 +821,37 @@ class BotManager
         mutate('bots', function (&$a) use ($id, $token, $username) {
             $a[$id] = [
                 'id' => $id, 'token' => $token, 'username' => ltrim($username, '@'),
-                'active' => true, 'created_at' => nowStr(),
+                'active' => true, 'created_at' => nowStr(), 'admins' => [],
                 'settings' => cfg()['uploader'],   // تنظیمات پیش‌فرض روی هر ربات جدید
             ];
         });
         return self::get($id);
+    }
+
+    /** آیا این کاربر می‌تواند ربات را مدیریت کند؟ */
+    public static function isManager($botId, $userId) {
+        if ((int)$userId === (int)ADMIN_ID) return true;
+        $b = self::get($botId);
+        $admins = array_map('intval', $b['admins'] ?? []);
+        return in_array((int)$userId, $admins, true);
+    }
+
+    public static function addAdmin($botId, $userId) {
+        mutate('bots', function (&$a) use ($botId, $userId) {
+            if (!isset($a[$botId])) return;
+            $ad = array_map('intval', $a[$botId]['admins'] ?? []);
+            if (!in_array((int)$userId, $ad, true)) $ad[] = (int)$userId;
+            $a[$botId]['admins'] = array_values($ad);
+        });
+    }
+
+    public static function removeAdmin($botId, $userId) {
+        mutate('bots', function (&$a) use ($botId, $userId) {
+            if (!isset($a[$botId])) return;
+            $a[$botId]['admins'] = array_values(array_filter(
+                array_map('intval', $a[$botId]['admins'] ?? []),
+                fn($u) => $u !== (int)$userId));
+        });
     }
 
     /** تنظیمات یک ربات: مقادیر خودش روی پیش‌فرض ربات مادر سوار می‌شود */
@@ -722,10 +878,17 @@ class Channels
 {
     public static function all() { return load('channels'); }
 
-    public static function add($chatId, $title, $url) {
+    public static function get($id) { $a = load('channels'); return $a[$id] ?? null; }
+
+    public static function add($chatId, $title, $url, $bots = []) {
+        // اگر همین کانال قبلا ثبت شده، تکراری نساز
+        foreach (self::all() as $ch) {
+            if ((string)$ch['chat_id'] === (string)$chatId) return $ch['id'];
+        }
         $id = uid('ch');
-        mutate('channels', function (&$a) use ($id, $chatId, $title, $url) {
-            $a[$id] = ['id' => $id, 'chat_id' => $chatId, 'title' => $title, 'url' => $url, 'on' => true];
+        mutate('channels', function (&$a) use ($id, $chatId, $title, $url, $bots) {
+            $a[$id] = ['id' => $id, 'chat_id' => $chatId, 'title' => $title,
+                       'url' => $url, 'on' => true, 'bots' => array_values($bots)];
         });
         return $id;
     }
@@ -734,34 +897,70 @@ class Channels
         mutate('channels', function (&$a) use ($id) { unset($a[$id]); });
     }
 
-    /**
-     * کانال‌هایی که کاربر هنوز عضو نشده.
-     *
-     * اگر بررسی ممکن نباشد (ربات در کانال ادمین نیست) کانال را
-     * «عضو نشده» حساب می‌کنیم — یعنی قفل بسته می‌ماند. اگر برعکس عمل
-     * می‌کردیم، یک کانال بدتنظیم بی‌سروصدا کل عضویت اجباری را خاموش می‌کرد.
-     */
-    public static function missing($token, $userId) {
-        $missing = [];
+    /** کانال‌هایی که برای این ربات اعمال می‌شوند (bots خالی = همه ربات‌ها) */
+    public static function forBot($botId) {
+        $out = [];
         foreach (self::all() as $ch) {
             if (empty($ch['on'])) continue;
-            $r = tg($token, 'getChatMember', ['chat_id' => $ch['chat_id'], 'user_id' => $userId]);
-            if (empty($r['ok'])) { $ch['unverifiable'] = true; $missing[] = $ch; continue; }
-            $status = $r['result']['status'] ?? '';
-            if (!in_array($status, ['member', 'administrator', 'creator'], true)) $missing[] = $ch;
+            $bots = $ch['bots'] ?? [];
+            if (!$bots || in_array($botId, $bots, true)) $out[] = $ch;
+        }
+        return $out;
+    }
+
+    /**
+     * بررسی عضویت — همیشه با توکن «ربات مادر».
+     * پس فقط ربات مادر باید در کانال ادمین باشد؛ ربات‌های اپلودر
+     * لازم نیست اصلا عضو کانال باشند.
+     *
+     * نتیجه در همین درخواست کش می‌شود تا کلیک‌های پشت‌سرهم ربات را کند نکند.
+     * اگر بررسی ممکن نباشد، کانال «عضو نشده» حساب می‌شود (fail-closed)
+     * تا کسی نتواند با خراب کردن دسترسی، قفل را دور بزند.
+     */
+    public static function isMemberOf($chatId, $userId) {
+        static $cache = [];
+        $k = $chatId . ':' . $userId;
+        if (isset($cache[$k])) return $cache[$k];
+
+        $r = tg(BOT_TOKEN, 'getChatMember',
+                ['chat_id' => $chatId, 'user_id' => $userId], 6);
+
+        if (empty($r['ok'])) {
+            $desc = strtolower($r['description'] ?? '');
+            // «کاربر پیدا نشد» یعنی واقعا عضو نیست، نه اینکه دسترسی نداریم
+            $reallyNotMember = str_contains($desc, 'user not found')
+                            || str_contains($desc, 'participant_id_invalid');
+            return $cache[$k] = ['ok' => $reallyNotMember, 'member' => false, 'error' => $r['description'] ?? ''];
+        }
+        $st = $r['result']['status'] ?? '';
+        $isIn = in_array($st, ['member', 'administrator', 'creator'], true);
+        return $cache[$k] = ['ok' => true, 'member' => $isIn, 'error' => ''];
+    }
+
+    /** کانال‌هایی که کاربر هنوز عضو نشده — برای این ربات */
+    public static function missing($userId, $botId = null) {
+        $list = $botId ? self::forBot($botId)
+                       : array_values(array_filter(self::all(), fn($c) => !empty($c['on'])));
+        $missing = [];
+        foreach ($list as $ch) {
+            $res = self::isMemberOf($ch['chat_id'], $userId);
+            if (!$res['ok']) { $ch['unverifiable'] = true; $ch['error'] = $res['error']; $missing[] = $ch; continue; }
+            if (!$res['member']) $missing[] = $ch;
         }
         return $missing;
     }
 
-    /** بررسی سلامت: آیا این ربات می‌تواند عضویت کانال‌ها را چک کند؟ */
-    public static function health($token) {
+    /** بررسی سلامت: آیا ربات مادر در کانال‌ها دسترسی دارد؟ */
+    public static function health() {
         $out = [];
         foreach (self::all() as $ch) {
-            $r = tg($token, 'getChatMember', ['chat_id' => $ch['chat_id'], 'user_id' => (int)ADMIN_ID]);
+            $r = tg(BOT_TOKEN, 'getChat', ['chat_id' => $ch['chat_id']], 6);
+            $m = tg(BOT_TOKEN, 'getChatMember',
+                    ['chat_id' => $ch['chat_id'], 'user_id' => (int)ADMIN_ID], 6);
             $out[$ch['id']] = [
                 'title' => $ch['title'],
-                'ok'    => !empty($r['ok']),
-                'error' => $r['description'] ?? '',
+                'ok'    => !empty($r['ok']) && !empty($m['ok']),
+                'error' => $r['description'] ?? ($m['description'] ?? ''),
             ];
         }
         return $out;
@@ -907,30 +1106,75 @@ function showAccount($uid, $chatId) {
     ]));
 }
 
+function productBtn($p, $uid) {
+    $emoji = $p['emoji'] ?? '💠';
+    if (Product::hasBought($p['id'], $uid)) {
+        $b = btnCb(trim("📦 $emoji " . $p['name'] . ' — دریافت مجدد'), 'redeliver_' . $p['id'], 'link');
+    } elseif (Product::isFull($p)) {
+        $b = btnCb(trim("$emoji " . $p['name'] . ' — تکمیل'), 'full_' . $p['id'], 'reject');
+    } else {
+        $b = btnCb(trim("$emoji " . $p['name'] . ' — ' . fmtNum($p['price']) . ' ' . $p['currency']),
+                   'buy_' . $p['id']);
+        if (isStyle($p['color'] ?? '')) $b['style'] = $p['color'];
+        elseif (gs('buy')) $b['style'] = gs('buy');
+    }
+    if (!empty($p['icon'])) $b['icon_custom_emoji_id'] = $p['icon'];
+    return $b;
+}
+
+function activeProducts() {
+    $list = [];
+    foreach (Product::all() as $p) {
+        if (empty($p['active'])) continue;
+        $list[] = $p;
+    }
+    usort($list, fn($x, $y) => ((int)($x['order'] ?? 99)) <=> ((int)($y['order'] ?? 99)));
+    return $list;
+}
+
 function showProducts($uid, $chatId) {
-    $prods = array_filter(Product::all(), fn($p) => !empty($p['active']));
+    $prods = activeProducts();
     if (!$prods) { sendMsg(BOT_TOKEN, $chatId, T('buy_empty')); return; }
 
     $text = T('buy_head') . "\n";
-    $rows = [];
     foreach ($prods as $p) {
-        $cnt  = count($p['buyers']);
-        $cap  = ((int)$p['limit']) > 0 ? "{$cnt}/{$p['limit']}" : "{$cnt}/∞";
-        $full = Product::isFull($p);
-        $text .= "\n💠 <b>" . h($p['name']) . "</b>\n";
+        $cnt = count($p['buyers']);
+        $cap = ((int)$p['limit']) > 0 ? "{$cnt}/{$p['limit']}" : "{$cnt}/∞";
+        $text .= "\n" . ($p['emoji'] ?? '💠') . " <b>" . h($p['name']) . "</b>\n";
         if (!empty($p['desc'])) $text .= "   " . h($p['desc']) . "\n";
         $text .= "   💰 " . fmtNum($p['price']) . ' ' . h($p['currency']) . "  |  👥 {$cap}\n";
+    }
 
-        if (Product::hasBought($p['id'], $uid)) {
-            $rows[] = [['text' => '📦 دریافت مجدد — ' . $p['name'], 'callback_data' => 'redeliver_' . $p['id']]];
-        } elseif ($full) {
-            $rows[] = [['text' => '🔴 تکمیل ظرفیت — ' . $p['name'], 'callback_data' => 'full_' . $p['id']]];
-        } else {
-            $rows[] = [['text' => '🟢 خرید ' . $p['name'] . ' — ' . fmtNum($p['price']) . ' ' . $p['currency'],
-                        'callback_data' => 'buy_' . $p['id']]];
-        }
+    // چیدمان محصول‌ها: ردیف صریح، وگرنه الگوی محصولات
+    $hasRows = false;
+    foreach ($prods as $p) if (!empty($p['row'])) { $hasRows = true; break; }
+    if ($hasRows) {
+        $byRow = [];
+        foreach ($prods as $p) $byRow[(int)($p['row'] ?: 99)][] = $p;
+        ksort($byRow);
+        $groups = array_values($byRow);
+    } else {
+        $groups = layoutRows($prods, cfg()['ui']['product_layout'] ?? '1');
+    }
+
+    $rows = [];
+    foreach ($groups as $g) {
+        $line = [];
+        foreach ($g as $p) $line[] = productBtn($p, $uid);
+        if ($line) $rows[] = $line;
     }
     sendMsg(BOT_TOKEN, $chatId, $text, inlineKb($rows));
+}
+
+/** نمایش یک محصول تکی — برای دکمه‌های سفارشی «محصول» */
+function showOneProduct($uid, $chatId, $p) {
+    $cnt = count($p['buyers']);
+    $cap = ((int)$p['limit']) > 0 ? "{$cnt}/{$p['limit']}" : "{$cnt}/∞";
+    $text  = ($p['emoji'] ?? '💠') . " <b>" . h($p['name']) . "</b>\n\n";
+    if (!empty($p['desc'])) $text .= h($p['desc']) . "\n\n";
+    $text .= "💰 قیمت: <b>" . fmtNum($p['price']) . ' ' . h($p['currency']) . "</b>\n";
+    $text .= "👥 خریداران: {$cap}";
+    sendMsg(BOT_TOKEN, $chatId, $text, inlineKb([[productBtn($p, $uid)]]));
 }
 
 function showOrders($uid, $chatId) {
@@ -1271,6 +1515,12 @@ function admBotOne($chatId, $msgId, $botId) {
 
 function masterHandle($update) {
 
+    // ---------------- ربات مادر در کانالی ادمین شد ----------------
+    if (isset($update['my_chat_member'])) {
+        handleMasterChatMember($update['my_chat_member']);
+        return;
+    }
+
     // ---------------- Callback ----------------
     if (isset($update['callback_query'])) {
         $cb     = $update['callback_query'];
@@ -1596,6 +1846,16 @@ function masterHandle($update) {
         return;
     }
     if ($text === '/id')     { sendMsg(BOT_TOKEN, $chatId, "🆔 <code>{$uid}</code>"); return; }
+    if ($text === '/emoji') {
+        if ($uid !== ADMIN_ID) return;
+        setState($uid, 'grab_emoji');
+        sendMsg(BOT_TOKEN, $chatId,
+            "✨ <b>گرفتن کد ایموجی پریمیوم</b>\n\n" .
+            "یک پیام بفرستید که ایموجی‌های پریمیوم مورد نظرتان داخلش باشد.\n" .
+            "کد هرکدام را به شما می‌دهم تا در پنل استفاده کنید.",
+            inlineKb([[btnCb('🔴 انصراف', 'cancel', 'cancel')]]));
+        return;
+    }
     if ($text === '/cancel') { clearState($uid); sendMsg(BOT_TOKEN, $chatId, "❌ لغو شد.", mainKeyboard()); return; }
     if ($text === '/menu')   { showHome($uid, $chatId, $fname); return; }
 
@@ -1638,6 +1898,24 @@ function masterHandle($update) {
         return;
     }
 
+    if ($action === 'grab_emoji') {
+        $ids = customEmojiIds($msg);
+        if (!$ids) {
+            sendMsg(BOT_TOKEN, $chatId, "⚠️ در این پیام ایموجی پریمیوم پیدا نشد. دوباره بفرستید.");
+            return;
+        }
+        clearState($uid);
+        $out = "✨ <b>کدهای ایموجی پریمیوم</b>\n\n";
+        foreach ($ids as $id) {
+            $out .= "<tg-emoji emoji-id=\"" . h($id) . "\">✨</tg-emoji>  <code>" . h($id) . "</code>\n";
+        }
+        $out .= "\nکد را کپی کنید و در پنل، فیلد «ایموجی پریمیوم» بگذارید.\n";
+        $out .= "برای داخل متن‌ها هم می‌توانید بنویسید:\n";
+        $out .= "<code>&lt;tg-emoji emoji-id=\"" . h($ids[0]) . "\"&gt;✨&lt;/tg-emoji&gt;</code>";
+        sendMsg(BOT_TOKEN, $chatId, $out, mainKeyboard());
+        return;
+    }
+
     if ($action === 'ticket') {
         if ($text === '') return;
         clearState($uid);
@@ -1654,9 +1932,31 @@ function masterHandle($update) {
     if ($action === 'edit_text') {
         $key = $sd['key'] ?? '';
         if (!array_key_exists($key, defaultConfig()['texts'])) { clearState($uid); return; }
-        cfgSet(function (&$c) use ($key, $text) { $c['texts'][$key] = $text; });
+        // با entity ذخیره می‌شود تا ایموجی پریمیوم و قالب‌بندی حفظ شود
+        $html = msgHtml($msg);
+        if (trim($html) === '') { sendMsg(BOT_TOKEN, $chatId, "⚠️ متن خالی است."); return; }
+        cfgSet(function (&$c) use ($key, $html) { $c['texts'][$key] = $html; });
         clearState($uid);
-        sendMsg(BOT_TOKEN, $chatId, "✅ متن ذخیره شد.", mainKeyboard());
+        sendMsg(BOT_TOKEN, $chatId, "✅ متن ذخیره شد.\n\n<b>پیش‌نمایش:</b>\n" . $html, mainKeyboard());
+        return;
+    }
+
+    if ($action === 'edit_btn_text') {
+        $bid = $sd['btn'] ?? '';
+        $html = msgHtml($msg);
+        if (trim($html) === '') return;
+        // متن دکمه نمی‌تواند HTML داشته باشد؛ فقط متن ساده + ایموجی پریمیوم جدا
+        $plain = trim(strip_tags($msg['text'] ?? ''));
+        $ids = customEmojiIds($msg);
+        cfgSet(function (&$c) use ($bid, $plain, $ids) {
+            if (!isset($c['buttons'][$bid])) return;
+            if ($plain !== '') $c['buttons'][$bid]['text'] = $plain;
+            if ($ids) $c['buttons'][$bid]['icon'] = $ids[0];
+        });
+        clearState($uid);
+        sendMsg(BOT_TOKEN, $chatId,
+            "✅ دکمه ذخیره شد." . ($ids ? "\n✨ ایموجی پریمیوم روی دکمه نشست." : ''),
+            mainKeyboard());
         return;
     }
 
@@ -1710,12 +2010,13 @@ function masterHandle($update) {
     }
 
     if ($action === 'broadcast') {
-        if ($text === '') return;
+        $html = msgHtml($msg);
+        if (trim($html) === '') return;
         clearState($uid);
         $sent = 0; $fail = 0;
         foreach (load('users') as $u2) {
             if (!empty($u2['banned'])) continue;
-            $r = sendMsg(BOT_TOKEN, $u2['telegram_id'], $text);
+            $r = sendMsg(BOT_TOKEN, $u2['telegram_id'], $html);
             if (!empty($r['ok'])) $sent++; else $fail++;
             usleep(50000);
         }
@@ -1744,8 +2045,86 @@ function broadcastToChildBots($text, $botIds = null) {
     return [$sent, $fail];
 }
 
+/**
+ * وقتی ربات مادر در کانالی ادمین می‌شود، کانال خودکار ثبت شده و
+ * برای همه ربات‌های اپلودر قابل استفاده می‌شود — چون بررسی عضویت
+ * همیشه با توکن ربات مادر انجام می‌گیرد و ربات‌های اپلودر لازم نیست
+ * اصلا عضو کانال باشند.
+ */
+function handleMasterChatMember($ev) {
+    $chat = $ev['chat'] ?? [];
+    $type = $chat['type'] ?? '';
+    if (!in_array($type, ['channel', 'supergroup', 'group'], true)) return;
+
+    $newStatus = $ev['new_chat_member']['status'] ?? '';
+    $chatId    = $chat['id'] ?? null;
+    $title     = $chat['title'] ?? (string)$chatId;
+    $un        = $chat['username'] ?? '';
+    if (!$chatId) return;
+
+    if (in_array($newStatus, ['administrator', 'creator'], true)) {
+        $url = $un ? "https://t.me/$un" : '';
+        if (!$url) {
+            $inv = tg(BOT_TOKEN, 'createChatInviteLink',
+                      ['chat_id' => $chatId, 'name' => 'عضویت اجباری'], 8);
+            if (!empty($inv['ok'])) $url = $inv['result']['invite_link'];
+        }
+        $existing = null;
+        foreach (Channels::all() as $c) if ((string)$c['chat_id'] === (string)$chatId) $existing = $c;
+
+        if ($existing) {
+            mutate('channels', function (&$a) use ($existing, $title, $url) {
+                if (!isset($a[$existing['id']])) return;
+                $a[$existing['id']]['title'] = $title;
+                if ($url) $a[$existing['id']]['url'] = $url;
+                $a[$existing['id']]['on'] = true;
+            });
+            sendMsg(BOT_TOKEN, ADMIN_ID,
+                "✅ کانال <b>" . h($title) . "</b> دوباره فعال شد.\n\nربات مادر در آن ادمین است.");
+            return;
+        }
+
+        Channels::add($chatId, $title, $url);
+        sendMsg(BOT_TOKEN, ADMIN_ID,
+            "✅ <b>کانال جدید ثبت شد</b>\n\n📢 " . h($title) . "\n<code>" . h($chatId) . "</code>\n\n" .
+            "به‌صورت پیش‌فرض برای <b>همه</b> ربات‌های اپلودر فعال است.\n" .
+            "اگر می‌خواهید فقط برای یک ربات خاص باشد، از پنل → 📢 کانال‌ها تنظیمش کنید.\n\n" .
+            "ℹ️ ربات‌های اپلودر لازم نیست در این کانال عضو یا ادمین باشند.",
+            inlineKb([[btnCb('📢 مدیریت کانال‌ها', 'adm_chans', 'admin')]]));
+        return;
+    }
+
+    if (in_array($newStatus, ['left', 'kicked', 'member'], true)) {
+        foreach (Channels::all() as $c) {
+            if ((string)$c['chat_id'] !== (string)$chatId) continue;
+            sendMsg(BOT_TOKEN, ADMIN_ID,
+                "⚠️ <b>ربات مادر دیگر در کانال «" . h($c['title']) . "» ادمین نیست.</b>\n\n" .
+                "تا وقتی ادمین نشود، قفل عضویت این کانال بسته می‌ماند و کاربران فایل نمی‌گیرند.");
+            return;
+        }
+    }
+}
+
 /** اجرای عملیات یک دکمه منو */
 function runMenuAction($act, $uid, $chatId, $uname, $fname) {
+    // دکمه‌های سفارشی که ادمین ساخته
+    $b = cfg()['buttons'][$act] ?? null;
+    if ($b && !empty($b['action'])) {
+        switch ($b['action']) {
+            case 'text':
+                sendMsg(BOT_TOKEN, $chatId, $b['value'] ?: '—');
+                return;
+            case 'url':
+                sendMsg(BOT_TOKEN, $chatId, btnLabel($b),
+                    inlineKb([[btnUrl('🔗 باز کردن', $b['value'], 'link')]]));
+                return;
+            case 'product':
+                $p = Product::get($b['value'] ?? '');
+                if (!$p) { sendMsg(BOT_TOKEN, $chatId, T('buy_empty')); return; }
+                showOneProduct($uid, $chatId, $p);
+                return;
+        }
+    }
     switch ($act) {
         case 'buy':      showProducts($uid, $chatId); break;
         case 'account':  showAccount($uid, $chatId); break;
@@ -1799,8 +2178,9 @@ function notifyChannelProblem($bot) {
     if (!empty($st['warned_at']) && (time() - (int)$st['warned_at']) < 21600) return;
     save($flag, ['warned_at' => time()]);
     sendMsg(BOT_TOKEN, ADMIN_ID,
-        "⚠️ <b>مشکل عضویت اجباری</b>\n\nربات <b>@" . h($bot['username']) . "</b> نمی‌تواند عضویت کانال‌ها را بررسی کند.\n\n" .
-        "این ربات را در همه کانال‌های اجباری <b>ادمین</b> کنید، وگرنه هیچ کاربری فایل دریافت نمی‌کند.");
+        "⚠️ <b>مشکل عضویت اجباری</b>\n\n<b>ربات مادر</b> نمی‌تواند عضویت کانال‌های مربوط به " .
+        "@" . h($bot['username']) . " را بررسی کند.\n\n" .
+        "فقط کافی است <b>ربات مادر</b> را در آن کانال ادمین کنید — ربات‌های اپلودر لازم نیست عضو کانال باشند.");
 }
 
 /** تحویل فایل‌های یک لینک + زمان‌بندی حذف */
@@ -1848,11 +2228,11 @@ function childHandle($botId, $update) {
         $msgId  = $cb['message']['message_id'] ?? null;
         $data   = $cb['data'] ?? '';
         $cbId   = $cb['id'];
-        $isOwner = ($uid === ADMIN_ID);
+        $isOwner = BotManager::isManager($botId, $uid);
 
         if (str_starts_with($data, 'jchk_')) {
             $code = substr($data, 5);
-            $missing = !empty($s['force_join']) ? Channels::missing($token, $uid) : [];
+            $missing = !empty($s['force_join']) ? Channels::missing($uid, $botId) : [];
             if ($missing) {
                 answerCb($token, $cbId, '❌ هنوز در همه کانال‌ها عضو نشده‌اید.', true);
                 return;
@@ -1926,7 +2306,7 @@ function childHandle($botId, $update) {
     $text   = trim($msg['text'] ?? '');
     if (!$uid) return;
 
-    $isOwner = ($uid === ADMIN_ID);
+    $isOwner = BotManager::isManager($botId, $uid);
     botUserTouch($botId, $uid, $uname, $fname);
 
     // ---- /start [code] ----
@@ -1946,7 +2326,7 @@ function childHandle($botId, $update) {
 
         // 🔒 قفل عضویت اجباری — کانال‌ها از ربات مادر می‌آیند
         if (!empty($s['force_join'])) {
-            $missing = Channels::missing($token, $uid);
+            $missing = Channels::missing($uid, $botId);
             if ($missing) { showJoinGate($bot, $chatId, $missing, $code); return; }
         }
 
@@ -2004,20 +2384,50 @@ function childHandle($botId, $update) {
     }
 }
 
-function childMenu($bot, $chatId, $msgId = null) {
-    $s = BotManager::settings($bot['id']);
-    $text  = "🤖 <b>پنل اپلودر @" . h($bot['username']) . "</b>\n\n";
-    $text .= "🔗 لینک‌ها: " . count(Links::all($bot['id'])) . "\n";
-    $text .= "🗑 حذف خودکار: {$s['delete_seconds']} ثانیه\n";
-    $text .= "🔒 عضویت اجباری: " . (!empty($s['force_join']) ? 'روشن' : 'خاموش') . "\n\n";
-    $text .= "فایل بفرستید تا لینک بسازم.";
+/** رنگ دکمه شیشه‌ای یک ربات اپلودر */
+function bgs($botId, $role) {
+    $s = BotManager::settings($botId);
+    $c = $s['glass_colors'][$role] ?? 'none';
+    return isStyle($c) ? $c : null;
+}
 
-    $rows = [
-        [['text' => '📤 آپلود تکی', 'callback_data' => 'u_single', 'style' => gs('upload') ?: null],
-         ['text' => '📦 آپلود گروهی', 'callback_data' => 'u_batch', 'style' => gs('upload') ?: null]],
-        [['text' => '🔗 لینک‌های من', 'callback_data' => 'u_links', 'style' => gs('info') ?: null],
-         ['text' => '📊 آمار', 'callback_data' => 'u_stats', 'style' => gs('info') ?: null]],
-    ];
+function childMenu($bot, $chatId, $msgId = null) {
+    $s   = BotManager::settings($bot['id']);
+    $set = $s['buttons'] ?? [];
+
+    $text = strtr($s['menu_text'] ?? '', [
+        '{links}' => count(Links::all($bot['id'])),
+        '{sec}'   => (int)$s['delete_seconds'],
+        '{join}'  => !empty($s['force_join']) ? 'روشن' : 'خاموش',
+        '{bot}'   => h($bot['username']),
+    ]);
+    if (trim($text) === '') $text = '🤖 پنل اپلودر';
+
+    $items = [];
+    foreach ($set as $id => $b) {
+        if (empty($b['on'])) continue;
+        $b['id'] = $id;
+        $items[] = $b;
+    }
+    usort($items, fn($x, $y) => ((int)($x['order'] ?? 99)) <=> ((int)($y['order'] ?? 99)));
+
+    $byRow = [];
+    foreach ($items as $b) $byRow[(int)($b['row'] ?: 99)][] = $b;
+    ksort($byRow);
+
+    $rows = [];
+    foreach ($byRow as $line) {
+        $out = [];
+        foreach ($line as $b) {
+            $btn = ['text' => trim(($b['emoji'] ?? '') . ' ' . $b['text']),
+                    'callback_data' => 'u_' . $b['id']];
+            if (isStyle($b['color'] ?? '')) $btn['style'] = $b['color'];
+            if (!empty($b['icon'])) $btn['icon_custom_emoji_id'] = $b['icon'];
+            $out[] = $btn;
+        }
+        if ($out) $rows[] = $out;
+    }
+
     if ($msgId) editMsg($bot['token'], $chatId, $msgId, $text, inlineKb($rows));
     else sendMsg($bot['token'], $chatId, $text, inlineKb($rows));
 }

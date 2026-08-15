@@ -213,10 +213,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $p = Product::create($name, (float)$price, trim($_POST['currency'] ?? 'تومان'),
                              (int)($_POST['limit'] ?? 0), trim($_POST['desc'] ?? ''),
                              $_POST['bot_id'] ?: null);
-        if (!empty($_POST['link_code'])) {
-            $lc = trim($_POST['link_code']);
-            mutate('products', function (&$all) use ($p, $lc) { $all[$p['id']]['link_code'] = $lc; });
-        }
+        $post = $_POST;
+        mutate('products', function (&$all) use ($p, $post) {
+            $id = $p['id'];
+            if (!isset($all[$id])) return;
+            $all[$id]['link_code'] = trim($post['link_code'] ?? '');
+            $all[$id]['emoji']     = trim($post['emoji'] ?? '💠');
+            $all[$id]['color']     = isStyle($post['color'] ?? '') ? $post['color'] : 'none';
+            $all[$id]['icon']      = trim($post['icon'] ?? '');
+            $all[$id]['row']       = max(0, (int)($post['row'] ?? 0));
+            $all[$id]['order']     = max(1, (int)($post['order'] ?? 99));
+        });
         go('محصول «' . $name . '» ساخته شد.');
     }
     if ($a === 'del_product') {
@@ -233,14 +240,135 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($a === 'link_product') {
         $id = $_POST['id'] ?? '';
-        $bid = $_POST['bot_id'] ?? '';
-        $code = trim($_POST['link_code'] ?? '');
-        mutate('products', function (&$all) use ($id, $bid, $code) {
+        $post = $_POST;
+        mutate('products', function (&$all) use ($id, $post) {
             if (!isset($all[$id])) return;
-            $all[$id]['bot_id'] = $bid ?: null;
-            $all[$id]['link_code'] = $code;
+            $all[$id]['bot_id']    = ($post['bot_id'] ?? '') ?: null;
+            $all[$id]['link_code'] = trim($post['link_code'] ?? '');
+            $all[$id]['name']      = trim($post['name'] ?? $all[$id]['name']);
+            $all[$id]['price']     = (float)str_replace(',', '', $post['price'] ?? $all[$id]['price']);
+            $all[$id]['emoji']     = trim($post['emoji'] ?? '');
+            $all[$id]['color']     = isStyle($post['color'] ?? '') ? $post['color'] : 'none';
+            $all[$id]['icon']      = trim($post['icon'] ?? '');
+            $all[$id]['row']       = max(0, (int)($post['row'] ?? 0));
+            $all[$id]['order']     = max(1, (int)($post['order'] ?? 99));
         });
-        go('محتوای محصول تنظیم شد.');
+        go('محصول به‌روزرسانی شد.');
+    }
+
+    if ($a === 'save_product_layout') {
+        $lay = $_POST['product_layout'] ?? '1';
+        cfgSet(function (&$c) use ($lay) { $c['ui']['product_layout'] = trim($lay); });
+        go('چیدمان محصولات ذخیره شد.');
+    }
+
+    // ---- دکمه سفارشی ----
+    if ($a === 'add_button') {
+        $label = trim($_POST['btn_text'] ?? '');
+        if ($label === '') go('متن دکمه لازم است.', 'err');
+        $act = $_POST['btn_action'] ?? 'text';
+        if (!in_array($act, ['text', 'url', 'product'], true)) $act = 'text';
+        $post = $_POST;
+        $newId = 'c_' . bin2hex(random_bytes(4));
+        cfgSet(function (&$c) use ($newId, $label, $act, $post) {
+            $c['buttons'][$newId] = [
+                'emoji' => trim($post['btn_emoji'] ?? ''), 'text' => $label,
+                'color' => isStyle($post['btn_color'] ?? '') ? $post['btn_color'] : 'none',
+                'dot' => '', 'icon' => trim($post['btn_icon'] ?? ''),
+                'row' => max(0, (int)($post['btn_row'] ?? 0)),
+                'order' => max(1, (int)($post['btn_order'] ?? 50)),
+                'on' => true, 'action' => $act, 'value' => trim($post['btn_value'] ?? ''),
+            ];
+        });
+        go('دکمه «' . $label . '» ساخته شد.');
+    }
+    if ($a === 'del_button') {
+        $id = $_POST['id'] ?? '';
+        if (!str_starts_with($id, 'c_')) go('فقط دکمه‌های سفارشی حذف می‌شوند.', 'err');
+        cfgSet(function (&$c) use ($id) { unset($c['buttons'][$id]); });
+        go('دکمه حذف شد.');
+    }
+    if ($a === 'apply_layout') {
+        $lay = $_POST['layout'] ?? '';
+        if (!parseLayout($lay)) go('چیدمان نامعتبر. مثال: 3,2,1', 'err');
+        $map = applyLayoutToRows($lay);
+        cfgSet(function (&$c) use ($map, $lay) {
+            $c['ui']['layout'] = trim($lay);
+            foreach ($map as $bid => $row) if (isset($c['buttons'][$bid])) $c['buttons'][$bid]['row'] = $row;
+        });
+        go('چیدمان اعمال شد.');
+    }
+
+    // ---- مدیران ربات اپلودر ----
+    if ($a === 'add_bot_admin') {
+        $bid = $_POST['id'] ?? '';
+        $u = (int)($_POST['user_id'] ?? 0);
+        if ($u <= 0) go('آیدی عددی معتبر بدهید.', 'err');
+        BotManager::addAdmin($bid, $u);
+        $b = BotManager::get($bid);
+        if ($b) sendMsg($b['token'], $u, "👑 شما به‌عنوان مدیر ربات @" . h($b['username']) . " ثبت شدید.\n\nبا /panel وارد پنل شوید.");
+        go('مدیر اضافه شد.');
+    }
+    if ($a === 'del_bot_admin') {
+        BotManager::removeAdmin($_POST['id'] ?? '', (int)($_POST['user_id'] ?? 0));
+        go('مدیر حذف شد.');
+    }
+
+    // ---- تنظیمات کامل هر ربات اپلودر ----
+    if ($a === 'save_bot_full') {
+        $id = $_POST['id'] ?? '';
+        $post = $_POST;
+        if (!BotManager::get($id)) go('ربات پیدا نشد.', 'err');
+
+        BotManager::setSetting($id, 'delete_seconds', max(5, (int)($post['del_sec'] ?? 30)));
+        BotManager::setSetting($id, 'force_join', !empty($post['force_join']));
+        BotManager::setSetting($id, 'protect_content', !empty($post['protect']));
+        BotManager::setSetting($id, 'inline_wait', !empty($post['inline_wait']));
+        foreach (['start_text','join_text','joined_btn','warn_text','deleted_text','expired_text','menu_text'] as $k) {
+            if (isset($post[$k])) BotManager::setSetting($id, $k, $post[$k]);
+        }
+        $btns = BotManager::settings($id)['buttons'];
+        foreach (array_keys($btns) as $bk) {
+            $btns[$bk]['emoji'] = trim($post["b_emoji_$bk"] ?? '');
+            $btns[$bk]['text']  = trim($post["b_text_$bk"] ?? $btns[$bk]['text']);
+            $btns[$bk]['color'] = isStyle($post["b_color_$bk"] ?? '') ? $post["b_color_$bk"] : 'none';
+            $btns[$bk]['icon']  = trim($post["b_icon_$bk"] ?? '');
+            $btns[$bk]['row']   = max(1, (int)($post["b_row_$bk"] ?? 1));
+            $btns[$bk]['order'] = max(1, (int)($post["b_order_$bk"] ?? 1));
+            $btns[$bk]['on']    = !empty($post["b_on_$bk"]);
+        }
+        BotManager::setSetting($id, 'buttons', $btns);
+
+        $gc = BotManager::settings($id)['glass_colors'];
+        foreach (array_keys($gc) as $role) {
+            $v = $post["bg_$role"] ?? 'none';
+            $gc[$role] = isStyle($v) ? $v : 'none';
+        }
+        BotManager::setSetting($id, 'glass_colors', $gc);
+
+        // کانال‌های مخصوص این ربات
+        $chosen = $post['bot_channels'] ?? [];
+        mutate('channels', function (&$all) use ($id, $chosen) {
+            foreach ($all as $cid => $ch) {
+                $bots = array_values(array_filter($ch['bots'] ?? [], fn($x) => $x !== $id));
+                if (in_array($cid, (array)$chosen, true)) $bots[] = $id;
+                $all[$cid]['bots'] = array_values(array_unique($bots));
+            }
+        });
+
+        if (!empty($post['apply_all'])) {
+            $src = BotManager::settings($id);
+            foreach (BotManager::all() as $ob) {
+                if ($ob['id'] === $id) continue;
+                foreach (['delete_seconds','force_join','protect_content','inline_wait','start_text',
+                          'join_text','joined_btn','warn_text','deleted_text','expired_text',
+                          'menu_text','buttons','glass_colors'] as $k) {
+                    BotManager::setSetting($ob['id'], $k, $src[$k]);
+                }
+            }
+            go('تنظیمات ذخیره و روی همه ربات‌ها اعمال شد.');
+        }
+        go('تنظیمات ربات ذخیره شد.');
     }
 
     // ---- کانال‌های اجباری ----
@@ -252,18 +380,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $title = $r['result']['title'] ?? $chat;
         $un = $r['result']['username'] ?? '';
         $url = trim($_POST['url'] ?? '') ?: ($un ? "https://t.me/$un" : ($r['result']['invite_link'] ?? ''));
-        Channels::add($chat, $title, $url);
+        Channels::add($chat, $title, $url, (array)($_POST['bots'] ?? []));
         go('کانال «' . $title . '» اضافه شد. ربات‌های اپلودر را در آن ادمین کنید.');
     }
     if ($a === 'del_channel') { Channels::remove($_POST['id'] ?? ''); go('کانال حذف شد.'); }
     if ($a === 'health') {
         $lines = [];
-        $mh = Channels::health(BOT_TOKEN);
-        foreach ($mh as $r) $lines[] = ($r['ok'] ? '✅' : '❌') . ' ربات مادر → ' . $r['title'] . ($r['ok'] ? '' : ' (' . $r['error'] . ')');
-        foreach (BotManager::all() as $b) {
-            foreach (Channels::health($b['token']) as $r) {
-                $lines[] = ($r['ok'] ? '✅' : '❌') . ' @' . $b['username'] . ' → ' . $r['title'] . ($r['ok'] ? '' : ' (' . $r['error'] . ')');
-            }
+        foreach (Channels::health() as $r) {
+            $lines[] = ($r['ok'] ? '✅' : '❌') . ' ' . $r['title'] .
+                       ($r['ok'] ? ' — ربات مادر دسترسی دارد' : ' — ' . ($r['error'] ?: 'ربات مادر ادمین نیست'));
         }
         $_SESSION['health'] = $lines ?: ['کانالی برای بررسی نیست.'];
         go('بررسی انجام شد.');
@@ -304,8 +429,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         go(!empty($r['ok']) ? 'وبهوک تنظیم شد.' : 'خطا: ' . ($r['description'] ?? ''), !empty($r['ok']) ? 'ok' : 'err');
     }
     if ($a === 'master_webhook') {
-        $r = tg(BOT_TOKEN, 'setWebhook',
-            ['url' => baseUrl() . '/bot_master_membership.php', 'drop_pending_updates' => 'true']);
+        // my_chat_member لازم است تا ثبت خودکار کانال کار کند
+        $r = tg(BOT_TOKEN, 'setWebhook', [
+            'url' => baseUrl() . '/bot_master_membership.php',
+            'drop_pending_updates' => 'true',
+            'allowed_updates' => json_encode(['message', 'callback_query', 'my_chat_member']),
+        ]);
         go(!empty($r['ok']) ? 'وبهوک ربات مادر تنظیم شد.' : 'خطا: ' . ($r['description'] ?? ''), !empty($r['ok']) ? 'ok' : 'err');
     }
     if ($a === 'save_bot') {
@@ -464,6 +593,7 @@ td{padding:11px;border-top:1px solid #edf2f7;vertical-align:middle}
 code{background:#edf2f7;padding:2px 6px;border-radius:5px;font-size:11.5px;direction:ltr;display:inline-block}
 .muted{color:#718096;font-size:12px}
 .inline{display:inline}
+.brow8{grid-template-columns:44px 1fr 96px 52px 90px 52px 52px 40px!important;gap:7px!important}
 .brow{display:grid;grid-template-columns:44px 1fr 90px 70px 60px 46px;gap:8px;align-items:center;
 padding:10px;border:1px solid #edf2f7;border-radius:10px;margin-bottom:8px}
 .brow input,.brow select{padding:8px;font-size:13px}
@@ -485,7 +615,7 @@ cursor:pointer;font-family:inherit;color:#4a5568}
 .pbtn.pb-b{background:#3182ce;color:#fff}
 .pbtn.pb-g{background:#38a169;color:#fff}
 .pbtn.pb-r{background:#e53e3e;color:#fff}
-@media(max-width:760px){.brow,.srow{grid-template-columns:1fr 1fr;gap:6px}}
+@media(max-width:900px){.brow,.brow8,.srow{grid-template-columns:1fr 1fr!important;gap:6px!important}}
 @media(max-width:640px){.card .body{padding:15px}header h1{font-size:18px}}
 </style>
 </head>
@@ -605,69 +735,110 @@ foreach ($tabs as $k => $l): ?>
 
 <?php // ================= محصولات ================= ?>
 <?php elseif ($tab === 'products'): ?>
-  <div class="card"><h2>➕ افزودن محصول</h2><div class="body">
+  <div class="card"><h2>➕ ساخت محصول (دکمه جدید)</h2><div class="body">
+    <div class="note">
+      هر محصول یک <b>دکمه</b> در بخش «خرید محصول» می‌سازد — مثلا «ممبر اخلاقی»، «ممبر فیک».
+      برای هرکدام ایموجی، رنگ واقعی و ایموجی پریمیوم جدا تنظیم می‌شود.
+    </div>
     <form method="post">
       <input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="tab" value="products">
       <input type="hidden" name="action" value="add_product">
       <div class="grid2">
-        <div><label>نام محصول</label><input name="name" required placeholder="اشتراک یک ماهه"></div>
+        <div><label>نام محصول</label><input name="name" required placeholder="ممبر اخلاقی"></div>
         <div><label>قیمت</label><input name="price" required placeholder="50000"></div>
         <div><label>واحد پول</label><select name="currency">
           <option>تومان</option><option>USDT</option><option>TRX</option></select></div>
         <div><label>محدودیت خرید (۰ = نامحدود)</label><input name="limit" type="number" min="0" value="0"></div>
+        <div><label>ایموجی دکمه</label><input name="emoji" value="💠" style="text-align:center"></div>
+        <div><label>رنگ دکمه</label><select name="color">
+          <?php foreach (styleMap() as $sk => $sl): ?>
+            <option value="<?= h($sk) ?>" <?= $sk === 'success' ? 'selected' : '' ?>><?= h($sl) ?></option>
+          <?php endforeach; ?></select></div>
+        <div><label>✨ ایموجی پریمیوم (کد)</label><input name="icon" placeholder="از /emoji در ربات" style="direction:ltr"></div>
+        <div><label>ردیف (۰ = خودکار)</label><input name="row" type="number" min="0" value="0"></div>
+        <div><label>ترتیب</label><input name="order" type="number" min="1" value="99"></div>
         <div><label>ربات اپلودر تحویل</label><select name="bot_id">
           <option value="">— بدون محتوا —</option>
-          <?php foreach ($bots as $b): ?><option value="<?= h($b['id']) ?>">@<?= h($b['username']) ?></option><?php endforeach; ?>
+          <?php foreach ($bots as $bb): ?><option value="<?= h($bb['id']) ?>">@<?= h($bb['username']) ?></option><?php endforeach; ?>
         </select></div>
-        <div><label>کد لینک محتوا</label><input name="link_code" placeholder="از تب ربات‌ها کپی کنید"></div>
+        <div><label>کد لینک محتوا</label><input name="link_code" placeholder="از تب ربات‌ها"></div>
       </div>
-      <div style="margin-top:12px"><label>توضیح</label><input name="desc" placeholder="دسترسی کامل به آرشیو"></div>
-      <div style="margin-top:14px"><button class="btn g">افزودن محصول</button></div>
+      <div style="margin-top:12px"><label>توضیح</label><input name="desc" placeholder="تحویل آنی"></div>
+      <div style="margin-top:14px"><button class="btn g">ساخت محصول</button></div>
     </form>
   </div></div>
 
-  <div class="card"><h2>🛒 محصولات (<?= count($products) ?>)</h2><div class="body">
-    <?php if (!$products): ?><div class="empty">محصولی ندارید.</div>
-    <?php else: ?><div class="scroll"><table>
-      <tr><th>نام</th><th>قیمت</th><th>خریدار</th><th>محتوا</th><th>وضعیت</th><th>اقدام</th></tr>
-      <?php foreach ($products as $p):
-        $cnt = count($p['buyers']);
-        $cap = ((int)$p['limit']) > 0 ? "$cnt / {$p['limit']}" : "$cnt / ∞"; ?>
-      <tr>
-        <td><b><?= h($p['name']) ?></b><?php if (!empty($p['desc'])): ?><br><span class="muted"><?= h($p['desc']) ?></span><?php endif; ?></td>
-        <td><?= h(fmtNum($p['price'])) ?> <?= h($p['currency']) ?></td>
-        <td><?= h($cap) ?></td>
-        <td>
-          <form method="post">
-            <input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="tab" value="products">
-            <input type="hidden" name="action" value="link_product"><input type="hidden" name="id" value="<?= h($p['id']) ?>">
-            <select name="bot_id" style="margin-bottom:5px">
-              <option value="">— بدون —</option>
-              <?php foreach ($bots as $b): ?>
-                <option value="<?= h($b['id']) ?>" <?= ($p['bot_id'] ?? '') === $b['id'] ? 'selected' : '' ?>>@<?= h($b['username']) ?></option>
-              <?php endforeach; ?>
-            </select>
-            <input name="link_code" value="<?= h($p['link_code'] ?? '') ?>" placeholder="کد لینک" style="margin-bottom:5px">
-            <button class="btn ghost sm">ذخیره</button>
-          </form>
-        </td>
-        <td><?= !empty($p['active']) ? '<span class="badge green">فعال</span>' : '<span class="badge gray">غیرفعال</span>' ?></td>
-        <td style="white-space:nowrap">
-          <form method="post" class="inline">
-            <input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="tab" value="products">
-            <input type="hidden" name="action" value="toggle_product"><input type="hidden" name="id" value="<?= h($p['id']) ?>">
-            <button class="btn ghost sm"><?= !empty($p['active']) ? 'غیرفعال' : 'فعال' ?></button>
-          </form>
-          <form method="post" class="inline" onsubmit="return confirm('حذف محصول؟')">
-            <input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="tab" value="products">
-            <input type="hidden" name="action" value="del_product"><input type="hidden" name="id" value="<?= h($p['id']) ?>">
-            <button class="btn r sm">حذف</button>
-          </form>
-        </td>
-      </tr>
+  <div class="card"><h2>📐 چیدمان دکمه‌های محصول</h2><div class="body">
+    <form method="post" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+      <input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="tab" value="products">
+      <input type="hidden" name="action" value="save_product_layout">
+      <div style="flex:1;min-width:200px"><label>الگو (وقتی ردیف محصول ۰ باشد)</label>
+        <input name="product_layout" value="<?= h($C['ui']['product_layout'] ?? '1') ?>" placeholder="2,1,1" style="direction:ltr"></div>
+      <button class="btn b">ذخیره</button>
+    </form>
+    <div class="prev" style="margin-top:12px">
+      <?php
+      $prods = activeProducts();
+      $hasRows = false; foreach ($prods as $pp) if (!empty($pp['row'])) { $hasRows = true; break; }
+      if ($hasRows) { $g = []; foreach ($prods as $pp) $g[(int)($pp['row'] ?: 99)][] = $pp; ksort($g); $g = array_values($g); }
+      else $g = layoutRows($prods, $C['ui']['product_layout'] ?? '1');
+      foreach ($g as $line): ?>
+        <div class="pgrid"><?php foreach ($line as $pp):
+          $cls = ['primary'=>'pb-b','success'=>'pb-g','danger'=>'pb-r'][$pp['color'] ?? ''] ?? ''; ?>
+          <div class="pbtn <?= $cls ?>"><?= h(trim(($pp['emoji'] ?? '') . ' ' . $pp['name'] . ' — ' . fmtNum($pp['price']) . ' ' . $pp['currency'])) ?></div>
+        <?php endforeach; ?></div>
       <?php endforeach; ?>
-    </table></div><?php endif; ?>
+      <?php if (!$prods): ?><div class="muted">محصولی نساخته‌اید.</div><?php endif; ?>
+    </div>
   </div></div>
+
+  <?php foreach ($products as $p): ?>
+  <div class="card"><h2><?= h(($p['emoji'] ?? '') . ' ' . $p['name']) ?> — <?= count($p['buyers']) ?> خریدار</h2><div class="body">
+    <form method="post">
+      <input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="tab" value="products">
+      <input type="hidden" name="action" value="link_product"><input type="hidden" name="id" value="<?= h($p['id']) ?>">
+      <div class="grid2">
+        <div><label>نام</label><input name="name" value="<?= h($p['name']) ?>"></div>
+        <div><label>قیمت (<?= h($p['currency']) ?>)</label><input name="price" value="<?= h(fmtNum($p['price'])) ?>"></div>
+        <div><label>ایموجی</label><input name="emoji" value="<?= h($p['emoji'] ?? '') ?>" style="text-align:center"></div>
+        <div><label>رنگ دکمه</label><select name="color">
+          <?php foreach (styleMap() as $sk => $sl): ?>
+            <option value="<?= h($sk) ?>" <?= ($p['color'] ?? '') === $sk ? 'selected' : '' ?>><?= h($sl) ?></option>
+          <?php endforeach; ?></select></div>
+        <div><label>✨ ایموجی پریمیوم</label><input name="icon" value="<?= h($p['icon'] ?? '') ?>" style="direction:ltr"></div>
+        <div><label>ردیف / ترتیب</label>
+          <div style="display:flex;gap:6px">
+            <input name="row" type="number" min="0" value="<?= (int)($p['row'] ?? 0) ?>">
+            <input name="order" type="number" min="1" value="<?= (int)($p['order'] ?? 99) ?>">
+          </div></div>
+        <div><label>ربات اپلودر</label><select name="bot_id">
+          <option value="">— بدون —</option>
+          <?php foreach ($bots as $bb): ?>
+            <option value="<?= h($bb['id']) ?>" <?= ($p['bot_id'] ?? '') === $bb['id'] ? 'selected' : '' ?>>@<?= h($bb['username']) ?></option>
+          <?php endforeach; ?></select></div>
+        <div><label>کد لینک محتوا</label><input name="link_code" value="<?= h($p['link_code'] ?? '') ?>"></div>
+      </div>
+      <div style="margin-top:14px"><button class="btn g">ذخیره</button></div>
+    </form>
+    <div style="margin-top:12px;padding-top:12px;border-top:1px solid #edf2f7">
+      <form method="post" class="inline">
+        <input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="tab" value="products">
+        <input type="hidden" name="action" value="toggle_product"><input type="hidden" name="id" value="<?= h($p['id']) ?>">
+        <button class="btn ghost sm"><?= !empty($p['active']) ? 'غیرفعال کن' : 'فعال کن' ?></button>
+      </form>
+      <form method="post" class="inline" onsubmit="return confirm('حذف محصول؟')">
+        <input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="tab" value="products">
+        <input type="hidden" name="action" value="del_product"><input type="hidden" name="id" value="<?= h($p['id']) ?>">
+        <button class="btn r sm">حذف</button>
+      </form>
+      <span class="muted" style="margin-right:8px">
+        <?= !empty($p['active']) ? '<span class="badge green">فعال</span>' : '<span class="badge gray">غیرفعال</span>' ?>
+        محدودیت: <?= ((int)$p['limit']) > 0 ? (int)$p['limit'] : '∞' ?>
+      </span>
+    </div>
+  </div></div>
+  <?php endforeach; ?>
+  <?php if (!$products): ?><div class="card"><div class="body"><div class="empty">محصولی نساخته‌اید.</div></div></div><?php endif; ?>
 
 <?php // ================= دکمه‌ها ================= ?>
 <?php elseif ($tab === 'buttons'): ?>
@@ -689,20 +860,25 @@ foreach ($tabs as $k => $l): ?>
             <option value="menu"  <?= $C['ui']['mode'] === 'menu' ? 'selected' : '' ?>>منو — کیبورد پایین صفحه</option>
             <option value="glass" <?= $C['ui']['mode'] === 'glass' ? 'selected' : '' ?>>شیشه‌ای — زیر پیام</option>
           </select></div>
-        <div><label>چیدمان ردیف‌ها</label>
-          <input name="layout" value="<?= h($C['ui']['layout'] ?? '1') ?>" placeholder="2,1,1" style="direction:ltr">
-          <div class="muted" style="margin-top:4px">مثلا <code>2,1,1</code> = ردیف اول ۲ دکمه، بعدی ۱، بعدی ۱</div></div>
+        <div><label>الگوی چیدمان (فقط برای دکمه «اعمال»)</label>
+          <input name="layout" value="<?= h($C['ui']['layout'] ?? '1') ?>" placeholder="3,2,1" style="direction:ltr"></div>
       </div>
       <label style="font-weight:500;margin-bottom:14px">
         <input type="checkbox" name="show_dot" style="width:auto" <?= !empty($C['ui']['show_dot']) ? 'checked' : '' ?>>
         نمایش دایره رنگی کنار متن (برای کلاینت‌های قدیمی)</label>
 
-      <div style="display:grid;grid-template-columns:44px 1fr 100px 56px 60px 46px;gap:8px;
-                  font-size:11.5px;color:#718096;font-weight:700;padding:0 10px 6px">
-        <div>ایموجی</div><div>متن دکمه</div><div>رنگ واقعی</div><div>دایره</div><div>ترتیب</div><div>فعال</div>
+      <div class="note">
+        <b>ردیف</b> تعیین می‌کند دکمه کجا بنشیند: هر دکمه‌ای که ردیف یکسان دارد، کنار هم می‌آید.
+        مثال: دو دکمه با ردیف <code>1</code> و یکی با ردیف <code>2</code> → دو تا بالا، یکی پایین.
+        هیچ محدودیتی روی تعداد ردیف‌ها نیست.
+      </div>
+      <div style="display:grid;grid-template-columns:44px 1fr 96px 52px 90px 52px 52px 40px;gap:7px;
+                  font-size:11px;color:#718096;font-weight:700;padding:0 10px 6px">
+        <div>ایموجی</div><div>متن دکمه</div><div>رنگ</div><div>دایره</div><div>✨ پریمیوم</div>
+        <div>ردیف</div><div>ترتیب</div><div>فعال</div>
       </div>
       <?php foreach ($C['buttons'] as $id => $b): ?>
-      <div class="brow">
+      <div class="brow brow8">
         <input name="emoji_<?= h($id) ?>" value="<?= h($b['emoji'] ?? '') ?>" style="text-align:center">
         <input name="text_<?= h($id) ?>" value="<?= h($b['text']) ?>">
         <select name="color_<?= h($id) ?>">
@@ -715,7 +891,9 @@ foreach ($tabs as $k => $l): ?>
             <option value="<?= h($d) ?>" <?= ($b['dot'] ?? '') === $d ? 'selected' : '' ?>><?= $d ?: '—' ?></option>
           <?php endforeach; ?>
         </select>
-        <input name="order_<?= h($id) ?>" type="number" min="1" max="50" value="<?= (int)($b['order'] ?? 1) ?>">
+        <input name="icon_<?= h($id) ?>" value="<?= h($b['icon'] ?? '') ?>" placeholder="کد" style="direction:ltr">
+        <input name="row_<?= h($id) ?>" type="number" min="0" value="<?= (int)($b['row'] ?? 0) ?>">
+        <input name="order_<?= h($id) ?>" type="number" min="1" value="<?= (int)($b['order'] ?? 1) ?>">
         <input type="checkbox" name="on_<?= h($id) ?>" <?= !empty($b['on']) ? 'checked' : '' ?> style="width:auto">
       </div>
       <?php endforeach; ?>
@@ -723,10 +901,17 @@ foreach ($tabs as $k => $l): ?>
       <div style="margin-top:14px"><button class="btn g">ذخیره دکمه‌های منو</button></div>
     </form>
 
+    <form method="post" style="margin-top:10px;display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+      <input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="tab" value="buttons">
+      <input type="hidden" name="action" value="apply_layout">
+      <div style="flex:1;min-width:190px"><label>اعمال سریع الگو روی ردیف‌ها</label>
+        <input name="layout" value="<?= h($C['ui']['layout'] ?? '') ?>" placeholder="3,2,1" style="direction:ltr"></div>
+      <button class="btn b">اعمال چیدمان</button>
+    </form>
+
     <div class="prev">
-      <div class="muted" style="margin-bottom:8px">پیش‌نمایش — <?= $C['ui']['mode'] === 'glass' ? 'شیشه‌ای' : 'منو' ?>
-        (چیدمان <?= h($C['ui']['layout'] ?? '') ?>):</div>
-      <?php foreach (layoutRows(activeButtons(), $C['ui']['layout'] ?? '') as $r): ?>
+      <div class="muted" style="margin-bottom:8px">پیش‌نمایش زنده — <?= $C['ui']['mode'] === 'glass' ? 'شیشه‌ای' : 'منو' ?>:</div>
+      <?php foreach (menuRows() as $r): ?>
         <div class="pgrid">
           <?php foreach ($r as $b):
             $cls = ['primary' => 'pb-b', 'success' => 'pb-g', 'danger' => 'pb-r'][$b['color'] ?? ''] ?? ''; ?>
@@ -735,6 +920,57 @@ foreach ($tabs as $k => $l): ?>
         </div>
       <?php endforeach; ?>
     </div>
+  </div></div>
+
+  <div class="card"><h2>➕ ساخت دکمه جدید</h2><div class="body">
+    <div class="note">
+      دکمه دلخواه بسازید — در همان منو/شیشه‌ای بالا نمایش داده می‌شود.
+      <b>متن</b> = نمایش یک متن · <b>لینک</b> = باز کردن آدرس · <b>محصول</b> = رفتن مستقیم به یک محصول.
+    </div>
+    <form method="post">
+      <input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="tab" value="buttons">
+      <input type="hidden" name="action" value="add_button">
+      <div class="grid2">
+        <div><label>ایموجی</label><input name="btn_emoji" style="text-align:center" placeholder="🎁"></div>
+        <div><label>متن دکمه</label><input name="btn_text" required placeholder="قوانین"></div>
+        <div><label>رنگ</label><select name="btn_color">
+          <?php foreach (styleMap() as $sk => $sl): ?><option value="<?= h($sk) ?>"><?= h($sl) ?></option><?php endforeach; ?>
+        </select></div>
+        <div><label>✨ ایموجی پریمیوم</label><input name="btn_icon" style="direction:ltr"></div>
+        <div><label>نوع</label><select name="btn_action">
+          <option value="text">متن</option><option value="url">لینک</option><option value="product">محصول</option>
+        </select></div>
+        <div><label>ردیف / ترتیب</label>
+          <div style="display:flex;gap:6px">
+            <input name="btn_row" type="number" min="0" value="0"><input name="btn_order" type="number" min="1" value="50">
+          </div></div>
+      </div>
+      <div style="margin-top:12px"><label>مقدار — متن، یا آدرس، یا شناسه محصول</label>
+        <textarea name="btn_value" placeholder="متن دلخواه… یا https://… یا pr_xxxx"></textarea>
+        <?php if ($products): ?>
+        <div class="muted" style="margin-top:5px">شناسه محصولات:
+          <?php foreach ($products as $pp): ?><code><?= h($pp['id']) ?></code> = <?= h($pp['name']) ?> &nbsp;<?php endforeach; ?>
+        </div><?php endif; ?>
+      </div>
+      <div style="margin-top:14px"><button class="btn g">ساخت دکمه</button></div>
+    </form>
+
+    <?php $custom = array_filter($C['buttons'], fn($k) => str_starts_with($k, 'c_'), ARRAY_FILTER_USE_KEY); ?>
+    <?php if ($custom): ?>
+    <div style="margin-top:16px"><div class="scroll"><table>
+      <tr><th>دکمه</th><th>نوع</th><th>مقدار</th><th>ردیف</th><th></th></tr>
+      <?php foreach ($custom as $cid => $cb): ?>
+      <tr><td><?= h(trim(($cb['emoji'] ?? '') . ' ' . $cb['text'])) ?></td>
+        <td><?= h(['text'=>'متن','url'=>'لینک','product'=>'محصول'][$cb['action'] ?? ''] ?? '—') ?></td>
+        <td class="muted"><?= h(mb_substr($cb['value'] ?? '', 0, 40)) ?></td>
+        <td><?= (int)($cb['row'] ?? 0) ?></td>
+        <td><form method="post" onsubmit="return confirm('حذف دکمه؟')">
+          <input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="tab" value="buttons">
+          <input type="hidden" name="action" value="del_button"><input type="hidden" name="id" value="<?= h($cid) ?>">
+          <button class="btn r sm">حذف</button></form></td></tr>
+      <?php endforeach; ?>
+    </table></div></div>
+    <?php endif; ?>
   </div></div>
 
   <div class="card"><h2>💠 رنگ دکمه‌های شیشه‌ای</h2><div class="body">
@@ -800,6 +1036,7 @@ foreach ($tabs as $k => $l): ?>
             <button type="button" onclick="wrapSel('t_<?= h($k) ?>','<s>','</s>')"><s>خط‌خورده</s></button>
             <button type="button" onclick="wrapSel('t_<?= h($k) ?>','<tg-spoiler>','</tg-spoiler>')">🫥 اسپویلر</button>
             <button type="button" onclick="wrapSel('t_<?= h($k) ?>','<code>','</code>')">&lt;/&gt; کد</button>
+            <button type="button" onclick="premEmoji('t_<?= h($k) ?>')">✨ ایموجی پریمیوم</button>
           </div>
           <textarea id="t_<?= h($k) ?>" name="t_<?= h($k) ?>"><?= h($C['texts'][$k] ?? '') ?></textarea></div>
       <?php endforeach; ?>
@@ -848,47 +1085,160 @@ foreach ($tabs as $k => $l): ?>
 <?php // ================= ربات‌های اپلودر ================= ?>
 <?php elseif ($tab === 'bots'): ?>
   <div class="card"><h2>➕ افزودن ربات اپلودر</h2><div class="body">
+    <div class="note">
+      ربات‌های اپلودر <b>لازم نیست در هیچ کانالی عضو یا ادمین باشند</b> —
+      بررسی عضویت اجباری همیشه با توکن <b>ربات مادر</b> انجام می‌شود.
+      فقط ربات مادر باید در کانال ادمین باشد.
+    </div>
     <form method="post">
       <input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="tab" value="bots">
       <input type="hidden" name="action" value="add_bot">
       <label>توکن ربات (از @BotFather)</label>
       <input name="token" required placeholder="123456:ABC-DEF..." style="direction:ltr">
-      <p class="muted" style="margin-top:8px">وبهوک و نام کاربری خودکار تنظیم می‌شود. تنظیمات پیش‌فرض تب «تنظیمات» روی ربات جدید اعمال می‌گردد.</p>
       <div style="margin-top:12px"><button class="btn g">افزودن ربات</button></div>
     </form>
   </div></div>
 
-  <?php foreach ($bots as $b): $s = BotManager::settings($b['id']); $links = Links::all($b['id']); ?>
+  <?php if (!$bots): ?>
+    <div class="card"><div class="body"><div class="empty">هنوز ربات اپلودری اضافه نکرده‌اید.</div></div></div>
+  <?php endif; ?>
+
+  <?php foreach ($bots as $b):
+    $bs = BotManager::settings($b['id']);
+    $links = Links::all($b['id']);
+    $myChans = [];
+    foreach ($channels as $cid => $ch) if (in_array($b['id'], $ch['bots'] ?? [], true)) $myChans[] = $cid;
+  ?>
   <div class="card">
-    <h2>🤖 @<?= h($b['username']) ?> — <?= count($links) ?> لینک</h2>
+    <h2>🤖 @<?= h($b['username']) ?> — <?= count($links) ?> لینک · <?= count(load('bots/' . $b['id'] . '/users')) ?> کاربر</h2>
     <div class="body">
       <form method="post">
         <input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="tab" value="bots">
-        <input type="hidden" name="action" value="save_bot"><input type="hidden" name="id" value="<?= h($b['id']) ?>">
+        <input type="hidden" name="action" value="save_bot_full"><input type="hidden" name="id" value="<?= h($b['id']) ?>">
+
+        <h3 style="font-size:13.5px;margin-bottom:9px">⚙️ رفتار</h3>
         <div class="grid2">
           <div><label>⏱ حذف فایل بعد از (ثانیه)</label>
-            <input name="del_sec" type="number" min="5" value="<?= (int)$s['delete_seconds'] ?>"></div>
+            <input name="del_sec" type="number" min="5" value="<?= (int)$bs['delete_seconds'] ?>"></div>
           <div><label>گزینه‌ها</label>
             <label style="font-weight:500"><input type="checkbox" name="force_join" style="width:auto"
-              <?= !empty($s['force_join']) ? 'checked' : '' ?>> 🔒 عضویت اجباری کانال‌ها</label>
+              <?= !empty($bs['force_join']) ? 'checked' : '' ?>> 🔒 عضویت اجباری</label>
             <label style="font-weight:500"><input type="checkbox" name="protect" style="width:auto"
-              <?= !empty($s['protect_content']) ? 'checked' : '' ?>> 🛡 جلوگیری از فوروارد/ذخیره</label></div>
+              <?= !empty($bs['protect_content']) ? 'checked' : '' ?>> 🛡 جلوگیری از فوروارد</label>
+            <label style="font-weight:500"><input type="checkbox" name="inline_wait" style="width:auto"
+              <?= !empty($bs['inline_wait']) ? 'checked' : '' ?>> ⏳ انتظار درون‌خطی (دقت بیشتر حذف)</label></div>
         </div>
-        <div class="tgrid" style="margin-top:12px">
-          <div><label>پیام شروع ربات (<code>{name}</code>)</label>
-            <textarea name="start_text"><?= h($s['start_text']) ?></textarea></div>
-          <div><label>متن عضویت اجباری</label>
-            <textarea name="join_text"><?= h($s['join_text']) ?></textarea></div>
-          <div class="grid2">
-            <div><label>متن دکمه «عضو شدم»</label><input name="joined_btn" value="<?= h($s['joined_btn']) ?>"></div>
-            <div><label>متن لینک نامعتبر</label><input name="expired_text" value="<?= h($s['expired_text']) ?>"></div>
+
+        <h3 style="font-size:13.5px;margin:18px 0 9px">📢 کانال‌های این ربات</h3>
+        <div class="note">هیچ‌کدام را نزنید = کانال‌های عمومی اعمال می‌شود. اگر بزنید، فقط همان‌ها برای این ربات چک می‌شوند.</div>
+        <?php $applicable = count(Channels::forBot($b['id']));
+        if (!empty($bs['force_join']) && $applicable === 0): ?>
+          <div class="flash warn" style="margin:0 0 10px">
+            ⚠️ عضویت اجباری روشن است ولی <b>هیچ کانالی</b> برای این ربات اعمال نمی‌شود —
+            یعنی فایل‌ها بدون قفل تحویل داده می‌شوند. یک کانال انتخاب کنید یا کانالی بسازید که برای «همه» باشد.
           </div>
-          <div><label>هشدار حذف (<code>{sec}</code>)</label>
-            <textarea name="warn_text"><?= h($s['warn_text']) ?></textarea></div>
-          <div><label>پیام بعد از حذف</label>
-            <textarea name="deleted_text"><?= h($s['deleted_text']) ?></textarea></div>
+        <?php endif; ?>
+        <?php if (!$channels): ?><div class="muted">کانالی ثبت نشده.</div>
+        <?php else: ?>
+        <div style="display:flex;flex-wrap:wrap;gap:9px;margin-bottom:6px">
+          <?php foreach ($channels as $cid => $ch): ?>
+            <label style="font-weight:500;background:#edf2f7;padding:7px 12px;border-radius:9px">
+              <input type="checkbox" name="bot_channels[]" value="<?= h($cid) ?>" style="width:auto"
+                <?= in_array($cid, $myChans, true) ? 'checked' : '' ?>> <?= h($ch['title']) ?>
+            </label>
+          <?php endforeach; ?>
         </div>
-        <div style="margin-top:14px"><button class="btn g">ذخیره تنظیمات این ربات</button></div>
+        <?php endif; ?>
+
+        <h3 style="font-size:13.5px;margin:18px 0 9px">🎨 دکمه‌های شیشه‌ای این ربات</h3>
+        <div style="display:grid;grid-template-columns:44px 1fr 96px 90px 52px 52px 40px;gap:7px;
+                    font-size:11px;color:#718096;font-weight:700;padding:0 10px 6px">
+          <div>ایموجی</div><div>متن</div><div>رنگ</div><div>✨ پریمیوم</div><div>ردیف</div><div>ترتیب</div><div>فعال</div>
+        </div>
+        <?php foreach ($bs['buttons'] as $bk => $bb): ?>
+        <div class="brow" style="grid-template-columns:44px 1fr 96px 90px 52px 52px 40px">
+          <input name="b_emoji_<?= h($bk) ?>" value="<?= h($bb['emoji'] ?? '') ?>" style="text-align:center">
+          <input name="b_text_<?= h($bk) ?>" value="<?= h($bb['text']) ?>">
+          <select name="b_color_<?= h($bk) ?>">
+            <?php foreach (styleMap() as $sk => $sl): ?>
+              <option value="<?= h($sk) ?>" <?= ($bb['color'] ?? '') === $sk ? 'selected' : '' ?>><?= h($sl) ?></option>
+            <?php endforeach; ?></select>
+          <input name="b_icon_<?= h($bk) ?>" value="<?= h($bb['icon'] ?? '') ?>" placeholder="کد" style="direction:ltr">
+          <input name="b_row_<?= h($bk) ?>" type="number" min="1" value="<?= (int)($bb['row'] ?? 1) ?>">
+          <input name="b_order_<?= h($bk) ?>" type="number" min="1" value="<?= (int)($bb['order'] ?? 1) ?>">
+          <input type="checkbox" name="b_on_<?= h($bk) ?>" <?= !empty($bb['on']) ? 'checked' : '' ?> style="width:auto">
+        </div>
+        <?php endforeach; ?>
+
+        <h3 style="font-size:13.5px;margin:18px 0 9px">💠 رنگ دکمه‌های داخل ربات</h3>
+        <div class="grid2">
+          <?php
+          $bgLabels = ['join'=>'📢 کانال عضویت','joined'=>'✅ عضو شدم','nav'=>'◀️ بازگشت',
+                       'cancel'=>'↩️ انصراف','upload'=>'📤 آپلود','info'=>'ℹ️ اطلاعات'];
+          foreach ($bgLabels as $role => $lbl): ?>
+            <div><label><?= $lbl ?></label><select name="bg_<?= h($role) ?>">
+              <?php foreach (styleMap() as $sk => $sl): ?>
+                <option value="<?= h($sk) ?>" <?= ($bs['glass_colors'][$role] ?? 'none') === $sk ? 'selected' : '' ?>><?= h($sl) ?></option>
+              <?php endforeach; ?></select></div>
+          <?php endforeach; ?>
+        </div>
+
+        <h3 style="font-size:13.5px;margin:18px 0 9px">📝 متن‌های این ربات</h3>
+        <div class="note">
+          برای گذاشتن <b>ایموجی پریمیوم</b> داخل متن‌ها، از نوار ابزار ✨ استفاده کنید —
+          کد را با دستور <code>/emoji</code> در ربات مادر بگیرید.
+        </div>
+        <div class="tgrid">
+          <?php
+          $tLabels = ['menu_text'=>'🤖 منوی پنل — {links} {sec} {join} {bot}',
+                      'start_text'=>'👋 پیام شروع — {name}',
+                      'join_text'=>'🔒 متن عضویت اجباری',
+                      'warn_text'=>'⚠️ هشدار حذف — {sec}',
+                      'deleted_text'=>'🗑 بعد از حذف',
+                      'expired_text'=>'❌ لینک نامعتبر'];
+          foreach ($tLabels as $tk => $tl):
+            $fid = 'bt_' . $b['id'] . '_' . $tk; ?>
+            <div><label><?= h($tl) ?></label>
+              <div class="tbar">
+                <button type="button" onclick="wrapSel('<?= $fid ?>','<blockquote>','</blockquote>')">❝ نقل‌قول</button>
+                <button type="button" onclick="wrapSel('<?= $fid ?>','<blockquote expandable>','</blockquote>')">❝ بازشو</button>
+                <button type="button" onclick="wrapSel('<?= $fid ?>','<b>','</b>')"><b>پررنگ</b></button>
+                <button type="button" onclick="premEmoji('<?= $fid ?>')">✨ ایموجی پریمیوم</button>
+              </div>
+              <textarea id="<?= $fid ?>" name="<?= h($tk) ?>"><?= h($bs[$tk] ?? '') ?></textarea></div>
+          <?php endforeach; ?>
+          <div><label>متن دکمه «عضو شدم»</label><input name="joined_btn" value="<?= h($bs['joined_btn']) ?>"></div>
+        </div>
+
+        <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+          <button class="btn g">ذخیره این ربات</button>
+          <label style="font-weight:500;background:#fef5e7;padding:9px 13px;border-radius:9px">
+            <input type="checkbox" name="apply_all" style="width:auto"> 📋 اعمال روی <b>همه</b> ربات‌ها
+          </label>
+        </div>
+      </form>
+
+      <h3 style="font-size:13.5px;margin:18px 0 9px">👑 مدیران این ربات</h3>
+      <div class="note">مدیر می‌تواند در این ربات فایل آپلود کند و لینک بسازد — ولی به پنل وب و ربات مادر دسترسی ندارد.</div>
+      <?php $ad = $b['admins'] ?? []; ?>
+      <?php if ($ad): ?>
+      <div style="display:flex;flex-wrap:wrap;gap:7px;margin-bottom:10px">
+        <?php foreach ($ad as $au): ?>
+          <span class="chip"><?= h(uLabel($users, $au)) ?> <code><?= h($au) ?></code>
+            <form method="post" class="inline" onsubmit="return confirm('حذف مدیر؟')">
+              <input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="tab" value="bots">
+              <input type="hidden" name="action" value="del_bot_admin"><input type="hidden" name="id" value="<?= h($b['id']) ?>">
+              <input type="hidden" name="user_id" value="<?= h($au) ?>"><button title="حذف">✕</button>
+            </form></span>
+        <?php endforeach; ?>
+      </div>
+      <?php endif; ?>
+      <form method="post" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+        <input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="tab" value="bots">
+        <input type="hidden" name="action" value="add_bot_admin"><input type="hidden" name="id" value="<?= h($b['id']) ?>">
+        <div style="flex:1;min-width:170px"><label>آیدی عددی مدیر جدید</label>
+          <input name="user_id" type="number" placeholder="کاربر با /id آیدیش را می‌گیرد" style="direction:ltr"></div>
+        <button class="btn b">افزودن مدیر</button>
       </form>
 
       <div style="margin-top:16px;padding-top:14px;border-top:1px solid #edf2f7">
@@ -897,7 +1247,7 @@ foreach ($tabs as $k => $l): ?>
           <input type="hidden" name="action" value="bot_webhook"><input type="hidden" name="id" value="<?= h($b['id']) ?>">
           <button class="btn b sm">تنظیم دوباره وبهوک</button>
         </form>
-        <form method="post" class="inline" onsubmit="return confirm('حذف ربات؟')">
+        <form method="post" class="inline" onsubmit="return confirm('حذف این ربات؟')">
           <input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="tab" value="bots">
           <input type="hidden" name="action" value="del_bot"><input type="hidden" name="id" value="<?= h($b['id']) ?>">
           <button class="btn r sm">حذف ربات</button>
@@ -906,27 +1256,22 @@ foreach ($tabs as $k => $l): ?>
 
       <?php if ($links): ?>
       <div style="margin-top:16px"><div class="scroll"><table>
-        <tr><th>عنوان</th><th>کد</th><th>لینک</th><th>👁</th><th>📥</th><th></th></tr>
-        <?php foreach (array_slice(array_reverse($links, true), 0, 40, true) as $code => $l): ?>
-        <tr>
-          <td><?= h($l['title'] ?: count($l['files']) . ' فایل') ?></td>
-          <td><code><?= h($code) ?></code></td>
+        <tr><th>عنوان</th><th>لینک</th><th>👁</th><th>📥</th><th></th></tr>
+        <?php foreach (array_slice(array_reverse($links, true), 0, 30, true) as $code => $l): ?>
+        <tr><td><?= h($l['title'] ?: count($l['files']) . ' فایل') ?></td>
           <td><code><?= h(Links::url($b['id'], $code)) ?></code></td>
           <td><?= (int)$l['clicks'] ?></td><td><?= (int)$l['delivered'] ?></td>
           <td><form method="post" onsubmit="return confirm('حذف لینک؟')">
             <input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="tab" value="bots">
             <input type="hidden" name="action" value="del_link"><input type="hidden" name="bot" value="<?= h($b['id']) ?>">
             <input type="hidden" name="code" value="<?= h($code) ?>">
-            <button class="btn r sm">حذف</button></form></td>
-        </tr>
+            <button class="btn r sm">حذف</button></form></td></tr>
         <?php endforeach; ?>
       </table></div></div>
       <?php endif; ?>
     </div>
   </div>
   <?php endforeach; ?>
-
-  <?php if (!$bots): ?><div class="card"><div class="body"><div class="empty">هنوز ربات اپلودری اضافه نکرده‌اید.</div></div></div><?php endif; ?>
 
 <?php // ================= کانال‌ها ================= ?>
 <?php elseif ($tab === 'channels'): ?>
@@ -938,9 +1283,20 @@ foreach ($tabs as $k => $l): ?>
         <div><label>آیدی یا یوزرنیم کانال</label><input name="chat_id" required placeholder="@mychannel یا -1001234567890" style="direction:ltr"></div>
         <div><label>لینک عضویت (اختیاری)</label><input name="url" placeholder="https://t.me/..." style="direction:ltr"></div>
       </div>
+      <?php if ($bots): ?>
+      <div style="margin-top:12px"><label>فقط برای این ربات‌ها (خالی = همه)</label>
+        <div style="display:flex;flex-wrap:wrap;gap:9px">
+          <?php foreach ($bots as $bb): ?>
+            <label style="font-weight:500;background:#edf2f7;padding:7px 12px;border-radius:9px">
+              <input type="checkbox" name="bots[]" value="<?= h($bb['id']) ?>" style="width:auto"> @<?= h($bb['username']) ?>
+            </label>
+          <?php endforeach; ?>
+        </div></div>
+      <?php endif; ?>
       <p class="muted" style="margin-top:10px;line-height:1.9">
-        ⚠️ <b>ربات مادر</b> و <b>همه ربات‌های اپلودر</b> باید در این کانال <b>ادمین</b> باشند،
-        وگرنه امکان بررسی عضویت وجود ندارد و کانال نادیده گرفته می‌شود.
+        ✅ فقط <b>ربات مادر</b> باید در این کانال <b>ادمین</b> باشد.
+        ربات‌های اپلودر لازم نیست عضو یا ادمین کانال باشند — بررسی عضویت همیشه با توکن ربات مادر انجام می‌شود.<br>
+        اگر ربات مادر را در کانالی ادمین کنید، کانال <b>خودکار</b> همین‌جا ثبت می‌شود.
       </p>
       <div style="margin-top:12px"><button class="btn g">افزودن کانال</button></div>
     </form>
@@ -948,8 +1304,8 @@ foreach ($tabs as $k => $l): ?>
 
   <div class="card"><h2>🩺 بررسی سلامت</h2><div class="body">
     <p class="muted" style="margin-bottom:10px;line-height:1.9">
-      اگر رباتی در کانالی ادمین نباشد، <b>قفل بسته می‌ماند</b> و آن ربات به هیچ‌کس فایل نمی‌دهد.
-      با این دکمه مطمئن شوید همه ربات‌ها دسترسی دارند.
+      اگر <b>ربات مادر</b> در کانالی ادمین نباشد، <b>قفل بسته می‌ماند</b> و هیچ‌کس فایل نمی‌گیرد.
+      با این دکمه دسترسی ربات مادر به همه کانال‌ها را بررسی کنید.
     </p>
     <form method="post" class="inline">
       <input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="tab" value="channels">
@@ -968,10 +1324,12 @@ foreach ($tabs as $k => $l): ?>
     <p class="muted" style="margin-bottom:12px">این کانال‌ها روی <b>همه</b> ربات‌های اپلودر اعمال می‌شوند.</p>
     <?php if (!$channels): ?><div class="empty">کانالی ثبت نشده.</div>
     <?php else: ?><div class="scroll"><table>
-      <tr><th>عنوان</th><th>آیدی</th><th>لینک</th><th>وضعیت</th><th>اقدام</th></tr>
+      <tr><th>عنوان</th><th>آیدی</th><th>ربات‌ها</th><th>وضعیت</th><th>اقدام</th></tr>
       <?php foreach ($channels as $ch): ?>
       <tr><td><?= h($ch['title']) ?></td><td><code><?= h($ch['chat_id']) ?></code></td>
-        <td><code><?= h($ch['url'] ?: '—') ?></code></td>
+        <td><?php if (empty($ch['bots'])): ?><span class="badge gray">همه</span><?php else:
+          foreach ($ch['bots'] as $bid2) { $bb2 = BotManager::get($bid2);
+            echo '<span class="badge green">@' . h($bb2['username'] ?? $bid2) . '</span> '; } endif; ?></td>
         <td><?= !empty($ch['on']) ? '<span class="badge green">فعال</span>' : '<span class="badge gray">خاموش</span>' ?></td>
         <td style="white-space:nowrap">
           <form method="post" class="inline">
@@ -1067,6 +1425,7 @@ foreach ($tabs as $k => $l): ?>
           <button type="button" onclick="wrapSel('sales_tpl','<blockquote expandable>','</blockquote>')">❝ بازشو</button>
           <button type="button" onclick="wrapSel('sales_tpl','<b>','</b>')"><b>پررنگ</b></button>
           <button type="button" onclick="wrapSel('sales_tpl','<code>','</code>')">&lt;/&gt; کد</button>
+        <button type="button" onclick="premEmoji('sales_tpl')">✨ ایموجی پریمیوم</button>
         </div>
         <textarea id="sales_tpl" name="sales_tpl" style="min-height:140px"><?= h($C['sales']['template']) ?></textarea>
         <div class="muted" style="margin-top:6px;line-height:1.9">
@@ -1097,6 +1456,7 @@ foreach ($tabs as $k => $l): ?>
         <button type="button" onclick="wrapSel('bc_master','<blockquote expandable>','</blockquote>')">❝ بازشو</button>
         <button type="button" onclick="wrapSel('bc_master','<b>','</b>')"><b>پررنگ</b></button>
         <button type="button" onclick="wrapSel('bc_master','<tg-spoiler>','</tg-spoiler>')">🫥 اسپویلر</button>
+        <button type="button" onclick="premEmoji('bc_master')">✨ ایموجی پریمیوم</button>
       </div>
       <textarea id="bc_master" name="text" placeholder="متن پیام… (تگ HTML تلگرام مجاز است)" required></textarea>
       <div style="margin-top:12px"><button class="btn b">ارسال به <?= count($users) ?> کاربر</button></div>
@@ -1125,6 +1485,7 @@ foreach ($tabs as $k => $l): ?>
       <div class="tbar">
         <button type="button" onclick="wrapSel('bc_child','<blockquote>','</blockquote>')">❝ نقل‌قول</button>
         <button type="button" onclick="wrapSel('bc_child','<b>','</b>')"><b>پررنگ</b></button>
+        <button type="button" onclick="premEmoji('bc_child')">✨ ایموجی پریمیوم</button>
       </div>
       <textarea id="bc_child" name="text" placeholder="متن پیام…" required></textarea>
       <div style="margin-top:12px"><button class="btn b">ارسال به ربات‌های زیرمجموعه</button></div>
@@ -1216,6 +1577,13 @@ foreach ($tabs as $k => $l): ?>
 
 <script>
 // انتخاب متن را داخل تگ می‌پیچد (نقل‌قول، پررنگ، ...)
+function premEmoji(id) {
+  var code = prompt('کد ایموجی پریمیوم را بگذارید:\n(با دستور /emoji در ربات مادر می‌گیرید)');
+  if (!code) return;
+  code = code.trim();
+  if (!/^[0-9]+$/.test(code)) { alert('کد باید فقط عدد باشد.'); return; }
+  wrapSel(id, '<tg-emoji emoji-id="' + code + '">', '</tg-emoji>');
+}
 function wrapSel(id, open, close) {
   var el = document.getElementById(id);
   if (!el) return;
