@@ -2255,6 +2255,7 @@ function edSubs($chatId, $msgId, $bid) {
     }
     $rows[] = [btnCb('➕ افزودن دکمه شیشه‌ای', 'sbnew_' . $bid, 'confirm'),
                btnCb('📐 چیدمان', 'sblay_' . $bid, 'admin')];
+    if ($subs) $rows[] = [btnCb('🔗 وصل خودکار به محصولات هم‌نام', 'sbauto_' . $bid, 'buy')];
     $rows[] = [btnUI('back', 'eb_' . $bid, 'nav')];
     editMsg(BOT_TOKEN, $chatId, $msgId, $text, inlineKb($rows));
 }
@@ -2620,12 +2621,37 @@ function masterHandle($update) {
             answerCb(BOT_TOKEN, $cbId);
             if (!$sub) return;
 
+            // نوع «محصول» — یا نوع «متن» که هنوز تنظیم نشده و هم‌نام یک محصول است
+            $p = null;
             if (($sub['action'] ?? '') === 'product') {
                 $p = Product::get($sub['value'] ?? '');
-                if (!$p || empty($p['active'])) { sendMsg(BOT_TOKEN, $chatId, T('buy_empty')); return; }
-                // اگر جریان سفارش روشن است، یک‌راست برو سراغ گرفتن لینک کانال
+            } elseif (isPlaceholder($sub['value'] ?? '')) {
+                $p = productByName($sub['text'] ?? '');
+                // یک بار برای همیشه وصلش کن تا دفعه بعد سریع باشد
+                if ($p) subMutate($bid, $sid, function (&$x) use ($p) {
+                    $x['action'] = 'product';
+                    $x['value']  = $p['id'];
+                });
+            }
+
+            if ($p) {
+                if (empty($p['active'])) { sendMsg(BOT_TOKEN, $chatId, T('buy_empty')); return; }
+                // جریان سفارش روشن است → یک‌راست سراغ گرفتن لینک کانال
                 if (!empty($p['flow']['on'])) { flowStart($uid, $chatId, $p); return; }
                 showOneProduct($uid, $chatId, $p);
+                return;
+            }
+
+            if (isPlaceholder($sub['value'] ?? '')) {
+                // به کاربر عادی چیز عجیب نشان نده؛ به ادمین بگو چطور درستش کند
+                if ($uid === ADMIN_ID) {
+                    sendMsg(BOT_TOKEN, $chatId,
+                        "⚠️ دکمه «" . h($sub['text']) . "» هنوز به محصولی وصل نشده.\n\n" .
+                        "یا محصولی با همین نام بسازید، یا از دکمه زیر وصلش کنید:",
+                        inlineKb([[btnCb('🛒 انتخاب محصول', 'sbpick_' . $bid . '|' . $sid, 'buy')]]));
+                } else {
+                    sendMsg(BOT_TOKEN, $chatId, T('buy_empty'));
+                }
                 return;
             }
             if (($sub['action'] ?? '') === 'section') {
@@ -2882,6 +2908,30 @@ function masterHandle($update) {
             sendMsg(BOT_TOKEN, $chatId,
                 "📐 چیدمان دکمه‌های شیشه‌ای را بفرستید.\n\nمثال: <code>2,1</code> یعنی ۲ تا بالا، ۱ تا پایین.",
                 inlineKb([[btnUI('cancel', 'sbs_' . $bid, 'cancel')]]));
+            return;
+        }
+        if (str_starts_with($data, 'sbauto_')) {
+            $bid = substr($data, 7);
+            $done = 0; $miss = [];
+            foreach ((cfg()['buttons'][$bid]['subs'] ?? []) as $sub) {
+                $mp = productByName($sub['text'] ?? '');
+                if ($mp) {
+                    subMutate($bid, $sub['id'], function (&$x) use ($mp) {
+                        $x['action'] = 'product';
+                        $x['value']  = $mp['id'];
+                    });
+                    $done++;
+                } elseif (($sub['action'] ?? '') !== 'product') {
+                    $miss[] = $sub['text'];
+                }
+            }
+            answerCb(BOT_TOKEN, $cbId, "✅ {$done} دکمه وصل شد", true);
+            if ($miss) {
+                sendMsg(BOT_TOKEN, $chatId,
+                    "⚠️ برای این دکمه‌ها محصول هم‌نام پیدا نشد:\n• " . h(implode("\n• ", $miss)) .
+                    "\n\nیا محصولی با همین نام بسازید، یا دستی وصلشان کنید.");
+            }
+            edSubs($chatId, $msgId, $bid);
             return;
         }
         if (str_starts_with($data, 'sbpick_')) {
@@ -3666,7 +3716,7 @@ function masterHandle($update) {
                 $c['buttons'][$bid]['subs'][] = [
                     'id' => $sid, 'emoji' => '', 'text' => $plain, 'color' => 'none',
                     'icon' => $ids ? $ids[0] : '', 'row' => 0, 'order' => 50,
-                    'on' => true, 'action' => 'text', 'value' => 'متن این دکمه را تنظیم کنید.',
+                    'on' => true, 'action' => 'text', 'value' => '',
                 ];
             });
             clearState($uid);
@@ -3747,7 +3797,7 @@ function masterHandle($update) {
             $c['buttons'][$nid] = [
                 'emoji' => '', 'text' => $plain, 'color' => 'none', 'dot' => '',
                 'icon' => $ids ? $ids[0] : '', 'row' => 0, 'order' => 50,
-                'on' => true, 'action' => 'text', 'value' => 'این متن را از پنل عوض کنید.',
+                'on' => true, 'action' => 'text', 'value' => '',
             ];
         });
         clearState($uid);
@@ -4105,6 +4155,22 @@ function edSubPick($chatId, $msgId, $bid, $sid) {
         inlineKb($rows));
 }
 
+/** متن‌های پیش‌فرضی که یعنی «هنوز تنظیم نشده» */
+function isPlaceholder($v) {
+    $v = trim(strip_tags((string)$v));
+    return $v === '' || $v === 'متن این دکمه را تنظیم کنید.' || $v === 'این متن را از پنل عوض کنید.';
+}
+
+/** محصولی که نامش با متن دکمه یکی است */
+function productByName($name) {
+    $name = trim(preg_replace('/\s+/u', ' ', (string)$name));
+    if ($name === '') return null;
+    foreach (Product::all() as $p) {
+        if (trim(preg_replace('/\s+/u', ' ', $p['name'])) === $name) return $p;
+    }
+    return null;
+}
+
 function findSub($btnId, $subId) {
     foreach ((cfg()['buttons'][$btnId]['subs'] ?? []) as $sub) {
         if (($sub['id'] ?? '') === $subId) return $sub;
@@ -4119,7 +4185,23 @@ function runMenuAction($act, $uid, $chatId, $uname, $fname, $replyTo = null) {
     if ($b && !empty($b['action'])) {
         switch ($b['action']) {
             case 'text':
-                sendMsg(BOT_TOKEN, $chatId, $b['value'] ?: '—');
+                if (isPlaceholder($b['value'] ?? '')) {
+                    $mp = productByName($b['text'] ?? '');
+                    if ($mp) {
+                        if (!empty($mp['flow']['on'])) { flowStart($uid, $chatId, $mp); return; }
+                        showOneProduct($uid, $chatId, $mp);
+                        return;
+                    }
+                    if ($uid === ADMIN_ID) {
+                        sendMsg(BOT_TOKEN, $chatId,
+                            "⚠️ متن دکمه «" . h($b['text']) . "» هنوز تنظیم نشده.\n" .
+                            "/panel → 🎨 دکمه‌ها → همین دکمه → 📝 مقدار");
+                        return;
+                    }
+                    sendMsg(BOT_TOKEN, $chatId, T('buy_empty'));
+                    return;
+                }
+                sendMsg(BOT_TOKEN, $chatId, $b['value']);
                 return;
             case 'url':
                 sendMsg(BOT_TOKEN, $chatId, btnLabel($b),
