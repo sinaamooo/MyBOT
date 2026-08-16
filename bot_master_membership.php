@@ -400,6 +400,7 @@ function defaultConfig() {
             'get_link'  => '🔗 دریافت لینک',
             'open'      => '🔗 باز کردن',
             'hide_menu' => '❌ بستن منو',
+            'did_admin' => '✅ ادمین کردم',
             'sup_direct'   => '💬 ارتباط مستقیم',
             'sup_indirect' => '📨 ارتباط غیر مستقیم',
         ],
@@ -458,6 +459,9 @@ function defaultConfig() {
             'flow_qty_bad' => "❌ عدد وارد شده معتبر نیست.\nحداقل <b>{min}</b> و حداکثر <b>{max}</b>.",
             'flow_speed'   => "👉 لطفا سرعت تکمیل سفارش و سرعت ممبرگیری کانال را انتخاب کنید؟",
             'flow_rate'    => "💰 برای کانال فوق، نرخ محاسبه ممبر به شرح زیر می‌باشد:\n\n👥 هزینه هر کا ممبر: <b>{rate}</b> تومان\n\n📗 جهت ادامه دکمه زیر را بزنید.",
+            'flow_addbot'  => "🤖 <b>افزودن ربات به کانال</b>\n\n➤ لطفا ربات را با <b>دسترسی کامل ادمین</b> به کانال خود اضافه کنید.\n➤ اطمینان حاصل کنید که تمام گزینه‌های ادمینی فعال باشند ✅\n\n⚠️ بدون ادمین بودن ربات، سفارش قابل انجام نیست.\n\n👇 بعد از ادمین کردن، دکمه زیر را بزنید.",
+            'flow_admin_ok'=> "✅ ربات با موفقیت در کانال <b>{title}</b> ادمین شد.",
+            'flow_admin_no'=> "❌ هنوز ربات را در کانال ادمین نکرده‌اید.\n\nربات <b>{bot}</b> را به کانال اضافه و ادمین کنید، بعد دوباره دکمه را بزنید.",
             'flow_invoice' => "📋 کاربر گرامی، جزئیات سفارش شما به شرح زیر است:\n\n📣 برای کانال: <code>{link}</code>\n👥 تعداد کاربر درخواستی: <b>{qty}</b> نفر\n⚙️ نوع درخواستی: {product}\n⚡️ سرعت: {speed}\n🚀 سرعت ممبرگیری: <b>{per_day}</b> نفر در روز\n⏳ زمان تقریبی تکمیل: <b>{eta}</b>\n💵 مبلغ به ازای هر {per} نفر: <b>{rate}</b>\n\n💳 مبلغ قابل پرداخت: <b>{total} {currency}</b>\n\n❗️ تمامی سفارش‌ها بصورت آنی ثبت شده و بصورت سیستمی انجام می‌گیرند.\n\n👇 درصورت تایید، دکمه زیر را بزنید.",
             'sup_ticket'   => "💬 <b>ارتباط غیر مستقیم</b>\n\nپیام خود را ارسال کنید، ادمین بررسی می‌کند.",
             'sup_sent'     => "✅ پیام شما برای پشتیبانی ارسال شد.\nبه زودی پاسخ داده می‌شود.",
@@ -857,7 +861,7 @@ class Product
                 'row' => 0, 'order' => 99,
                 // جریان سفارش — اگر روشن باشد از مشتری سوال می‌پرسد
                 'flow' => [
-                    'on' => false, 'ask_link' => true, 'ask_qty' => true,
+                    'on' => true, 'ask_link' => true, 'ask_qty' => true, 'ask_admin' => true,
                     'min' => 1000, 'max' => 100000, 'per' => 1000,
                     'speeds' => [
                         ['id' => 's1', 'text' => 'کند',       'emoji' => '🐢', 'mult' => 1,   'per_day' => 500,  'color' => 'primary', 'icon' => '', 'on' => true],
@@ -1681,7 +1685,7 @@ function flowNext($uid, $chatId, $step) {
             $sd['data']['per_day'] = (int)($one['per_day'] ?? 0);
             $sd['data']['eta']     = speedEta($one, (int)($sd['data']['qty'] ?? 0));
             setState($uid, 'flow', $sd);
-            flowInvoice($uid, $chatId);
+            flowNext($uid, $chatId, 'admin');
             return;
         }
 
@@ -1699,6 +1703,70 @@ function flowNext($uid, $chatId, $step) {
         panelShow($uid, $chatId, 'shop', $head . T('flow_speed'), inlineKb($rows));
         return;
     }
+
+    if ($step === 'admin') {
+        if (empty($f['ask_admin'])) { flowInvoice($uid, $chatId); return; }
+        $rows = [];
+        $un = botUsername();
+        if ($un) $rows[] = [btnUrl('➕ افزودن ربات به کانال', "https://t.me/{$un}?startchannel&admin=invite_users+promote_members", 'buy')];
+        $rows[] = [btnUI('did_admin', 'fadm', 'confirm')];
+        $rows[] = [btnUI('cancel', 'cancel', 'cancel')];
+        panelShow($uid, $chatId, 'shop', T('flow_addbot'), inlineKb($rows));
+        return;
+    }
+}
+
+/** نام کاربری ربات مادر — یک بار گرفته و کش می‌شود */
+function botUsername() {
+    static $u = null;
+    if ($u !== null) return $u;
+    $c = load('config');
+    if (!empty($c['bot_username'])) return $u = $c['bot_username'];
+    $r = tg(BOT_TOKEN, 'getMe', [], 8);
+    $u = $r['result']['username'] ?? '';
+    if ($u !== '') cfgSet(function (&$x) use ($u) { $x['bot_username'] = $u; });
+    return $u;
+}
+
+/**
+ * بررسی ادمین بودن ربات در کانال کاربر.
+ * لینک عمومی را مستقیم چک می‌کند؛ لینک خصوصی از راه my_chat_member
+ * تایید می‌شود (وقتی کاربر ربات را اضافه کرد، همان‌جا ثبت می‌شود).
+ */
+function flowCheckAdmin($uid) {
+    $st = getState($uid);
+    if (!$st || $st['action'] !== 'flow') return [false, ''];
+    $sd = $st['data'];
+
+    // اگر با افزودن ربات قبلا تایید شده
+    if (!empty($sd['data']['admin_ok'])) return [true, $sd['data']['chat_title'] ?? ''];
+
+    $link = $sd['data']['link'] ?? '';
+    if (!preg_match('#^https?://t\.me/([A-Za-z0-9_]{4,})/?$#', $link, $m)) {
+        return [false, ''];   // لینک خصوصی — فقط از راه افزودن ربات تایید می‌شود
+    }
+    $chat = '@' . $m[1];
+    $info = tg(BOT_TOKEN, 'getChat', ['chat_id' => $chat], 8);
+    if (empty($info['ok'])) return [false, ''];
+
+    $me = tg(BOT_TOKEN, 'getMe', [], 8);
+    $botId = $me['result']['id'] ?? 0;
+    if (!$botId) return [false, ''];
+
+    $mem = tg(BOT_TOKEN, 'getChatMember', ['chat_id' => $chat, 'user_id' => $botId], 8);
+    if (empty($mem['ok'])) return [false, ''];
+    $ok = in_array($mem['result']['status'] ?? '', ['administrator', 'creator'], true);
+    if (!$ok) return [false, ''];
+
+    $title = $info['result']['title'] ?? $chat;
+    mutate('states', function (&$x) use ($uid, $chat, $title) {
+        $k = (string)$uid;
+        if (!isset($x[$k])) return;
+        $x[$k]['data']['data']['admin_ok']   = true;
+        $x[$k]['data']['data']['chat_id']    = $chat;
+        $x[$k]['data']['data']['chat_title'] = $title;
+    });
+    return [true, $title];
 }
 
 function speedLabel($sp) {
@@ -1743,7 +1811,11 @@ function flowInvoice($uid, $chatId) {
     $sd['data']['total'] = $total;
     setState($uid, 'flow', $sd);
 
-    $text = T('flow_invoice', [
+    $okLine = !empty($sd['data']['admin_ok'])
+        ? T('flow_admin_ok', ['title' => h($sd['data']['chat_title'] ?? '—')]) . "\n\n"
+        : '';
+
+    $text = $okLine . T('flow_invoice', [
         'link'     => h($sd['data']['link'] ?? '—'),
         'qty'      => number_format($qty),
         'product'  => h($p['name']),
@@ -1773,11 +1845,14 @@ function flowFinish($uid, $chatId, $uname) {
     if ($total <= 0) { clearState($uid); return false; }
 
     $meta = [
-        'link'    => $sd['data']['link'] ?? '',
-        'qty'     => (int)($sd['data']['qty'] ?? 0),
-        'speed'   => $sd['data']['speed'] ?? '',
-        'per_day' => (int)($sd['data']['per_day'] ?? 0),
-        'eta'     => $sd['data']['eta'] ?? '',
+        'link'       => $sd['data']['link'] ?? '',
+        'qty'        => (int)($sd['data']['qty'] ?? 0),
+        'speed'      => $sd['data']['speed'] ?? '',
+        'per_day'    => (int)($sd['data']['per_day'] ?? 0),
+        'eta'        => $sd['data']['eta'] ?? '',
+        'chat_id'    => $sd['data']['chat_id'] ?? '',
+        'chat_title' => $sd['data']['chat_title'] ?? '',
+        'admin_ok'   => !empty($sd['data']['admin_ok']),
     ];
     $note = trim($meta['link'] . ' · ' . number_format($meta['qty']) . ' نفر · ' . $meta['speed'] .
                  ($meta['eta'] ? ' · ' . $meta['eta'] : ''));
@@ -1884,6 +1959,9 @@ function notifyAdminOrder($orderId) {
         $text .= "📣 " . h($m['link'] ?? '—') . "\n";
         $text .= "👥 " . number_format((int)($m['qty'] ?? 0)) . " نفر · " . h($m['speed'] ?? '') . "\n";
         if (!empty($m['per_day'])) $text .= "🚀 " . number_format((int)$m['per_day']) . " نفر/روز · ⏳ " . h($m['eta'] ?? '') . "\n";
+        $text .= (!empty($m['admin_ok'])
+            ? "🤖 ربات ادمین است" . (!empty($m['chat_title']) ? ' — ' . h($m['chat_title']) : '')
+            : "⚠️ ادمین بودن ربات تایید نشده") . "\n";
     }
     $text .= "💰 " . fmtNum($o['amount']) . ' ' . h($o['currency']) . "\n";
     $text .= "🧾 <code>" . h($o['id']) . "</code>\n";
@@ -2063,6 +2141,8 @@ function textLabels() {
         'flow_link' => '🔗 سوال لینک کانال', 'flow_link_bad' => '🔗 لینک نامعتبر',
         'flow_qty' => '👥 سوال تعداد', 'flow_qty_bad' => '👥 تعداد نامعتبر',
         'flow_speed' => '⚡️ سوال سرعت', 'flow_rate' => '💰 نمایش نرخ',
+        'flow_addbot' => '🤖 افزودن ربات به کانال', 'flow_admin_ok' => '✅ ادمین شد',
+        'flow_admin_no' => '❌ هنوز ادمین نشده',
         'flow_invoice' => '📋 فاکتور سفارش',
         'sup_ticket' => '💬 پیام ارتباط غیر مستقیم', 'sup_sent' => '✅ پیام ارسال شد',
         'orders_item' => '📊 قالب هر سفارش',
@@ -2078,6 +2158,7 @@ function uiTextLabels() {
         'direct_pay' => 'پرداخت مستقیم', 'topup' => 'افزایش موجودی',
         'my_orders' => 'سفارش‌های من', 'enter_bot' => 'ورود به ربات',
         'get_link' => 'دریافت لینک', 'open' => 'باز کردن', 'hide_menu' => 'بستن منو',
+        'did_admin' => 'ادمین کردم',
         'sup_direct' => 'ارتباط مستقیم', 'sup_indirect' => 'ارتباط غیر مستقیم',
     ];
 }
@@ -2625,9 +2706,28 @@ function masterHandle($update) {
             $sd['data']['eta']     = speedEta($chosen, (int)($sd['data']['qty'] ?? 0));
             setState($uid, 'flow', $sd);
             answerCb(BOT_TOKEN, $cbId);
+            flowNext($uid, $chatId, 'admin');
+            return;
+        }
+        if ($data === 'fadm') {
+            [$ok, $title] = flowCheckAdmin($uid);
+            if (!$ok) {
+                answerCb(BOT_TOKEN, $cbId, '❌ هنوز ادمین نشده', true);
+                $un = botUsername();
+                $rows = [];
+                if ($un) $rows[] = [btnUrl('➕ افزودن ربات به کانال', "https://t.me/{$un}?startchannel&admin=invite_users+promote_members", 'buy')];
+                $rows[] = [btnUI('did_admin', 'fadm', 'confirm')];
+                $rows[] = [btnUI('cancel', 'cancel', 'cancel')];
+                panelShow($uid, $chatId, 'shop',
+                    T('flow_addbot') . "\n\n" . T('flow_admin_no', ['bot' => '@' . h($un)]),
+                    inlineKb($rows));
+                return;
+            }
+            answerCb(BOT_TOKEN, $cbId, '✅ تایید شد');
             flowInvoice($uid, $chatId);
             return;
         }
+
         if ($data === 'fok') {
             answerCb(BOT_TOKEN, $cbId);
             flowFinish($uid, $chatId, $uname);
@@ -3884,6 +3984,24 @@ function handleMasterChatMember($ev) {
     $title     = $chat['title'] ?? (string)$chatId;
     $un        = $chat['username'] ?? '';
     if (!$chatId) return;
+
+    // اگر کاربری که ربات را اضافه کرده وسط جریان سفارش است، همان‌جا تاییدش کن
+    $byUser = (int)($ev['from']['id'] ?? 0);
+    if ($byUser && in_array($newStatus, ['administrator', 'creator'], true)) {
+        $st = getState($byUser);
+        if ($st && $st['action'] === 'flow' && ($st['data']['step'] ?? '') === 'admin') {
+            mutate('states', function (&$x) use ($byUser, $chatId, $title) {
+                $k = (string)$byUser;
+                if (!isset($x[$k])) return;
+                $x[$k]['data']['data']['admin_ok']   = true;
+                $x[$k]['data']['data']['chat_id']    = $chatId;
+                $x[$k]['data']['data']['chat_title'] = $title;
+            });
+            sendMsg(BOT_TOKEN, $byUser, T('flow_admin_ok', ['title' => h($title)]));
+            flowInvoice($byUser, $byUser);
+            return;   // این افزودن مربوط به سفارش بود، نه کانال عضویت اجباری
+        }
+    }
 
     if (in_array($newStatus, ['administrator', 'creator'], true)) {
         $url = $un ? "https://t.me/$un" : '';
