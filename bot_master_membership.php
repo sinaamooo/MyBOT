@@ -458,7 +458,7 @@ function defaultConfig() {
             'flow_qty_bad' => "❌ عدد وارد شده معتبر نیست.\nحداقل <b>{min}</b> و حداکثر <b>{max}</b>.",
             'flow_speed'   => "👉 لطفا سرعت تکمیل سفارش و سرعت ممبرگیری کانال را انتخاب کنید؟",
             'flow_rate'    => "💰 برای کانال فوق، نرخ محاسبه ممبر به شرح زیر می‌باشد:\n\n👥 هزینه هر کا ممبر: <b>{rate}</b> تومان\n\n📗 جهت ادامه دکمه زیر را بزنید.",
-            'flow_invoice' => "📋 کاربر گرامی، جزئیات سفارش شما به شرح زیر است:\n\n📣 برای کانال: <code>{link}</code>\n👥 تعداد کاربر درخواستی: <b>{qty}</b> نفر\n⚙️ نوع درخواستی: {product}\n⚡️ سرعت: {speed}\n💵 مبلغ به ازای هر {per} نفر: <b>{rate}</b>\n\n💳 مبلغ قابل پرداخت: <b>{total} {currency}</b>\n\n❗️ تمامی سفارش‌ها بصورت آنی ثبت شده و بصورت سیستمی انجام می‌گیرند.\n\n👇 درصورت تایید، دکمه زیر را بزنید.",
+            'flow_invoice' => "📋 کاربر گرامی، جزئیات سفارش شما به شرح زیر است:\n\n📣 برای کانال: <code>{link}</code>\n👥 تعداد کاربر درخواستی: <b>{qty}</b> نفر\n⚙️ نوع درخواستی: {product}\n⚡️ سرعت: {speed}\n🚀 سرعت ممبرگیری: <b>{per_day}</b> نفر در روز\n⏳ زمان تقریبی تکمیل: <b>{eta}</b>\n💵 مبلغ به ازای هر {per} نفر: <b>{rate}</b>\n\n💳 مبلغ قابل پرداخت: <b>{total} {currency}</b>\n\n❗️ تمامی سفارش‌ها بصورت آنی ثبت شده و بصورت سیستمی انجام می‌گیرند.\n\n👇 درصورت تایید، دکمه زیر را بزنید.",
             'sup_ticket'   => "💬 <b>ارتباط غیر مستقیم</b>\n\nپیام خود را ارسال کنید، ادمین بررسی می‌کند.",
             'sup_sent'     => "✅ پیام شما برای پشتیبانی ارسال شد.\nبه زودی پاسخ داده می‌شود.",
             'orders_item'  => "{status}\n   {title}\n   💰 {amount} {currency}\n   🧾 <code>{id}</code>\n   📅 {date}\n",
@@ -745,6 +745,71 @@ function payReferralCommission($buyerId, $amount) {
 }
 
 // ============================================================
+// 🖼 اسلات پیام — به‌جای پیام جدید، همان پیام قبلی را عوض می‌کند
+// ============================================================
+//
+// دو اسلات جدا داریم تا بخش‌ها روی هم نیفتند:
+//   'menu' → حساب کاربری، پیگیری سفارش، پشتیبانی، اعتماد، زیرمجموعه
+//   'shop' → خرید محصول و کل جریان سفارش
+// هر کدام پیام خودش را عوض می‌کند و آن یکی دست‌نخورده می‌ماند.
+
+function slotGet($uid, $slot) {
+    $u = getUser($uid);
+    $v = $u['slots'][$slot] ?? null;
+    return $v ? (int)$v : null;
+}
+
+function slotSet($uid, $slot, $mid) {
+    mutate('users', function (&$a) use ($uid, $slot, $mid) {
+        $k = (string)$uid;
+        if (!isset($a[$k])) return;
+        if (!is_array($a[$k]['slots'] ?? null)) $a[$k]['slots'] = [];
+        if ($mid) $a[$k]['slots'][$slot] = (int)$mid;
+        else unset($a[$k]['slots'][$slot]);
+    });
+}
+
+function slotClear($uid, $slot = null) {
+    mutate('users', function (&$a) use ($uid, $slot) {
+        $k = (string)$uid;
+        if (!isset($a[$k])) return;
+        if ($slot === null) $a[$k]['slots'] = [];
+        else unset($a[$k]['slots'][$slot]);
+    });
+}
+
+/**
+ * پیام یک اسلات را نشان می‌دهد: اگر پیام قبلی هست ویرایشش می‌کند،
+ * وگرنه پیام تازه می‌فرستد و شناسه‌اش را نگه می‌دارد.
+ */
+function panelShow($uid, $chatId, $slot, $text, $markup = null) {
+    $mid = slotGet($uid, $slot);
+
+    if ($mid) {
+        $data = [
+            'chat_id' => $chatId, 'message_id' => $mid, 'text' => $text,
+            'parse_mode' => 'HTML', 'disable_web_page_preview' => 'true',
+        ];
+        if ($markup) $data['reply_markup'] = is_string($markup) ? $markup : json_encode($markup);
+        $r = tg(BOT_TOKEN, 'editMessageText', $data);
+
+        if (empty($r['ok']) && $markup && !is_string($markup) && isStyleError($r)) {
+            $data['reply_markup'] = json_encode(stripStyles($markup));
+            $r = tg(BOT_TOKEN, 'editMessageText', $data);
+        }
+        if (!empty($r['ok'])) return $mid;
+
+        // «تغییری نکرده» یعنی پیام سر جایش هست — همان را نگه دار
+        if (str_contains(strtolower($r['description'] ?? ''), 'not modified')) return $mid;
+    }
+
+    $r = sendMsg(BOT_TOKEN, $chatId, $text, $markup);
+    $nid = $r['result']['message_id'] ?? null;
+    slotSet($uid, $slot, $nid);
+    return $nid;
+}
+
+// ============================================================
 // 🧠 وضعیت گفتگو
 // ============================================================
 
@@ -781,9 +846,9 @@ class Product
                     'on' => false, 'ask_link' => true, 'ask_qty' => true,
                     'min' => 1000, 'max' => 100000, 'per' => 1000,
                     'speeds' => [
-                        ['id' => 's1', 'text' => 'کند',       'emoji' => '🐢', 'mult' => 1,   'color' => 'primary', 'icon' => '', 'on' => true],
-                        ['id' => 's2', 'text' => 'متوسط',     'emoji' => '🚶', 'mult' => 1.3, 'color' => 'success', 'icon' => '', 'on' => true],
-                        ['id' => 's3', 'text' => 'سرعت بالا', 'emoji' => '⚡️', 'mult' => 1.7, 'color' => 'danger',  'icon' => '', 'on' => true],
+                        ['id' => 's1', 'text' => 'کند',       'emoji' => '🐢', 'mult' => 1,   'per_day' => 500,  'color' => 'primary', 'icon' => '', 'on' => true],
+                        ['id' => 's2', 'text' => 'متوسط',     'emoji' => '🚶', 'mult' => 1.3, 'per_day' => 2000, 'color' => 'success', 'icon' => '', 'on' => true],
+                        ['id' => 's3', 'text' => 'سرعت بالا', 'emoji' => '⚡️', 'mult' => 1.7, 'per_day' => 8000, 'color' => 'danger',  'icon' => '', 'on' => true],
                     ],
                     'speed_layout' => '1',
                 ],
@@ -822,15 +887,15 @@ class Order
     public static function all() { return load('orders'); }
     public static function get($id) { $a = load('orders'); return $a[$id] ?? null; }
 
-    public static function create($userId, $username, $type, $productId, $amount, $currency) {
+    public static function create($userId, $username, $type, $productId, $amount, $currency, $meta = []) {
         $id = uid('or');
-        mutate('orders', function (&$a) use ($id, $userId, $username, $type, $productId, $amount, $currency) {
+        mutate('orders', function (&$a) use ($id, $userId, $username, $type, $productId, $amount, $currency, $meta) {
             $a[$id] = [
                 'id' => $id, 'user_id' => (int)$userId, 'username' => $username,
                 'type' => $type,                 // product | topup
                 'product_id' => $productId,
                 'amount' => (float)$amount, 'currency' => $currency,
-                'status' => self::PENDING,
+                'status' => self::PENDING, 'meta' => $meta,
                 'receipt_type' => null, 'receipt' => null,
                 'created_at' => nowStr(), 'decided_at' => null, 'decided_by' => null,
             ];
@@ -1386,7 +1451,7 @@ function showAccount($uid, $chatId, $extra = []) {
     ]);
     $rows = [[btnUI('topup', 'menu_topup', 'buy')], [btnUI('my_orders', 'menu_orders', 'info')]];
     foreach ($extra as $r) $rows[] = $r;
-    sendMsg(BOT_TOKEN, $chatId, $text, inlineKb($rows));
+    panelShow($uid, $chatId, 'menu', $text, inlineKb($rows));
 }
 
 function productBtn($p, $uid) {
@@ -1418,7 +1483,7 @@ function activeProducts() {
 function showProducts($uid, $chatId, $extra = []) {
     $prods = activeProducts();
     if (!$prods) {
-        sendMsg(BOT_TOKEN, $chatId, T('buy_empty'), $extra ? inlineKb($extra) : null);
+        panelShow($uid, $chatId, 'shop', T('buy_empty'), $extra ? inlineKb($extra) : null);
         return;
     }
 
@@ -1450,7 +1515,7 @@ function showProducts($uid, $chatId, $extra = []) {
         if ($line) $rows[] = $line;
     }
     foreach ($extra as $r) $rows[] = $r;   // دکمه‌های شیشه‌ای دلخواه، زیر محصولات
-    sendMsg(BOT_TOKEN, $chatId, $text, inlineKb($rows));
+    panelShow($uid, $chatId, 'shop', $text, inlineKb($rows));
 }
 
 /** نمایش یک محصول تکی — برای دکمه‌های سفارشی «محصول» */
@@ -1461,18 +1526,25 @@ function showOneProduct($uid, $chatId, $p) {
     if (!empty($p['desc'])) $text .= h($p['desc']) . "\n\n";
     $text .= "💰 قیمت: <b>" . fmtNum($p['price']) . ' ' . h($p['currency']) . "</b>\n";
     $text .= "👥 خریداران: {$cap}";
-    sendMsg(BOT_TOKEN, $chatId, $text, inlineKb([[productBtn($p, $uid)]]));
+    panelShow($uid, $chatId, 'shop', $text,
+        inlineKb([[productBtn($p, $uid)], [btnUI('back', 'menu_buy', 'nav')]]));
 }
 
 function showOrders($uid, $chatId, $extra = []) {
     $orders = Order::forUser($uid);
-    if (!$orders) { sendMsg(BOT_TOKEN, $chatId, T('orders_empty'), $extra ? inlineKb($extra) : null); return; }
+    if (!$orders) { panelShow($uid, $chatId, 'menu', T('orders_empty'), $extra ? inlineKb($extra) : null); return; }
 
     $text = T('orders_head') . "\n";
     foreach (array_slice($orders, 0, 15) as $o) {
         $title = $o['type'] === 'topup'
             ? '➕ شارژ کیف پول'
             : '🛒 ' . h(Product::get($o['product_id'])['name'] ?? '—');
+        $m = $o['meta'] ?? [];
+        if ($m) {
+            $title .= "\n   📣 " . h($m['link'] ?? '—');
+            $title .= "\n   👥 " . number_format((int)($m['qty'] ?? 0)) . ' نفر · ' . h($m['speed'] ?? '');
+            if (!empty($m['eta'])) $title .= "\n   ⏳ " . h($m['eta']);
+        }
         $text .= "\n" . T('orders_item', [
             'status'   => Order::statusLabel($o['status']),
             'title'    => $title,
@@ -1483,7 +1555,7 @@ function showOrders($uid, $chatId, $extra = []) {
             'type'     => $o['type'] === 'topup' ? 'شارژ' : 'محصول',
         ]);
     }
-    sendMsg(BOT_TOKEN, $chatId, $text, $extra ? inlineKb($extra) : null);
+    panelShow($uid, $chatId, 'menu', $text, $extra ? inlineKb($extra) : null);
 }
 
 function showReferral($uid, $chatId, $extra = []) {
@@ -1492,12 +1564,13 @@ function showReferral($uid, $chatId, $extra = []) {
     $un = $me['result']['username'] ?? '';
     $link = $un ? "https://t.me/{$un}?start=ref{$uid}" : '—';
 
-    sendMsg(BOT_TOKEN, $chatId, T('referral', [
+    $refText = T('referral', [
         'percent'    => cfg()['referral']['percent'],
         'link'       => $link,
         'referrals'  => countReferrals($uid),
         'ref_earned' => fmtNum($u['ref_earned'] ?? 0),
-    ]), $extra ? inlineKb($extra) : null);
+    ]);
+    panelShow($uid, $chatId, 'menu', $refText, $extra ? inlineKb($extra) : null);
 }
 
 function supMainBtn($which, $cb) {
@@ -1514,15 +1587,14 @@ function supMainBtn($which, $cb) {
 function showSupport($uid, $chatId, $extra = []) {
     $rows = [[supMainBtn('direct', 'sup_direct')], [supMainBtn('indirect', 'sup_list')]];
     foreach ($extra as $r) $rows[] = $r;
-    sendMsg(BOT_TOKEN, $chatId, T('support'), inlineKb($rows));
+    panelShow($uid, $chatId, 'menu', T('support'), inlineKb($rows));
 }
 
 /** ارتباط غیر مستقیم = ارسال پیام برای ادمین */
 function showSupportIndirect($uid, $chatId, $msgId = null) {
     setState($uid, 'ticket');
-    $rows = [[btnUI('cancel', 'menu_support', 'cancel')]];
-    if ($msgId) editMsg(BOT_TOKEN, $chatId, $msgId, T('sup_ticket'), inlineKb($rows));
-    else sendMsg(BOT_TOKEN, $chatId, T('sup_ticket'), inlineKb($rows));
+    panelShow($uid, $chatId, 'menu', T('sup_ticket'),
+        inlineKb([[btnUI('cancel', 'menu_support', 'cancel')]]));
 }
 
 function startTopup($uid, $chatId) {
@@ -1540,8 +1612,8 @@ function walletFor($currency) {
     return ['کارت به کارت', $card];
 }
 
-function createOrderAndAsk($uid, $chatId, $username, $type, $productId, $amount, $currency, $title) {
-    $oid = Order::create($uid, $username, $type, $productId, $amount, $currency);
+function createOrderAndAsk($uid, $chatId, $username, $type, $productId, $amount, $currency, $title, $meta = []) {
+    $oid = Order::create($uid, $username, $type, $productId, $amount, $currency, $meta);
     [$method, $wallet] = walletFor($currency);
     $text = T('pay_info', [
         'title' => $title, 'amount' => fmtNum($amount), 'currency' => h($currency),
@@ -1559,7 +1631,7 @@ function flowStart($uid, $chatId, $p) {
     $f = $p['flow'] ?? [];
     setState($uid, 'flow', ['pid' => $p['id'], 'step' => 'link', 'data' => []]);
     if (!empty($f['ask_link'])) {
-        sendMsg(BOT_TOKEN, $chatId, T('flow_link'), inlineKb([[btnUI('cancel', 'cancel', 'cancel')]]));
+        panelShow($uid, $chatId, 'shop', T('flow_link'), inlineKb([[btnUI('cancel', 'cancel', 'cancel')]]));
         return;
     }
     flowNext($uid, $chatId, 'qty');
@@ -1577,7 +1649,7 @@ function flowNext($uid, $chatId, $step) {
 
     if ($step === 'qty') {
         if (empty($f['ask_qty'])) { flowNext($uid, $chatId, 'speed'); return; }
-        sendMsg(BOT_TOKEN, $chatId,
+        panelShow($uid, $chatId, 'shop',
             T('flow_qty', ['min' => number_format((int)$f['min']), 'max' => number_format((int)$f['max'])]),
             inlineKb([[btnUI('cancel', 'cancel', 'cancel')]]));
         return;
@@ -1588,8 +1660,11 @@ function flowNext($uid, $chatId, $step) {
         foreach ($f['speeds'] ?? [] as $sp) if (!isset($sp['on']) || !empty($sp['on'])) $speeds[] = $sp;
 
         if (count($speeds) < 2) {
-            $sd['data']['speed'] = speedLabel($speeds[0] ?? []);
-            $sd['data']['mult']  = (float)($speeds[0]['mult'] ?? 1);
+            $one = $speeds[0] ?? [];
+            $sd['data']['speed']   = speedLabel($one);
+            $sd['data']['mult']    = (float)($one['mult'] ?? 1);
+            $sd['data']['per_day'] = (int)($one['per_day'] ?? 0);
+            $sd['data']['eta']     = speedEta($one, (int)($sd['data']['qty'] ?? 0));
             setState($uid, 'flow', $sd);
             flowInvoice($uid, $chatId);
             return;
@@ -1597,7 +1672,7 @@ function flowNext($uid, $chatId, $step) {
 
         $items = [];
         foreach ($speeds as $sp) {
-            $b = ['text' => speedLabel($sp), 'callback_data' => 'fsp_' . $sp['id']];
+            $b = ['text' => speedBtnLabel($sp), 'callback_data' => 'fsp_' . $sp['id']];
             if (isStyle($sp['color'] ?? '')) $b['style'] = $sp['color'];
             elseif (gs('buy')) $b['style'] = gs('buy');
             if (!empty($sp['icon'])) $b['icon_custom_emoji_id'] = (string)$sp['icon'];
@@ -1605,13 +1680,31 @@ function flowNext($uid, $chatId, $step) {
         }
         $rows = layoutRows($items, $f['speed_layout'] ?? '1');
         $rows[] = [btnUI('cancel', 'cancel', 'cancel')];
-        sendMsg(BOT_TOKEN, $chatId, T('flow_speed'), inlineKb($rows));
+        $head = ($sd['data']['rate_note'] ?? '') !== '' ? $sd['data']['rate_note'] . "\n\n" : '';
+        panelShow($uid, $chatId, 'shop', $head . T('flow_speed'), inlineKb($rows));
         return;
     }
 }
 
 function speedLabel($sp) {
     return trim(($sp['emoji'] ?? '') . ' ' . ($sp['text'] ?? '—'));
+}
+
+/** زمان تقریبی تکمیل سفارش بر اساس سرعت انتخابی */
+function speedEta($sp, $qty) {
+    $perDay = (int)($sp['per_day'] ?? 0);
+    if ($perDay <= 0 || $qty <= 0) return '—';
+    $days = $qty / $perDay;
+    if ($days < 1)  return 'کمتر از یک روز';
+    if ($days < 2)  return 'حدود ۱ روز';
+    return 'حدود ' . ceil($days) . ' روز';
+}
+
+/** برچسب دکمه سرعت با سرعت روزانه */
+function speedBtnLabel($sp) {
+    $l = speedLabel($sp);
+    $pd = (int)($sp['per_day'] ?? 0);
+    return $pd > 0 ? $l . ' — ' . number_format($pd) . '/روز' : $l;
 }
 
 /** محاسبه مبلغ نهایی */
@@ -1640,12 +1733,14 @@ function flowInvoice($uid, $chatId) {
         'qty'      => number_format($qty),
         'product'  => h($p['name']),
         'speed'    => h($sd['data']['speed'] ?? '—'),
+        'per_day'  => number_format((int)($sd['data']['per_day'] ?? 0)),
+        'eta'      => h($sd['data']['eta'] ?? '—'),
         'per'      => number_format((int)($p['flow']['per'] ?? 1000)),
         'rate'     => fmtNum($rate),
         'total'    => fmtNum($total),
         'currency' => h($p['currency']),
     ]);
-    sendMsg(BOT_TOKEN, $chatId, $text, inlineKb([
+    panelShow($uid, $chatId, 'shop', $text, inlineKb([
         [btnCb('✅ موافقم، نهایی سازی سفارش', 'fok', 'confirm')],
         [btnUI('cancel', 'cancel', 'cancel')],
     ]));
@@ -1662,9 +1757,16 @@ function flowFinish($uid, $chatId, $uname) {
     $total = (float)($sd['data']['total'] ?? 0);
     if ($total <= 0) { clearState($uid); return false; }
 
-    $note = trim(($sd['data']['link'] ?? '') . ' · ' . number_format((int)($sd['data']['qty'] ?? 0)) .
-                 ' نفر · ' . ($sd['data']['speed'] ?? ''));
-    clearState($uid);
+    $meta = [
+        'link'    => $sd['data']['link'] ?? '',
+        'qty'     => (int)($sd['data']['qty'] ?? 0),
+        'speed'   => $sd['data']['speed'] ?? '',
+        'per_day' => (int)($sd['data']['per_day'] ?? 0),
+        'eta'     => $sd['data']['eta'] ?? '',
+    ];
+    $note = trim($meta['link'] . ' · ' . number_format($meta['qty']) . ' نفر · ' . $meta['speed'] .
+                 ($meta['eta'] ? ' · ' . $meta['eta'] : ''));
+    setState($uid, 'flow_meta', $meta);
 
     $bal = (float)(getUser($uid)['balance'] ?? 0);
     $rows = [];
@@ -1674,7 +1776,7 @@ function flowFinish($uid, $chatId, $uname) {
     $rows[] = [btnCb(UT('direct_pay'), 'fdpay_' . $p['id'] . '|' . $total, 'buy')];
     $rows[] = [btnUI('cancel', 'cancel', 'cancel')];
 
-    sendMsg(BOT_TOKEN, $chatId,
+    panelShow($uid, $chatId, 'shop',
         "🧾 <b>" . h($p['name']) . "</b>\n" . h($note) .
         "\n\n💳 مبلغ: <b>" . fmtNum($total) . ' ' . h($p['currency']) . "</b>\n\nروش پرداخت را انتخاب کنید:",
         inlineKb($rows));
@@ -1762,6 +1864,12 @@ function notifyAdminOrder($orderId) {
     $text  = "🧾 <b>سفارش جدید — منتظر تایید</b>\n\n";
     $text .= "👤 کاربر: " . h($uname) . " (<code>{$o['user_id']}</code>)\n";
     $text .= "📦 {$title}\n";
+    $m = $o['meta'] ?? [];
+    if ($m) {
+        $text .= "📣 " . h($m['link'] ?? '—') . "\n";
+        $text .= "👥 " . number_format((int)($m['qty'] ?? 0)) . " نفر · " . h($m['speed'] ?? '') . "\n";
+        if (!empty($m['per_day'])) $text .= "🚀 " . number_format((int)$m['per_day']) . " نفر/روز · ⏳ " . h($m['eta'] ?? '') . "\n";
+    }
     $text .= "💰 " . fmtNum($o['amount']) . ' ' . h($o['currency']) . "\n";
     $text .= "🧾 <code>" . h($o['id']) . "</code>\n";
     $text .= "📅 " . h($o['created_at']) . "\n\n";
@@ -2486,8 +2594,10 @@ function masterHandle($update) {
             $chosen = null;
             foreach (($p['flow']['speeds'] ?? []) as $sp) if ($sp['id'] === $sid) $chosen = $sp;
             if (!$chosen) { answerCb(BOT_TOKEN, $cbId, 'نامعتبر', true); return; }
-            $sd['data']['speed'] = speedLabel($chosen);
-            $sd['data']['mult']  = (float)$chosen['mult'];
+            $sd['data']['speed']   = speedLabel($chosen);
+            $sd['data']['mult']    = (float)$chosen['mult'];
+            $sd['data']['per_day'] = (int)($chosen['per_day'] ?? 0);
+            $sd['data']['eta']     = speedEta($chosen, (int)($sd['data']['qty'] ?? 0));
             setState($uid, 'flow', $sd);
             answerCb(BOT_TOKEN, $cbId);
             flowInvoice($uid, $chatId);
@@ -2508,11 +2618,15 @@ function masterHandle($update) {
             $p = Product::get($pid);
             if (!$p || $amt <= 0) { answerCb(BOT_TOKEN, $cbId, 'نامعتبر', true); return; }
 
+            $mst = getState($uid);
+            $meta = ($mst && $mst['action'] === 'flow_meta') ? $mst['data'] : [];
+
             if ($wallet) {
                 $bal = (float)(getUser($uid)['balance'] ?? 0);
                 if ($bal < $amt) { answerCb(BOT_TOKEN, $cbId, '❌ موجودی کافی نیست', true); return; }
                 addBalance($uid, -$amt);
-                $oid = Order::create($uid, $uname, 'product', $pid, $amt, $p['currency']);
+                clearState($uid);
+                $oid = Order::create($uid, $uname, 'product', $pid, $amt, $p['currency'], $meta);
                 Order::attachReceipt($oid, 'text', 'پرداخت از کیف پول');
                 Order::approve($oid, ADMIN_ID);
                 answerCb(BOT_TOKEN, $cbId, '✅ ثبت شد');
@@ -2522,7 +2636,8 @@ function masterHandle($update) {
                 return;
             }
             answerCb(BOT_TOKEN, $cbId);
-            createOrderAndAsk($uid, $chatId, $uname, 'product', $pid, $amt, $p['currency'], '🛒 ' . h($p['name']));
+            clearState($uid);
+            createOrderAndAsk($uid, $chatId, $uname, 'product', $pid, $amt, $p['currency'], '🛒 ' . h($p['name']), $meta);
             return;
         }
 
@@ -3144,6 +3259,7 @@ function masterHandle($update) {
         $ref = (str_starts_with($arg, 'ref')) ? (int)substr($arg, 3) : null;
         touchUser($uid, $uname, $fname, $ref);
         clearState($uid);
+        slotClear($uid);   // منوی تازه، پیام‌های قدیمی رها می‌شوند
         showHome($uid, $chatId, $fname);
         hintHideOnce($uid, $chatId);
         return;
@@ -3237,8 +3353,8 @@ function masterHandle($update) {
             $sd['data']['qty'] = $q;
             setState($uid, 'flow', $sd);
 
-            // نرخ پایه را نشان بده، بعد سرعت
-            sendMsg(BOT_TOKEN, $chatId, T('flow_rate', ['rate' => fmtNum($p['price'])]));
+            $sd['data']['rate_note'] = T('flow_rate', ['rate' => fmtNum($p['price'])]);
+            setState($uid, 'flow', $sd);
             flowNext($uid, $chatId, 'speed');
             return;
         }
@@ -3840,7 +3956,7 @@ function runMenuAction($act, $uid, $chatId, $uname, $fname) {
         case 'referral': showReferral($uid, $chatId, $subs); break;
         case 'orders':   showOrders($uid, $chatId, $subs); break;
         case 'support':  showSupport($uid, $chatId, $subs); break;
-        case 'trust':    sendMsg(BOT_TOKEN, $chatId, T('trust'), $subs ? inlineKb($subs) : null); break;
+        case 'trust':    panelShow($uid, $chatId, 'menu', T('trust'), $subs ? inlineKb($subs) : null); break;
         default:         showHome($uid, $chatId, $fname); break;
     }
 }
