@@ -77,8 +77,10 @@ function fmtNum($n) { return rtrim(rtrim(number_format((float)$n, 2, '.', ','), 
 // 🔌 تلگرام API
 // ============================================================
 
+if (!defined('TG_API_BASE')) define('TG_API_BASE', 'https://api.telegram.org');
+
 function tg($token, $method, $data = [], $timeout = 20) {
-    $ch = curl_init("https://api.telegram.org/bot{$token}/{$method}");
+    $ch = curl_init(TG_API_BASE . "/bot{$token}/{$method}");
     curl_setopt_array($ch, [
         CURLOPT_POST => true,
         CURLOPT_POSTFIELDS => http_build_query($data),
@@ -2002,6 +2004,7 @@ function admHome($chatId, $msgId = null) {
     $rows = [
         [btnCb('🎨 دکمه‌ها', 'ebuttons', 'admin'), btnCb('📝 متن‌ها', 'etexts', 'admin')],
         [btnCb('💠 رنگ دکمه‌های شیشه‌ای', 'eglass', 'admin')],
+        [btnCb('🔧 راه‌اندازی خودکار', 'setup', 'confirm')],
         [btnCb('🛒 محصولات', 'eprods', 'admin'),
          btnCb('🤖 ربات‌های زیرمجموعه', 'eupload', 'admin')],
         [btnCb('🧾 سفارش‌ها', 'adm_orders', 'admin'), btnCb('🤖 ربات‌ها', 'adm_bots', 'admin')],
@@ -2446,6 +2449,103 @@ function edUpText($chatId, $msgId, $key) {
     editMsg(BOT_TOKEN, $chatId, $msgId, $text, inlineKb($rows));
 }
 
+/**
+ * 🔧 راه‌اندازی خودکار — همه چیز را برای فروش ممبر آماده می‌کند.
+ * چیزی را که خودش می‌تواند درست کند، درست می‌کند؛ بقیه را گزارش می‌دهد.
+ */
+function autoSetup($chatId, $msgId = null) {
+    $log = [];
+    $prods = Product::all();
+
+    // ۱) محصولات: جریان سفارش را روشن کن
+    $flowOn = 0;
+    foreach ($prods as $p) {
+        if (empty($p['flow']['on']) || empty($p['flow']['ask_admin'])) {
+            mutate('products', function (&$a) use ($p) {
+                if (!is_array($a[$p['id']]['flow'] ?? null)) $a[$p['id']]['flow'] = [];
+                $a[$p['id']]['flow'] = array_merge(
+                    ['ask_link' => true, 'ask_qty' => true, 'ask_admin' => true,
+                     'min' => 1000, 'max' => 100000, 'per' => 1000, 'speed_layout' => '1',
+                     'speeds' => [
+                        ['id' => 's1', 'text' => 'کند',       'emoji' => '🐢', 'mult' => 1,   'per_day' => 500,  'color' => 'primary', 'icon' => '', 'on' => true],
+                        ['id' => 's2', 'text' => 'متوسط',     'emoji' => '🚶', 'mult' => 1.3, 'per_day' => 2000, 'color' => 'success', 'icon' => '', 'on' => true],
+                        ['id' => 's3', 'text' => 'سرعت بالا', 'emoji' => '⚡️', 'mult' => 1.7, 'per_day' => 8000, 'color' => 'danger',  'icon' => '', 'on' => true],
+                     ]],
+                    $a[$p['id']]['flow'],
+                    ['on' => true, 'ask_admin' => true]
+                );
+            });
+            $flowOn++;
+        }
+    }
+    if ($flowOn) $log[] = "✅ جریان سفارش برای <b>{$flowOn}</b> محصول روشن شد";
+
+    // ۲) زیردکمه‌های تکراری: چون خود لیست محصولات دکمه می‌سازد
+    $removed = 0; $bound = 0;
+    foreach (cfg()['buttons'] as $bid => $b) {
+        foreach ($b['subs'] ?? [] as $sub) {
+            $match = productByName($sub['text'] ?? '');
+            if (!$match) continue;
+            if (isPlaceholder($sub['value'] ?? '') || ($sub['action'] ?? '') === 'product') {
+                // اگر دکمه مادر همان «خرید محصول» است، تکراری است → حذف
+                if (($b['action'] ?? '') === '' && $bid === 'buy') {
+                    cfgSet(function (&$c) use ($bid, $sub) {
+                        $c['buttons'][$bid]['subs'] = array_values(array_filter(
+                            $c['buttons'][$bid]['subs'] ?? [],
+                            fn($x) => ($x['id'] ?? '') !== ($sub['id'] ?? '')));
+                    });
+                    $removed++;
+                } else {
+                    subMutate($bid, $sub['id'], function (&$x) use ($match) {
+                        $x['action'] = 'product';
+                        $x['value']  = $match['id'];
+                    });
+                    $bound++;
+                }
+            }
+        }
+    }
+    if ($removed) $log[] = "🧹 <b>{$removed}</b> دکمه تکراری حذف شد (خود لیست محصولات دکمه می‌سازد)";
+    if ($bound)   $log[] = "🔗 <b>{$bound}</b> دکمه به محصول وصل شد";
+
+    // ۳) دکمه «خرید محصول» روشن باشد
+    if (empty(cfg()['buttons']['buy']['on'])) {
+        cfgSet(function (&$c) { $c['buttons']['buy']['on'] = true; });
+        $log[] = "✅ دکمه «خرید محصول» روشن شد";
+    }
+
+    // ۴) گزارش نهایی
+    $text  = "🔧 <b>راه‌اندازی خودکار</b>\n\n";
+    $text .= $log ? implode("\n", $log) . "\n\n" : "همه چیز از قبل درست بود.\n\n";
+
+    $active = array_filter($prods, fn($p) => !empty($p['active']));
+    $text .= "📦 محصولات: <b>" . count($prods) . "</b> (فعال: " . count($active) . ")\n";
+    foreach (array_slice($prods, 0, 8) as $p) {
+        $pf = Product::get($p['id']);
+        $text .= "   " . (!empty($pf['active']) ? '✅' : '❌') . ' ' .
+                 h(trim(($pf['emoji'] ?? '') . ' ' . $pf['name'])) . ' — ' .
+                 fmtNum($pf['price']) . ' ' . h($pf['currency']) .
+                 (!empty($pf['flow']['on']) ? ' 🔄' : ' ⚠️ بدون جریان') . "\n";
+    }
+
+    $probs = [];
+    if (!$prods) $probs[] = "هیچ محصولی نساخته‌اید — از پنل وب → 🛒 محصولات بسازید";
+    if ($prods && !$active) $probs[] = "هیچ محصولی فعال نیست";
+    $w = cfg()['wallets'];
+    if (trim($w['card'] ?? '') === '' && trim($w['usdt'] ?? '') === '')
+        $probs[] = "مقصد پرداخت تنظیم نشده — پنل وب → ⚙️ تنظیمات";
+
+    if ($probs) $text .= "\n⚠️ <b>باقی‌مانده:</b>\n• " . implode("\n• ", $probs) . "\n";
+    else $text .= "\n✅ <b>آماده فروش است.</b>\n";
+
+    $text .= "\n🧪 تست کنید: /start ← دکمه خرید محصول ← روی یک محصول بزنید\n";
+    $text .= "باید بپرسد: لینک کانال ← تعداد ← سرعت ← ادمین کردن ربات ← فاکتور";
+
+    $rows = [[btnCb('🔧 دوباره بررسی کن', 'setup', 'admin')], [btnUI('back', 'adm_home', 'nav')]];
+    if ($msgId) editMsg(BOT_TOKEN, $chatId, $msgId, $text, inlineKb($rows));
+    else sendMsg(BOT_TOKEN, $chatId, $text, inlineKb($rows));
+}
+
 /** 🛒 فهرست محصولات در ربات */
 function edProducts($chatId, $msgId) {
     $rows = [];
@@ -2846,7 +2946,7 @@ function masterHandle($update) {
 
         // ---------------- ادمین ----------------
         // همه کال‌بک‌های مدیریتی — شامل ویرایشگر داخل ربات
-        $adminPrefixes = ['aok_', 'ano_', 'adm_', 'eb', 'et', 'eg', 'eu', 'sb', 'ep', 'esp', 'reply_'];
+        $adminPrefixes = ['aok_', 'ano_', 'adm_', 'eb', 'et', 'eg', 'eu', 'sb', 'ep', 'esp', 'reply_', 'setup'];
         $isAdminCb = false;
         foreach ($adminPrefixes as $pref) {
             if (str_starts_with($data, $pref)) { $isAdminCb = true; break; }
@@ -3004,6 +3104,8 @@ function masterHandle($update) {
             edSub($chatId, $msgId, $bid, $sid);
             return;
         }
+
+        if ($data === 'setup') { answerCb(BOT_TOKEN, $cbId, '🔧'); autoSetup($chatId, $msgId); return; }
 
         // ---------- محصولات ----------
         if ($data === 'eprods') { answerCb(BOT_TOKEN, $cbId); edProducts($chatId, $msgId); return; }
@@ -3471,6 +3573,11 @@ function masterHandle($update) {
         return;
     }
     if ($text === '/id')     { sendMsg(BOT_TOKEN, $chatId, "🆔 <code>{$uid}</code>"); return; }
+    if ($text === '/setup') {
+        if ($uid !== ADMIN_ID) return;
+        autoSetup($chatId);
+        return;
+    }
     if ($text === '/emoji') {
         if ($uid !== ADMIN_ID) return;
         setState($uid, 'grab_emoji');
@@ -4047,7 +4154,7 @@ function handleMasterChatMember($ev) {
                 $x[$k]['data']['data']['chat_id']    = $chatId;
                 $x[$k]['data']['data']['chat_title'] = $title;
             });
-            sendMsg(BOT_TOKEN, $byUser, T('flow_admin_ok', ['title' => h($title)]));
+            // پیام تایید داخل خود فاکتور می‌آید، پس پیام جدا نمی‌فرستیم
             flowInvoice($byUser, $byUser);
             return;   // این افزودن مربوط به سفارش بود، نه کانال عضویت اجباری
         }
