@@ -782,8 +782,22 @@ function slotClear($uid, $slot = null) {
  * پیام یک اسلات را نشان می‌دهد: اگر پیام قبلی هست ویرایشش می‌کند،
  * وگرنه پیام تازه می‌فرستد و شناسه‌اش را نگه می‌دارد.
  */
-function panelShow($uid, $chatId, $slot, $text, $markup = null) {
+function panelShow($uid, $chatId, $slot, $text, $markup = null, $replyTo = null) {
     $mid = slotGet($uid, $slot);
+
+    // اگر کاربر دکمه منو را زده، جواب باید ریپلای همان پیام باشد:
+    // پیام قبلی این اسلات حذف و پیام تازه به‌عنوان ریپلای فرستاده می‌شود
+    // تا هم شلوغ نشود، هم معلوم باشد جواب کدام دکمه است.
+    if ($replyTo) {
+        if ($mid) delMsg(BOT_TOKEN, $chatId, $mid);
+        $r = sendMsg(BOT_TOKEN, $chatId, $text, $markup, [
+            'reply_to_message_id' => $replyTo,
+            'allow_sending_without_reply' => 'true',
+        ]);
+        $nid = $r['result']['message_id'] ?? null;
+        slotSet($uid, $slot, $nid);
+        return $nid;
+    }
 
     if ($mid) {
         $data = [
@@ -1434,7 +1448,7 @@ function hintHideOnce($uid, $chatId) {
     sendMsg(BOT_TOKEN, $chatId, "ℹ️ برای بستن منو هر وقت خواستید /hide را بزنید.");
 }
 
-function showAccount($uid, $chatId, $extra = []) {
+function showAccount($uid, $chatId, $extra = [], $replyTo = null) {
     $u = getUser($uid) ?: [];
     $orders = 0;
     foreach (Order::forUser($uid) as $o) if ($o['status'] === Order::APPROVED) $orders++;
@@ -1451,7 +1465,7 @@ function showAccount($uid, $chatId, $extra = []) {
     ]);
     $rows = [[btnUI('topup', 'menu_topup', 'buy')], [btnUI('my_orders', 'menu_orders', 'info')]];
     foreach ($extra as $r) $rows[] = $r;
-    panelShow($uid, $chatId, 'menu', $text, inlineKb($rows));
+    panelShow($uid, $chatId, 'menu', $text, inlineKb($rows), $replyTo);
 }
 
 function productBtn($p, $uid) {
@@ -1480,10 +1494,10 @@ function activeProducts() {
     return $list;
 }
 
-function showProducts($uid, $chatId, $extra = []) {
+function showProducts($uid, $chatId, $extra = [], $replyTo = null) {
     $prods = activeProducts();
     if (!$prods) {
-        panelShow($uid, $chatId, 'shop', T('buy_empty'), $extra ? inlineKb($extra) : null);
+        panelShow($uid, $chatId, 'shop', T('buy_empty'), $extra ? inlineKb($extra) : null, $replyTo);
         return;
     }
 
@@ -1515,7 +1529,7 @@ function showProducts($uid, $chatId, $extra = []) {
         if ($line) $rows[] = $line;
     }
     foreach ($extra as $r) $rows[] = $r;   // دکمه‌های شیشه‌ای دلخواه، زیر محصولات
-    panelShow($uid, $chatId, 'shop', $text, inlineKb($rows));
+    panelShow($uid, $chatId, 'shop', $text, inlineKb($rows), $replyTo);
 }
 
 /** نمایش یک محصول تکی — برای دکمه‌های سفارشی «محصول» */
@@ -1530,9 +1544,9 @@ function showOneProduct($uid, $chatId, $p) {
         inlineKb([[productBtn($p, $uid)], [btnUI('back', 'menu_buy', 'nav')]]));
 }
 
-function showOrders($uid, $chatId, $extra = []) {
+function showOrders($uid, $chatId, $extra = [], $replyTo = null) {
     $orders = Order::forUser($uid);
-    if (!$orders) { panelShow($uid, $chatId, 'menu', T('orders_empty'), $extra ? inlineKb($extra) : null); return; }
+    if (!$orders) { panelShow($uid, $chatId, 'menu', T('orders_empty'), $extra ? inlineKb($extra) : null, $replyTo); return; }
 
     $text = T('orders_head') . "\n";
     foreach (array_slice($orders, 0, 15) as $o) {
@@ -1555,10 +1569,10 @@ function showOrders($uid, $chatId, $extra = []) {
             'type'     => $o['type'] === 'topup' ? 'شارژ' : 'محصول',
         ]);
     }
-    panelShow($uid, $chatId, 'menu', $text, $extra ? inlineKb($extra) : null);
+    panelShow($uid, $chatId, 'menu', $text, $extra ? inlineKb($extra) : null, $replyTo);
 }
 
-function showReferral($uid, $chatId, $extra = []) {
+function showReferral($uid, $chatId, $extra = [], $replyTo = null) {
     $u  = getUser($uid) ?: [];
     $me = tg(BOT_TOKEN, 'getMe', []);
     $un = $me['result']['username'] ?? '';
@@ -1570,7 +1584,7 @@ function showReferral($uid, $chatId, $extra = []) {
         'referrals'  => countReferrals($uid),
         'ref_earned' => fmtNum($u['ref_earned'] ?? 0),
     ]);
-    panelShow($uid, $chatId, 'menu', $refText, $extra ? inlineKb($extra) : null);
+    panelShow($uid, $chatId, 'menu', $refText, $extra ? inlineKb($extra) : null, $replyTo);
 }
 
 function supMainBtn($which, $cb) {
@@ -1584,10 +1598,10 @@ function supMainBtn($which, $cb) {
 }
 
 /** پشتیبانی — فقط دو دکمه: مستقیم و غیر مستقیم */
-function showSupport($uid, $chatId, $extra = []) {
+function showSupport($uid, $chatId, $extra = [], $replyTo = null) {
     $rows = [[supMainBtn('direct', 'sup_direct')], [supMainBtn('indirect', 'sup_list')]];
     foreach ($extra as $r) $rows[] = $r;
-    panelShow($uid, $chatId, 'menu', T('support'), inlineKb($rows));
+    panelShow($uid, $chatId, 'menu', T('support'), inlineKb($rows), $replyTo);
 }
 
 /** ارتباط غیر مستقیم = ارسال پیام برای ادمین */
@@ -1597,9 +1611,10 @@ function showSupportIndirect($uid, $chatId, $msgId = null) {
         inlineKb([[btnUI('cancel', 'menu_support', 'cancel')]]));
 }
 
-function startTopup($uid, $chatId) {
+function startTopup($uid, $chatId, $replyTo = null) {
     setState($uid, 'topup_amount');
-    sendMsg(BOT_TOKEN, $chatId, T('topup'), inlineKb([[['text' => UT('cancel'), 'callback_data' => 'cancel', 'style' => gs('cancel') ?: null]]]));
+    panelShow($uid, $chatId, 'wallet', T('topup'),
+        inlineKb([[btnUI('cancel', 'cancel', 'cancel')]]), $replyTo);
 }
 
 function walletFor($currency) {
@@ -2177,7 +2192,12 @@ function edSub($chatId, $msgId, $bid, $sid) {
     $text .= "✨ پریمیوم: " . (!empty($sub['icon']) ? '<code>' . h($sub['icon']) . '</code>' : '—') . "\n";
     $text .= "ردیف: " . (int)($sub['row'] ?? 0) . "  |  ترتیب: " . (int)($sub['order'] ?? 0) . "\n";
     $text .= "نوع: " . h($actLabel) . "\n";
-    $text .= "مقدار: <code>" . h(mb_substr((string)($sub['value'] ?? ''), 0, 80)) . "</code>\n";
+    if (($sub['action'] ?? '') === 'product') {
+        $lp = Product::get($sub['value'] ?? '');
+        $text .= "محصول: " . ($lp ? h($lp['name']) . (!empty($lp['flow']['on']) ? ' 🔄' : '') : '<b>انتخاب نشده</b>') . "\n";
+    } else {
+        $text .= "مقدار: <code>" . h(mb_substr((string)($sub['value'] ?? ''), 0, 80)) . "</code>\n";
+    }
     $text .= "وضعیت: " . (!empty($sub['on']) ? '✅ روشن' : '❌ خاموش');
 
     $k = $bid . '|' . $sid;
@@ -2185,7 +2205,10 @@ function edSub($chatId, $msgId, $bid, $sid) {
         [btnCb('✏️ متن', 'sbt_' . $k, 'admin'), btnCb('😀 ایموجی', 'sbe_' . $k, 'admin')],
         [btnCb('🎨 رنگ', 'sbc_' . $k, 'admin'), btnCb('✨ پریمیوم', 'sbi_' . $k, 'admin')],
         [btnCb('📐 ردیف', 'sbr_' . $k, 'admin'), btnCb('🔢 ترتیب', 'sbo_' . $k, 'admin')],
-        [btnCb('🔀 نوع', 'sba_' . $k, 'admin'), btnCb('📝 مقدار', 'sbv_' . $k, 'admin')],
+        [btnCb('🔀 نوع', 'sba_' . $k, 'admin'),
+         (($sub['action'] ?? '') === 'product'
+            ? btnCb('🛒 انتخاب محصول', 'sbpick_' . $k, 'buy')
+            : btnCb('📝 مقدار', 'sbv_' . $k, 'admin'))],
         [btnCb(!empty($sub['on']) ? '❌ خاموش' : '✅ روشن', 'sbx_' . $k, 'info'),
          btnCb('🗑 حذف', 'sbd_' . $k, 'reject')],
         [btnUI('back', 'sbs_' . $bid, 'nav')],
@@ -2518,8 +2541,10 @@ function masterHandle($update) {
 
             if (($sub['action'] ?? '') === 'product') {
                 $p = Product::get($sub['value'] ?? '');
-                if ($p) showOneProduct($uid, $chatId, $p);
-                else sendMsg(BOT_TOKEN, $chatId, T('buy_empty'));
+                if (!$p || empty($p['active'])) { sendMsg(BOT_TOKEN, $chatId, T('buy_empty')); return; }
+                // اگر جریان سفارش روشن است، یک‌راست برو سراغ گرفتن لینک کانال
+                if (!empty($p['flow']['on'])) { flowStart($uid, $chatId, $p); return; }
+                showOneProduct($uid, $chatId, $p);
                 return;
             }
             if (($sub['action'] ?? '') === 'section') {
@@ -2681,7 +2706,8 @@ function masterHandle($update) {
             if ($o['status'] !== Order::PENDING) { answerCb(BOT_TOKEN, $cbId, 'قبلا ثبت شده', true); return; }
             answerCb(BOT_TOKEN, $cbId);
             setState($uid, 'receipt', ['order' => $oid]);
-            sendMsg(BOT_TOKEN, $chatId, T('receipt_ask'), inlineKb([[['text' => UT('cancel'), 'callback_data' => 'cancel', 'style' => gs('cancel') ?: null]]]));
+            panelShow($uid, $chatId, $o['type'] === 'topup' ? 'wallet' : 'shop',
+                T('receipt_ask'), inlineKb([[btnUI('cancel', 'cancel', 'cancel')]]));
             return;
         }
 
@@ -2756,6 +2782,26 @@ function masterHandle($update) {
             sendMsg(BOT_TOKEN, $chatId,
                 "📐 چیدمان دکمه‌های شیشه‌ای را بفرستید.\n\nمثال: <code>2,1</code> یعنی ۲ تا بالا، ۱ تا پایین.",
                 inlineKb([[btnUI('cancel', 'sbs_' . $bid, 'cancel')]]));
+            return;
+        }
+        if (str_starts_with($data, 'sbpick_')) {
+            $rest = substr($data, 7); $pos = strrpos($rest, '|');
+            if ($pos === false) { answerCb(BOT_TOKEN, $cbId); return; }
+            answerCb(BOT_TOKEN, $cbId);
+            edSubPick($chatId, $msgId, substr($rest, 0, $pos), substr($rest, $pos + 1));
+            return;
+        }
+        if (str_starts_with($data, 'sbp_')) {
+            $parts = explode('|', substr($data, 4));
+            if (count($parts) !== 3) { answerCb(BOT_TOKEN, $cbId); return; }
+            [$bid, $sid, $pid] = $parts;
+            if (!Product::get($pid)) { answerCb(BOT_TOKEN, $cbId, 'محصول پیدا نشد', true); return; }
+            subMutate($bid, $sid, function (&$x) use ($pid) {
+                $x['action'] = 'product';
+                $x['value']  = $pid;
+            });
+            answerCb(BOT_TOKEN, $cbId, '✅ وصل شد');
+            edSub($chatId, $msgId, $bid, $sid);
             return;
         }
         if (str_starts_with($data, 'sb_')) {
@@ -3295,7 +3341,11 @@ function masterHandle($update) {
 
     // --- دکمه منو زده شد؟ ---
     $act = findMenuAction($text);
-    if ($act) { clearState($uid); runMenuAction($act, $uid, $chatId, $uname, $fname); return; }
+    if ($act) {
+        clearState($uid);
+        runMenuAction($act, $uid, $chatId, $uname, $fname, $msg['message_id'] ?? null);
+        return;
+    }
 
     // --- ادامه گفتگو ---
     $st = getState($uid);
@@ -3319,7 +3369,7 @@ function masterHandle($update) {
             return;
         }
         clearState($uid);
-        sendMsg(BOT_TOKEN, $chatId, T('receipt_ok'), mainKeyboard());
+        panelShow($uid, $chatId, $o['type'] === 'topup' ? 'wallet' : 'shop', T('receipt_ok'));
         notifyAdminOrder($oid);
         return;
     }
@@ -3921,6 +3971,22 @@ function subRows($btnId) {
     return $rows;
 }
 
+/** فهرست محصولات برای بستن یک زیردکمه به محصول */
+function edSubPick($chatId, $msgId, $bid, $sid) {
+    $rows = [];
+    foreach (Product::all() as $p) {
+        $flow = !empty($p['flow']['on']) ? ' 🔄' : '';
+        $rows[] = [btnCb(trim(($p['emoji'] ?? '') . ' ' . $p['name']) . $flow,
+                         'sbp_' . $bid . '|' . $sid . '|' . $p['id'], 'buy')];
+    }
+    $rows[] = [btnUI('back', 'sb_' . $bid . '|' . $sid, 'nav')];
+    editMsg(BOT_TOKEN, $chatId, $msgId,
+        Product::all()
+            ? "🛒 <b>این دکمه به کدام محصول وصل شود؟</b>\n\n🔄 = جریان سفارش دارد (لینک کانال، تعداد، سرعت)"
+            : "🛒 هنوز محصولی نساخته‌اید.",
+        inlineKb($rows));
+}
+
 function findSub($btnId, $subId) {
     foreach ((cfg()['buttons'][$btnId]['subs'] ?? []) as $sub) {
         if (($sub['id'] ?? '') === $subId) return $sub;
@@ -3929,7 +3995,7 @@ function findSub($btnId, $subId) {
 }
 
 /** اجرای عملیات یک دکمه منو */
-function runMenuAction($act, $uid, $chatId, $uname, $fname) {
+function runMenuAction($act, $uid, $chatId, $uname, $fname, $replyTo = null) {
     // دکمه‌های سفارشی که ادمین ساخته
     $b = cfg()['buttons'][$act] ?? null;
     if ($b && !empty($b['action'])) {
@@ -3950,13 +4016,13 @@ function runMenuAction($act, $uid, $chatId, $uname, $fname) {
     }
     $subs = subRows($act);
     switch ($act) {
-        case 'buy':      showProducts($uid, $chatId, $subs); break;
-        case 'account':  showAccount($uid, $chatId, $subs); break;
-        case 'topup':    startTopup($uid, $chatId); break;
-        case 'referral': showReferral($uid, $chatId, $subs); break;
-        case 'orders':   showOrders($uid, $chatId, $subs); break;
-        case 'support':  showSupport($uid, $chatId, $subs); break;
-        case 'trust':    panelShow($uid, $chatId, 'menu', T('trust'), $subs ? inlineKb($subs) : null); break;
+        case 'buy':      showProducts($uid, $chatId, $subs, $replyTo); break;
+        case 'account':  showAccount($uid, $chatId, $subs, $replyTo); break;
+        case 'topup':    startTopup($uid, $chatId, $replyTo); break;
+        case 'referral': showReferral($uid, $chatId, $subs, $replyTo); break;
+        case 'orders':   showOrders($uid, $chatId, $subs, $replyTo); break;
+        case 'support':  showSupport($uid, $chatId, $subs, $replyTo); break;
+        case 'trust':    panelShow($uid, $chatId, 'menu', T('trust'), $subs ? inlineKb($subs) : null, $replyTo); break;
         default:         showHome($uid, $chatId, $fname); break;
     }
 }
