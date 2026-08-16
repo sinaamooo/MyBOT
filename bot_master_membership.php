@@ -404,8 +404,9 @@ function defaultConfig() {
             'sup_indirect' => '📨 ارتباط غیر مستقیم',
         ],
 
-        // ایموجی پریمیوم هر دکمه ثابت — کلید = همان کلید ui_texts
+        // ایموجی پریمیوم و رنگ هر دکمه ثابت — کلید = همان کلید ui_texts
         'ui_icons' => [],
+        'ui_colors' => [],
 
         // رنگ همه دکمه‌های شیشه‌ای بر اساس نقششان
         'glass_colors' => [
@@ -449,6 +450,17 @@ function defaultConfig() {
             'rejected'     => "❌ سفارش شما تایید نشد.\nدر صورت نیاز با پشتیبانی تماس بگیرید.",
             'no_balance'   => "❌ موجودی شما کافی نیست.\nموجودی فعلی: {balance} تومان",
             'banned'       => "🚫 دسترسی شما مسدود شده است.",
+
+            // جریان سفارش محصول
+            'flow_link'    => "🔗 لطفا لینک خصوصی کانال/گروه خود را ارسال کنید.\n\nنمونه لینک:\n<code>https://t.me/+uiTRrjKIPVk0NDM9</code>\n\nاگر لینک خصوصی ندارید، لینک عمومی را بفرستید:\n<code>https://t.me/YourChannel</code>\n\n📍 دقت کنید لینک حتما شبیه موارد بالا باشد.",
+            'flow_link_bad'=> "❌ لینک معتبر نیست.\nلینک باید با <code>https://t.me/</code> شروع شود.",
+            'flow_qty'     => "👥 مقدار سفارش خود را به عدد و انگلیسی ارسال کنید.\n\n📊 حداقل تعداد برای ثبت سفارش <b>{min}</b> و حداکثر <b>{max}</b> می‌باشد.",
+            'flow_qty_bad' => "❌ عدد وارد شده معتبر نیست.\nحداقل <b>{min}</b> و حداکثر <b>{max}</b>.",
+            'flow_speed'   => "👉 لطفا سرعت تکمیل سفارش و سرعت ممبرگیری کانال را انتخاب کنید؟",
+            'flow_rate'    => "💰 برای کانال فوق، نرخ محاسبه ممبر به شرح زیر می‌باشد:\n\n👥 هزینه هر کا ممبر: <b>{rate}</b> تومان\n\n📗 جهت ادامه دکمه زیر را بزنید.",
+            'flow_invoice' => "📋 کاربر گرامی، جزئیات سفارش شما به شرح زیر است:\n\n📣 برای کانال: <code>{link}</code>\n👥 تعداد کاربر درخواستی: <b>{qty}</b> نفر\n⚙️ نوع درخواستی: {product}\n⚡️ سرعت: {speed}\n💵 مبلغ به ازای هر {per} نفر: <b>{rate}</b>\n\n💳 مبلغ قابل پرداخت: <b>{total} {currency}</b>\n\n❗️ تمامی سفارش‌ها بصورت آنی ثبت شده و بصورت سیستمی انجام می‌گیرند.\n\n👇 درصورت تایید، دکمه زیر را بزنید.",
+            'sup_ticket'   => "💬 <b>ارتباط غیر مستقیم</b>\n\nپیام خود را ارسال کنید، ادمین بررسی می‌کند.",
+            'sup_sent'     => "✅ پیام شما برای پشتیبانی ارسال شد.\nبه زودی پاسخ داده می‌شود.",
             'quote_hint'   => "",
         ],
 
@@ -492,6 +504,12 @@ function defaultConfig() {
             'warn_text'       => "⚠️ این فایل تا <b>{sec} ثانیه</b> دیگر حذف می‌شود.\nلطفا آن را ذخیره یا فوروارد کنید.",
             'deleted_text'    => "🗑 فایل حذف شد.\nبرای دریافت دوباره، روی لینک کلیک کنید.",
             'expired_text'    => "❌ این لینک معتبر نیست یا حذف شده است.",
+            'info_text'       => "📊 <b>اطلاعات فایل</b>\n\n📦 {title}\n📁 تعداد فایل: <b>{files}</b>\n👁 بازدید: <b>{clicks}</b>\n📥 دانلود: <b>{delivered}</b>\n📅 {created}",
+            'file_layout'     => '1',
+            'file_buttons'    => [
+                ['id' => 'f1', 'emoji' => '📊', 'text' => 'اطلاعات فایل', 'color' => 'primary',
+                 'icon' => '', 'row' => 1, 'order' => 1, 'on' => true, 'action' => 'info', 'value' => ''],
+            ],
             'menu_text'       => "🤖 <b>پنل اپلودر</b>\n\n🔗 لینک‌ها: {links}\n🗑 حذف خودکار: {sec} ثانیه\n🔒 عضویت اجباری: {join}\n\nفایل بفرستید تا لینک بسازم.",
             'buttons' => [
                 'single' => ['emoji' => '📤', 'text' => 'آپلود تکی',   'color' => 'success', 'icon' => '', 'row' => 1, 'order' => 1, 'on' => true],
@@ -530,10 +548,16 @@ function cfgSet(callable $fn) {
 /** ایموجی پریمیوم دکمه‌های ثابت */
 function UI($key) { return cfg()['ui_icons'][$key] ?? ''; }
 
-/** دکمه ثابت آماده — متن + رنگ نقش + ایموجی پریمیوم */
+/** رنگ اختصاصی یک دکمه ثابت (اگر تنظیم شده باشد بر رنگ نقش اولویت دارد) */
+function UC($key) {
+    $c = cfg()['ui_colors'][$key] ?? '';
+    return isStyle($c) ? $c : null;
+}
+
+/** دکمه ثابت آماده — متن + رنگ + ایموجی پریمیوم */
 function btnUI($key, $data, $role = null) {
     $b = ['text' => UT($key), 'callback_data' => $data];
-    $st = $role ? gs($role) : null;
+    $st = UC($key) ?: ($role ? gs($role) : null);
     if (isStyle($st)) $b['style'] = $st;
     $ic = (string)UI($key);
     if ($ic !== '') $b['icon_custom_emoji_id'] = $ic;
@@ -751,6 +775,15 @@ class Product
                 'bot_id' => $botId, 'link_code' => '',
                 'emoji' => '💠', 'color' => 'success', 'icon' => '',
                 'row' => 0, 'order' => 99,
+                // جریان سفارش — اگر روشن باشد از مشتری سوال می‌پرسد
+                'flow' => [
+                    'on' => false, 'ask_link' => true, 'ask_qty' => true,
+                    'min' => 1000, 'max' => 100000, 'per' => 1000,
+                    'speeds' => [
+                        ['id' => 's1', 'text' => '🐢 عادی',  'mult' => 1],
+                        ['id' => 's2', 'text' => '⚡️ سریع', 'mult' => 1.5],
+                    ],
+                ],
                 'active' => true, 'created_at' => nowStr(),
             ];
         });
@@ -1477,30 +1510,12 @@ function showSupport($uid, $chatId, $extra = []) {
     sendMsg(BOT_TOKEN, $chatId, T('support'), inlineKb($rows));
 }
 
-/** زیرمجموعه‌های ارتباط غیر مستقیم */
-function showSupportIndirect($chatId, $msgId = null) {
-    $rows = [];
-    $line = [];
-    foreach (cfg()['support_methods'] as $i => $m) {
-        if (empty($m['on'])) continue;
-        $label = trim(($m['emoji'] ?? '') . ' ' . ($m['label'] ?? ''));
-        if (($m['type'] ?? '') === 'url' && !empty($m['value'])) {
-            $b = ['text' => $label, 'url' => $m['value']];
-        } else {
-            $b = ['text' => $label, 'callback_data' => 'sup_' . $i];
-        }
-        if (isStyle(gs('support') ?? '')) $b['style'] = gs('support');
-        $line[] = $b;
-        if (count($line) === 2) { $rows[] = $line; $line = []; }
-    }
-    if ($line) $rows[] = $line;
-    $rows[] = [btnUI('back', 'menu_support', 'nav')];
-
-    $text = "📨 <b>" . h(cfg()['support_main']['indirect']['text'] ?? 'ارتباط غیر مستقیم') . "</b>\n\n" .
-            (count($rows) > 1 ? "یکی از راه‌های زیر را انتخاب کنید:" : "هنوز راهی تنظیم نشده است.");
-
-    if ($msgId) editMsg(BOT_TOKEN, $chatId, $msgId, $text, inlineKb($rows));
-    else sendMsg(BOT_TOKEN, $chatId, $text, inlineKb($rows));
+/** ارتباط غیر مستقیم = ارسال پیام برای ادمین */
+function showSupportIndirect($uid, $chatId, $msgId = null) {
+    setState($uid, 'ticket');
+    $rows = [[btnUI('cancel', 'menu_support', 'cancel')]];
+    if ($msgId) editMsg(BOT_TOKEN, $chatId, $msgId, T('sup_ticket'), inlineKb($rows));
+    else sendMsg(BOT_TOKEN, $chatId, T('sup_ticket'), inlineKb($rows));
 }
 
 function startTopup($uid, $chatId) {
@@ -1530,6 +1545,119 @@ function createOrderAndAsk($uid, $chatId, $username, $type, $productId, $amount,
         [['text' => UT('cancel'), 'callback_data' => 'ocancel_' . $oid, 'style' => gs('cancel') ?: null]],
     ]));
     return $oid;
+}
+
+/** جریان سفارش: شروع */
+function flowStart($uid, $chatId, $p) {
+    $f = $p['flow'] ?? [];
+    setState($uid, 'flow', ['pid' => $p['id'], 'step' => 'link', 'data' => []]);
+    if (!empty($f['ask_link'])) {
+        sendMsg(BOT_TOKEN, $chatId, T('flow_link'), inlineKb([[btnUI('cancel', 'cancel', 'cancel')]]));
+        return;
+    }
+    flowNext($uid, $chatId, 'qty');
+}
+
+function flowNext($uid, $chatId, $step) {
+    $st = getState($uid);
+    if (!$st || $st['action'] !== 'flow') return;
+    $sd = $st['data'];
+    $p  = Product::get($sd['pid']);
+    if (!$p) { clearState($uid); return; }
+    $f  = $p['flow'] ?? [];
+    $sd['step'] = $step;
+    setState($uid, 'flow', $sd);
+
+    if ($step === 'qty') {
+        if (empty($f['ask_qty'])) { flowNext($uid, $chatId, 'speed'); return; }
+        sendMsg(BOT_TOKEN, $chatId,
+            T('flow_qty', ['min' => number_format((int)$f['min']), 'max' => number_format((int)$f['max'])]),
+            inlineKb([[btnUI('cancel', 'cancel', 'cancel')]]));
+        return;
+    }
+
+    if ($step === 'speed') {
+        $speeds = $f['speeds'] ?? [];
+        if (count($speeds) < 2) {
+            $sd['data']['speed'] = $speeds[0]['text'] ?? '—';
+            $sd['data']['mult']  = (float)($speeds[0]['mult'] ?? 1);
+            setState($uid, 'flow', $sd);
+            flowInvoice($uid, $chatId);
+            return;
+        }
+        $rows = [];
+        foreach ($speeds as $sp) $rows[] = [btnCb($sp['text'], 'fsp_' . $sp['id'], 'buy')];
+        $rows[] = [btnUI('cancel', 'cancel', 'cancel')];
+        sendMsg(BOT_TOKEN, $chatId, T('flow_speed'), inlineKb($rows));
+        return;
+    }
+}
+
+/** محاسبه مبلغ نهایی */
+function flowTotal($p, $qty, $mult) {
+    $per = max(1, (int)($p['flow']['per'] ?? 1000));
+    return round(((float)$p['price'] * $mult) * ($qty / $per), 2);
+}
+
+function flowInvoice($uid, $chatId) {
+    $st = getState($uid);
+    if (!$st || $st['action'] !== 'flow') return;
+    $sd = $st['data'];
+    $p  = Product::get($sd['pid']);
+    if (!$p) { clearState($uid); return; }
+
+    $qty   = (int)($sd['data']['qty'] ?? 0);
+    $mult  = (float)($sd['data']['mult'] ?? 1);
+    $rate  = round((float)$p['price'] * $mult, 2);
+    $total = $qty > 0 ? flowTotal($p, $qty, $mult) : $rate;
+
+    $sd['data']['total'] = $total;
+    setState($uid, 'flow', $sd);
+
+    $text = T('flow_invoice', [
+        'link'     => h($sd['data']['link'] ?? '—'),
+        'qty'      => number_format($qty),
+        'product'  => h($p['name']),
+        'speed'    => h($sd['data']['speed'] ?? '—'),
+        'per'      => number_format((int)($p['flow']['per'] ?? 1000)),
+        'rate'     => fmtNum($rate),
+        'total'    => fmtNum($total),
+        'currency' => h($p['currency']),
+    ]);
+    sendMsg(BOT_TOKEN, $chatId, $text, inlineKb([
+        [btnCb('✅ موافقم، نهایی سازی سفارش', 'fok', 'confirm')],
+        [btnUI('cancel', 'cancel', 'cancel')],
+    ]));
+}
+
+/** ثبت نهایی سفارش جریان‌دار */
+function flowFinish($uid, $chatId, $uname) {
+    $st = getState($uid);
+    if (!$st || $st['action'] !== 'flow') return false;
+    $sd = $st['data'];
+    $p  = Product::get($sd['pid']);
+    if (!$p) { clearState($uid); return false; }
+
+    $total = (float)($sd['data']['total'] ?? 0);
+    if ($total <= 0) { clearState($uid); return false; }
+
+    $note = trim(($sd['data']['link'] ?? '') . ' · ' . number_format((int)($sd['data']['qty'] ?? 0)) .
+                 ' نفر · ' . ($sd['data']['speed'] ?? ''));
+    clearState($uid);
+
+    $bal = (float)(getUser($uid)['balance'] ?? 0);
+    $rows = [];
+    if (trim($p['currency']) === 'تومان' && $bal >= $total) {
+        $rows[] = [btnCb(UT('wallet_pay') . ' (' . fmtNum($bal) . ')', 'fwpay_' . $p['id'] . '|' . $total, 'buy')];
+    }
+    $rows[] = [btnCb(UT('direct_pay'), 'fdpay_' . $p['id'] . '|' . $total, 'buy')];
+    $rows[] = [btnUI('cancel', 'cancel', 'cancel')];
+
+    sendMsg(BOT_TOKEN, $chatId,
+        "🧾 <b>" . h($p['name']) . "</b>\n" . h($note) .
+        "\n\n💳 مبلغ: <b>" . fmtNum($total) . ' ' . h($p['currency']) . "</b>\n\nروش پرداخت را انتخاب کنید:",
+        inlineKb($rows));
+    return true;
 }
 
 function deliverProduct($uid, $chatId, $productId) {
@@ -1652,6 +1780,7 @@ function admHome($chatId, $msgId = null) {
     $rows = [
         [btnCb('🎨 دکمه‌ها', 'ebuttons', 'admin'), btnCb('📝 متن‌ها', 'etexts', 'admin')],
         [btnCb('💠 رنگ دکمه‌های شیشه‌ای', 'eglass', 'admin')],
+        [btnCb('🤖 تنظیمات ربات‌های زیرمجموعه', 'eupload', 'admin')],
         [btnCb('🧾 سفارش‌ها', 'adm_orders', 'admin'), btnCb('🤖 ربات‌ها', 'adm_bots', 'admin')],
         [btnCb('📢 کانال‌ها', 'adm_chans', 'admin'), btnCb('📢 پیام همگانی', 'adm_bc', 'admin')],
         [btnCb('🌐 پنل وب', 'adm_web', 'info')],
@@ -1786,6 +1915,11 @@ function textLabels() {
         'receipt_ok' => '✅ رسید ثبت شد', 'approved' => '✅ تایید سفارش',
         'rejected' => '❌ رد سفارش', 'no_balance' => '❌ موجودی کم',
         'banned' => '🚫 کاربر مسدود',
+        'flow_link' => '🔗 سوال لینک کانال', 'flow_link_bad' => '🔗 لینک نامعتبر',
+        'flow_qty' => '👥 سوال تعداد', 'flow_qty_bad' => '👥 تعداد نامعتبر',
+        'flow_speed' => '⚡️ سوال سرعت', 'flow_rate' => '💰 نمایش نرخ',
+        'flow_invoice' => '📋 فاکتور سفارش',
+        'sup_ticket' => '💬 پیام ارتباط غیر مستقیم', 'sup_sent' => '✅ پیام ارسال شد',
     ];
 }
 
@@ -1798,6 +1932,7 @@ function uiTextLabels() {
         'direct_pay' => 'پرداخت مستقیم', 'topup' => 'افزایش موجودی',
         'my_orders' => 'سفارش‌های من', 'enter_bot' => 'ورود به ربات',
         'get_link' => 'دریافت لینک', 'open' => 'باز کردن', 'hide_menu' => 'بستن منو',
+        'sup_direct' => 'ارتباط مستقیم', 'sup_indirect' => 'ارتباط غیر مستقیم',
     ];
 }
 
@@ -1988,10 +2123,12 @@ function edUiTexts($chatId, $msgId, $page = 0) {
     $slice = array_slice($keys, $page * $per, $per);
 
     $rows = [];
-    foreach (array_chunk($slice, 2) as $pair) {
-        $line = [];
-        foreach ($pair as $k) $line[] = btnCb(UT($k), 'eu_' . $k, 'info');
-        $rows[] = $line;
+    foreach ($slice as $k) {
+        $col = UC($k) ? (styleMap()[UC($k)] ?? '') : '—';
+        $rows[] = [
+            btnCb(UT($k), 'eu_' . $k, 'info'),
+            btnCb('🎨 ' . mb_substr($col, 0, 2), 'euc_' . $k, 'admin'),
+        ];
     }
     $nav = [];
     if ($page > 0) $nav[] = btnCb('⬅️ قبلی', 'eus_' . ($page - 1), 'nav');
@@ -2003,6 +2140,74 @@ function edUiTexts($chatId, $msgId, $page = 0) {
         "🔤 <b>متن دکمه‌های ثابت</b>\n\nمتن دکمه‌هایی که همه‌جای ربات تکرار می‌شوند.\n" .
         "هنگام فرستادن متن، <b>ایموجی پریمیوم</b> هم بگذارید تا روی دکمه بنشیند.",
         inlineKb($rows));
+}
+
+/** برچسب متن‌های ربات‌های زیرمجموعه */
+function upTextLabels() {
+    return [
+        'menu_text'    => '🤖 منوی پنل اپلودر',
+        'start_text'   => '👋 پیام شروع',
+        'join_text'    => '🔒 متن عضویت اجباری',
+        'joined_btn'   => '✅ متن دکمه «عضو شدم»',
+        'warn_text'    => '⚠️ هشدار حذف — {sec}',
+        'deleted_text' => '🗑 پیام بعد از حذف',
+        'expired_text' => '❌ لینک نامعتبر',
+        'info_text'    => '📊 اطلاعات فایل',
+    ];
+}
+
+/** 🤖 تنظیمات پیش‌فرض ربات‌های زیرمجموعه */
+function edUploader($chatId, $msgId) {
+    $u = cfg()['uploader'];
+    $text  = "🤖 <b>تنظیمات ربات‌های زیرمجموعه</b>\n\n";
+    $text .= "این تنظیمات روی هر ربات <b>جدیدی</b> که اضافه می‌شود اعمال می‌گردد.\n";
+    $text .= "برای ربات‌های موجود، دکمه «اعمال روی همه» را بزنید.\n\n";
+    $text .= "⏱ حذف بعد از: <b>{$u['delete_seconds']}</b> ثانیه\n";
+    $text .= "🔒 عضویت اجباری: " . (!empty($u['force_join']) ? 'روشن' : 'خاموش') . "\n";
+    $text .= "🛡 محافظت فایل: " . (!empty($u['protect_content']) ? 'روشن' : 'خاموش') . "\n";
+    $text .= "🤖 ربات‌های ثبت‌شده: <b>" . count(BotManager::all()) . "</b>";
+
+    $rows = [
+        [btnCb('📝 متن‌های ربات زیرمجموعه', 'eup_texts', 'admin')],
+        [btnCb('⏱ زمان حذف', 'eup_sec', 'admin'),
+         btnCb(!empty($u['force_join']) ? '🔒 اجباری: روشن' : '🔒 اجباری: خاموش', 'eup_fj', 'info')],
+        [btnCb(!empty($u['protect_content']) ? '🛡 محافظت: روشن' : '🛡 محافظت: خاموش', 'eup_pc', 'info')],
+        [btnCb('📋 اعمال روی همه ربات‌ها', 'eup_all', 'confirm')],
+        [btnUI('back', 'adm_home', 'nav')],
+    ];
+    editMsg(BOT_TOKEN, $chatId, $msgId, $text, inlineKb($rows));
+}
+
+/** 🤖 فهرست متن‌های ربات زیرمجموعه */
+function edUpTexts($chatId, $msgId) {
+    $rows = [];
+    foreach (upTextLabels() as $k => $lbl) $rows[] = [btnCb($lbl, 'eupt_' . $k, 'info')];
+    $rows[] = [btnUI('back', 'eupload', 'nav')];
+    editMsg(BOT_TOKEN, $chatId, $msgId,
+        "📝 <b>متن‌های ربات‌های زیرمجموعه</b>\n\n" .
+        "متن جدید را با <b>ایموجی پریمیوم</b> و <b>نقل‌قول</b> بفرستید — همه حفظ می‌شود.",
+        inlineKb($rows));
+}
+
+/** 🤖 نمایش یک متن ربات زیرمجموعه */
+function edUpText($chatId, $msgId, $key) {
+    $labels = upTextLabels();
+    if (!isset($labels[$key])) { edUpTexts($chatId, $msgId); return; }
+    $cur = cfg()['uploader'][$key] ?? '';
+    $isQ = str_starts_with(trim($cur), '<blockquote');
+
+    $text  = "📝 <b>" . h($labels[$key]) . "</b>\n\n";
+    $text .= "<b>پیش‌نمایش:</b>\n" . ($cur !== '' ? $cur : '<i>خالی</i>') . "\n\n";
+    $text .= "<b>کد:</b>\n<code>" . h(mb_substr($cur, 0, 600)) . "</code>";
+
+    $rows = [
+        [btnCb('✏️ تغییر متن', 'eupe_' . $key, 'confirm')],
+        [btnCb($isQ ? '❝ حذف نقل‌قول' : '❝ نقل‌قول', 'eupq_' . $key, 'admin'),
+         btnCb('❝ بازشو', 'eupx_' . $key, 'admin')],
+        [btnCb('♻️ پیش‌فرض', 'eupr_' . $key, 'reject')],
+        [btnUI('back', 'eup_texts', 'nav')],
+    ];
+    editMsg(BOT_TOKEN, $chatId, $msgId, $text, inlineKb($rows));
 }
 
 /** 💠 رنگ دکمه‌های شیشه‌ای */
@@ -2062,7 +2267,7 @@ function masterHandle($update) {
         // --- پشتیبانی ---
         if ($data === 'sup_list') {
             answerCb(BOT_TOKEN, $cbId);
-            showSupportIndirect($chatId, $msgId);
+            showSupportIndirect($uid, $chatId, $msgId);
             return;
         }
         if ($data === 'sup_direct') { answerCb(BOT_TOKEN, $cbId); return; }
@@ -2130,6 +2335,8 @@ function masterHandle($update) {
             if (Product::hasBought($pid, $uid)) { deliverProduct($uid, $chatId, $pid); return; }
             if (Product::isFull($p)) { sendMsg(BOT_TOKEN, $chatId, "🔴 ظرفیت این محصول تکمیل شده است."); return; }
 
+            if (!empty($p['flow']['on'])) { flowStart($uid, $chatId, $p); return; }
+
             $bal = (float)(getUser($uid)['balance'] ?? 0);
             $rows = [];
             if (strtoupper($p['currency']) === 'تومان' || $p['currency'] === 'تومان') {
@@ -2141,6 +2348,56 @@ function masterHandle($update) {
             sendMsg(BOT_TOKEN, $chatId,
                 "🛒 <b>" . h($p['name']) . "</b>\n💰 " . fmtNum($p['price']) . ' ' . h($p['currency']) .
                 "\n\nروش پرداخت را انتخاب کنید:", inlineKb($rows));
+            return;
+        }
+
+        // --- جریان سفارش ---
+        if (str_starts_with($data, 'fsp_')) {
+            $sid = substr($data, 4);
+            $st = getState($uid);
+            if (!$st || $st['action'] !== 'flow') { answerCb(BOT_TOKEN, $cbId, 'منقضی شد', true); return; }
+            $sd = $st['data'];
+            $p = Product::get($sd['pid']);
+            $chosen = null;
+            foreach (($p['flow']['speeds'] ?? []) as $sp) if ($sp['id'] === $sid) $chosen = $sp;
+            if (!$chosen) { answerCb(BOT_TOKEN, $cbId, 'نامعتبر', true); return; }
+            $sd['data']['speed'] = $chosen['text'];
+            $sd['data']['mult']  = (float)$chosen['mult'];
+            setState($uid, 'flow', $sd);
+            answerCb(BOT_TOKEN, $cbId);
+            flowInvoice($uid, $chatId);
+            return;
+        }
+        if ($data === 'fok') {
+            answerCb(BOT_TOKEN, $cbId);
+            flowFinish($uid, $chatId, $uname);
+            return;
+        }
+        if (str_starts_with($data, 'fwpay_') || str_starts_with($data, 'fdpay_')) {
+            $wallet = str_starts_with($data, 'fwpay_');
+            $rest = substr($data, 6);
+            $pos = strrpos($rest, '|');
+            if ($pos === false) { answerCb(BOT_TOKEN, $cbId); return; }
+            $pid = substr($rest, 0, $pos);
+            $amt = (float)substr($rest, $pos + 1);
+            $p = Product::get($pid);
+            if (!$p || $amt <= 0) { answerCb(BOT_TOKEN, $cbId, 'نامعتبر', true); return; }
+
+            if ($wallet) {
+                $bal = (float)(getUser($uid)['balance'] ?? 0);
+                if ($bal < $amt) { answerCb(BOT_TOKEN, $cbId, '❌ موجودی کافی نیست', true); return; }
+                addBalance($uid, -$amt);
+                $oid = Order::create($uid, $uname, 'product', $pid, $amt, $p['currency']);
+                Order::attachReceipt($oid, 'text', 'پرداخت از کیف پول');
+                Order::approve($oid, ADMIN_ID);
+                answerCb(BOT_TOKEN, $cbId, '✅ ثبت شد');
+                sendMsg(BOT_TOKEN, $chatId, T('approved'), mainKeyboard());
+                deliverProduct($uid, $chatId, $pid);
+                announceSale(Order::get($oid));
+                return;
+            }
+            answerCb(BOT_TOKEN, $cbId);
+            createOrderAndAsk($uid, $chatId, $uname, 'product', $pid, $amt, $p['currency'], '🛒 ' . h($p['name']));
             return;
         }
 
@@ -2312,6 +2569,75 @@ function masterHandle($update) {
             return;
         }
 
+        // ---------- تنظیمات ربات‌های زیرمجموعه ----------
+        if ($data === 'eupload')   { answerCb(BOT_TOKEN, $cbId); edUploader($chatId, $msgId); return; }
+        if ($data === 'eup_texts') { answerCb(BOT_TOKEN, $cbId); edUpTexts($chatId, $msgId); return; }
+        if (str_starts_with($data, 'eupt_')) { answerCb(BOT_TOKEN, $cbId); edUpText($chatId, $msgId, substr($data, 5)); return; }
+
+        if ($data === 'eup_fj' || $data === 'eup_pc') {
+            $f = ($data === 'eup_fj') ? 'force_join' : 'protect_content';
+            cfgSet(function (&$c) use ($f) { $c['uploader'][$f] = empty($c['uploader'][$f]); });
+            answerCb(BOT_TOKEN, $cbId, '✅');
+            edUploader($chatId, $msgId);
+            return;
+        }
+        if ($data === 'eup_sec') {
+            answerCb(BOT_TOKEN, $cbId);
+            setState(ADMIN_ID, 'eup_sec');
+            sendMsg(BOT_TOKEN, $chatId, "⏱ چند ثانیه بعد فایل حذف شود؟ (عدد)",
+                inlineKb([[btnUI('cancel', 'eupload', 'cancel')]]));
+            return;
+        }
+        if ($data === 'eup_all') {
+            $u = cfg()['uploader'];
+            $n = 0;
+            foreach (BotManager::all() as $b) {
+                foreach ($u as $k => $v) BotManager::setSetting($b['id'], $k, $v);
+                $n++;
+            }
+            answerCb(BOT_TOKEN, $cbId, "✅ روی {$n} ربات اعمال شد", true);
+            edUploader($chatId, $msgId);
+            return;
+        }
+        if (str_starts_with($data, 'eupe_')) {
+            $k = substr($data, 5);
+            if (!isset(upTextLabels()[$k])) { answerCb(BOT_TOKEN, $cbId, 'نامعتبر', true); return; }
+            answerCb(BOT_TOKEN, $cbId);
+            setState(ADMIN_ID, 'eup_text', ['key' => $k]);
+            sendMsg(BOT_TOKEN, $chatId,
+                "✏️ متن جدید را بفرستید.\n\n✨ ایموجی پریمیوم و نقل‌قول حفظ می‌شود.",
+                inlineKb([[btnUI('cancel', 'eupt_' . $k, 'cancel')]]));
+            return;
+        }
+        if (str_starts_with($data, 'eupq_') || str_starts_with($data, 'eupx_')) {
+            $exp = str_starts_with($data, 'eupx_');
+            $k = substr($data, 5);
+            if (!isset(upTextLabels()[$k])) { answerCb(BOT_TOKEN, $cbId, 'نامعتبر', true); return; }
+            cfgSet(function (&$c) use ($k, $exp) {
+                $t = trim($c['uploader'][$k] ?? '');
+                if (str_starts_with($t, '<blockquote')) {
+                    $t = preg_replace('#^<blockquote[^>]*>#', '', $t);
+                    $t = preg_replace('#</blockquote>$#', '', trim($t));
+                    if ($exp) $t = '<blockquote expandable>' . trim($t) . '</blockquote>';
+                } else {
+                    $t = ($exp ? '<blockquote expandable>' : '<blockquote>') . $t . '</blockquote>';
+                }
+                $c['uploader'][$k] = trim($t);
+            });
+            answerCb(BOT_TOKEN, $cbId, '❝ اعمال شد');
+            edUpText($chatId, $msgId, $k);
+            return;
+        }
+        if (str_starts_with($data, 'eupr_')) {
+            $k = substr($data, 5);
+            $d = defaultConfig()['uploader'][$k] ?? null;
+            if ($d === null) { answerCb(BOT_TOKEN, $cbId, 'نامعتبر', true); return; }
+            cfgSet(function (&$c) use ($k, $d) { $c['uploader'][$k] = $d; });
+            answerCb(BOT_TOKEN, $cbId, '♻️');
+            edUpText($chatId, $msgId, $k);
+            return;
+        }
+
         if ($data === 'ebmode') {
             cfgSet(function (&$c) { $c['ui']['mode'] = ($c['ui']['mode'] === 'glass') ? 'menu' : 'glass'; });
             answerCb(BOT_TOKEN, $cbId, '✅ حالت عوض شد');
@@ -2428,6 +2754,21 @@ function masterHandle($update) {
             cfgSet(function (&$c) use ($k, $d) { $c['texts'][$k] = $d; });
             answerCb(BOT_TOKEN, $cbId, '♻️ بازگردانی شد');
             edText($chatId, $msgId, $k);
+            return;
+        }
+        if (str_starts_with($data, 'euc_')) {
+            $k = substr($data, 4);
+            if (!isset(uiTextLabels()[$k])) { answerCb(BOT_TOKEN, $cbId, 'نامعتبر', true); return; }
+            cfgSet(function (&$c) use ($k) {
+                $cur = $c['ui_colors'][$k] ?? 'none';
+                $c['ui_colors'][$k] = nextStyle($cur);
+            });
+            answerCb(BOT_TOKEN, $cbId, '🎨');
+            $page = 0;
+            $keys = array_keys(uiTextLabels());
+            $i = array_search($k, $keys, true);
+            if ($i !== false) $page = intdiv($i, 9);
+            edUiTexts($chatId, $msgId, $page);
             return;
         }
         if (str_starts_with($data, 'eu_')) {
@@ -2664,6 +3005,43 @@ function masterHandle($update) {
         return;
     }
 
+    if ($action === 'flow') {
+        $sd = $st['data'];
+        $p  = Product::get($sd['pid'] ?? '');
+        if (!$p) { clearState($uid); return; }
+        $step = $sd['step'] ?? 'link';
+
+        if ($step === 'link') {
+            if (!preg_match('#^https?://t\.me/[A-Za-z0-9_+\-]{3,}#', $text)) {
+                sendMsg(BOT_TOKEN, $chatId, T('flow_link_bad'));
+                return;
+            }
+            $sd['data']['link'] = $text;
+            setState($uid, 'flow', $sd);
+            flowNext($uid, $chatId, 'qty');
+            return;
+        }
+
+        if ($step === 'qty') {
+            $f = $p['flow'];
+            $q = (int)preg_replace('/[^0-9]/', '', $text);
+            $min = (int)$f['min']; $max = (int)$f['max'];
+            if ($q < $min || ($max > 0 && $q > $max)) {
+                sendMsg(BOT_TOKEN, $chatId, T('flow_qty_bad',
+                    ['min' => number_format($min), 'max' => number_format($max)]));
+                return;
+            }
+            $sd['data']['qty'] = $q;
+            setState($uid, 'flow', $sd);
+
+            // نرخ پایه را نشان بده، بعد سرعت
+            sendMsg(BOT_TOKEN, $chatId, T('flow_rate', ['rate' => fmtNum($p['price'])]));
+            flowNext($uid, $chatId, 'speed');
+            return;
+        }
+        return;
+    }
+
     if ($action === 'topup_amount') {
         $amt = (float)str_replace(',', '', $text);
         if ($amt <= 0) { sendMsg(BOT_TOKEN, $chatId, "⚠️ یک عدد معتبر بفرستید."); return; }
@@ -2696,7 +3074,7 @@ function masterHandle($update) {
         sendMsg(BOT_TOKEN, ADMIN_ID,
             "🎫 <b>تیکت جدید</b>\n\n👤 " . h($uname ? '@' . $uname : $fname) . " (<code>{$uid}</code>)\n\n" . h($text),
             inlineKb([[['text' => '💬 پاسخ', 'callback_data' => 'reply_' . $uid, 'style' => gs('admin') ?: null]]]));
-        sendMsg(BOT_TOKEN, $chatId, "✅ پیام شما برای پشتیبانی ارسال شد.", mainKeyboard());
+        sendMsg(BOT_TOKEN, $chatId, T('sup_sent'), mainKeyboard());
         return;
     }
 
@@ -2879,6 +3257,29 @@ function masterHandle($update) {
         sendMsg(BOT_TOKEN, $chatId,
             "✅ دکمه <b>" . h($plain) . "</b> ساخته شد.\n\nحالا متن، رنگ و ردیفش را تنظیم کنید:",
             inlineKb([[btnCb('⚙️ تنظیم دکمه', 'eb_' . $nid, 'admin')]]));
+        return;
+    }
+
+    if ($action === 'eup_sec') {
+        if (!ctype_digit($text)) { sendMsg(BOT_TOKEN, $chatId, "⚠️ فقط عدد."); return; }
+        $v = max(5, (int)$text);
+        cfgSet(function (&$c) use ($v) { $c['uploader']['delete_seconds'] = $v; });
+        clearState($uid);
+        sendMsg(BOT_TOKEN, $chatId, "✅ روی {$v} ثانیه تنظیم شد.",
+            inlineKb([[btnCb('🤖 تنظیمات', 'eupload', 'admin')]]));
+        return;
+    }
+
+    if ($action === 'eup_text') {
+        $k = $sd['key'] ?? '';
+        if (!isset(upTextLabels()[$k])) { clearState($uid); return; }
+        $html = msgHtml($msg);
+        if (trim($html) === '') { sendMsg(BOT_TOKEN, $chatId, "⚠️ متن خالی است."); return; }
+        cfgSet(function (&$c) use ($k, $html) { $c['uploader'][$k] = $html; });
+        clearState($uid);
+        sendMsg(BOT_TOKEN, $chatId, "✅ ذخیره شد.\n\n<b>پیش‌نمایش:</b>\n" . $html,
+            inlineKb([[btnCb('📋 اعمال روی همه ربات‌ها', 'eup_all', 'confirm')],
+                      [btnUI('back', 'eupt_' . $k, 'nav')]]));
         return;
     }
 
@@ -3193,6 +3594,38 @@ function notifyChannelProblem($bot) {
 }
 
 /** تحویل فایل‌های یک لینک + زمان‌بندی حذف */
+/** دکمه‌های شیشه‌ای زیر فایل تحویل‌شده */
+function fileButtons($botId, $code) {
+    $s = BotManager::settings($botId);
+    $items = [];
+    foreach ($s['file_buttons'] ?? [] as $b) if (!empty($b['on'])) $items[] = $b;
+    if (!$items) return null;
+    usort($items, fn($x, $y) => ((int)($x['order'] ?? 99)) <=> ((int)($y['order'] ?? 99)));
+
+    $hasRow = false;
+    foreach ($items as $i) if (!empty($i['row'])) { $hasRow = true; break; }
+    if ($hasRow) {
+        $g = []; foreach ($items as $i) $g[(int)($i['row'] ?: 99)][] = $i; ksort($g); $groups = array_values($g);
+    } else {
+        $groups = layoutRows($items, $s['file_layout'] ?? '1');
+    }
+
+    $rows = [];
+    foreach ($groups as $line) {
+        $out = [];
+        foreach ($line as $b) {
+            $btn = ['text' => trim(($b['emoji'] ?? '') . ' ' . $b['text'])];
+            if (($b['action'] ?? '') === 'url' && !empty($b['value'])) $btn['url'] = $b['value'];
+            else $btn['callback_data'] = 'fb_' . $b['id'] . '|' . $code;
+            if (isStyle($b['color'] ?? '')) $btn['style'] = $b['color'];
+            if (!empty($b['icon'])) $btn['icon_custom_emoji_id'] = (string)$b['icon'];
+            $out[] = $btn;
+        }
+        if ($out) $rows[] = $out;
+    }
+    return inlineKb($rows);
+}
+
 function deliverLink($bot, $chatId, $uid, $code) {
     $s    = BotManager::settings($bot['id']);
     $link = Links::get($bot['id'], $code);
@@ -3215,7 +3648,8 @@ function deliverLink($bot, $chatId, $uid, $code) {
     if (!$msgIds) { sendMsg($bot['token'], $chatId, $s['expired_text']); return; }
 
     $sec = max(5, (int)$s['delete_seconds']);
-    $warn = sendMsg($bot['token'], $chatId, str_replace('{sec}', $sec, $s['warn_text']));
+    $warn = sendMsg($bot['token'], $chatId, str_replace('{sec}', $sec, $s['warn_text']),
+                    fileButtons($bot['id'], $code));
     $warnId = $warn['result']['message_id'] ?? null;
 
     // اگر سرور اجازه بدهد دقیقا سر وقت حذف می‌کند، وگرنه از صف استفاده می‌شود
@@ -3238,6 +3672,30 @@ function childHandle($botId, $update) {
         $data   = $cb['data'] ?? '';
         $cbId   = $cb['id'];
         $isOwner = BotManager::isManager($botId, $uid);
+
+        if (str_starts_with($data, 'fb_')) {
+            $rest = substr($data, 3); $pos = strrpos($rest, '|');
+            if ($pos === false) { answerCb($token, $cbId); return; }
+            $fid = substr($rest, 0, $pos); $code = substr($rest, $pos + 1);
+            $link = Links::get($botId, $code);
+            $btn = null;
+            foreach ($s['file_buttons'] ?? [] as $b) if (($b['id'] ?? '') === $fid) $btn = $b;
+            answerCb($token, $cbId);
+            if (!$btn || !$link) return;
+
+            if (($btn['action'] ?? '') === 'info') {
+                sendMsg($token, $chatId, strtr($s['info_text'], [
+                    '{title}'     => h($link['title'] ?: count($link['files']) . ' فایل'),
+                    '{files}'     => count($link['files']),
+                    '{clicks}'    => (int)$link['clicks'],
+                    '{delivered}' => (int)$link['delivered'],
+                    '{created}'   => h($link['created_at']),
+                ]));
+                return;
+            }
+            sendMsg($token, $chatId, ($btn['value'] ?? '') !== '' ? $btn['value'] : '—');
+            return;
+        }
 
         if (str_starts_with($data, 'jchk_')) {
             $code = substr($data, 5);
@@ -3286,7 +3744,7 @@ function childHandle($botId, $update) {
             foreach (array_slice(array_reverse($links, true), 0, 20, true) as $c => $l) {
                 $text .= "\n📦 " . h($l['title'] ?: (count($l['files']) . ' فایل')) . "\n";
                 $text .= "   " . Links::url($botId, $c) . "\n";
-                $text .= "   👁 " . (int)$l['clicks'] . "  |  📥 " . (int)$l['delivered'] . "\n";
+                $text .= "   👁 بازدید: " . (int)$l['clicks'] . "  |  📥 دانلود: " . (int)$l['delivered'] . "\n";
             }
             sendMsg($token, $chatId, $text);
             return;
@@ -3297,10 +3755,22 @@ function childHandle($botId, $update) {
             $users = load('bots/' . $botId . '/users');
             $cl = 0; $dl = 0;
             foreach ($links as $l) { $cl += (int)$l['clicks']; $dl += (int)$l['delivered']; }
-            editMsg($token, $chatId, $msgId,
-                "📊 <b>آمار</b>\n\n👥 کاربران: " . count($users) . "\n🔗 لینک‌ها: " . count($links) .
-                "\n👁 کلیک: {$cl}\n📥 تحویل: {$dl}\n🗑 حذف بعد از: {$s['delete_seconds']} ثانیه",
-                inlineKb([[['text' => UT('back'), 'callback_data' => 'u_home', 'style' => gs('nav') ?: null]]]));
+            $top = $links;
+            uasort($top, fn($a, $b) => (int)$b['delivered'] <=> (int)$a['delivered']);
+            $txt  = "📊 <b>آمار</b>\n\n";
+            $txt .= "👥 کاربران: <b>" . count($users) . "</b>\n";
+            $txt .= "🔗 لینک‌ها: <b>" . count($links) . "</b>\n";
+            $txt .= "👁 بازدید کل: <b>{$cl}</b>\n";
+            $txt .= "📥 دانلود کل: <b>{$dl}</b>\n";
+            $txt .= "🗑 حذف بعد از: {$s['delete_seconds']} ثانیه\n";
+            if ($top) {
+                $txt .= "\n<b>پربازدیدترین‌ها:</b>\n";
+                foreach (array_slice($top, 0, 5, true) as $c2 => $l2) {
+                    $txt .= "• " . h($l2['title'] ?: count($l2['files']) . ' فایل') .
+                            " — 👁 " . (int)$l2['clicks'] . " · 📥 " . (int)$l2['delivered'] . "\n";
+                }
+            }
+            editMsg($token, $chatId, $msgId, $txt, inlineKb([[btnUI('back', 'u_home', 'nav')]]));
             return;
         }
         if ($data === 'u_home') { answerCb($token, $cbId); childMenu($bot, $chatId, $msgId); return; }
