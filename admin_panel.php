@@ -254,7 +254,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $x['flow']['max'] = $max;
             $x['flow']['per'] = $per;
 
-            // ضریب و نفر/روز هر سرعت
+            // متن، ایموجی، رنگ، ضریب، نفر/روز و توضیح هر سرعت
             foreach ($x['flow']['speeds'] as $i => $sp) {
                 $id = $sp['id'];
                 if (isset($post['mult'][$id]) && is_numeric(str_replace(',', '', $post['mult'][$id]))) {
@@ -265,6 +265,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $pd = (int)str_replace([',', '،'], '', $post['perday'][$id]);
                     if ($pd >= 0) $x['flow']['speeds'][$i]['per_day'] = $pd;
                 }
+                if (isset($post['sptext'][$id])) {
+                    $tx = trim((string)$post['sptext'][$id]);
+                    if ($tx !== '') $x['flow']['speeds'][$i]['text'] = $tx;
+                }
+                if (isset($post['spemoji'][$id]))
+                    $x['flow']['speeds'][$i]['emoji'] = trim((string)$post['spemoji'][$id]);
+                if (isset($post['spdesc'][$id]))
+                    $x['flow']['speeds'][$i]['desc'] = trim((string)$post['spdesc'][$id]);
+                if (isset($post['spcolor'][$id]))
+                    $x['flow']['speeds'][$i]['color'] = isStyle($post['spcolor'][$id]) ? $post['spcolor'][$id] : 'none';
                 $x['flow']['speeds'][$i]['on'] = !empty($post['spon'][$id]);
             }
         });
@@ -855,22 +865,37 @@ foreach ($tabs as $k => $l): ?>
 
         <div style="margin-top:16px"><label>⚡️ سرعت‌ها</label>
           <table style="margin-top:6px">
-            <tr><th>سرعت</th><th>ضریب قیمت</th><th>نفر در روز</th><th>قیمت هر <?= number_format((int)$f['per']) ?></th><th>روشن</th></tr>
+            <tr><th>ایموجی</th><th>متن دکمه</th><th>ضریب</th><th>نفر در روز</th>
+                <th>قیمت هر <?= number_format((int)$f['per']) ?></th><th>رنگ</th><th>روشن</th></tr>
             <?php foreach ($f['speeds'] as $sp): ?>
               <tr>
-                <td><?= h(trim(($sp['emoji'] ?? '') . ' ' . $sp['text'])) ?></td>
+                <td><input name="spemoji[<?= h($sp['id']) ?>]" value="<?= h($sp['emoji'] ?? '') ?>"
+                           style="text-align:center;max-width:70px"></td>
+                <td><input name="sptext[<?= h($sp['id']) ?>]" value="<?= h($sp['text'] ?? '') ?>"
+                           style="min-width:130px"></td>
                 <td><input name="mult[<?= h($sp['id']) ?>]" value="<?= h((string)$sp['mult']) ?>"
-                           style="direction:ltr;max-width:110px"></td>
+                           style="direction:ltr;max-width:90px"></td>
                 <td><input name="perday[<?= h($sp['id']) ?>]" type="number" min="0"
-                           value="<?= (int)($sp['per_day'] ?? 0) ?>" style="direction:ltr;max-width:140px"></td>
+                           value="<?= (int)($sp['per_day'] ?? 0) ?>" style="direction:ltr;max-width:120px"></td>
                 <td class="muted"><?= h(number_format((float)$sb['price'] * (float)$sp['mult']) . ' ' . $sb['currency']) ?></td>
+                <td><select name="spcolor[<?= h($sp['id']) ?>]" style="max-width:120px">
+                  <?php foreach (styleMap() as $sk => $sl): ?>
+                    <option value="<?= h($sk) ?>" <?= ($sp['color'] ?? 'none') === $sk ? 'selected' : '' ?>><?= h($sl) ?></option>
+                  <?php endforeach; ?></select></td>
                 <td><input type="checkbox" name="spon[<?= h($sp['id']) ?>]" value="1" style="width:auto"
                            <?= (!isset($sp['on']) || !empty($sp['on'])) ? 'checked' : '' ?>></td>
+              </tr>
+              <tr>
+                <td class="muted">توضیح</td>
+                <td colspan="6"><input name="spdesc[<?= h($sp['id']) ?>]" value="<?= h($sp['desc'] ?? '') ?>"
+                       placeholder="یک خط توضیح — زیر متن انتخاب سرعت به مشتری نشان داده می‌شود"></td>
               </tr>
             <?php endforeach; ?>
           </table>
           <div class="muted" style="margin-top:6px">
-            متن و ایموجی و رنگ سرعت‌ها داخل ربات تنظیم می‌شود: <code>/panel</code> ← 🔘 دکمه‌ها ← این دکمه ← ⚡️ سرعت‌ها
+            متن دکمه = ایموجی + متن + «نفر در روز». مثلا <code>🏃 نیمه‌سریع — 3,500/روز</code><br>
+            ✨ ایموجی پریمیوم فقط داخل ربات تنظیم می‌شود:
+            <code>/panel</code> ← 🔘 دکمه‌ها ← این دکمه ← ⚡️ سرعت‌ها
           </div>
         </div>
 

@@ -1696,44 +1696,144 @@ function showOneProduct($uid, $chatId, $p) {
         inlineKb([[productBtn($p, $uid)], [btnUI('back', 'menu_buy', 'nav')]]));
 }
 
+/** وضعیت واقعی سفارش — پرداخت + تحویل */
+function orderStage($o) {
+    if ($o['status'] === Order::REJECTED) return ['rejected', '❌ رد شده'];
+    if ($o['status'] === Order::PENDING)  return ['pending',  '⏳ منتظر پرداخت'];
+    if ($o['status'] === Order::REVIEW)   return ['review',   '🧾 رسید در حال بررسی'];
+
+    // تایید شده — حالا تحویل
+    $cmp = Campaign::forOrder($o['id']);
+    if (!$cmp) return ['done', '✅ انجام شد'];
+    if (!empty($cmp['done_at'])) return ['done', '✅ انجام شد'];
+    if (empty($cmp['active']))   return ['paused', '⏸ متوقف — نیاز به بررسی'];
+    return ['running', '🔄 در حال انجام'];
+}
+
+/** خط پیشرفت تحویل، اگر کمپین داشته باشد */
+function orderProgress($o, $indent = '   ') {
+    $cmp = Campaign::forOrder($o['id']);
+    if (!$cmp) return '';
+    $done = count($cmp['joined']);
+    $tgt  = max(1, (int)$cmp['target']);
+    $pct  = min(100, (int)round($done / $tgt * 100));
+    $bars = (int)round($pct / 10);
+    $out  = "\n" . $indent . '📊 ' . str_repeat('█', $bars) . str_repeat('░', 10 - $bars) .
+            ' ' . $pct . '%  (' . number_format($done) . '/' . number_format((int)$cmp['target']) . ')';
+    if ((int)($cmp['per_day'] ?? 0) > 0 && empty($cmp['done_at'])) {
+        $left = max(0, (int)$cmp['target'] - $done);
+        $days = (int)ceil($left / (int)$cmp['per_day']);
+        $out .= "\n" . $indent . '⏳ باقی‌مانده: ' . number_format($left) . ' نفر' .
+                ($days > 0 ? ' · حدود ' . $days . ' روز' : '');
+    }
+    if (!empty($cmp['done_at'])) $out .= "\n" . $indent . '🏁 تکمیل: ' . h($cmp['done_at']);
+    return $out;
+}
+
+/** یک سفارش، به شکل چند خط */
+function orderLines($o, $indent = '   ') {
+    $t = $o['type'] === 'topup'
+        ? '➕ شارژ کیف پول'
+        : '🛒 ' . h(Product::get($o['product_id'])['name'] ?? '—');
+    $m = $o['meta'] ?? [];
+    if ($m) {
+        if (!empty($m['link']))  $t .= "\n" . $indent . '📣 ' . h($m['link']);
+        if (!empty($m['qty']))   $t .= "\n" . $indent . '👥 ' . number_format((int)$m['qty']) . ' نفر' .
+                                       (!empty($m['speed']) ? ' · ' . h($m['speed']) : '');
+        if (!empty($m['per_day'])) $t .= "\n" . $indent . '🚀 ' . number_format((int)$m['per_day']) . ' نفر در روز';
+        if (!empty($m['eta']))   $t .= "\n" . $indent . '⏳ زمان تقریبی: ' . h($m['eta']);
+        $t .= orderProgress($o, $indent);
+    }
+    return $t;
+}
+
+/**
+ * 📊 پیگیری سفارش — دسته‌بندی‌شده
+ * در حال انجام · منتظر پرداخت · انجام‌شده · رد شده
+ */
 function showOrders($uid, $chatId, $extra = [], $replyTo = null) {
     $orders = Order::forUser($uid);
     if (!$orders) { panelShow($uid, $chatId, 'menu', T('orders_empty'), $extra ? inlineKb($extra) : null, $replyTo); return; }
 
-    $text = T('orders_head') . "\n";
-    foreach (array_slice($orders, 0, 15) as $o) {
-        $title = $o['type'] === 'topup'
-            ? '➕ شارژ کیف پول'
-            : '🛒 ' . h(Product::get($o['product_id'])['name'] ?? '—');
-        $m = $o['meta'] ?? [];
-        if ($m) {
-            $title .= "\n   📣 " . h($m['link'] ?? '—');
-            $title .= "\n   👥 " . number_format((int)($m['qty'] ?? 0)) . ' نفر · ' . h($m['speed'] ?? '');
-            if (!empty($m['eta'])) $title .= "\n   ⏳ " . h($m['eta']);
+    $groups = ['running' => [], 'review' => [], 'pending' => [], 'paused' => [], 'done' => [], 'rejected' => []];
+    foreach ($orders as $o) { [$k, ] = orderStage($o); $groups[$k][] = $o; }
 
-            // پیشرفت واقعی — از روی کمپینی که با همین سفارش ساخته شده
-            $cmp = Campaign::forOrder($o['id']);
-            if ($cmp) {
-                $done = count($cmp['joined']);
-                $tgt  = max(1, (int)$cmp['target']);
-                $pct  = min(100, (int)round($done / $tgt * 100));
-                $bars = (int)round($pct / 10);
-                $title .= "\n   📊 " . str_repeat('█', $bars) . str_repeat('░', 10 - $bars) .
-                          ' ' . $pct . '%  (' . number_format($done) . '/' . number_format((int)$cmp['target']) . ')';
-                if (!empty($cmp['done_at'])) $title .= "\n   ✅ تکمیل شد";
-            }
+    $heads = [
+        'running'  => '🔄 <b>در حال انجام</b>',
+        'review'   => '🧾 <b>رسید در حال بررسی</b>',
+        'pending'  => '⏳ <b>منتظر پرداخت</b>',
+        'paused'   => '⏸ <b>متوقف — با پشتیبانی تماس بگیرید</b>',
+        'done'     => '✅ <b>انجام شده</b>',
+        'rejected' => '❌ <b>رد شده</b>',
+    ];
+
+    $text = T('orders_head') . "\n";
+    $shown = 0;
+    foreach ($groups as $k => $list) {
+        if (!$list) continue;
+        $text .= "\n" . $heads[$k] . '  (' . count($list) . ")\n";
+        foreach (array_slice($list, 0, 6) as $o) {
+            $text .= "\n" . orderLines($o) . "\n";
+            $text .= '   💰 ' . fmtNum($o['amount']) . ' ' . h($o['currency']) . "\n";
+            $text .= '   🧾 <code>' . h($o['id']) . "</code>\n";
+            $text .= '   📅 ' . h($o['created_at']) . "\n";
+            $shown++;
         }
-        $text .= "\n" . T('orders_item', [
-            'status'   => Order::statusLabel($o['status']),
-            'title'    => $title,
-            'amount'   => fmtNum($o['amount']),
-            'currency' => h($o['currency']),
-            'id'       => h($o['id']),
-            'date'     => h($o['created_at']),
-            'type'     => $o['type'] === 'topup' ? 'شارژ' : 'محصول',
-        ]);
+        if (count($list) > 6) $text .= "\n   … و " . (count($list) - 6) . " سفارش دیگر\n";
     }
-    panelShow($uid, $chatId, 'menu', $text, $extra ? inlineKb($extra) : null, $replyTo);
+
+    $text .= "\n➖➖➖\n🔍 برای دیدن وضعیت یک سفارش، <b>کد پیگیری</b> آن را بفرستید.";
+
+    $rows = [[btnCb('🔍 پیگیری با کد', 'track_ask', 'info')]];
+    foreach ($extra as $r) $rows[] = $r;
+    panelShow($uid, $chatId, 'menu', $text, inlineKb($rows), $replyTo);
+}
+
+/** 🔍 وضعیت یک سفارش با کد پیگیری */
+function showOrderStatus($uid, $chatId, $code, $replyTo = null) {
+    $code = trim($code);
+    $o = Order::get($code);
+
+    if (!$o || (int)$o['user_id'] !== (int)$uid) {
+        // شاید ادمین کد کاربر دیگری را زده
+        if ($o && $uid === ADMIN_ID) {
+            // اجازه دارد
+        } else {
+            sendMsg(BOT_TOKEN, $chatId,
+                "❌ سفارشی با کد <code>" . h($code) . "</code> پیدا نشد.\n\n" .
+                "کد پیگیری را از پیام ثبت سفارش کپی کنید، یا 📊 پیگیری سفارش را بزنید.",
+                mainKeyboard());
+            return false;
+        }
+    }
+
+    [$stage, $label] = orderStage($o);
+
+    $text  = "🔍 <b>وضعیت سفارش</b>\n\n";
+    $text .= "🧾 کد پیگیری: <code>" . h($o['id']) . "</code>\n";
+    $text .= "📊 وضعیت: <b>" . $label . "</b>\n\n";
+    $text .= orderLines($o, '') . "\n\n";
+    $text .= "💰 مبلغ: <b>" . fmtNum($o['amount']) . ' ' . h($o['currency']) . "</b>\n";
+    $text .= "📅 ثبت: " . h($o['created_at']) . "\n";
+    if (!empty($o['decided_at'])) $text .= "✅ تایید: " . h($o['decided_at']) . "\n";
+
+    $hint = [
+        'pending'  => "\n👇 مبلغ را واریز کنید و رسید را بفرستید.",
+        'review'   => "\n⏳ رسید شما رسید؛ بعد از تایید، سفارش شروع می‌شود.",
+        'running'  => "\n🔄 سفارش در حال انجام است. این صفحه را هر وقت خواستید ببینید.",
+        'paused'   => "\n⚠️ برای ادامه، ربات باید در کانال شما ادمین باشد.",
+        'done'     => "\n🎉 سفارش شما کامل شد. ممنون از خریدتان.",
+        'rejected' => "\n❌ این سفارش رد شد. با پشتیبانی تماس بگیرید.",
+    ][$stage] ?? '';
+    $text .= $hint;
+
+    $rows = [];
+    if ($stage === 'pending')  $rows[] = [btnCb(UT('receipt'), 'rcpt_' . $o['id'], 'confirm')];
+    if ($stage === 'rejected' || $stage === 'paused') $rows[] = [btnUI('support', 'menu_support', 'info')];
+    $rows[] = [btnCb('📊 همه سفارش‌ها', 'menu_orders', 'nav')];
+
+    panelShow($uid, $chatId, 'menu', $text, inlineKb($rows), $replyTo);
+    return true;
 }
 
 function showReferral($uid, $chatId, $extra = [], $replyTo = null) {
@@ -1793,6 +1893,20 @@ function walletFor($currency) {
 
 function createOrderAndAsk($uid, $chatId, $username, $type, $productId, $amount, $currency, $title, $meta = []) {
     $oid = Order::create($uid, $username, $type, $productId, $amount, $currency, $meta);
+
+    // ✅ اول تایید ثبت سفارش، بعد اطلاعات پرداخت
+    $ok  = "✅ <b>سفارش شما ثبت شد</b>\n\n";
+    $ok .= "🧾 کد پیگیری: <code>" . h($oid) . "</code>\n";
+    if (!empty($meta['link'])) $ok .= "📣 کانال: " . h($meta['link']) . "\n";
+    if (!empty($meta['qty']))  $ok .= "👥 تعداد: <b>" . number_format((int)$meta['qty']) . "</b> نفر\n";
+    if (!empty($meta['speed'])) $ok .= "⚡️ سرعت: " . h($meta['speed']) . "\n";
+    if (!empty($meta['eta']))   $ok .= "⏳ زمان تقریبی: " . h($meta['eta']) . "\n";
+    $ok .= "💳 مبلغ: <b>" . fmtNum($amount) . ' ' . h($currency) . "</b>\n";
+    $ok .= "📊 وضعیت: <b>در انتظار پرداخت</b>\n\n";
+    $ok .= "👇 مبلغ را واریز کنید و رسید را بفرستید.\n";
+    $ok .= "با همین کد پیگیری هر وقت خواستید وضعیت را ببینید: /track " . h($oid);
+    sendMsg(BOT_TOKEN, $chatId, $ok);
+
     [$method, $wallet] = walletFor($currency);
     $text = T('pay_info', [
         'title' => $title, 'amount' => fmtNum($amount), 'currency' => h($currency),
@@ -2008,13 +2122,59 @@ function flowInvoice($uid, $chatId) {
 /** ثبت نهایی سفارش جریان‌دار */
 function flowFinish($uid, $chatId, $uname) {
     $st = getState($uid);
-    if (!$st || $st['action'] !== 'flow') return false;
+
+    // دوباره زدن همان دکمه — پیام قبلی هنوز روی صفحه است
+    if ($st && $st['action'] === 'flow_meta') {
+        sendMsg(BOT_TOKEN, $chatId, "ℹ️ سفارش شما ثبت شده؛ روش پرداخت را از پیام بالا انتخاب کنید.");
+        return false;
+    }
+    if (!$st || $st['action'] !== 'flow') {
+        // حالت گم شده (ربات ری‌استارت شده یا خیلی وقت گذشته) — از اول، نه سکوت
+        sendMsg(BOT_TOKEN, $chatId,
+            "⚠️ این سفارش منقضی شده است.\n\nلطفا دوباره از «🛒 خرید محصول» شروع کنید.",
+            mainKeyboard());
+        return false;
+    }
+
     $sd = $st['data'];
     $p  = Product::get($sd['pid']);
-    if (!$p) { clearState($uid); return false; }
+    if (!$p) {
+        clearState($uid);
+        sendMsg(BOT_TOKEN, $chatId, "⚠️ این محصول دیگر در دسترس نیست.", mainKeyboard());
+        if ($uid !== ADMIN_ID) sendMsg(BOT_TOKEN, ADMIN_ID,
+            "⚠️ کاربر <code>{$uid}</code> روی محصولی سفارش داد که دیگر وجود ندارد: <code>" .
+            h((string)($sd['pid'] ?? '')) . "</code>");
+        return false;
+    }
 
     $total = (float)($sd['data']['total'] ?? 0);
-    if ($total <= 0) { clearState($uid); return false; }
+    if ($total <= 0) {
+        // تقریبا همیشه یعنی: قیمت این دکمه هنوز تنظیم نشده
+        clearState($uid);
+        if ($uid === ADMIN_ID) {
+            sendMsg(BOT_TOKEN, $chatId,
+                "⚠️ <b>قیمت این محصول صفر است، پس فاکتور ساخته نمی‌شود.</b>\n\n" .
+                "محصول: <b>" . h($p['name']) . "</b>\n\n" .
+                "قیمتش را بگذارید:\n" .
+                "• داخل ربات: /panel ← 🔘 دکمه‌ها ← این دکمه ← 💰 قیمت\n" .
+                "• یا پنل وب ← 🛒 محصولات",
+                inlineKb(parseSubProductId($p['id'])
+                    ? [[btnCb('💰 تنظیم قیمت همین حالا', 'sbpr_' . implode('|', $p['btn']), 'buy')]]
+                    : [[btnCb('💰 تنظیم قیمت همین حالا', 'epp_' . $p['id'], 'buy')]]));
+        } else {
+            sendMsg(BOT_TOKEN, $chatId,
+                "⚠️ قیمت این محصول هنوز تنظیم نشده است.\nلطفا با پشتیبانی تماس بگیرید.",
+                mainKeyboard());
+            sendMsg(BOT_TOKEN, ADMIN_ID,
+                "🔴 <b>فروش از دست رفت!</b>\n\n" .
+                "کاربر <code>{$uid}</code> خواست «<b>" . h($p['name']) . "</b>» بخرد " .
+                "ولی قیمتش صفر است.\n\nهمین حالا قیمتش را بگذارید:",
+                inlineKb(parseSubProductId($p['id'])
+                    ? [[btnCb('💰 تنظیم قیمت', 'sbpr_' . implode('|', $p['btn']), 'buy')]]
+                    : [[btnCb('💰 تنظیم قیمت', 'epp_' . $p['id'], 'buy')]]));
+        }
+        return false;
+    }
 
     $meta = [
         'link'       => $sd['data']['link'] ?? '',
@@ -3128,6 +3288,16 @@ function masterHandle($update) {
             return;
         }
 
+        if ($data === 'track_ask') {
+            answerCb(BOT_TOKEN, $cbId);
+            setState($uid, 'track');
+            sendMsg(BOT_TOKEN, $chatId,
+                "🔍 <b>کد پیگیری</b> سفارش را بفرستید.\n\n" .
+                "نمونه: <code>or_tjwodm15a1a3</code>",
+                inlineKb([[btnUI('cancel', 'cancel', 'cancel')]]));
+            return;
+        }
+
         if ($data === 'fok') {
             answerCb(BOT_TOKEN, $cbId);
             flowFinish($uid, $chatId, $uname);
@@ -3878,6 +4048,20 @@ function masterHandle($update) {
         return;
     }
     if ($text === '/cancel') { clearState($uid); sendMsg(BOT_TOKEN, $chatId, "❌ لغو شد.", mainKeyboard()); return; }
+    if ($text === '/orders' || $text === '/track') {
+        clearState($uid); showOrders($uid, $chatId, [], $msg['message_id'] ?? null); return;
+    }
+    if (str_starts_with($text, '/track ')) {
+        clearState($uid);
+        showOrderStatus($uid, $chatId, substr($text, 7), $msg['message_id'] ?? null);
+        return;
+    }
+    // کد پیگیری را خالی فرستاده — بدون هیچ دستوری
+    if (preg_match('/^or_[A-Za-z0-9]{6,}$/', $text)) {
+        clearState($uid);
+        showOrderStatus($uid, $chatId, $text, $msg['message_id'] ?? null);
+        return;
+    }
     if ($text === '/menu')   { showHome($uid, $chatId, $fname); return; }
     if ($text === '/hide' || $text === UT('hide_menu')) {
         sendMsg(BOT_TOKEN, $chatId,
@@ -3898,6 +4082,12 @@ function masterHandle($update) {
     if (!$st) return;
     $action = $st['action'];
     $sd     = $st['data'] ?? [];
+
+    if ($action === 'track') {
+        clearState($uid);
+        showOrderStatus($uid, $chatId, $text, $msg['message_id'] ?? null);
+        return;
+    }
 
     if ($action === 'receipt') {
         $oid = $sd['order'] ?? '';
