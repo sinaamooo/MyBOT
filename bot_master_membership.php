@@ -378,6 +378,15 @@ function defaultConfig() {
         // 🧪 حالت تست — اجازه سفارش با مبلغ صفر، برای امتحان کردن کل مسیر
         'test_mode' => false,
 
+        // 📋 لیست تعرفه‌ها — دکمه شیشه‌ای زیر بخش محصولات
+        'tariff' => [
+            'on'   => true,
+            'text' => '📋 <b>لیست تعرفه‌ها</b>',   // {list} = جدول خودکار قیمت‌ها
+            'btn'  => ['emoji' => '📋', 'text' => 'لیست تعرفه‌ها', 'color' => 'primary', 'icon' => ''],
+            'back' => ['emoji' => '◀️', 'text' => 'برگشت', 'color' => 'nav', 'icon' => ''],
+            'auto' => true,   // جدول قیمت‌ها خودکار زیر متن اضافه شود
+        ],
+
         'buttons' => [
             'buy'      => ['emoji' => '🛒', 'text' => 'خرید محصول',                     'color' => 'success', 'dot' => '🟢', 'icon' => '', 'row' => 1, 'order' => 1, 'on' => true, 'action' => ''],
             'account'  => ['emoji' => '👤', 'text' => 'حساب کاربری',                    'color' => 'primary', 'dot' => '🔵', 'icon' => '', 'row' => 2, 'order' => 2, 'on' => true, 'action' => ''],
@@ -939,7 +948,7 @@ function subProduct($bid, $sid, $sub = null) {
         'currency'  => (string)($sub['currency'] ?? (cfg()['currency'] ?? 'تومان')),
         'limit'     => (int)($sub['limit'] ?? 0),
         'buyers'    => array_values($sub['buyers'] ?? []),
-        'bot_id'    => null,
+        'bot_id'    => $sub['bot_id'] ?? null,
         'link_code' => (string)($sub['link_code'] ?? ''),
         'emoji'     => (string)($sub['emoji'] ?? '💠'),
         'color'     => (string)($sub['color'] ?? 'none'),
@@ -1731,7 +1740,61 @@ function showProducts($uid, $chatId, $extra = [], $replyTo = null) {
         if ($line) $rows[] = $line;
     }
     foreach ($extra as $r) $rows[] = $r;   // دکمه‌های شیشه‌ای دلخواه، زیر محصولات
+
+    // 📋 دکمه لیست تعرفه‌ها — همیشه آخرین ردیف
+    $tf = cfg()['tariff'] ?? [];
+    if (!empty($tf['on'])) {
+        $b = ['text' => trim(($tf['btn']['emoji'] ?? '') . ' ' . ($tf['btn']['text'] ?? 'لیست تعرفه‌ها')),
+              'callback_data' => 'tariff'];
+        if (isStyle($tf['btn']['color'] ?? '')) $b['style'] = $tf['btn']['color'];
+        if (!empty($tf['btn']['icon'])) $b['icon_custom_emoji_id'] = (string)$tf['btn']['icon'];
+        $rows[] = [$b];
+    }
     panelShow($uid, $chatId, 'shop', $text, inlineKb($rows), $replyTo);
+}
+
+/** 📋 جدول خودکار تعرفه‌ها */
+function tariffTable() {
+    $items = activeProducts('buy');
+    foreach (saleButtons() as $sb) if (!empty($sb['active'])) $items[] = $sb;
+    if (!$items) return '';
+
+    $out = '';
+    foreach ($items as $p) {
+        $per = max(1, (int)($p['flow']['per'] ?? 1000));
+        $out .= "\n" . trim(($p['emoji'] ?? '💠') . ' <b>' . h($p['name']) . '</b>') . "\n";
+        if ((float)$p['price'] <= 0) { $out .= "   قیمت به‌زودی\n"; continue; }
+        foreach ($p['flow']['speeds'] ?? [] as $sp) {
+            if (isset($sp['on']) && empty($sp['on'])) continue;
+            $rate = (float)$p['price'] * (float)($sp['mult'] ?? 1);
+            $out .= '   ' . h(speedLabel($sp)) . ' — <b>' . fmtNum($rate) . '</b> ' .
+                    h($p['currency']) . ' / ' . number_format($per) . ' نفر';
+            $pd = (int)($sp['per_day'] ?? 0);
+            if ($pd > 0) $out .= ' · 🚀 ' . number_format($pd) . '/روز';
+            $out .= "\n";
+        }
+        $out .= '   👥 از ' . number_format((int)$p['flow']['min']) .
+                ' تا ' . number_format((int)$p['flow']['max']) . "\n";
+    }
+    return $out;
+}
+
+/** 📋 نمایش لیست تعرفه‌ها — با دکمه برگشت به بخش خرید */
+function showTariff($uid, $chatId, $replyTo = null) {
+    $tf = cfg()['tariff'] ?? [];
+    $text = (string)($tf['text'] ?? '📋 <b>لیست تعرفه‌ها</b>');
+    $table = !empty($tf['auto']) ? tariffTable() : '';
+    $text = str_contains($text, '{list}')
+        ? str_replace('{list}', $table, $text)
+        : $text . ($table !== '' ? "\n" . $table : '');
+
+    $b = ['text' => trim(($tf['back']['emoji'] ?? '◀️') . ' ' . ($tf['back']['text'] ?? 'برگشت')),
+          'callback_data' => 'menu_buy'];
+    if (isStyle($tf['back']['color'] ?? '')) $b['style'] = $tf['back']['color'];
+    elseif (gs('nav')) $b['style'] = gs('nav');
+    if (!empty($tf['back']['icon'])) $b['icon_custom_emoji_id'] = (string)$tf['back']['icon'];
+
+    panelShow($uid, $chatId, 'shop', $text, inlineKb([[$b]]), $replyTo);
 }
 
 /** نمایش یک محصول تکی — برای دکمه‌های سفارشی «محصول» */
@@ -1801,41 +1864,28 @@ function orderLines($o, $indent = '   ') {
  * 📊 پیگیری سفارش — دسته‌بندی‌شده
  * در حال انجام · منتظر پرداخت · انجام‌شده · رد شده
  */
+/**
+ * 📊 پیگیری سفارش — فقط با کد
+ * فهرست بلند نشان نمی‌دهد؛ کاربر کد را می‌فرستد، وضعیت همان سفارش می‌آید.
+ */
 function showOrders($uid, $chatId, $extra = [], $replyTo = null) {
     $orders = Order::forUser($uid);
-    if (!$orders) { panelShow($uid, $chatId, 'menu', T('orders_empty'), $extra ? inlineKb($extra) : null, $replyTo); return; }
+    setState($uid, 'track');
 
-    $groups = ['running' => [], 'review' => [], 'pending' => [], 'paused' => [], 'done' => [], 'rejected' => []];
-    foreach ($orders as $o) { [$k, ] = orderStage($o); $groups[$k][] = $o; }
+    $text  = "🔍 <b>پیگیری سفارش</b>\n\n";
+    $text .= "کد پیگیری سفارش خود را بفرستید.\n";
+    $text .= "<i>نمونه:</i> <code>or_tjwodm15a1a3</code>";
 
-    $heads = [
-        'running'  => '🔄 <b>در حال انجام</b>',
-        'review'   => '🧾 <b>رسید در حال بررسی</b>',
-        'pending'  => '⏳ <b>منتظر پرداخت</b>',
-        'paused'   => '⏸ <b>متوقف — با پشتیبانی تماس بگیرید</b>',
-        'done'     => '✅ <b>انجام شده</b>',
-        'rejected' => '❌ <b>رد شده</b>',
-    ];
-
-    $text = T('orders_head') . "\n";
-    $shown = 0;
-    foreach ($groups as $k => $list) {
-        if (!$list) continue;
-        $text .= "\n" . $heads[$k] . '  (' . count($list) . ")\n";
-        foreach (array_slice($list, 0, 6) as $o) {
-            $text .= "\n" . orderLines($o) . "\n";
-            $text .= '   💰 ' . fmtNum($o['amount']) . ' ' . h($o['currency']) . "\n";
-            $text .= '   🧾 <code>' . h($o['id']) . "</code>\n";
-            $text .= '   📅 ' . h($o['created_at']) . "\n";
-            $shown++;
-        }
-        if (count($list) > 6) $text .= "\n   … و " . (count($list) - 6) . " سفارش دیگر\n";
+    $rows = [];
+    // آخرین سفارش‌ها فقط به شکل دکمه — بدون متن اضافه
+    foreach (array_slice($orders, 0, 5) as $o) {
+        [, $label] = orderStage($o);
+        $name = $o['type'] === 'topup' ? '➕ شارژ' : (Product::get($o['product_id'])['name'] ?? 'محصول');
+        $rows[] = [btnCb(mb_substr($label . ' · ' . $name, 0, 40), 'trk_' . $o['id'], 'info')];
     }
-
-    $text .= "\n➖➖➖\n🔍 برای دیدن وضعیت یک سفارش، <b>کد پیگیری</b> آن را بفرستید.";
-
-    $rows = [[btnCb('🔍 پیگیری با کد', 'track_ask', 'info')]];
     foreach ($extra as $r) $rows[] = $r;
+    $rows[] = [btnUI('cancel', 'cancel', 'cancel')];
+
     panelShow($uid, $chatId, 'menu', $text, inlineKb($rows), $replyTo);
 }
 
@@ -2566,6 +2616,8 @@ function admHome($chatId, $msgId = null) {
         [btnCb('🔧 راه‌اندازی خودکار', 'setup', 'confirm')],
         [btnCb('🛒 محصولات', 'eprods', 'admin'),
          btnCb('🤖 ربات‌های زیرمجموعه', 'eupload', 'admin')],
+        [btnCb('📢 گزارش خرید در گروه', 'adm_reports', 'admin')],
+        [btnCb('📋 لیست تعرفه‌ها', 'adm_tariff', 'admin')],
         [btnCb('🧾 سفارش‌ها', 'adm_orders', 'admin'), btnCb('🤖 ربات‌ها', 'adm_bots', 'admin')],
         [btnCb('📢 کانال‌ها', 'adm_chans', 'admin'), btnCb('📢 پیام همگانی', 'adm_bc', 'admin')],
         [btnCb('🌐 پنل وب', 'adm_web', 'info')],
@@ -2573,6 +2625,86 @@ function admHome($chatId, $msgId = null) {
     ];
     if ($msgId) editMsg(BOT_TOKEN, $chatId, $msgId, $text, inlineKb($rows));
     else sendMsg(BOT_TOKEN, $chatId, $text, inlineKb($rows));
+}
+
+/** 🤖 انتخاب ربات اپلودر تحویل برای یک محصول */
+function edProdBot($chatId, $msgId, $pid) {
+    $p = Product::get($pid);
+    if (!$p) return;
+    $bots = BotManager::all();
+
+    $text  = "🤖 <b>ربات تحویل — " . h($p['name']) . "</b>\n\n";
+    $text .= "بعد از خرید، لینک محتوا از این ربات به مشتری داده می‌شود.\n";
+    $text .= "برای فروش ممبر لازم نیست؛ برای فروش فایل بله.\n\n";
+    $cur = !empty($p['bot_id']) ? BotManager::get($p['bot_id']) : null;
+    $text .= "الان: " . ($cur ? '@' . h($cur['username']) : '<b>هیچ‌کدام</b>') . "\n";
+    if (!empty($p['link_code'])) $text .= "کد لینک: <code>" . h($p['link_code']) . "</code>\n";
+
+    $rows = [];
+    foreach ($bots as $b) {
+        $mark = (!empty($p['bot_id']) && $p['bot_id'] === $b['id']) ? '✅ ' : '';
+        $rows[] = [btnCb($mark . '@' . $b['username'], 'sbbotset_' . $pid . '|' . $b['id'], 'info')];
+    }
+    if (!$bots) $text .= "\n⚠️ هنوز ربات اپلودری اضافه نکرده‌اید (پنل وب ← 🤖 ربات‌ها).";
+    $rows[] = [btnCb('🚫 بدون ربات', 'sbbotset_' . $pid . '|', 'reject'),
+               btnCb('🔗 کد لینک', 'sbcode_' . $pid, 'admin')];
+    $bs = parseSubProductId($pid);
+    $rows[] = [btnUI('back', $bs ? 'sb_' . $bs[0] . '|' . $bs[1] : 'ep_' . $pid, 'nav')];
+    editMsg(BOT_TOKEN, $chatId, $msgId, $text, inlineKb($rows));
+}
+
+/** 📋 ویرایش لیست تعرفه‌ها */
+function admTariff($chatId, $msgId) {
+    $tf = cfg()['tariff'] ?? [];
+    $text  = "📋 <b>لیست تعرفه‌ها</b>\n\n";
+    $text .= "وضعیت: " . (!empty($tf['on']) ? '✅ روشن' : '❌ خاموش') . "\n";
+    $text .= "جدول خودکار قیمت‌ها: " . (!empty($tf['auto']) ? '✅ اضافه می‌شود' : '❌ فقط متن خودتان') . "\n\n";
+    $text .= "🔘 دکمه: " . h(trim(($tf['btn']['emoji'] ?? '') . ' ' . ($tf['btn']['text'] ?? ''))) .
+             " · " . (styleMap()[$tf['btn']['color'] ?? 'none'] ?? '—') . "\n";
+    $text .= "◀️ دکمه برگشت: " . h(trim(($tf['back']['emoji'] ?? '') . ' ' . ($tf['back']['text'] ?? ''))) . "\n\n";
+    $text .= "<b>متن فعلی:</b>\n" . (string)($tf['text'] ?? '—');
+
+    $rows = [
+        [btnCb(!empty($tf['on']) ? '❌ خاموش کردن' : '✅ روشن کردن', 'tfx', 'info'),
+         btnCb(!empty($tf['auto']) ? '📊 جدول: روشن' : '📊 جدول: خاموش', 'tfauto', 'info')],
+        [btnCb('✏️ متن تعرفه', 'tft', 'admin')],
+        [btnCb('🔘 متن دکمه', 'tfbt', 'admin'), btnCb('😀 ایموجی دکمه', 'tfbe', 'admin')],
+        [btnCb('◀️ متن دکمه برگشت', 'tfkt', 'admin'), btnCb('😀 ایموجی برگشت', 'tfke', 'admin')],
+        [btnCb('🎨 رنگ دکمه', 'tfbc', 'admin'), btnCb('🎨 رنگ برگشت', 'tfkc', 'admin')],
+        [btnCb('👁 پیش‌نمایش', 'tfprev', 'confirm')],
+        [btnUI('back', 'adm_home', 'nav')],
+    ];
+    editMsg(BOT_TOKEN, $chatId, $msgId, $text, inlineKb($rows));
+}
+
+/** 📢 فهرست گزارش‌های خرید — یک گروه، هر محصول یک تاپیک */
+function admReports($chatId, $msgId) {
+    $items = saleButtons();
+    foreach (Product::all() as $pr) if (!empty($pr['active'])) $items[] = $pr;
+
+    $text  = "📢 <b>گزارش خرید در گروه</b>\n\n";
+    $text .= "یک گروه بسازید و برای هر محصول یک <b>تاپیک</b> جدا.\n";
+    $text .= "بعد از هر خرید، گزارشش در تاپیک خودش می‌افتد.\n";
+    $text .= "⚠️ ربات باید در گروه <b>ادمین</b> باشد.\n\n";
+
+    $rows = [];
+    if (!$items) {
+        $text .= "هنوز محصولی ندارید.";
+    } else {
+        foreach ($items as $p) {
+            $r = reportOf($p);
+            $mark = !empty($r['on']) && trim((string)$r['chat_id']) !== '' ? '✅' : '❌';
+            $tag  = trim((string)$r['chat_id']) !== ''
+                ? ((int)$r['thread_id'] > 0 ? '🧵 ' . (int)$r['thread_id'] : 'بدون تاپیک')
+                : 'تنظیم نشده';
+            $text .= "{$mark} " . h(trim(($p['emoji'] ?? '') . ' ' . $p['name'])) . " — {$tag}\n";
+            $rows[] = [btnCb($mark . ' ' . trim(($p['emoji'] ?? '') . ' ' . $p['name']),
+                             'rp_' . $p['id'], 'info')];
+        }
+        $rows[] = [btnCb('👥 یک گروه برای همه', 'rpall', 'buy')];
+    }
+    $rows[] = [btnUI('back', 'adm_home', 'nav')];
+    editMsg(BOT_TOKEN, $chatId, $msgId, $text, inlineKb($rows));
 }
 
 function admOrders($chatId, $msgId) {
@@ -2817,7 +2949,7 @@ function edSubs($chatId, $msgId, $bid) {
     }
     $rows[] = [btnCb('➕ افزودن دکمه شیشه‌ای', 'sbnew_' . $bid, 'confirm'),
                btnCb('📐 چیدمان', 'sblay_' . $bid, 'admin')];
-    if ($subs) $rows[] = [btnCb('🔗 وصل خودکار به محصولات هم‌نام', 'sbauto_' . $bid, 'buy')];
+    if (count($subs) > 1) $rows[] = [btnCb('🔄 هماهنگ کردن همه با هم', 'sbsync_' . $bid, 'buy')];
     $rows[] = [btnUI('back', 'eb_' . $bid, 'nav')];
     editMsg(BOT_TOKEN, $chatId, $msgId, $text, inlineKb($rows));
 }
@@ -2856,6 +2988,12 @@ function edSub($chatId, $msgId, $bid, $sid) {
         $ons = 0;
         foreach ($sp['flow']['speeds'] ?? [] as $spd) if (!isset($spd['on']) || !empty($spd['on'])) $ons++;
         $text .= "⚡️ سرعت‌ها: " . $ons . "\n";
+        $dbot = !empty($sp['bot_id']) ? BotManager::get($sp['bot_id']) : null;
+        $text .= "🤖 ربات تحویل: " . ($dbot ? '@' . h($dbot['username']) : '—') . "\n";
+        $rp0 = reportOf($sp);
+        $text .= "📢 گزارش: " . (!empty($rp0['on']) && trim((string)$rp0['chat_id']) !== ''
+                 ? '✅ ' . ((int)$rp0['thread_id'] > 0 ? '🧵 ' . (int)$rp0['thread_id'] : 'بدون تاپیک')
+                 : '❌ خاموش') . "\n";
     }
     $text .= "\nوضعیت: " . (!empty($sub['on']) ? '✅ روشن' : '❌ خاموش');
 
@@ -2871,6 +3009,7 @@ function edSub($chatId, $msgId, $bid, $sid) {
         ($sp ? [btnCb('💰 قیمت', 'sbpr_' . $k, 'buy'), btnCb('👥 تعداد', 'sbm_' . $k, 'info')] : null),
         ($sp ? [btnCb('⚡️ سرعت‌ها', 'sbsp_' . $k, 'admin'),
                 btnCb('📢 گزارش خرید', 'sbrp_' . $k, 'admin')] : null),
+        ($sp ? [btnCb('🤖 ربات تحویل', 'sbbot_' . $k, 'admin')] : null),
         [btnCb(!empty($sub['on']) ? '❌ خاموش' : '✅ روشن', 'sbx_' . $k, 'info'),
          btnCb('🗑 حذف', 'sbd_' . $k, 'reject')],
         [btnUI('back', 'sbs_' . $bid, 'nav')],
@@ -2937,6 +3076,49 @@ function edReportBtn($chatId, $msgId, $pid, $i) {
         [btnUI('back', 'rp_' . $pid, 'nav')],
     ];
     editMsg(BOT_TOKEN, $chatId, $msgId, $text, inlineKb($rows));
+}
+
+/** بهترین دکمه برای الگو گرفتن — اولی که قیمت دارد، وگرنه اولی */
+function sourceSub($bid, $exceptSid = null) {
+    $subs = cfg()['buttons'][$bid]['subs'] ?? [];
+    $first = null;
+    foreach ($subs as $sub) {
+        if ($exceptSid !== null && ($sub['id'] ?? '') === $exceptSid) continue;
+        if ($first === null) $first = $sub;
+        if ((float)($sub['price'] ?? 0) > 0) return $sub;
+    }
+    return $first;
+}
+
+/**
+ * 🔄 هماهنگ کردن همه دکمه‌های یک بخش با یک دکمه مرجع
+ * قیمت، تعداد، سرعت‌ها و گروه گزارش یکی می‌شود؛ نام و ایموجی و تاپیک دست‌نخورده می‌ماند.
+ */
+function syncSubs($bid, $srcSid, $withPrice = true) {
+    $src = findSub($bid, $srcSid);
+    if (!$src) return 0;
+    $n = 0;
+    foreach ((cfg()['buttons'][$bid]['subs'] ?? []) as $sub) {
+        if (($sub['id'] ?? '') === $srcSid) continue;
+        subMutate($bid, $sub['id'], function (&$x) use ($src, $withPrice) {
+            if ($withPrice) {
+                $x['price']    = (float)($src['price'] ?? 0);
+                $x['currency'] = (string)($src['currency'] ?? 'تومان');
+            }
+            $x['flow'] = array_merge(defaultFlow(), $src['flow'] ?? [], ['on' => true, 'ask_admin' => true]);
+            if (!is_array($x['report'] ?? null)) $x['report'] = defaultReport();
+            $srcR = array_merge(defaultReport(), $src['report'] ?? []);
+            $x['report']['on']      = $srcR['on'];
+            $x['report']['chat_id'] = $srcR['chat_id'];
+            $x['report']['text']    = $srcR['text'];
+            $x['report']['buttons'] = $srcR['buttons'];
+            // تاپیک هر محصول مخصوص خودش می‌ماند
+            if (!empty($src['bot_id'])) $x['bot_id'] = $src['bot_id'];
+            $x['on'] = true;
+        });
+        $n++;
+    }
+    return $n;
 }
 
 function subMutate($bid, $sid, callable $fn) {
@@ -3350,6 +3532,8 @@ function masterHandle($update) {
         if ($u && !empty($u['banned'])) { answerCb(BOT_TOKEN, $cbId, T('banned'), true); return; }
 
         // --- دکمه‌های منو در حالت شیشه‌ای ---
+        if ($data === 'tariff') { answerCb(BOT_TOKEN, $cbId); showTariff($uid, $chatId); return; }
+
         if (str_starts_with($data, 'menu_')) {
             $act = substr($data, 5);
             answerCb(BOT_TOKEN, $cbId);
@@ -3616,7 +3800,7 @@ function masterHandle($update) {
         // ---------------- ادمین ----------------
         // همه کال‌بک‌های مدیریتی — شامل ویرایشگر داخل ربات
         $adminPrefixes = ['aok_', 'ano_', 'adm_', 'eb', 'et', 'eg', 'eu', 'sb', 'ep', 'esp',
-                          'rp', 'reply_', 'setup'];
+                          'rp', 'tf', 'reply_', 'setup'];
         $isAdminCb = false;
         foreach ($adminPrefixes as $pref) {
             if (str_starts_with($data, $pref)) { $isAdminCb = true; break; }
@@ -3680,6 +3864,40 @@ function masterHandle($update) {
                 inlineKb([[btnUI('cancel', 'sbs_' . $bid, 'cancel')]]));
             return;
         }
+        if (str_starts_with($data, 'sbsync_')) {
+            $bid = substr($data, 7);
+            $subs = cfg()['buttons'][$bid]['subs'] ?? [];
+            answerCb(BOT_TOKEN, $cbId);
+            if (count($subs) < 2) return;
+            $rows = [];
+            foreach ($subs as $sub) {
+                $sp = subProduct($bid, $sub['id'], $sub);
+                $rows[] = [btnCb(trim(($sub['emoji'] ?? '') . ' ' . $sub['text']) .
+                                 ' — ' . ((float)$sp['price'] > 0 ? fmtNum($sp['price']) : 'بدون قیمت'),
+                                 'sbsyncdo_' . $bid . '|' . $sub['id'], 'buy')];
+            }
+            $rows[] = [btnUI('back', 'sbs_' . $bid, 'nav')];
+            editMsg(BOT_TOKEN, $chatId, $msgId,
+                "🔄 <b>هماهنگ کردن دکمه‌ها</b>\n\n" .
+                "کدام دکمه درست تنظیم شده؟ روی آن بزنید تا <b>بقیه هم مثل آن شوند</b>:\n\n" .
+                "کپی می‌شود: 💰 قیمت · 👥 تعداد · ⚡️ سرعت‌ها · 📢 گروه گزارش · 🤖 ربات تحویل\n" .
+                "دست‌نخورده می‌ماند: نام · ایموجی · 🧵 شماره تاپیک هر محصول",
+                inlineKb($rows));
+            return;
+        }
+        if (str_starts_with($data, 'sbsyncdo_')) {
+            $rest = substr($data, 9); $pos = strrpos($rest, '|');
+            answerCb(BOT_TOKEN, $cbId);
+            if ($pos === false) return;
+            $bid = substr($rest, 0, $pos); $sid = substr($rest, $pos + 1);
+            $n = syncSubs($bid, $sid);
+            $src = findSub($bid, $sid);
+            sendMsg(BOT_TOKEN, $chatId,
+                "✅ <b>{$n}</b> دکمه با «" . h($src['text'] ?? '—') . "» هماهنگ شد.\n\n" .
+                "یادتان نرود برای هر محصول <b>شماره تاپیک</b> گزارشش را جدا بگذارید.");
+            edSubs($chatId, $msgId, $bid);
+            return;
+        }
         if (str_starts_with($data, 'sbauto_')) {
             $bid = substr($data, 7);
             $done = 0; $miss = [];
@@ -3727,6 +3945,75 @@ function masterHandle($update) {
         if (str_starts_with($data, 'sb_')) {
             $rest = substr($data, 3); $pos = strrpos($rest, '|');
             if ($pos !== false) { answerCb(BOT_TOKEN, $cbId); edSub($chatId, $msgId, substr($rest, 0, $pos), substr($rest, $pos + 1)); return; }
+        }
+
+        if (str_starts_with($data, 'sbbot_')) {
+            $rest = substr($data, 6); $pos = strrpos($rest, '|');
+            answerCb(BOT_TOKEN, $cbId);
+            if ($pos === false) return;
+            edProdBot($chatId, $msgId, subProductId(substr($rest, 0, $pos), substr($rest, $pos + 1)));
+            return;
+        }
+        if (str_starts_with($data, 'sbbotset_')) {
+            $rest = substr($data, 9); $pos = strrpos($rest, '|');
+            answerCb(BOT_TOKEN, $cbId, '✅');
+            if ($pos === false) return;
+            $pid = substr($rest, 0, $pos); $bidNew = substr($rest, $pos + 1);
+            prodMutate($pid, function (&$x) use ($bidNew) { $x['bot_id'] = $bidNew !== '' ? $bidNew : null; });
+            edProdBot($chatId, $msgId, $pid);
+            return;
+        }
+        if (str_starts_with($data, 'sbcode_')) {
+            $pid = substr($data, 7);
+            answerCb(BOT_TOKEN, $cbId);
+            setState(ADMIN_ID, 'sb_code', ['pid' => $pid]);
+            sendMsg(BOT_TOKEN, $chatId,
+                "🔗 کد لینک محتوا را بفرستید (خط تیره = حذف).\n\nاز پنل وب ← 🤖 ربات‌ها می‌گیرید.",
+                inlineKb([[btnUI('cancel', 'sbbot_' . $pid, 'cancel')]]));
+            return;
+        }
+
+        // 📋 لیست تعرفه‌ها
+        if ($data === 'adm_tariff') { answerCb(BOT_TOKEN, $cbId); admTariff($chatId, $msgId); return; }
+        if ($data === 'adm_reports') { answerCb(BOT_TOKEN, $cbId); admReports($chatId, $msgId); return; }
+        if ($data === 'tfx' || $data === 'tfauto') {
+            $f = $data === 'tfx' ? 'on' : 'auto';
+            cfgSet(function (&$c) use ($f) { $c['tariff'][$f] = empty($c['tariff'][$f]); });
+            answerCb(BOT_TOKEN, $cbId, '✅');
+            admTariff($chatId, $msgId);
+            return;
+        }
+        if ($data === 'tfbc' || $data === 'tfkc') {
+            $w = $data === 'tfbc' ? 'btn' : 'back';
+            cfgSet(function (&$c) use ($w) {
+                $c['tariff'][$w]['color'] = nextStyle($c['tariff'][$w]['color'] ?? 'none');
+            });
+            answerCb(BOT_TOKEN, $cbId, '✅');
+            admTariff($chatId, $msgId);
+            return;
+        }
+        if ($data === 'tfprev') { answerCb(BOT_TOKEN, $cbId); showTariff($uid, $chatId); return; }
+        foreach ([['tft',  'tf_text',  "✏️ متن لیست تعرفه‌ها را بفرستید.\n\n✨ ایموجی پریمیوم و نقل‌قول پشتیبانی می‌شود.\n\nاگر <code>{list}</code> بنویسید، جدول خودکار قیمت‌ها دقیقا همان‌جا می‌نشیند."],
+                  ['tfbt', 'tf_btn',   '🔘 متن دکمه «لیست تعرفه‌ها»:'],
+                  ['tfbe', 'tf_bemoji','😀 ایموجی دکمه تعرفه (خط تیره = حذف):'],
+                  ['tfkt', 'tf_back',  '◀️ متن دکمه برگشت:'],
+                  ['tfke', 'tf_kemoji','😀 ایموجی دکمه برگشت (خط تیره = حذف):']] as [$d0, $act, $ask]) {
+            if ($data !== $d0) continue;
+            answerCb(BOT_TOKEN, $cbId);
+            setState(ADMIN_ID, $act, []);
+            sendMsg(BOT_TOKEN, $chatId, $ask, inlineKb([[btnUI('cancel', 'adm_tariff', 'cancel')]]));
+            return;
+        }
+        if ($data === 'rpall') {
+            answerCb(BOT_TOKEN, $cbId);
+            setState(ADMIN_ID, 'rp_allchat', []);
+            sendMsg(BOT_TOKEN, $chatId,
+                "👥 آیدی گروه گزارش را بفرستید.\n\n" .
+                "روی <b>همه محصولات</b> اعمال می‌شود و همه روشن می‌شوند.\n" .
+                "بعد برای هر محصول <b>شماره تاپیک</b> خودش را جدا بگذارید.\n\n" .
+                "مثال: <code>-1001234567890</code>",
+                inlineKb([[btnUI('cancel', 'adm_reports', 'cancel')]]));
+            return;
         }
 
         // 📢 گزارش خرید
@@ -4396,6 +4683,76 @@ function masterHandle($update) {
     $action = $st['action'];
     $sd     = $st['data'] ?? [];
 
+    if ($action === 'sb_code') {
+        $pid = $sd['pid'] ?? '';
+        $plain = trim($msg['text'] ?? '');
+        if (!Product::get($pid)) { clearState($uid); return; }
+        $v = ($plain === '-' || $plain === '—') ? '' : $plain;
+        prodMutate($pid, function (&$x) use ($v) { $x['link_code'] = $v; });
+        clearState($uid);
+        sendMsg(BOT_TOKEN, $chatId, $v !== '' ? "✅ کد لینک ذخیره شد." : "✅ حذف شد.",
+            inlineKb([[btnCb('🤖 ربات تحویل', 'sbbot_' . $pid, 'admin')]]));
+        return;
+    }
+
+    if (str_starts_with($action, 'tf_')) {
+        $plain = trim($msg['text'] ?? '');
+        $ids   = customEmojiIds($msg);
+        $back  = inlineKb([[btnCb('📋 لیست تعرفه‌ها', 'adm_tariff', 'admin')]]);
+
+        if ($action === 'tf_text') {
+            $html = msgHtml($msg);
+            if (trim($html) === '') { sendMsg(BOT_TOKEN, $chatId, "⚠️ متن خالی است."); return; }
+            cfgSet(function (&$c) use ($html) { $c['tariff']['text'] = $html; });
+            clearState($uid);
+            sendMsg(BOT_TOKEN, $chatId,
+                "✅ متن ذخیره شد." . ($ids ? "\n✨ ایموجی پریمیوم حفظ شد." : '') .
+                (str_contains($html, '{list}') ? "\n📊 جدول قیمت‌ها جای <code>{list}</code> می‌نشیند." : ''),
+                $back);
+            return;
+        }
+        $map = ['tf_btn' => ['btn', 'text'], 'tf_bemoji' => ['btn', 'emoji'],
+                'tf_back' => ['back', 'text'], 'tf_kemoji' => ['back', 'emoji']];
+        if (isset($map[$action])) {
+            [$w, $f] = $map[$action];
+            $v = ($plain === '-' || $plain === '—') ? '' : $plain;
+            if ($f === 'text' && $v === '') { sendMsg(BOT_TOKEN, $chatId, "⚠️ متن خالی است."); return; }
+            cfgSet(function (&$c) use ($w, $f, $v, $ids) {
+                $c['tariff'][$w][$f] = $v;
+                if ($f === 'text' && $ids) $c['tariff'][$w]['icon'] = $ids[0];
+            });
+            clearState($uid);
+            sendMsg(BOT_TOKEN, $chatId, "✅ ذخیره شد." . ($ids && $f === 'text' ? "\n✨ ایموجی پریمیوم نشست." : ''), $back);
+            return;
+        }
+        clearState($uid);
+        return;
+    }
+
+    if ($action === 'rp_allchat') {
+        $plain = trim($msg['text'] ?? '');
+        if ($plain === '') { sendMsg(BOT_TOKEN, $chatId, "⚠️ آیدی گروه را بفرستید."); return; }
+        $n = 0;
+        foreach (saleButtons() as $sb) {
+            reportMutate($sb['id'], function (&$r) use ($plain) { $r['chat_id'] = $plain; $r['on'] = true; });
+            $n++;
+        }
+        foreach (Product::all() as $pr) {
+            reportMutate($pr['id'], function (&$r) use ($plain) { $r['chat_id'] = $plain; $r['on'] = true; });
+            $n++;
+        }
+        clearState($uid);
+        $t = tg(BOT_TOKEN, 'getChat', ['chat_id' => $plain], 8);
+        sendMsg(BOT_TOKEN, $chatId,
+            (!empty($t['ok'])
+                ? "✅ گروه <b>" . h($t['result']['title'] ?? $plain) . "</b> روی <b>{$n}</b> محصول نشست."
+                : "⚠️ روی <b>{$n}</b> محصول ذخیره شد، ولی ربات به گروه دسترسی ندارد:\n<code>" .
+                  h($t['description'] ?? '—') . "</code>") .
+            "\n\nحالا برای هر محصول <b>شماره تاپیک</b> خودش را بگذارید:",
+            inlineKb([[btnCb('📢 گزارش‌ها', 'adm_reports', 'admin')]]));
+        return;
+    }
+
     if (str_starts_with($action, 'rp_')) {
         $pid = $sd['pid'] ?? '';
         $p   = Product::get($pid);
@@ -4687,17 +5044,57 @@ function masterHandle($update) {
         if ($action === 'sb_new') {
             if ($plain === '') { sendMsg(BOT_TOKEN, $chatId, "⚠️ متن خالی است."); return; }
             $sid = 's' . bin2hex(random_bytes(3));
-            cfgSet(function (&$c) use ($bid, $sid, $plain, $ids) {
+
+            // 🧬 از روی یک دکمه آماده، همه تنظیمات را به ارث ببر تا از همان اول کار کند
+            $src = sourceSub($bid);
+            cfgSet(function (&$c) use ($bid, $sid, $plain, $ids, $src) {
                 if (!isset($c['buttons'][$bid]['subs'])) $c['buttons'][$bid]['subs'] = [];
-                $c['buttons'][$bid]['subs'][] = [
+                $new = [
                     'id' => $sid, 'emoji' => '', 'text' => $plain, 'color' => 'none',
                     'icon' => $ids ? $ids[0] : '', 'row' => 0, 'order' => 50,
                     'on' => true, 'action' => 'text', 'value' => '',
+                    'price' => 0, 'currency' => cfg()['currency'] ?? 'تومان',
+                    'buyers' => [], 'flow' => defaultFlow(), 'report' => defaultReport(),
                 ];
+                if ($src) {
+                    $new['price']    = (float)($src['price'] ?? 0);
+                    $new['currency'] = (string)($src['currency'] ?? ($c['currency'] ?? 'تومان'));
+                    $new['color']    = (string)($src['color'] ?? 'none');
+                    if (is_array($src['flow'] ?? null))
+                        $new['flow'] = array_merge(defaultFlow(), $src['flow'], ['on' => true, 'ask_admin' => true]);
+                    if (is_array($src['report'] ?? null)) {
+                        $new['report'] = array_merge(defaultReport(), $src['report']);
+                        $new['report']['thread_id'] = 0;   // تاپیک باید مخصوص خودش باشد
+                    }
+                    if (!empty($src['bot_id']))    $new['bot_id']    = $src['bot_id'];
+                    if (!empty($src['link_code'])) $new['link_code'] = '';
+                }
+                $c['buttons'][$bid]['subs'][] = $new;
             });
             clearState($uid);
-            sendMsg(BOT_TOKEN, $chatId, "✅ دکمه شیشه‌ای <b>" . h($plain) . "</b> ساخته شد.",
-                inlineKb([[btnCb('⚙️ تنظیمش کن', 'sb_' . $bid . '|' . $sid, 'admin')]]));
+
+            $p = subProduct($bid, $sid);
+            $msgTxt  = "✅ دکمه <b>" . h($plain) . "</b> ساخته شد و <b>آماده فروش است</b>.\n\n";
+            if ($src) {
+                $msgTxt .= "🧬 تنظیمات از «" . h($src['text']) . "» کپی شد:\n";
+                $msgTxt .= "💰 قیمت: <b>" . fmtNum($p['price']) . ' ' . h($p['currency']) . "</b>\n";
+                $msgTxt .= "👥 تعداد: " . number_format((int)$p['flow']['min']) . ' تا ' .
+                           number_format((int)$p['flow']['max']) . "\n";
+                $msgTxt .= "⚡️ سرعت‌ها: " . count($p['flow']['speeds']) . "\n";
+                if (!empty($p['report']['chat_id']))
+                    $msgTxt .= "📢 گروه گزارش: <code>" . h($p['report']['chat_id']) .
+                               "</code> — <b>تاپیکش را بگذارید</b>\n";
+                $msgTxt .= "\nاگر قیمتش فرق دارد، عوضش کنید:";
+            } else {
+                $msgTxt .= "⚠️ هنوز قیمت ندارد. اول قیمتش را بگذارید:";
+            }
+
+            $k = $bid . '|' . $sid;
+            sendMsg(BOT_TOKEN, $chatId, $msgTxt, inlineKb([
+                [btnCb('💰 قیمت', 'sbpr_' . $k, 'buy'), btnCb('😀 ایموجی', 'sbe_' . $k, 'admin')],
+                [btnCb('📢 گزارش خرید', 'sbrp_' . $k, 'admin')],
+                [btnCb('⚙️ همه تنظیمات', 'sb_' . $k, 'admin')],
+            ]));
             return;
         }
         if ($action === 'sb_layout') {
