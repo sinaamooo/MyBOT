@@ -158,6 +158,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     // ---- تنظیمات عمومی ----
+    if ($a === 'save_tariff') {
+        $post = $_POST;
+        cfgSet(function (&$c) use ($post) {
+            $c['tariff']['on']   = !empty($post['tf_on']);
+            $c['tariff']['auto'] = !empty($post['tf_auto']);
+            $txt = (string)($post['tf_text'] ?? '');
+            if (trim($txt) !== '') $c['tariff']['text'] = $txt;
+            $c['tariff']['btn']['text']   = trim($post['tf_btn_text'] ?? '') ?: 'لیست تعرفه‌ها';
+            $c['tariff']['btn']['emoji']  = trim($post['tf_btn_emoji'] ?? '');
+            $c['tariff']['btn']['color']  = isStyle($post['tf_btn_color'] ?? '') ? $post['tf_btn_color'] : 'none';
+            $c['tariff']['back']['text']  = trim($post['tf_back_text'] ?? '') ?: 'برگشت';
+            $c['tariff']['back']['emoji'] = trim($post['tf_back_emoji'] ?? '');
+            $c['tariff']['back']['color'] = isStyle($post['tf_back_color'] ?? '') ? $post['tf_back_color'] : 'none';
+        });
+        go('لیست تعرفه‌ها ذخیره شد.');
+    }
+
     if ($a === 'save_settings') {
         $post = $_POST;
         cfgSet(function (&$c) use ($post) {
@@ -868,6 +885,60 @@ foreach ($tabs as $k => $l): ?>
 
 <?php // ================= محصولات ================= ?>
 <?php elseif ($tab === 'products'): ?>
+  <?php $TF = cfg()['tariff'] ?? []; ?>
+  <div class="card"><h2>📋 لیست تعرفه‌ها <?= !empty($TF['on']) ? '<span class="badge green">روشن</span>' : '<span class="badge">خاموش</span>' ?></h2><div class="body">
+    <div class="note">
+      یک دکمه شیشه‌ای زیر بخش «خرید محصول». جدول قیمت‌ها را خودکار می‌سازد و
+      زیرش یک دکمه <b>برگشت</b> دارد که به بخش ثبت سفارش برمی‌گردد.
+    </div>
+    <form method="post">
+      <input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="tab" value="products">
+      <input type="hidden" name="action" value="save_tariff">
+
+      <div style="margin:10px 0">
+        <label style="font-weight:500"><input type="checkbox" name="tf_on" style="width:auto"
+          <?= !empty($TF['on']) ? 'checked' : '' ?>> دکمه «لیست تعرفه‌ها» نشان داده شود</label>
+        <label style="font-weight:500"><input type="checkbox" name="tf_auto" style="width:auto"
+          <?= !empty($TF['auto']) ? 'checked' : '' ?>> 📊 جدول خودکار قیمت‌ها اضافه شود</label>
+      </div>
+
+      <label>متن لیست تعرفه‌ها</label>
+      <textarea name="tf_text" rows="8" style="direction:rtl"><?= h($TF['text'] ?? '') ?></textarea>
+      <div class="muted" style="margin-top:6px">
+        اگر <code>{list}</code> بنویسید، جدول قیمت‌ها دقیقا همان‌جا می‌نشیند؛ وگرنه زیر متن اضافه می‌شود.<br>
+        HTML مجاز: <code>&lt;b&gt;</code> <code>&lt;i&gt;</code> <code>&lt;code&gt;</code>
+        <code>&lt;blockquote&gt;</code> <code>&lt;blockquote expandable&gt;</code><br>
+        ✨ برای <b>ایموجی پریمیوم</b> متن را داخل ربات بنویسید: <code>/panel</code> ← 📋 لیست تعرفه‌ها ← ✏️ متن تعرفه
+      </div>
+
+      <div class="grid2" style="margin-top:14px">
+        <div><label>🔘 متن دکمه تعرفه</label>
+          <input name="tf_btn_text" value="<?= h($TF['btn']['text'] ?? 'لیست تعرفه‌ها') ?>"></div>
+        <div><label>😀 ایموجی دکمه</label>
+          <input name="tf_btn_emoji" value="<?= h($TF['btn']['emoji'] ?? '') ?>" style="text-align:center"></div>
+        <div><label>🎨 رنگ دکمه</label><select name="tf_btn_color">
+          <?php foreach (styleMap() as $sk => $sl): ?>
+            <option value="<?= h($sk) ?>" <?= ($TF['btn']['color'] ?? 'none') === $sk ? 'selected' : '' ?>><?= h($sl) ?></option>
+          <?php endforeach; ?></select></div>
+        <div><label>◀️ متن دکمه برگشت</label>
+          <input name="tf_back_text" value="<?= h($TF['back']['text'] ?? 'برگشت') ?>"></div>
+        <div><label>😀 ایموجی برگشت</label>
+          <input name="tf_back_emoji" value="<?= h($TF['back']['emoji'] ?? '') ?>" style="text-align:center"></div>
+        <div><label>🎨 رنگ برگشت</label><select name="tf_back_color">
+          <?php foreach (styleMap() as $sk => $sl): ?>
+            <option value="<?= h($sk) ?>" <?= ($TF['back']['color'] ?? 'none') === $sk ? 'selected' : '' ?>><?= h($sl) ?></option>
+          <?php endforeach; ?></select></div>
+      </div>
+
+      <div style="margin-top:14px"><button class="btn g">ذخیره لیست تعرفه‌ها</button></div>
+    </form>
+
+    <?php $tbl = tariffTable(); if (trim($tbl) !== ''): ?>
+      <div style="margin-top:16px"><label>👁 پیش‌نمایش جدول</label>
+        <div class="prev" style="white-space:pre-wrap;line-height:2"><?= $tbl ?></div></div>
+    <?php endif; ?>
+  </div></div>
+
   <?php $saleBtns = saleButtons(); ?>
   <?php if ($saleBtns): ?>
   <div class="card"><h2>💰 قیمت‌گذاری دکمه‌های فروش</h2><div class="body">

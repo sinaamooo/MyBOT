@@ -188,7 +188,7 @@ function delMsg($token, $chatId, $msgId) {
     return tg($token, 'deleteMessage', ['chat_id' => $chatId, 'message_id' => $msgId]);
 }
 
-function sendFile($token, $chatId, $type, $fileId, $caption = '', $protect = false) {
+function sendFile($token, $chatId, $type, $fileId, $caption = '', $protect = false, $markup = null) {
     $map = [
         'document' => ['sendDocument', 'document'], 'photo' => ['sendPhoto', 'photo'],
         'video' => ['sendVideo', 'video'],          'audio' => ['sendAudio', 'audio'],
@@ -202,7 +202,13 @@ function sendFile($token, $chatId, $type, $fileId, $caption = '', $protect = fal
         $data['parse_mode'] = 'HTML';
     }
     if ($protect) $data['protect_content'] = 'true';
-    return tg($token, $method, $data);
+    if ($markup) $data['reply_markup'] = is_string($markup) ? $markup : json_encode($markup);
+    $res = tg($token, $method, $data);
+    if (empty($res['ok']) && $markup && !is_string($markup) && isStyleError($res)) {
+        $data['reply_markup'] = json_encode(stripStyles($markup));
+        $res = tg($token, $method, $data);
+    }
+    return $res;
 }
 
 /**
@@ -529,9 +535,12 @@ function defaultConfig() {
             'info_text'       => "📊 <b>اطلاعات فایل</b>\n\n📦 {title}\n📁 تعداد فایل: <b>{files}</b>\n👁 بازدید: <b>{clicks}</b>\n📥 دانلود: <b>{delivered}</b>\n📅 {created}",
             'file_layout'     => '1',
             'file_buttons'    => [
-                ['id' => 'f1', 'emoji' => '📊', 'text' => 'اطلاعات فایل', 'color' => 'primary',
-                 'icon' => '', 'row' => 1, 'order' => 1, 'on' => true, 'action' => 'info', 'value' => ''],
+                ['id' => 'f1', 'emoji' => '📥', 'text' => 'تعداد دانلود', 'color' => 'success',
+                 'icon' => '', 'row' => 1, 'order' => 1, 'on' => true, 'action' => 'downloads', 'value' => ''],
+                ['id' => 'f2', 'emoji' => '👁', 'text' => 'بازدید', 'color' => 'primary',
+                 'icon' => '', 'row' => 1, 'order' => 2, 'on' => true, 'action' => 'views', 'value' => ''],
             ],
+            'file_layout'     => '2',
             'menu_text'       => "🤖 <b>پنل اپلودر</b>\n\n🔗 لینک‌ها: {links}\n🗑 حذف خودکار: {sec} ثانیه\n🔒 عضویت اجباری: {join}\n\nفایل بفرستید تا لینک بسازم.",
             'buttons' => [
                 'single' => ['emoji' => '📤', 'text' => 'آپلود تکی',   'color' => 'success', 'icon' => '', 'row' => 1, 'order' => 1, 'on' => true],
@@ -1493,16 +1502,73 @@ class Campaign
  * برگشت: [missing[], creditable[]] — creditable شناسه کمپین‌هایی که
  * کاربر تازه عضوشان شده و باید شمرده شوند.
  */
+/** سقف عضویت اجباری هر ربات و تعداد ربات هر کمپین */
+if (!defined('MAX_JOIN_PER_BOT'))  define('MAX_JOIN_PER_BOT', 4);
+if (!defined('BOTS_PER_CAMPAIGN')) define('BOTS_PER_CAMPAIGN', 2);
+
+/**
+ * 🎯 پخش کردن کمپین بین ربات‌ها
+ * هر کانال فقط در ۲ ربات قفل می‌شود، و ربات‌هایی انتخاب می‌شوند که کمترین بار را دارند.
+ */
+function assignCampaignBots($cid) {
+    $bots = [];
+    foreach (BotManager::all() as $b) if (!empty($b['active'])) $bots[] = $b['id'];
+    if (!$bots) return [];
+
+    // بار فعلی هر ربات = تعداد کمپین‌های فعالی که رویش نشسته
+    $load = array_fill_keys($bots, 0);
+    foreach (Campaign::all() as $c) {
+        if (($c['id'] ?? '') === $cid) continue;
+        if (empty($c['active']) || Campaign::isDone($c)) continue;
+        $on = $c['bots'] ?? [];
+        if (!$on) { foreach ($bots as $b) $load[$b]++; continue; }   // قدیمی: روی همه
+        foreach ($on as $b) if (isset($load[$b])) $load[$b]++;
+    }
+
+    // کانال‌های ثابت هم جا می‌گیرند
+    $fixed = [];
+    foreach ($bots as $b) $fixed[$b] = count(Channels::all($b));
+
+    // اول ربات‌هایی که هنوز به سقف نرسیده‌اند، بعد کم‌بارترین‌ها
+    $free = array_values(array_filter($bots, fn($b) => $load[$b] + $fixed[$b] < MAX_JOIN_PER_BOT));
+    $pool = $free ?: $bots;
+    usort($pool, fn($x, $y) => ($load[$x] + $fixed[$x]) <=> ($load[$y] + $fixed[$y]));
+
+    $pick = array_slice($pool, 0, BOTS_PER_CAMPAIGN);
+    mutate('campaigns', function (&$a) use ($cid, $pick) {
+        if (isset($a[$cid])) $a[$cid]['bots'] = array_values($pick);
+    });
+    return $pick;
+}
+
+/**
+ * کانال‌هایی که کاربر باید عضو شود = کانال‌های ثابت + کمپین‌های فعال.
+ *
+ * - کمپین‌ها همیشه قفل می‌کنند (سفارش مشتری است، به تنظیم هر ربات ربط ندارد)
+ * - کانال‌های ثابت فقط وقتی «عضویت اجباری» آن ربات روشن باشد
+ * - در مجموع بیشتر از MAX_JOIN_PER_BOT کانال به کاربر نشان داده نمی‌شود
+ *
+ * برگشت: [missing[], creditable[]]
+ */
 function requiredMissing($userId, $botId = null, $partnerId = null) {
     $missing = [];
     $creditable = [];
 
+    $fixedOn = true;
     if ($botId !== null) {
+        $bs = BotManager::settings($botId);
+        $fixedOn = !empty($bs['force_join']);
+    }
+
+    if ($botId !== null && $fixedOn) {
         foreach (Channels::missing($userId, $botId) as $m) $missing[] = $m;
     }
 
-    foreach (Campaign::activeFor($botId, $partnerId) as $c) {
-        // سهمیه امروز پر شده؟ امروز دیگر این کانال را قفل نکن
+    // کمپین‌ها — قدیمی‌ترین اول تا سفارش‌ها به‌ترتیب تمام شوند
+    $camps = Campaign::activeFor($botId, $partnerId);
+    usort($camps, fn($x, $y) => strcmp((string)($x['created_at'] ?? ''), (string)($y['created_at'] ?? '')));
+
+    foreach ($camps as $c) {
         if (Campaign::overDailyQuota($c)) continue;
 
         $res = Channels::isMemberOf($c['chat_id'], $userId);
@@ -1513,6 +1579,7 @@ function requiredMissing($userId, $botId = null, $partnerId = null) {
         }
         Campaign::noteSuccess($c['id']);
         if (!$res['member']) {
+            if (count($missing) >= MAX_JOIN_PER_BOT) continue;   // سقف پر شد، بقیه بماند برای بعد
             $missing[] = ['title' => $c['title'], 'url' => $c['url'], 'chat_id' => $c['chat_id']];
         } else {
             $creditable[] = $c['id'];
@@ -2272,17 +2339,10 @@ function flowFinish($uid, $chatId, $uname) {
         $oid = Order::create($uid, $uname, 'product', $p['id'], 0, $p['currency'], $meta);
         Order::attachReceipt($oid, 'text', '🧪 سفارش تستی — بدون پرداخت');
         Order::approve($oid, ADMIN_ID);
-        panelShow($uid, $chatId, 'shop',
-            "🧪 <b>سفارش تستی ثبت شد</b>\n\n" .
-            "🧾 کد پیگیری: <code>" . h($oid) . "</code>\n" .
-            "📦 " . h($p['name']) . "\n" .
-            "👥 " . number_format((int)$meta['qty']) . " نفر · " . h($meta['speed']) . "\n" .
-            "💳 مبلغ: <b>0 " . h($p['currency']) . "</b>\n" .
-            "📊 وضعیت: <b>در حال انجام</b>\n\n" .
-            "حالت تست روشن است، پس بدون پرداخت تایید شد.\n" .
-            "برای خاموش کردن: پنل وب ← ⚙️ تنظیمات ← حالت تست.",
-            inlineKb([[btnCb('🔍 وضعیت سفارش', 'trk_' . $oid, 'info')]]));
-        completeApprovedOrder(Order::get($oid));
+        $od = Order::get($oid);
+        panelShow($uid, $chatId, 'shop', orderDoneText($od), orderDoneKb($od));
+        announceSale($od);
+        reportSale($od);
         return true;
     }
 
@@ -2413,6 +2473,8 @@ function campaignFromOrder($o) {
         $o['id'],
         (int)($meta['per_day'] ?? 0)
     );
+    $picked = assignCampaignBots($c['id']);   // 🎯 روی حداکثر ۲ ربات می‌نشیند
+    $c = Campaign::get($c['id']);
 
     sendMsg(BOT_TOKEN, ADMIN_ID,
         "🎯 <b>کمپین خودکار ساخته شد</b>\n\n" .
@@ -2421,15 +2483,13 @@ function campaignFromOrder($o) {
         ((int)($meta['per_day'] ?? 0) > 0
             ? "🚀 سقف روزانه: <b>" . number_format((int)$meta['per_day']) . "</b> نفر\n" : '') .
         "🧾 سفارش: <code>" . h($o['id']) . "</code>\n\n" .
-        "از حالا این کانال در <b>همه ربات‌های اپلودر</b> قفل عضویت اجباری دارد و " .
+        (function () use ($picked) {
+            if (!$picked) return "⚠️ هنوز ربات اپلودری ندارید — این کانال جایی قفل نمی‌شود.\n";
+            $names = [];
+            foreach ($picked as $bid) { $b = BotManager::get($bid); if ($b) $names[] = '@' . $b['username']; }
+            return "🤖 قفل شد روی: <b>" . h(implode('، ', $names)) . "</b>\n";
+        })() .
         "به‌محض رسیدن به هدف، خودکار برداشته می‌شود.");
-
-    sendMsg(BOT_TOKEN, $o['user_id'],
-        "🎯 سفارش شما فعال شد.\n\n" .
-        "📣 کانال: <b>" . h($title) . "</b>\n" .
-        "👥 تعداد: <b>" . number_format($qty) . "</b> نفر\n" .
-        (($meta['eta'] ?? '') !== '' ? "⏳ زمان تقریبی: <b>" . h($meta['eta']) . "</b>\n" : '') .
-        "\nممبرها به‌تدریج اضافه می‌شوند. با /orders وضعیت را ببینید.");
 
     return $c;
 }
@@ -2550,10 +2610,49 @@ function completeApprovedOrder($order) {
             "💰 موجودی جدید: <b>" . fmtNum(getUser($order['user_id'])['balance'] ?? 0) . "</b> تومان");
         return;
     }
-    sendMsg(BOT_TOKEN, $order['user_id'], T('approved'));
-    deliverProduct($order['user_id'], $order['user_id'], $order['product_id']);
+    // 📩 یک پیام کامل — نه سه تا
+    sendMsg(BOT_TOKEN, $order['user_id'], orderDoneText($order), orderDoneKb($order));
     announceSale($order);
     reportSale($order);
+}
+
+/** ✅ پیام واحد بعد از تایید سفارش — همه اطلاعات یک‌جا */
+function orderDoneText($order) {
+    $p = Product::get($order['product_id']);
+    $m = $order['meta'] ?? [];
+    $isTest = !empty($m['test']);
+
+    $t  = ($isTest ? "🧪 <b>سفارش تستی ثبت شد</b>\n\n" : T('approved') . "\n\n");
+    $t .= "📦 محصول: <b>" . h($p['name'] ?? '—') . "</b>\n";
+    if (!empty($m['link']))    $t .= "📣 کانال: " . h($m['link']) . "\n";
+    if (!empty($m['qty']))     $t .= "👥 تعداد: <b>" . number_format((int)$m['qty']) . "</b> نفر\n";
+    if (!empty($m['speed']))   $t .= "⚡️ سرعت: " . h($m['speed']) . "\n";
+    if (!empty($m['per_day'])) $t .= "🚀 سرعت تحویل: " . number_format((int)$m['per_day']) . " نفر در روز\n";
+    if (!empty($m['eta']))     $t .= "⏳ زمان تقریبی: <b>" . h($m['eta']) . "</b>\n";
+    $t .= "💰 مبلغ: <b>" . ($isTest ? '0' : fmtNum($order['amount'])) . ' ' . h($order['currency']) . "</b>\n";
+    $t .= "🧾 کد پیگیری: <code>" . h($order['id']) . "</code>\n";
+    $t .= "📊 وضعیت: <b>" . orderStage($order)[1] . "</b>\n";
+
+    // اگر محصول محتوا دارد، لینکش را همین‌جا بده — نه پیام جدا
+    if ($p && !empty($p['bot_id']) && !empty($p['link_code'])) {
+        $url = Links::url($p['bot_id'], $p['link_code']);
+        if ($url) $t .= "\n🔗 لینک دریافت محتوا:\n" . $url . "\n";
+    }
+
+    $t .= "\n" . ($isTest
+        ? "حالت تست روشن است، پس بدون پرداخت تایید شد."
+        : "ممبرها به‌تدریج اضافه می‌شوند. وضعیت را با همان کد پیگیری ببینید.");
+    return $t;
+}
+
+function orderDoneKb($order) {
+    $rows = [[btnCb('🔍 وضعیت سفارش', 'trk_' . $order['id'], 'info')]];
+    $p = Product::get($order['product_id']);
+    if ($p && !empty($p['bot_id']) && !empty($p['link_code'])) {
+        $url = Links::url($p['bot_id'], $p['link_code']);
+        if ($url) $rows[] = [['text' => UT('enter_bot'), 'url' => $url, 'style' => gs('link') ?: null]];
+    }
+    return inlineKb($rows);
 }
 
 function notifyAdminOrder($orderId) {
@@ -2617,6 +2716,7 @@ function admHome($chatId, $msgId = null) {
         [btnCb('🛒 محصولات', 'eprods', 'admin'),
          btnCb('🤖 ربات‌های زیرمجموعه', 'eupload', 'admin')],
         [btnCb('📢 گزارش خرید در گروه', 'adm_reports', 'admin')],
+        [btnCb('🔒 قفل‌های عضویت اجباری', 'adm_locks', 'admin')],
         [btnCb('📋 لیست تعرفه‌ها', 'adm_tariff', 'admin')],
         [btnCb('🧾 سفارش‌ها', 'adm_orders', 'admin'), btnCb('🤖 ربات‌ها', 'adm_bots', 'admin')],
         [btnCb('📢 کانال‌ها', 'adm_chans', 'admin'), btnCb('📢 پیام همگانی', 'adm_bc', 'admin')],
@@ -2650,6 +2750,42 @@ function edProdBot($chatId, $msgId, $pid) {
                btnCb('🔗 کد لینک', 'sbcode_' . $pid, 'admin')];
     $bs = parseSubProductId($pid);
     $rows[] = [btnUI('back', $bs ? 'sb_' . $bs[0] . '|' . $bs[1] : 'ep_' . $pid, 'nav')];
+    editMsg(BOT_TOKEN, $chatId, $msgId, $text, inlineKb($rows));
+}
+
+/** 🔒 نمای قفل‌های عضویت اجباری — کدام کانال روی کدام ربات */
+function admLocks($chatId, $msgId) {
+    $bots = array_filter(BotManager::all(), fn($b) => !empty($b['active']));
+    $camps = [];
+    foreach (Campaign::all() as $c) if (!empty($c['active']) && !Campaign::isDone($c)) $camps[] = $c;
+
+    $text  = "🔒 <b>قفل‌های عضویت اجباری</b>\n\n";
+    $text .= "هر کانال روی <b>" . BOTS_PER_CAMPAIGN . " ربات</b> قفل می‌شود، و هر کاربر حداکثر " .
+             "<b>" . MAX_JOIN_PER_BOT . " کانال</b> می‌بیند.\n\n";
+
+    if (!$bots) {
+        $text .= "⚠️ هیچ ربات اپلودری ندارید. تا ربات اضافه نکنید، هیچ کانالی قفل نمی‌شود.";
+    } elseif (!$camps) {
+        $text .= "الان کمپین فعالی نیست.\n🤖 ربات‌ها: <b>" . count($bots) . "</b>";
+    } else {
+        foreach ($bots as $b) {
+            $mine = [];
+            foreach ($camps as $c) {
+                $on = $c['bots'] ?? [];
+                if (!$on || in_array($b['id'], $on, true)) $mine[] = $c['title'];
+            }
+            $fixed = count(Channels::all($b['id']));
+            $tot = count($mine) + $fixed;
+            $text .= ($tot > MAX_JOIN_PER_BOT ? '⚠️ ' : '✅ ') . '@' . h($b['username']) .
+                     " — <b>{$tot}</b> کانال" . ($fixed ? " (‏{$fixed} ثابت)" : '') . "\n";
+            foreach (array_slice($mine, 0, 6) as $t) $text .= "   🔒 " . h($t) . "\n";
+            if (count($mine) > 6) $text .= "   … و " . (count($mine) - 6) . " تای دیگر\n";
+        }
+        $text .= "\n📣 کمپین فعال: <b>" . count($camps) . "</b>";
+    }
+
+    $rows = [[btnCb('🔄 پخش دوباره بین ربات‌ها', 'locks_rebalance', 'confirm')],
+             [btnUI('back', 'adm_home', 'nav')]];
     editMsg(BOT_TOKEN, $chatId, $msgId, $text, inlineKb($rows));
 }
 
@@ -3732,10 +3868,10 @@ function masterHandle($update) {
                 Order::attachReceipt($oid, 'text', 'پرداخت از کیف پول');
                 Order::approve($oid, ADMIN_ID);
                 answerCb(BOT_TOKEN, $cbId, '✅ ثبت شد');
-                sendMsg(BOT_TOKEN, $chatId, T('approved'), mainKeyboard());
-                deliverProduct($uid, $chatId, $pid);
-                announceSale(Order::get($oid));
-                reportSale(Order::get($oid));
+                $od = Order::get($oid);
+                sendMsg(BOT_TOKEN, $chatId, orderDoneText($od), orderDoneKb($od));
+                announceSale($od);
+                reportSale($od);
                 return;
             }
             answerCb(BOT_TOKEN, $cbId);
@@ -3762,10 +3898,10 @@ function masterHandle($update) {
             Order::attachReceipt($oid, 'text', 'پرداخت از کیف پول');
             Order::approve($oid, ADMIN_ID);
             answerCb(BOT_TOKEN, $cbId, '✅ خرید انجام شد');
-            sendMsg(BOT_TOKEN, $chatId, T('approved'));
-            deliverProduct($uid, $chatId, $pid);
-            announceSale(Order::get($oid));
-            reportSale(Order::get($oid));
+            $od = Order::get($oid);
+            sendMsg(BOT_TOKEN, $chatId, orderDoneText($od), orderDoneKb($od));
+            announceSale($od);
+            reportSale($od);
             return;
         }
 
@@ -3976,6 +4112,19 @@ function masterHandle($update) {
         // 📋 لیست تعرفه‌ها
         if ($data === 'adm_tariff') { answerCb(BOT_TOKEN, $cbId); admTariff($chatId, $msgId); return; }
         if ($data === 'adm_reports') { answerCb(BOT_TOKEN, $cbId); admReports($chatId, $msgId); return; }
+        if ($data === 'adm_locks')   { answerCb(BOT_TOKEN, $cbId); admLocks($chatId, $msgId); return; }
+        if ($data === 'locks_rebalance') {
+            $n = 0;
+            foreach (Campaign::all() as $c) {
+                if (empty($c['active']) || Campaign::isDone($c)) continue;
+                mutate('campaigns', function (&$a) use ($c) { if (isset($a[$c['id']])) $a[$c['id']]['bots'] = []; });
+                assignCampaignBots($c['id']);
+                $n++;
+            }
+            answerCb(BOT_TOKEN, $cbId, "✅ {$n} کمپین پخش شد");
+            admLocks($chatId, $msgId);
+            return;
+        }
         if ($data === 'tfx' || $data === 'tfauto') {
             $f = $data === 'tfx' ? 'on' : 'auto';
             cfgSet(function (&$c) use ($f) { $c['tariff'][$f] = empty($c['tariff'][$f]); });
@@ -5730,20 +5879,33 @@ function deliverLink($bot, $chatId, $uid, $code) {
 
     Links::hit($bot['id'], $code, 'delivered');
 
+    $sec   = max(5, (int)$s['delete_seconds']);
+    $warn  = str_replace('{sec}', $sec, $s['warn_text']);
+    $kb    = fileButtons($bot['id'], $code);
+    $files = $link['files'];
+    $last  = count($files) - 1;
+
     $msgIds = [];
-    foreach ($link['files'] as $f) {
-        $r = sendFile($bot['token'], $chatId, $f['type'], $f['file_id'],
-                      $f['caption'] ?? '', !empty($s['protect_content']));
+    foreach ($files as $i => $f) {
+        // متن هشدار و دکمه‌ها زیر خودِ فایل می‌آید — پیام جداگانه فرستاده نمی‌شود
+        $cap = trim((string)($f['caption'] ?? ''));
+        if ($i === $last) $cap = $cap !== '' ? $cap . "\n\n" . $warn : $warn;
+
+        $r = sendFile($bot['token'], $chatId, $f['type'], $f['file_id'], $cap,
+                      !empty($s['protect_content']), $i === $last ? $kb : null);
         if (!empty($r['ok'])) $msgIds[] = $r['result']['message_id'];
         usleep(40000);
     }
 
     if (!$msgIds) { sendMsg($bot['token'], $chatId, $s['expired_text']); return; }
 
-    $sec = max(5, (int)$s['delete_seconds']);
-    $warn = sendMsg($bot['token'], $chatId, str_replace('{sec}', $sec, $s['warn_text']),
-                    fileButtons($bot['id'], $code));
-    $warnId = $warn['result']['message_id'] ?? null;
+    // استیکر و ویدیو-نوت کپشن نمی‌پذیرند — برای آن‌ها یک پیام کوتاه لازم است
+    $lastType = $files[$last]['type'] ?? 'document';
+    $warnId = null;
+    if (in_array($lastType, ['sticker', 'video_note'], true)) {
+        $w = sendMsg($bot['token'], $chatId, $warn, $kb);
+        $warnId = $w['result']['message_id'] ?? null;
+    }
 
     // اگر سرور اجازه بدهد دقیقا سر وقت حذف می‌کند، وگرنه از صف استفاده می‌شود
     tryImmediateDelete($bot['id'], $chatId, $msgIds, $sec, $warnId);
@@ -5773,8 +5935,18 @@ function childHandle($botId, $update) {
             $link = Links::get($botId, $code);
             $btn = null;
             foreach ($s['file_buttons'] ?? [] as $b) if (($b['id'] ?? '') === $fid) $btn = $b;
+            if (!$btn || !$link) { answerCb($token, $cbId); return; }
+
+            // آمار را به شکل پیام کوچک روی خود دکمه نشان بده — چت شلوغ نمی‌شود
+            if (($btn['action'] ?? '') === 'downloads') {
+                answerCb($token, $cbId, '📥 تعداد دانلود: ' . number_format((int)$link['delivered']), true);
+                return;
+            }
+            if (($btn['action'] ?? '') === 'views') {
+                answerCb($token, $cbId, '👁 بازدید: ' . number_format((int)$link['clicks']), true);
+                return;
+            }
             answerCb($token, $cbId);
-            if (!$btn || !$link) return;
 
             if (($btn['action'] ?? '') === 'info') {
                 sendMsg($token, $chatId, strtr($s['info_text'], [
@@ -5900,12 +6072,10 @@ function childHandle($botId, $update) {
 
         Links::hit($botId, $code, 'clicks');
 
-        // 🔒 قفل عضویت اجباری — کانال‌های ثابت + کمپین‌های فعال
-        if (!empty($s['force_join'])) {
-            [$missing, $creditable] = requiredMissing($uid, $botId);
-            if ($missing) { showJoinGate($bot, $chatId, $missing, $code); return; }
-            foreach ($creditable as $cid) Campaign::credit($cid, $uid);
-        }
+        // 🔒 قفل عضویت اجباری — کمپین‌ها همیشه، کانال‌های ثابت طبق تنظیم همان ربات
+        [$missing, $creditable] = requiredMissing($uid, $botId);
+        if ($missing) { showJoinGate($bot, $chatId, $missing, $code); return; }
+        foreach ($creditable as $cid) Campaign::credit($cid, $uid);
 
         deliverLink($bot, $chatId, $uid, $code);
         return;
