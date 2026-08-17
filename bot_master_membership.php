@@ -1389,6 +1389,7 @@ class Campaign
         $out = [];
         foreach (self::all() as $c) {
             if (empty($c['active']) || self::isDone($c)) continue;
+            if (trim((string)($c['chat_id'] ?? '')) === '') continue;  // هنوز آیدی کانال ندارد
             if ($botId !== null) {
                 $sc = $c['bots'] ?? [];
                 if ($sc && !in_array($botId, $sc, true)) continue;
@@ -2088,13 +2089,22 @@ function campaignFromOrder($o) {
     $url   = (string)($meta['link'] ?? '');
 
     if ($chat === '') {
-        // لینک خصوصی و ربات هیچ‌وقت ادمین نشده — نمی‌شود عضویت را بررسی کرد
+        // لینک خصوصی و ربات هیچ‌وقت ادمین نشده — هنوز نمی‌شود عضویت را شمرد.
+        // سفارش گم نمی‌شود: کمپین ساخته می‌شود ولی خاموش، تا بعد از ادمین کردن روشنش کنید.
+        $c = Campaign::create($title, '', $url, $qty, [], [], 'سفارش ' . $o['id'],
+                              $o['id'], (int)($meta['per_day'] ?? 0));
+        mutate('campaigns', function (&$a) use ($c) {
+            if (!isset($a[$c['id']])) return;
+            $a[$c['id']]['active'] = false;
+            $a[$c['id']]['paused_reason'] = 'ربات در کانال ادمین نیست';
+        });
         sendMsg(BOT_TOKEN, ADMIN_ID,
-            "⚠️ سفارش <code>" . h($o['id']) . "</code> پرداخت شد ولی <b>قفل خودکار انجام نشد</b>.\n\n" .
-            "کانال: " . h($title) . "\n" .
-            "دلیل: ربات در کانال ادمین نیست، پس نمی‌تواند عضویت را بررسی کند.\n\n" .
-            "بعد از ادمین کردن ربات، از پنل وب ← 🎯 کمپین‌ها دستی بسازید.");
-        return null;
+            "⏸ سفارش <code>" . h($o['id']) . "</code> پرداخت شد، کمپینش ساخته شد ولی <b>هنوز خاموش است</b>.\n\n" .
+            "📣 کانال: " . h($title) . "\n" .
+            "👥 هدف: <b>" . number_format($qty) . "</b> عضو\n\n" .
+            "دلیل: ربات در کانال ادمین نیست، پس نمی‌تواند عضویت را بشمارد.\n\n" .
+            "ربات را در کانال ادمین کنید، بعد پنل وب ← 🎯 کمپین‌ها ← آیدی کانال را بگذارید و روشنش کنید.");
+        return Campaign::get($c['id']);
     }
 
     $c = Campaign::create(

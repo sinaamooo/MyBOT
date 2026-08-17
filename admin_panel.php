@@ -225,6 +225,58 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         go('محصول به‌روزرسانی شد.');
     }
 
+    // ---- قیمت‌گذاری دکمه‌های فروش (خودِ دکمه = محصول) ----
+    if ($a === 'save_btn_price') {
+        $bid = $_POST['bid'] ?? ''; $sid = $_POST['sid'] ?? '';
+        if (!findSub($bid, $sid)) go('دکمه پیدا نشد.', 'err');
+
+        $price = str_replace([',', '،', ' '], '', trim($_POST['price'] ?? ''));
+        if (!is_numeric($price) || (float)$price < 0) go('قیمت باید عدد باشد.', 'err');
+
+        $min = (int)str_replace([',', '،'], '', $_POST['min'] ?? '0');
+        $max = (int)str_replace([',', '،'], '', $_POST['max'] ?? '0');
+        $per = (int)str_replace([',', '،'], '', $_POST['per'] ?? '1000');
+        if ($min < 1)    go('حداقل تعداد باید بزرگ‌تر از صفر باشد.', 'err');
+        if ($max <= $min) go('حداکثر باید از حداقل بیشتر باشد.', 'err');
+        if ($per < 1)    go('«قیمت به ازای هر …» باید بزرگ‌تر از صفر باشد.', 'err');
+
+        $cur  = trim($_POST['currency'] ?? 'تومان');
+        $desc = trim($_POST['desc'] ?? '');
+        $post = $_POST;
+
+        subMutate($bid, $sid, function (&$x) use ($price, $cur, $min, $max, $per, $desc, $post) {
+            $x['price']    = (float)$price;
+            $x['currency'] = $cur !== '' ? $cur : 'تومان';
+            $x['desc']     = $desc;
+            if (!is_array($x['flow'] ?? null)) $x['flow'] = [];
+            $x['flow'] = array_merge(defaultFlow(), $x['flow'], ['on' => true, 'ask_admin' => true]);
+            $x['flow']['min'] = $min;
+            $x['flow']['max'] = $max;
+            $x['flow']['per'] = $per;
+
+            // ضریب و نفر/روز هر سرعت
+            foreach ($x['flow']['speeds'] as $i => $sp) {
+                $id = $sp['id'];
+                if (isset($post['mult'][$id]) && is_numeric(str_replace(',', '', $post['mult'][$id]))) {
+                    $m = (float)str_replace(',', '', $post['mult'][$id]);
+                    if ($m > 0) $x['flow']['speeds'][$i]['mult'] = $m;
+                }
+                if (isset($post['perday'][$id])) {
+                    $pd = (int)str_replace([',', '،'], '', $post['perday'][$id]);
+                    if ($pd >= 0) $x['flow']['speeds'][$i]['per_day'] = $pd;
+                }
+                $x['flow']['speeds'][$i]['on'] = !empty($post['spon'][$id]);
+            }
+        });
+        go('قیمت‌گذاری ذخیره شد.');
+    }
+    if ($a === 'toggle_btn_product') {
+        $bid = $_POST['bid'] ?? ''; $sid = $_POST['sid'] ?? '';
+        if (!findSub($bid, $sid)) go('دکمه پیدا نشد.', 'err');
+        subMutate($bid, $sid, function (&$x) { $x['on'] = empty($x['on']); });
+        go('وضعیت دکمه تغییر کرد.');
+    }
+
     if ($a === 'save_product_layout') {
         $lay = $_POST['product_layout'] ?? '1';
         cfgSet(function (&$c) use ($lay) { $c['ui']['product_layout'] = trim($lay); });
@@ -286,6 +338,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $x[$id]['target']   = max(0, (int)($post['target'] ?? 0));
             $x[$id]['title']    = trim($post['title'] ?? $x[$id]['title']);
             $x[$id]['url']      = trim($post['url'] ?? $x[$id]['url']);
+            if (isset($post['chat_id'])) {
+                $newChat = trim($post['chat_id']);
+                if ($newChat !== '' && $newChat !== ($x[$id]['chat_id'] ?? '')) {
+                    // آیدی کانال تازه آمد — خطاها را صفر و کمپین را روشن کن
+                    $x[$id]['chat_id']       = $newChat;
+                    $x[$id]['fails']         = 0;
+                    $x[$id]['paused_reason'] = '';
+                    $x[$id]['active']        = true;
+                }
+            }
             $x[$id]['partners'] = array_values((array)($post['partners'] ?? []));
             $x[$id]['bots']     = array_values((array)($post['bots'] ?? []));
         });
@@ -746,30 +808,102 @@ foreach ($tabs as $k => $l): ?>
 <?php elseif ($tab === 'products'): ?>
   <?php $saleBtns = saleButtons(); ?>
   <?php if ($saleBtns): ?>
-  <div class="card"><h2>🔘 دکمه‌های فروش (خودِ دکمه = محصول)</h2><div class="body">
+  <div class="card"><h2>💰 قیمت‌گذاری دکمه‌های فروش</h2><div class="body">
     <div class="note">
       این دکمه‌ها خودشان محصول‌اند — رکورد محصول جداگانه لازم ندارند.
-      مشتری که رویشان بزند، مستقیم می‌رود سراغ <b>لینک کانال ← تعداد ← سرعت ← ادمین کردن ربات ← فاکتور</b>.
-      <br>قیمت و تعداد و سرعتشان را <b>داخل ربات</b> تنظیم کنید:
-      <code>/panel</code> ← 🔘 دکمه‌ها ← روی دکمه ← 💰 قیمت
-      (ایموجی پریمیوم فقط داخل تلگرام تایپ می‌شود).
+      مشتری که رویشان بزند، مستقیم می‌رود سراغ
+      <b>لینک کانال ← تعداد ← سرعت ← ادمین کردن ربات ← فاکتور</b>.<br>
+      قیمت، تعداد و ضریب سرعت‌ها را همین‌جا تنظیم کنید.
+      (ایموجی، رنگ و ایموجی پریمیوم داخل خود ربات: <code>/panel</code> ← 🔘 دکمه‌ها.)
     </div>
-    <table>
-      <tr><th>دکمه</th><th>قیمت هر ۱۰۰۰</th><th>تعداد</th><th>سرعت‌ها</th><th>وضعیت</th></tr>
-      <?php foreach ($saleBtns as $sb): ?>
-        <?php $spdOn = 0; foreach ($sb['flow']['speeds'] ?? [] as $sx) if (!isset($sx['on']) || !empty($sx['on'])) $spdOn++; ?>
-        <tr>
-          <td><?= h(trim(($sb['emoji'] ?? '') . ' ' . $sb['name'])) ?></td>
-          <td><?= (float)$sb['price'] > 0
-                ? h(number_format((float)$sb['price']) . ' ' . $sb['currency'])
-                : '<span style="color:#e5484d">تنظیم نشده</span>' ?></td>
-          <td><?= h(number_format((int)$sb['flow']['min']) . ' — ' . number_format((int)$sb['flow']['max'])) ?></td>
-          <td><?= (int)$spdOn ?></td>
-          <td><?= !empty($sb['active']) ? '✅ روشن' : '❌ خاموش' ?></td>
-        </tr>
-      <?php endforeach; ?>
-    </table>
   </div></div>
+
+  <?php foreach ($saleBtns as $sb):
+    [$bid, $sid] = $sb['btn'];
+    $f = $sb['flow']; ?>
+  <div class="card">
+    <h2>
+      <?= h(trim(($sb['emoji'] ?? '') . ' ' . $sb['name'])) ?>
+      <?= (float)$sb['price'] > 0
+            ? '<span class="badge green">' . h(number_format((float)$sb['price']) . ' ' . $sb['currency']) . '</span>'
+            : '<span class="badge">قیمت ندارد</span>' ?>
+      <?= empty($sb['active']) ? '<span class="badge">خاموش</span>' : '' ?>
+    </h2>
+    <div class="body">
+      <form method="post">
+        <input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="tab" value="products">
+        <input type="hidden" name="action" value="save_btn_price">
+        <input type="hidden" name="bid" value="<?= h($bid) ?>"><input type="hidden" name="sid" value="<?= h($sid) ?>">
+
+        <div class="grid2">
+          <div><label>قیمت پایه</label>
+            <input name="price" value="<?= h((float)$sb['price'] > 0 ? (0 + $sb['price']) : '') ?>"
+                   placeholder="5000" style="direction:ltr" required></div>
+          <div><label>به ازای هر چند نفر؟</label>
+            <input name="per" type="number" min="1" value="<?= (int)$f['per'] ?>" style="direction:ltr"></div>
+          <div><label>واحد پول</label><select name="currency">
+            <?php foreach (['تومان', 'USDT', 'TRX'] as $cu): ?>
+              <option <?= $sb['currency'] === $cu ? 'selected' : '' ?>><?= h($cu) ?></option>
+            <?php endforeach; ?></select></div>
+          <div><label>حداقل تعداد سفارش</label>
+            <input name="min" type="number" min="1" value="<?= (int)$f['min'] ?>" style="direction:ltr"></div>
+          <div><label>حداکثر تعداد سفارش</label>
+            <input name="max" type="number" min="2" value="<?= (int)$f['max'] ?>" style="direction:ltr"></div>
+          <div><label>توضیح کوتاه (اختیاری)</label>
+            <input name="desc" value="<?= h($sb['desc'] ?? '') ?>" placeholder="تحویل تدریجی"></div>
+        </div>
+
+        <div style="margin-top:16px"><label>⚡️ سرعت‌ها</label>
+          <table style="margin-top:6px">
+            <tr><th>سرعت</th><th>ضریب قیمت</th><th>نفر در روز</th><th>قیمت هر <?= number_format((int)$f['per']) ?></th><th>روشن</th></tr>
+            <?php foreach ($f['speeds'] as $sp): ?>
+              <tr>
+                <td><?= h(trim(($sp['emoji'] ?? '') . ' ' . $sp['text'])) ?></td>
+                <td><input name="mult[<?= h($sp['id']) ?>]" value="<?= h((string)$sp['mult']) ?>"
+                           style="direction:ltr;max-width:110px"></td>
+                <td><input name="perday[<?= h($sp['id']) ?>]" type="number" min="0"
+                           value="<?= (int)($sp['per_day'] ?? 0) ?>" style="direction:ltr;max-width:140px"></td>
+                <td class="muted"><?= h(number_format((float)$sb['price'] * (float)$sp['mult']) . ' ' . $sb['currency']) ?></td>
+                <td><input type="checkbox" name="spon[<?= h($sp['id']) ?>]" value="1" style="width:auto"
+                           <?= (!isset($sp['on']) || !empty($sp['on'])) ? 'checked' : '' ?>></td>
+              </tr>
+            <?php endforeach; ?>
+          </table>
+          <div class="muted" style="margin-top:6px">
+            متن و ایموجی و رنگ سرعت‌ها داخل ربات تنظیم می‌شود: <code>/panel</code> ← 🔘 دکمه‌ها ← این دکمه ← ⚡️ سرعت‌ها
+          </div>
+        </div>
+
+        <?php
+          $exQty = min((int)$f['max'], max((int)$f['min'], 5000));
+          $fast  = null;
+          foreach ($f['speeds'] as $sp) if (!isset($sp['on']) || !empty($sp['on'])) { $fast = $sp; break; }
+        ?>
+        <?php if ($fast && (float)$sb['price'] > 0): ?>
+          <div class="note" style="margin-top:14px">
+            🧾 نمونه فاکتور — <?= number_format($exQty) ?> نفر با
+            «<?= h(trim(($fast['emoji'] ?? '') . ' ' . $fast['text'])) ?>»:
+            <b><?= h(number_format(round((float)$sb['price'] * (float)$fast['mult'] * ($exQty / max(1, (int)$f['per'])))) . ' ' . $sb['currency']) ?></b>
+            <?php if ((int)($fast['per_day'] ?? 0) > 0): ?>
+              · ⏳ <?= h(speedEta($fast, $exQty)) ?>
+            <?php endif; ?>
+          </div>
+        <?php endif; ?>
+
+        <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn g">ذخیره قیمت‌گذاری</button>
+        </div>
+      </form>
+
+      <form method="post" style="margin-top:10px">
+        <input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="tab" value="products">
+        <input type="hidden" name="action" value="toggle_btn_product">
+        <input type="hidden" name="bid" value="<?= h($bid) ?>"><input type="hidden" name="sid" value="<?= h($sid) ?>">
+        <button class="btn"><?= !empty($sb['active']) ? 'خاموش کردن دکمه' : 'روشن کردن دکمه' ?></button>
+      </form>
+    </div>
+  </div>
+  <?php endforeach; ?>
   <?php endif; ?>
 
   <div class="card"><h2>➕ ساخت محصول جداگانه (اختیاری)</h2><div class="body">
@@ -1295,6 +1429,8 @@ foreach ($tabs as $k => $l): ?>
         <input type="hidden" name="action" value="edit_campaign"><input type="hidden" name="id" value="<?= h($c['id']) ?>">
         <div class="grid2">
           <div><label>عنوان</label><input name="title" value="<?= h($c['title']) ?>"></div>
+          <div><label>آیدی کانال<?= trim((string)($c['chat_id'] ?? '')) === '' ? ' ⚠️ خالی است' : '' ?></label>
+            <input name="chat_id" value="<?= h($c['chat_id'] ?? '') ?>" placeholder="@customer یا -100..." style="direction:ltr"></div>
           <div><label>تعداد سفارش</label><input name="target" type="number" min="1" value="<?= (int)$c['target'] ?>"></div>
           <div><label>لینک عضویت</label><input name="url" value="<?= h($c['url']) ?>" style="direction:ltr"></div>
         </div>
