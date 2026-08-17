@@ -1203,7 +1203,17 @@ foreach ($tabs as $k => $l): ?>
 
 <?php // ================= سفارش ممبر (کمپین) ================= ?>
 <?php elseif ($tab === 'campaigns'): ?>
-  <div class="card"><h2>🎯 ثبت سفارش ممبر</h2><div class="body">
+  <div class="card"><h2>⚡️ خودکار است</h2><div class="body">
+    <div class="note">
+      <b>لازم نیست دستی چیزی بسازید.</b> به‌محض اینکه سفارش ممبری پرداخت و تایید شود،
+      کانال مشتری <b>خودکار</b> در بخش عضویت اجباری همه ربات‌های اپلودر قفل می‌شود،
+      و به‌محض رسیدن به تعداد سفارش <b>خودکار</b> برداشته می‌شود.<br><br>
+      فرم پایین فقط برای موارد دستی است — مثلا وقتی مشتری خارج از ربات سفارش داده،
+      یا ربات موقع سفارش در کانال ادمین نبوده.
+    </div>
+  </div></div>
+
+  <div class="card"><h2>🎯 ثبت دستی سفارش ممبر</h2><div class="body">
     <div class="note">
       کانال مشتری تا رسیدن به تعداد سفارش، در بخش <b>عضویت اجباری</b> قفل می‌شود —
       هم در ربات‌های اپلودر خودمان، هم در ربات‌های شریک.
@@ -1262,6 +1272,23 @@ foreach ($tabs as $k => $l): ?>
         <?= !empty($c['note']) ? ' · ' . h($c['note']) : '' ?>
         <?= !empty($c['done_at']) ? ' · تکمیل در ' . h($c['done_at']) : '' ?>
       </div>
+      <?php if (!empty($c['order_id'])): ?>
+        <div class="note" style="margin-bottom:12px">
+          ⚡️ خودکار از سفارش <code><?= h($c['order_id']) ?></code>
+          <?php if ((int)($c['per_day'] ?? 0) > 0): ?>
+            · سقف روزانه <b><?= number_format((int)$c['per_day']) ?></b> نفر
+            (امروز: <?= (($c['day'] ?? '') === substr(date('Y-m-d H:i:s'), 0, 10))
+                      ? (int)($c['day_count'] ?? 0) : 0 ?>)
+          <?php endif; ?>
+        </div>
+      <?php endif; ?>
+      <?php if (!empty($c['paused_reason'])): ?>
+        <div class="note" style="margin-bottom:12px;background:#fff4f4;border-color:#f5c2c7">
+          ⏸ <b>موقتا متوقف شد</b> — ربات نمی‌تواند عضویت را بررسی کند:
+          <code><?= h($c['paused_reason']) ?></code><br>
+          ربات مادر را دوباره در این کانال ادمین کنید، بعد از دکمه پایین روشنش کنید.
+        </div>
+      <?php endif; ?>
 
       <form method="post">
         <input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="tab" value="campaigns">

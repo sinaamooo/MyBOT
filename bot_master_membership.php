@@ -1037,6 +1037,7 @@ class Order
         }
         Product::addBuyer($p['id'], $o['user_id']);
         payReferralCommission($o['user_id'], $o['amount']);
+        campaignFromOrder($o);   // 🎯 کانال مشتری خودکار در ربات‌های اپلودر قفل می‌شود
         return [true, $o];
     }
 
@@ -1314,18 +1315,65 @@ class Campaign
     public static function all() { return load('campaigns'); }
     public static function get($id) { $a = load('campaigns'); return $a[$id] ?? null; }
 
-    public static function create($title, $chatId, $url, $target, $partners = [], $bots = [], $note = '') {
+    public static function create($title, $chatId, $url, $target, $partners = [], $bots = [],
+                                  $note = '', $orderId = null, $perDay = 0) {
         $id = uid('cm');
-        mutate('campaigns', function (&$a) use ($id, $title, $chatId, $url, $target, $partners, $bots, $note) {
+        mutate('campaigns', function (&$a) use ($id, $title, $chatId, $url, $target, $partners,
+                                                $bots, $note, $orderId, $perDay) {
             $a[$id] = [
                 'id' => $id, 'title' => $title, 'chat_id' => $chatId, 'url' => $url,
                 'target' => max(0, (int)$target), 'joined' => [],
                 'partners' => array_values($partners), 'bots' => array_values($bots),
                 'note' => $note, 'active' => true,
+                'order_id' => $orderId,          // سفارشی که این کمپین را ساخته
+                'per_day'  => max(0, (int)$perDay),
+                'fails'    => 0,                 // چند بار پشت‌سرهم قابل بررسی نبوده
+                'paused_reason' => '',
                 'created_at' => nowStr(), 'done_at' => null,
             ];
         });
         return self::get($id);
+    }
+
+    public static function forOrder($orderId) {
+        foreach (self::all() as $c) if (($c['order_id'] ?? null) === $orderId) return $c;
+        return null;
+    }
+
+    /** سهمیه امروز — بیشتر از per_day در یک روز تحویل نمی‌دهیم */
+    public static function overDailyQuota($c) {
+        $pd = (int)($c['per_day'] ?? 0);
+        if ($pd <= 0) return false;
+        $today = substr(nowStr(), 0, 10);
+        return (($c['day'] ?? '') === $today) && ((int)($c['day_count'] ?? 0)) >= $pd;
+    }
+
+    /** کانالی که ربات دیگر نمی‌تواند بررسی کند را موقتا کنار بگذار */
+    public static function noteFailure($id, $why) {
+        $paused = mutate('campaigns', function (&$a) use ($id, $why) {
+            if (!isset($a[$id])) return false;
+            $a[$id]['fails'] = ((int)($a[$id]['fails'] ?? 0)) + 1;
+            if ($a[$id]['fails'] >= 3 && !empty($a[$id]['active'])) {
+                $a[$id]['active'] = false;
+                $a[$id]['paused_reason'] = $why;
+                return $a[$id]['title'] . '|' . $why;
+            }
+            return false;
+        });
+        if ($paused) {
+            [$title, $w] = explode('|', $paused, 2);
+            sendMsg(BOT_TOKEN, ADMIN_ID,
+                "⚠️ <b>کمپین موقتا متوقف شد</b>\n\n" .
+                "کانال: <b>" . h($title) . "</b>\n" .
+                "دلیل: ربات نمی‌تواند عضویت را بررسی کند (" . h($w) . ")\n\n" .
+                "ربات را دوباره در آن کانال ادمین کنید، بعد از پنل وب ← 🎯 کمپین‌ها روشنش کنید.");
+        }
+    }
+
+    public static function noteSuccess($id) {
+        mutate('campaigns', function (&$a) use ($id) {
+            if (isset($a[$id]) && ((int)($a[$id]['fails'] ?? 0)) > 0) $a[$id]['fails'] = 0;
+        });
     }
 
     public static function isDone($c) {
@@ -1364,7 +1412,13 @@ class Campaign
             if ($t > 0 && count($j) >= $t) return false;
             $j[] = (int)$userId;
             $a[$id]['joined'] = array_values($j);
-            if ($t > 0 && count($j) >= $t) $a[$id]['done_at'] = nowStr();
+            $today = substr(nowStr(), 0, 10);
+            if (($a[$id]['day'] ?? '') !== $today) { $a[$id]['day'] = $today; $a[$id]['day_count'] = 0; }
+            $a[$id]['day_count'] = ((int)$a[$id]['day_count']) + 1;
+            if ($t > 0 && count($j) >= $t) {
+                $a[$id]['done_at'] = nowStr();
+                $a[$id]['active']  = false;   // سهمیه پر شد — قفل برداشته می‌شود
+            }
             return true;
         });
     }
@@ -1388,12 +1442,16 @@ function requiredMissing($userId, $botId = null, $partnerId = null) {
     }
 
     foreach (Campaign::activeFor($botId, $partnerId) as $c) {
+        // سهمیه امروز پر شده؟ امروز دیگر این کانال را قفل نکن
+        if (Campaign::overDailyQuota($c)) continue;
+
         $res = Channels::isMemberOf($c['chat_id'], $userId);
         if (!$res['ok']) {
-            $missing[] = ['title' => $c['title'], 'url' => $c['url'],
-                          'chat_id' => $c['chat_id'], 'unverifiable' => true, 'error' => $res['error']];
+            // کانال مشتری است، نه ما — اگر ربات دسترسی ندارد کل ربات را قفل نمی‌کنیم
+            Campaign::noteFailure($c['id'], $res['error'] ?? 'unknown');
             continue;
         }
+        Campaign::noteSuccess($c['id']);
         if (!$res['member']) {
             $missing[] = ['title' => $c['title'], 'url' => $c['url'], 'chat_id' => $c['chat_id']];
         } else {
@@ -1651,6 +1709,18 @@ function showOrders($uid, $chatId, $extra = [], $replyTo = null) {
             $title .= "\n   📣 " . h($m['link'] ?? '—');
             $title .= "\n   👥 " . number_format((int)($m['qty'] ?? 0)) . ' نفر · ' . h($m['speed'] ?? '');
             if (!empty($m['eta'])) $title .= "\n   ⏳ " . h($m['eta']);
+
+            // پیشرفت واقعی — از روی کمپینی که با همین سفارش ساخته شده
+            $cmp = Campaign::forOrder($o['id']);
+            if ($cmp) {
+                $done = count($cmp['joined']);
+                $tgt  = max(1, (int)$cmp['target']);
+                $pct  = min(100, (int)round($done / $tgt * 100));
+                $bars = (int)round($pct / 10);
+                $title .= "\n   📊 " . str_repeat('█', $bars) . str_repeat('░', 10 - $bars) .
+                          ' ' . $pct . '%  (' . number_format($done) . '/' . number_format((int)$cmp['target']) . ')';
+                if (!empty($cmp['done_at'])) $title .= "\n   ✅ تکمیل شد";
+            }
         }
         $text .= "\n" . T('orders_item', [
             'status'   => Order::statusLabel($o['status']),
@@ -1789,7 +1859,19 @@ function flowNext($uid, $chatId, $step) {
         $rows = layoutRows($items, $f['speed_layout'] ?? '1');
         $rows[] = [btnUI('cancel', 'cancel', 'cancel')];
         $head = ($sd['data']['rate_note'] ?? '') !== '' ? $sd['data']['rate_note'] . "\n\n" : '';
-        panelShow($uid, $chatId, 'shop', $head . T('flow_speed'), inlineKb($rows));
+
+        // توضیح هر سرعت، اگر ادمین نوشته باشد
+        $notes = '';
+        $qtyNow = (int)($sd['data']['qty'] ?? 0);
+        foreach ($speeds as $sp) {
+            $d = trim((string)($sp['desc'] ?? ''));
+            if ($d === '') continue;
+            $notes .= "\n" . h(speedLabel($sp)) . " — " . $d;
+            if ($qtyNow > 0) $notes .= " (" . h(speedEta($sp, $qtyNow)) . ")";
+        }
+        if ($notes !== '') $notes = "\n" . $notes . "\n";
+
+        panelShow($uid, $chatId, 'shop', $head . T('flow_speed') . $notes, inlineKb($rows));
         return;
     }
 
@@ -1868,7 +1950,7 @@ function speedEta($sp, $qty) {
     if ($perDay <= 0 || $qty <= 0) return '—';
     $days = $qty / $perDay;
     if ($days < 1)  return 'کمتر از یک روز';
-    if ($days < 2)  return 'حدود ۱ روز';
+    if ($days < 2)  return 'حدود 1 روز';
     return 'حدود ' . ceil($days) . ' روز';
 }
 
@@ -1981,6 +2063,69 @@ function deliverProduct($uid, $chatId, $productId) {
  * اعلام فروش در کانال جدا — کد خرید، مبلغ، تعداد ممبر
  * از هر دو مسیر تایید (تلگرام و پنل وب) صدا زده می‌شود.
  */
+/**
+ * 🎯 بعد از پرداخت، کانال مشتری خودکار قفل می‌شود
+ *
+ * سفارش ممبر تایید شد → یک کمپین ساخته می‌شود → کانال مشتری به لیست
+ * عضویت اجباری همه ربات‌های اپلودر اضافه می‌شود → هر کاربری که بخواهد
+ * فایل بگیرد باید اول عضو شود → به‌محض رسیدن به تعداد سفارش، قفل خودکار برداشته می‌شود.
+ */
+function campaignFromOrder($o) {
+    if (($o['type'] ?? '') !== 'product') return null;
+    if (Campaign::forOrder($o['id'])) return null;         // قبلا ساخته شده
+
+    $meta = $o['meta'] ?? [];
+    $qty  = (int)($meta['qty'] ?? 0);
+    if ($qty <= 0) return null;                            // سفارش ممبر نیست
+
+    // شناسه‌ای که تلگرام بشناسد: یا شناسه عددی از my_chat_member، یا @نام از لینک عمومی
+    $chat = trim((string)($meta['chat_id'] ?? ''));
+    if ($chat === '') {
+        $link = (string)($meta['link'] ?? '');
+        if (preg_match('#^https?://t\.me/([A-Za-z0-9_]{4,})/?$#', $link, $m)) $chat = '@' . $m[1];
+    }
+    $title = trim((string)($meta['chat_title'] ?? '')) ?: (string)($meta['link'] ?? 'کانال مشتری');
+    $url   = (string)($meta['link'] ?? '');
+
+    if ($chat === '') {
+        // لینک خصوصی و ربات هیچ‌وقت ادمین نشده — نمی‌شود عضویت را بررسی کرد
+        sendMsg(BOT_TOKEN, ADMIN_ID,
+            "⚠️ سفارش <code>" . h($o['id']) . "</code> پرداخت شد ولی <b>قفل خودکار انجام نشد</b>.\n\n" .
+            "کانال: " . h($title) . "\n" .
+            "دلیل: ربات در کانال ادمین نیست، پس نمی‌تواند عضویت را بررسی کند.\n\n" .
+            "بعد از ادمین کردن ربات، از پنل وب ← 🎯 کمپین‌ها دستی بسازید.");
+        return null;
+    }
+
+    $c = Campaign::create(
+        $title, $chat, $url, $qty,
+        [],                                   // همه شریک‌ها
+        [],                                   // همه ربات‌های اپلودر
+        'سفارش ' . $o['id'],
+        $o['id'],
+        (int)($meta['per_day'] ?? 0)
+    );
+
+    sendMsg(BOT_TOKEN, ADMIN_ID,
+        "🎯 <b>کمپین خودکار ساخته شد</b>\n\n" .
+        "📣 کانال: <b>" . h($title) . "</b>\n" .
+        "👥 هدف: <b>" . number_format($qty) . "</b> عضو\n" .
+        ((int)($meta['per_day'] ?? 0) > 0
+            ? "🚀 سقف روزانه: <b>" . number_format((int)$meta['per_day']) . "</b> نفر\n" : '') .
+        "🧾 سفارش: <code>" . h($o['id']) . "</code>\n\n" .
+        "از حالا این کانال در <b>همه ربات‌های اپلودر</b> قفل عضویت اجباری دارد و " .
+        "به‌محض رسیدن به هدف، خودکار برداشته می‌شود.");
+
+    sendMsg(BOT_TOKEN, $o['user_id'],
+        "🎯 سفارش شما فعال شد.\n\n" .
+        "📣 کانال: <b>" . h($title) . "</b>\n" .
+        "👥 تعداد: <b>" . number_format($qty) . "</b> نفر\n" .
+        (($meta['eta'] ?? '') !== '' ? "⏳ زمان تقریبی: <b>" . h($meta['eta']) . "</b>\n" : '') .
+        "\nممبرها به‌تدریج اضافه می‌شوند. با /orders وضعیت را ببینید.");
+
+    return $c;
+}
+
 function announceSale($order) {
     $s = cfg()['sales'];
     if (empty($s['on']) || empty($s['chat_id'])) return;
@@ -2712,18 +2857,25 @@ function edSpeed($chatId, $msgId, $pid, $sid) {
     foreach ($p['flow']['speeds'] ?? [] as $x) if ($x['id'] === $sid) $sp = $x;
     if (!$sp) { edSpeeds($chatId, $msgId, $pid); return; }
 
+    $pd = (int)($sp['per_day'] ?? 0);
     $text  = "⚡️ <b>" . h(speedLabel($sp)) . "</b>\n\n";
+    $text .= "متن دکمه: <code>" . h(speedBtnLabel($sp)) . "</code>\n";
     $text .= "ضریب قیمت: <b>×" . $sp['mult'] . "</b>\n";
     $text .= "قیمت نهایی هر " . number_format((int)$p['flow']['per']) . ": <b>" .
              fmtNum((float)$p['price'] * (float)$sp['mult']) . ' ' . h($p['currency']) . "</b>\n";
+    $text .= "🚀 سرعت تحویل: <b>" . ($pd > 0 ? number_format($pd) . " نفر در روز" : 'تنظیم نشده') . "</b>\n";
+    $text .= "⏳ نمونه زمان (۵٬۰۰۰ نفر): <b>" . h(speedEta($sp, 5000)) . "</b>\n";
     $text .= "رنگ: " . (styleMap()[$sp['color'] ?? 'none'] ?? '—') . "\n";
-    $text .= "✨ پریمیوم: " . (!empty($sp['icon']) ? '<code>' . h($sp['icon']) . '</code>' : '—');
+    $text .= "✨ پریمیوم: " . (!empty($sp['icon']) ? '<code>' . h($sp['icon']) . '</code>' : '—') . "\n";
+    $text .= "\n💬 توضیح زیر دکمه: " . (trim((string)($sp['desc'] ?? '')) !== ''
+             ? h($sp['desc']) : '—');
 
     $k = $pid . '|' . $sid;
     $rows = [
-        [btnCb('✏️ متن', 'espt_' . $k, 'admin'), btnCb('😀 ایموجی', 'espe_' . $k, 'admin')],
+        [btnCb('✏️ متن دکمه', 'espt_' . $k, 'admin'), btnCb('😀 ایموجی', 'espe_' . $k, 'admin')],
         [btnCb('🎨 رنگ', 'espc_' . $k, 'admin'), btnCb('✨ پریمیوم', 'espi_' . $k, 'admin')],
-        [btnCb('✖️ ضریب قیمت', 'espm_' . $k, 'admin')],
+        [btnCb('✖️ ضریب قیمت', 'espm_' . $k, 'admin'), btnCb('🚀 نفر در روز', 'espd_' . $k, 'admin')],
+        [btnCb('💬 توضیح', 'espn_' . $k, 'admin')],
         [btnCb((!isset($sp['on']) || !empty($sp['on'])) ? '❌ خاموش' : '✅ روشن', 'espx_' . $k, 'info')],
         [btnUI('back', 'eps_' . $pid, 'nav')],
     ];
@@ -3278,7 +3430,9 @@ function masterHandle($update) {
         foreach ([['espt_', 'sp_text', '✏️ متن سرعت (ایموجی پریمیوم مجاز):'],
                   ['espe_', 'sp_emoji', '😀 ایموجی سرعت (خط تیره = حذف):'],
                   ['espi_', 'sp_icon', '✨ ایموجی پریمیوم بفرستید یا کدش را:'],
-                  ['espm_', 'sp_mult', '✖️ ضریب قیمت (مثلا 1 یا 1.5):']] as $it) {
+                  ['espm_', 'sp_mult', '✖️ ضریب قیمت (مثلا 1 یا 1.5):'],
+                  ['espd_', 'sp_perday', "🚀 چند نفر در روز تحویل داده می‌شود؟ (فقط عدد)\n\nهمین عدد هم روی دکمه می‌آید، هم زمان تقریبی تحویل را می‌سازد."],
+                  ['espn_', 'sp_desc', "💬 توضیح کوتاه این سرعت (خط تیره = حذف):\n\nزیر متن انتخاب سرعت نشان داده می‌شود."]] as $it) {
             [$pref, $act, $ask] = $it;
             if (!str_starts_with($data, $pref)) continue;
             $rest = substr($data, strlen($pref)); $pos = strrpos($rest, '|');
@@ -4125,6 +4279,20 @@ function masterHandle($update) {
             $m = (float)str_replace(',', '', $plain);
             if ($m <= 0) { sendMsg(BOT_TOKEN, $chatId, "⚠️ عدد بزرگ‌تر از صفر."); return; }
             speedMutate($pid, $sid, function (&$x) use ($m) { $x['mult'] = $m; });
+        } elseif ($action === 'sp_perday') {
+            $n = (int)str_replace([',', '،', ' '], '', $plain);
+            if ($n <= 0) { sendMsg(BOT_TOKEN, $chatId, "⚠️ عدد بزرگ‌تر از صفر بفرستید."); return; }
+            speedMutate($pid, $sid, function (&$x) use ($n) { $x['per_day'] = $n; });
+            clearState($uid);
+            $spNow = null;
+            foreach (Product::get($pid)['flow']['speeds'] ?? [] as $x) if ($x['id'] === $sid) $spNow = $x;
+            sendMsg(BOT_TOKEN, $chatId,
+                "✅ ذخیره شد.\n\nمتن دکمه: <code>" . h(speedBtnLabel($spNow)) . "</code>\n" .
+                "⏳ ۵٬۰۰۰ نفر ← " . h(speedEta($spNow, 5000)), $back);
+            return;
+        } elseif ($action === 'sp_desc') {
+            $d = ($plain === '-' || $plain === '—') ? '' : msgHtml($msg);
+            speedMutate($pid, $sid, function (&$x) use ($d) { $x['desc'] = $d; });
         } else { clearState($uid); return; }
 
         clearState($uid);
