@@ -2049,14 +2049,14 @@ function startTopup($uid, $chatId, $replyTo = null, $need = 0, $total = 0, $bal 
     $rows = [];
     $text = T('topup');
     if ($need > 0) {
+        $need = ceil($need);
         $text  = "❌ <b>موجودی ناکافی!</b>\n\n";
         $text .= "💰 موجودی شما: <b>" . fmtNum($bal) . "</b> تومان\n";
-        if ($total > 0) $text .= "💳 مبلغ نهایی: <b>" . fmtNum($total) . "</b> تومان\n";
+        if ($total > 0) $text .= "💳 مبلغ سفارش: <b>" . fmtNum($total) . "</b> تومان\n";
         $text .= "➖ کمبود: <b>" . fmtNum($need) . "</b> تومان\n\n";
-        $text .= "👇 مبلغی که می‌خواهید شارژ کنید را بفرستید،\nیا دکمه زیر را بزنید:";
-        $rows[] = [btnCb('💳 شارژ ' . fmtNum($need) . ' تومان', 'topupq_' . (int)ceil($need), 'buy')];
-        $r2 = (int)(ceil($need / 50000) * 50000);
-        if ($r2 > $need) $rows[] = [btnCb('💳 شارژ ' . fmtNum($r2) . ' تومان', 'topupq_' . $r2, 'confirm')];
+        $text .= "👇 دکمه زیر را بزنید، یا مبلغ دلخواهتان را بفرستید.\n";
+        $text .= "بعد از تایید شارژ، <b>سفارش شما خودکار ثبت می‌شود.</b>";
+        $rows[] = [btnCb('💳 شارژ ' . fmtNum($need) . ' تومان', 'topupq_' . (int)$need, 'buy')];
     }
     $rows[] = [btnUI('cancel', 'cancel', 'cancel')];
     panelShow($uid, $chatId, 'wallet', $text, inlineKb($rows), $replyTo);
@@ -2110,27 +2110,37 @@ function walletFor($currency) {
 }
 
 function createOrderAndAsk($uid, $chatId, $username, $type, $productId, $amount, $currency, $title, $meta = []) {
+    $isTopup = $type === 'topup';
+    [$method, $wallet] = walletFor($currency);
+
+    if (str_contains($wallet, 'تنظیم نشده')) {
+        sendMsg(BOT_TOKEN, $chatId,
+            "⚠️ روش پرداخت هنوز تنظیم نشده است.\nلطفا با پشتیبانی تماس بگیرید.");
+        sendMsg(BOT_TOKEN, ADMIN_ID,
+            "🔴 <b>مقصد پرداخت خالی است!</b>\n\n" .
+            "کاربر <code>{$uid}</code> می‌خواست <b>" . fmtNum($amount) . ' ' . h($currency) . "</b> بپردازد.\n\n" .
+            "پنل وب ← ⚙️ تنظیمات ← شماره کارت را پر کنید.");
+        return null;
+    }
+
     $oid = Order::create($uid, $username, $type, $productId, $amount, $currency, $meta);
 
-    // ✅ اول تایید ثبت سفارش، بعد اطلاعات پرداخت
-    $ok  = "✅ <b>سفارش شما ثبت شد</b>\n\n";
-    $ok .= "🧾 کد پیگیری: <code>" . h($oid) . "</code>\n";
-    if (!empty($meta['link'])) $ok .= "📣 کانال: " . h($meta['link']) . "\n";
-    if (!empty($meta['qty']))  $ok .= "👥 تعداد: <b>" . number_format((int)$meta['qty']) . "</b> نفر\n";
-    if (!empty($meta['speed'])) $ok .= "⚡️ سرعت: " . h($meta['speed']) . "\n";
-    if (!empty($meta['eta']))   $ok .= "⏳ زمان تقریبی: " . h($meta['eta']) . "\n";
-    $ok .= "💳 مبلغ: <b>" . fmtNum($amount) . ' ' . h($currency) . "</b>\n";
-    $ok .= "📊 وضعیت: <b>در انتظار پرداخت</b>\n\n";
-    $ok .= "👇 مبلغ را واریز کنید و رسید را بفرستید.\n";
-    $ok .= "با همین کد پیگیری هر وقت خواستید وضعیت را ببینید: /track " . h($oid);
-    sendMsg(BOT_TOKEN, $chatId, $ok);
+    $t  = $isTopup ? "💳 <b>درخواست شارژ ثبت شد</b>\n\n" : "🧾 <b>اطلاعات پرداخت</b>\n\n";
+    $t .= "💰 مبلغ: <b>" . fmtNum($amount) . ' ' . h($currency) . "</b>\n";
+    $t .= "🏦 روش: " . h($method) . "\n\n";
+    $t .= "💠 مقصد پرداخت:\n<code>" . h($wallet) . "</code>\n\n";
+    $t .= "🧾 کد پیگیری: <code>" . h($oid) . "</code>\n\n";
+    $t .= "👇 مبلغ را واریز کنید، بعد دکمه «ارسال رسید» را بزنید.";
+    if ($isTopup) {
+        $pend = getUser($uid)['pending'] ?? null;
+        if ($pend && Product::get($pend['pid'] ?? '')) {
+            $pp = Product::get($pend['pid']);
+            $t .= "\n\n🛒 بعد از تایید شارژ، سفارش «<b>" . h($pp['name']) .
+                  "</b>» خودکار ثبت می‌شود.";
+        }
+    }
 
-    [$method, $wallet] = walletFor($currency);
-    $text = T('pay_info', [
-        'title' => $title, 'amount' => fmtNum($amount), 'currency' => h($currency),
-        'method' => $method, 'wallet' => h($wallet), 'id' => h($oid),
-    ]);
-    sendMsg(BOT_TOKEN, $chatId, $text, inlineKb([
+    sendMsg(BOT_TOKEN, $chatId, $t, inlineKb([
         [['text' => UT('receipt'), 'callback_data' => 'rcpt_' . $oid, 'style' => gs('confirm') ?: null]],
         [['text' => UT('cancel'), 'callback_data' => 'ocancel_' . $oid, 'style' => gs('cancel') ?: null]],
     ]));
@@ -2445,28 +2455,7 @@ function flowFinish($uid, $chatId, $uname) {
                                        'currency' => $p['currency'], 'meta' => $meta, 'at' => nowStr()];
     });
 
-    $bal   = (float)(getUser($uid)['balance'] ?? 0);
-    $canW  = trim($p['currency']) === 'تومان';
-    $short = max(0, $total - $bal);
-
-    $rows = [];
-    if ($canW) $rows[] = [btnCb(UT('wallet_pay') . ' (' . fmtNum($bal) . ')',
-                                'fwpay_' . $p['id'] . '|' . $total, 'buy')];
-    $rows[] = [btnCb(UT('direct_pay'), 'fdpay_' . $p['id'] . '|' . $total, 'buy')];
-    if ($canW && $short > 0) $rows[] = [btnCb('➕ شارژ کیف پول (' . fmtNum($short) . ')',
-                                              'topup_' . (int)ceil($short), 'confirm')];
-    $rows[] = [btnUI('cancel', 'cancel', 'cancel')];
-
-    $t  = "🧾 <b>" . h($p['name']) . "</b>\n" . h($note);
-    $t .= "\n\n💳 مبلغ: <b>" . fmtNum($total) . ' ' . h($p['currency']) . "</b>";
-    if ($canW) {
-        $t .= "\n💰 موجودی شما: <b>" . fmtNum($bal) . " تومان</b>";
-        if ($short > 0) $t .= "\n➖ کمبود: <b>" . fmtNum($short) . " تومان</b>";
-    }
-    $t .= "\n\n⚠️ سفارش هنوز ثبت نشده — بعد از پرداخت ثبت می‌شود.";
-    $t .= "\n\nروش پرداخت را انتخاب کنید:";
-
-    panelShow($uid, $chatId, 'shop', $t, inlineKb($rows));
+    settlePurchase($uid, $chatId, $uname, $p, $total, $meta);
     return true;
 }
 
@@ -2677,27 +2666,81 @@ function completeApprovedOrder($order) {
         $t = "✅ کیف پول شما <b>" . fmtNum($order['amount']) . "</b> تومان شارژ شد.\n" .
              "💰 موجودی جدید: <b>" . fmtNum($balT) . "</b> تومان";
 
-        // سفارش نیمه‌تمام داشت؟ همان‌جا ادامه بدهد
+        // 🛒 سفارش نیمه‌تمام داشت و حالا پول کافی است → همین حالا خودکار ثبتش کن
         $pend = getUser($uidT)['pending'] ?? null;
-        $rows = [];
-        if ($pend && (float)($pend['amount'] ?? 0) > 0 && Product::get($pend['pid'] ?? '')) {
-            $need = (float)$pend['amount'];
-            $pp   = Product::get($pend['pid']);
-            $t .= "\n\n🛒 سفارش نیمه‌تمام: <b>" . h($pp['name']) . "</b> — " .
-                  fmtNum($need) . ' ' . h($pend['currency'] ?? 'تومان');
-            $t .= $balT >= $need
-                ? "\n✅ حالا موجودی کافی است."
-                : "\n➖ هنوز " . fmtNum($need - $balT) . " تومان کم دارید.";
-            if ($balT >= $need)
-                $rows[] = [btnCb('✅ پرداخت و ثبت سفارش', 'fwpay_' . $pend['pid'] . '|' . $need, 'buy')];
+        $pp   = $pend ? Product::get($pend['pid'] ?? '') : null;
+        $need = $pend ? (float)($pend['amount'] ?? 0) : 0;
+
+        if ($pp && $need > 0 && $balT >= $need) {
+            addBalance($uidT, -$need);
+            mutate('users', function (&$a) use ($uidT) { unset($a[(string)$uidT]['pending']); });
+            clearState($uidT);
+
+            $oid2 = Order::create($uidT, $order['username'] ?? '', 'product', $pend['pid'],
+                                  $need, (string)($pend['currency'] ?? 'تومان'), $pend['meta'] ?? []);
+            Order::attachReceipt($oid2, 'text', 'پرداخت از کیف پول');
+            Order::approve($oid2, ADMIN_ID);
+
+            sendMsg(BOT_TOKEN, $uidT, $t);
+            $od2 = Order::get($oid2);
+            sendMsg(BOT_TOKEN, $uidT, orderDoneText($od2), orderDoneKb($od2));
+            announceSale($od2);
+            reportSale($od2);
+            return;
         }
-        sendMsg(BOT_TOKEN, $uidT, $t, $rows ? inlineKb($rows) : null);
+
+        if ($pp && $need > 0) {
+            $t .= "\n\n🛒 سفارش نیمه‌تمام: <b>" . h($pp['name']) . "</b> — " . fmtNum($need) . " تومان";
+            $t .= "\n➖ هنوز <b>" . fmtNum($need - $balT) . "</b> تومان کم دارید.";
+            sendMsg(BOT_TOKEN, $uidT, $t, inlineKb([
+                [btnCb('💳 شارژ ' . fmtNum(ceil($need - $balT)) . ' تومان',
+                       'topupq_' . (int)ceil($need - $balT), 'buy')],
+            ]));
+            return;
+        }
+
+        sendMsg(BOT_TOKEN, $uidT, $t);
         return;
     }
     // 📩 یک پیام کامل — نه سه تا
     sendMsg(BOT_TOKEN, $order['user_id'], orderDoneText($order), orderDoneKb($order));
     announceSale($order);
     reportSale($order);
+}
+
+/**
+ * 💳 تسویه خرید — موجودی کافی بود سفارش ثبت می‌شود، وگرنه می‌رود شارژ
+ * هیچ دکمه «پرداخت مستقیم» یا «کیف پول» لازم نیست؛ خودش تصمیم می‌گیرد.
+ */
+function settlePurchase($uid, $chatId, $uname, $p, $total, $meta = []) {
+    $bal   = (float)(getUser($uid)['balance'] ?? 0);
+    $short = max(0, $total - $bal);
+
+    // مشخصات سفارش را نگه دار تا اگر رفت شارژ کند، گم نشود
+    mutate('users', function (&$a) use ($uid, $meta, $p, $total) {
+        if (!isset($a[(string)$uid])) return;
+        $a[(string)$uid]['pending'] = ['pid' => $p['id'], 'amount' => $total,
+                                       'currency' => $p['currency'], 'meta' => $meta, 'at' => nowStr()];
+    });
+
+    if ($short > 0) {
+        startTopup($uid, $chatId, null, $short, $total, $bal);
+        return false;
+    }
+
+    addBalance($uid, -$total);
+    clearState($uid);
+    mutate('users', function (&$a) use ($uid) { unset($a[(string)$uid]['pending']); });
+
+    $oid = Order::create($uid, $uname, 'product', $p['id'], $total, $p['currency'], $meta);
+    Order::attachReceipt($oid, 'text', 'پرداخت از کیف پول');
+    Order::approve($oid, ADMIN_ID);
+
+    $od = Order::get($oid);
+    panelShow($uid, $chatId, 'shop', orderDoneText($od), orderDoneKb($od));
+    announceSale($od);
+    reportSale($od);
+    return true;
 }
 
 /** ✅ پیام واحد بعد از تایید سفارش — همه اطلاعات یک‌جا */
@@ -3963,53 +4006,25 @@ function masterHandle($update) {
             flowFinish($uid, $chatId, $uname);
             return;
         }
+        // دکمه‌های قدیمی پرداخت (پیام‌های قبلی) — همان مسیر تازه را می‌روند
         if (str_starts_with($data, 'fwpay_') || str_starts_with($data, 'fdpay_')) {
-            $wallet = str_starts_with($data, 'fwpay_');
             $rest = substr($data, 6);
-            $pos = strrpos($rest, '|');
+            $pos  = strrpos($rest, '|');
             if ($pos === false) { answerCb(BOT_TOKEN, $cbId); return; }
             $pid = substr($rest, 0, $pos);
             $amt = (float)substr($rest, $pos + 1);
             $p = Product::get($pid);
             if (!$p || $amt <= 0) { answerCb(BOT_TOKEN, $cbId, 'نامعتبر', true); return; }
 
+            $meta = [];
             $mst = getState($uid);
-            $meta = ($mst && $mst['action'] === 'flow_meta') ? $mst['data'] : [];
+            if ($mst && $mst['action'] === 'flow_meta') $meta = $mst['data'];
             if (!$meta) {
                 $pend = getUser($uid)['pending'] ?? null;
                 if ($pend && ($pend['pid'] ?? '') === $pid) $meta = $pend['meta'] ?? [];
             }
-
-            if ($wallet) {
-                $bal = (float)(getUser($uid)['balance'] ?? 0);
-                if ($bal < $amt) {
-                    $short = $amt - $bal;
-                    // پیام کوچک روی خود دکمه — دقیقا مثل چیزی که خواستید
-                    answerCb(BOT_TOKEN, $cbId,
-                        "❌ موجودی ناکافی!\n" .
-                        "💰 موجودی: " . fmtNum($bal) . " تومان\n" .
-                        "💳 مبلغ نهایی: " . fmtNum($amt) . " تومان\n" .
-                        "➖ کمبود: " . fmtNum($short) . " تومان", true);
-                    // و یک‌راست ببرش سراغ شارژ کیف پول
-                    startTopup($uid, $chatId, null, (int)ceil($short), $amt, $bal);
-                    return;
-                }
-                addBalance($uid, -$amt);
-                clearState($uid);
-                mutate('users', function (&$a) use ($uid) { unset($a[(string)$uid]['pending']); });
-                $oid = Order::create($uid, $uname, 'product', $pid, $amt, $p['currency'], $meta);
-                Order::attachReceipt($oid, 'text', 'پرداخت از کیف پول');
-                Order::approve($oid, ADMIN_ID);
-                answerCb(BOT_TOKEN, $cbId, '✅ ثبت شد');
-                $od = Order::get($oid);
-                sendMsg(BOT_TOKEN, $chatId, orderDoneText($od), orderDoneKb($od));
-                announceSale($od);
-                reportSale($od);
-                return;
-            }
             answerCb(BOT_TOKEN, $cbId);
-            // ⚠️ سفارش هنوز ساخته نمی‌شود — فقط وقتی رسید بیاید
-            askDirectPay($uid, $chatId, $p, $amt, $meta);
+            settlePurchase($uid, $chatId, $uname, $p, $amt, $meta);
             return;
         }
 
