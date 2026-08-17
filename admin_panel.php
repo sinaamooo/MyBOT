@@ -170,6 +170,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $c['uploader']['delete_seconds']  = max(5, (int)($post['del_sec'] ?? 30));
             $c['uploader']['force_join']      = !empty($post['force_join']);
             $c['uploader']['protect_content'] = !empty($post['protect']);
+            // این دو فقط از فرم «تنظیمات» می‌آیند؛ فرم‌های دیگر نباید صفرشان کنند
+            if (!empty($post['adv_scope'])) {
+                $c['test_mode']               = !empty($post['test_mode']);
+                $c['ui']['speed_show_perday'] = !empty($post['speed_perday']);
+            }
         });
         go('تنظیمات ذخیره شد.');
     }
@@ -280,6 +285,53 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         });
         go('قیمت‌گذاری ذخیره شد.');
     }
+    if ($a === 'save_btn_report') {
+        $bid = $_POST['bid'] ?? ''; $sid = $_POST['sid'] ?? '';
+        if (!findSub($bid, $sid)) go('دکمه پیدا نشد.', 'err');
+        $post = $_POST;
+
+        foreach ([0, 1] as $i) {
+            $u = trim($post['burl'][$i] ?? '');
+            if ($u !== '' && !preg_match('#^(https?://|tg://)#i', $u))
+                go('لینک دکمه ' . ($i + 1) . ' باید با https:// شروع شود.', 'err');
+        }
+
+        reportMutate(subProductId($bid, $sid), function (&$r) use ($post) {
+            $r['on']        = !empty($post['ron']);
+            $r['chat_id']   = trim($post['rchat'] ?? '');
+            $r['thread_id'] = max(0, (int)($post['rthread'] ?? 0));
+            $txt = (string)($post['rtext'] ?? '');
+            if (trim($txt) !== '') $r['text'] = $txt;
+            foreach ([0, 1] as $i) {
+                if (!isset($r['buttons'][$i]))
+                    $r['buttons'][$i] = ['text'=>'','url'=>'','color'=>'none','icon'=>'','on'=>true];
+                $r['buttons'][$i]['text']  = trim($post['btext'][$i] ?? '');
+                $r['buttons'][$i]['url']   = trim($post['burl'][$i] ?? '');
+                $r['buttons'][$i]['color'] = isStyle($post['bcolor'][$i] ?? '') ? $post['bcolor'][$i] : 'none';
+                $r['buttons'][$i]['on']    = !empty($post['bon'][$i]);
+            }
+        });
+        go('گزارش خرید ذخیره شد.');
+    }
+    if ($a === 'test_btn_report') {
+        $bid = $_POST['bid'] ?? ''; $sid = $_POST['sid'] ?? '';
+        $pid = subProductId($bid, $sid);
+        $p = Product::get($pid);
+        if (!$p) go('دکمه پیدا نشد.', 'err');
+        reportSale([
+            'id' => 'or_TEST000000', 'type' => 'product', 'product_id' => $pid,
+            'user_id' => ADMIN_ID, 'username' => 'admin', 'amount' => (float)$p['price'],
+            'currency' => $p['currency'], 'created_at' => nowStr(),
+            'meta' => ['link' => 'https://t.me/example', 'qty' => 5000, 'speed' => 'نمونه',
+                       'per_day' => 5000, 'eta' => 'حدود 1 روز', 'chat_title' => 'کانال نمونه'],
+        ], true);
+        $rr = reportOf($p);
+        if (trim((string)$rr['chat_id']) === '') go('اول آیدی گروه را تنظیم و ذخیره کنید.', 'err');
+        go('گزارش آزمایشی فرستاده شد.' . (empty($rr['on'])
+            ? ' توجه: گزارش این محصول خاموش است، پس خریدهای واقعی گزارش نمی‌شوند.'
+            : ' اگر نرسید، ربات را در گروه ادمین کنید.'));
+    }
+
     if ($a === 'toggle_btn_product') {
         $bid = $_POST['bid'] ?? ''; $sid = $_POST['sid'] ?? '';
         if (!findSub($bid, $sid)) go('دکمه پیدا نشد.', 'err');
@@ -845,11 +897,19 @@ foreach ($tabs as $k => $l): ?>
         <input type="hidden" name="action" value="save_btn_price">
         <input type="hidden" name="bid" value="<?= h($bid) ?>"><input type="hidden" name="sid" value="<?= h($sid) ?>">
 
+        <?php $perNow = max(1, (int)$f['per']); $perMember = (float)$sb['price'] / $perNow; ?>
+        <div class="note" style="margin-bottom:12px">
+          💠 <b>قیمت هر ۱ ممبر: <?= h(rtrim(rtrim(number_format($perMember, 2), '0'), '.') ?: '0') ?>
+          <?= h($sb['currency']) ?></b>
+          — یعنی <?= number_format((float)$sb['price']) ?> برای هر <?= number_format($perNow) ?> نفر.<br>
+          می‌خواهید ممبری قیمت بگذارید؟ «به ازای هر چند نفر» را <code>1</code> بگذارید و
+          قیمت پایه را قیمت یک ممبر بنویسید.
+        </div>
         <div class="grid2">
           <div><label>قیمت پایه</label>
             <input name="price" value="<?= h((float)$sb['price'] > 0 ? (0 + $sb['price']) : '') ?>"
                    placeholder="5000" style="direction:ltr" required></div>
-          <div><label>به ازای هر چند نفر؟</label>
+          <div><label>به ازای هر چند نفر؟ (۱ = قیمت هر ممبر)</label>
             <input name="per" type="number" min="1" value="<?= (int)$f['per'] ?>" style="direction:ltr"></div>
           <div><label>واحد پول</label><select name="currency">
             <?php foreach (['تومان', 'USDT', 'TRX'] as $cu): ?>
@@ -920,7 +980,81 @@ foreach ($tabs as $k => $l): ?>
         </div>
       </form>
 
-      <form method="post" style="margin-top:10px">
+      <?php $rp = reportOf($sb); ?>
+      <details style="margin-top:16px"<?= !empty($rp['on']) ? ' open' : '' ?>>
+        <summary style="cursor:pointer;font-weight:700;padding:8px 0">
+          📢 گزارش خرید در گروه <?= !empty($rp['on']) ? '<span class="badge green">روشن</span>' : '<span class="badge">خاموش</span>' ?>
+        </summary>
+        <form method="post" style="margin-top:10px">
+          <input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="tab" value="products">
+          <input type="hidden" name="action" value="save_btn_report">
+          <input type="hidden" name="bid" value="<?= h($bid) ?>"><input type="hidden" name="sid" value="<?= h($sid) ?>">
+
+          <div class="note">
+            یک گروه با چند تاپیک بسازید و برای هر محصول <b>شماره تاپیک خودش</b> را بگذارید —
+            گزارش خرید هر محصول در بخش خودش می‌افتد.
+            ربات باید در گروه <b>ادمین</b> باشد.
+          </div>
+
+          <div style="margin:10px 0">
+            <label style="font-weight:500"><input type="checkbox" name="ron" value="1" style="width:auto"
+              <?= !empty($rp['on']) ? 'checked' : '' ?>> گزارش این محصول روشن باشد</label>
+          </div>
+
+          <div class="grid2">
+            <div><label>آیدی گروه</label>
+              <input name="rchat" value="<?= h($rp['chat_id']) ?>" placeholder="-1001234567890" style="direction:ltr"></div>
+            <div><label>شماره تاپیک (۰ = بدون تاپیک)</label>
+              <input name="rthread" type="number" min="0" value="<?= (int)$rp['thread_id'] ?>" style="direction:ltr"></div>
+          </div>
+
+          <div style="margin-top:12px"><label>متن گزارش</label>
+            <textarea name="rtext" rows="7" style="direction:rtl"><?= h($rp['text']) ?></textarea>
+            <div class="muted" style="margin-top:6px">
+              متغیرها: <code>{product} {emoji} {qty} {speed} {per_day} {eta} {amount} {currency}
+              {code} {link} {channel} {user} {user_id} {date} {delivered}</code><br>
+              HTML مجاز است: <code>&lt;b&gt;</code> <code>&lt;i&gt;</code> <code>&lt;code&gt;</code>
+              <code>&lt;blockquote&gt;</code> <code>&lt;blockquote expandable&gt;</code><br>
+              ✨ برای <b>ایموجی پریمیوم</b> و نقل‌قول آماده، متن را داخل ربات بنویسید:
+              <code>/panel</code> ← 🔘 دکمه‌ها ← این دکمه ← 📢 گزارش خرید ← ✏️ متن گزارش
+            </div>
+          </div>
+
+          <div style="margin-top:14px"><label>🔘 دو دکمه زیر گزارش</label>
+            <table style="margin-top:6px">
+              <tr><th>#</th><th>متن دکمه</th><th>لینک</th><th>رنگ</th><th>روشن</th></tr>
+              <?php foreach ([0, 1] as $i): $b = $rp['buttons'][$i] ?? ['text'=>'','url'=>'','color'=>'none','on'=>true]; ?>
+                <tr>
+                  <td><?= $i + 1 ?></td>
+                  <td><input name="btext[<?= $i ?>]" value="<?= h($b['text'] ?? '') ?>" placeholder="🛒 ثبت سفارش"></td>
+                  <td><input name="burl[<?= $i ?>]" value="<?= h($b['url'] ?? '') ?>"
+                             placeholder="https://t.me/YourBot" style="direction:ltr"></td>
+                  <td><select name="bcolor[<?= $i ?>]" style="max-width:120px">
+                    <?php foreach (styleMap() as $sk => $sl): ?>
+                      <option value="<?= h($sk) ?>" <?= ($b['color'] ?? 'none') === $sk ? 'selected' : '' ?>><?= h($sl) ?></option>
+                    <?php endforeach; ?></select></td>
+                  <td><input type="checkbox" name="bon[<?= $i ?>]" value="1" style="width:auto"
+                             <?= !empty($b['on']) ? 'checked' : '' ?>></td>
+                </tr>
+              <?php endforeach; ?>
+            </table>
+            <div class="muted" style="margin-top:6px">
+              دکمه بدون لینک نشان داده نمی‌شود. ✨ ایموجی پریمیوم دکمه‌ها را داخل ربات بگذارید.
+            </div>
+          </div>
+
+          <div style="margin-top:14px"><button class="btn g">ذخیره گزارش</button></div>
+        </form>
+
+        <form method="post" style="margin-top:10px">
+          <input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="tab" value="products">
+          <input type="hidden" name="action" value="test_btn_report">
+          <input type="hidden" name="bid" value="<?= h($bid) ?>"><input type="hidden" name="sid" value="<?= h($sid) ?>">
+          <button class="btn b">🧪 ارسال گزارش آزمایشی</button>
+        </form>
+      </details>
+
+      <form method="post" style="margin-top:14px">
         <input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="tab" value="products">
         <input type="hidden" name="action" value="toggle_btn_product">
         <input type="hidden" name="bid" value="<?= h($bid) ?>"><input type="hidden" name="sid" value="<?= h($sid) ?>">
@@ -1795,6 +1929,7 @@ def join_gate(user_id):
     <form method="post">
       <input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="tab" value="settings">
       <input type="hidden" name="action" value="save_settings">
+      <input type="hidden" name="adv_scope" value="1">
 
       <h3 style="font-size:14px;margin-bottom:10px">💳 اطلاعات پرداخت</h3>
       <div class="grid2">
@@ -1823,6 +1958,20 @@ def join_gate(user_id):
             <?= !empty($C['uploader']['force_join']) ? 'checked' : '' ?>> 🔒 عضویت اجباری</label>
           <label style="font-weight:500"><input type="checkbox" name="protect" style="width:auto"
             <?= !empty($C['uploader']['protect_content']) ? 'checked' : '' ?>> 🛡 محافظت فایل</label></div>
+      </div>
+
+      <h3 style="font-size:14px;margin:18px 0 10px">🧪 تست و نمایش</h3>
+      <div class="note">
+        <b>حالت تست</b> اجازه می‌دهد سفارش با مبلغ <b>صفر</b> تا آخر برود — بدون پرداخت،
+        خودکار تایید می‌شود و کمپین قفل کانالش هم ساخته می‌شود.
+        برای امتحان کردن کل مسیر قبل از قیمت‌گذاری. <b>یادتان باشد بعد خاموشش کنید.</b>
+      </div>
+      <div style="margin-top:10px">
+        <label style="font-weight:500"><input type="checkbox" name="test_mode" style="width:auto"
+          <?= !empty($C['test_mode']) ? 'checked' : '' ?>> 🧪 حالت تست — سفارش با ۰ ریال مجاز باشد</label>
+        <label style="font-weight:500"><input type="checkbox" name="speed_perday" style="width:auto"
+          <?= !empty($C['ui']['speed_show_perday']) ? 'checked' : '' ?>>
+          🚀 «نفر در روز» روی دکمه سرعت هم نوشته شود</label>
       </div>
 
       <div style="margin-top:16px"><button class="btn g">ذخیره تنظیمات</button></div>
