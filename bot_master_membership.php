@@ -1490,10 +1490,19 @@ function productBtn($p, $uid) {
     return $b;
 }
 
-function activeProducts() {
+function activeProducts($excludeBtn = null) {
+    // محصولاتی که خودشان دکمه اختصاصی دارند دوباره در فهرست نمی‌آیند
+    $covered = [];
+    if ($excludeBtn !== null) {
+        foreach ((cfg()['buttons'][$excludeBtn]['subs'] ?? []) as $sub) {
+            if (empty($sub['on'])) continue;
+            if (($sub['action'] ?? '') === 'product' && !empty($sub['value'])) $covered[$sub['value']] = true;
+        }
+    }
     $list = [];
     foreach (Product::all() as $p) {
         if (empty($p['active'])) continue;
+        if (isset($covered[$p['id']])) continue;
         $list[] = $p;
     }
     usort($list, fn($x, $y) => ((int)($x['order'] ?? 99)) <=> ((int)($y['order'] ?? 99)));
@@ -1501,8 +1510,8 @@ function activeProducts() {
 }
 
 function showProducts($uid, $chatId, $extra = [], $replyTo = null) {
-    $prods = activeProducts();
-    if (!$prods) {
+    $prods = activeProducts('buy');
+    if (!$prods && !$extra) {
         panelShow($uid, $chatId, 'shop', T('buy_empty'), $extra ? inlineKb($extra) : null, $replyTo);
         return;
     }
@@ -2480,41 +2489,55 @@ function autoSetup($chatId, $msgId = null) {
     }
     if ($flowOn) $log[] = "✅ جریان سفارش برای <b>{$flowOn}</b> محصول روشن شد";
 
-    // ۲) زیردکمه‌های تکراری: چون خود لیست محصولات دکمه می‌سازد
-    $removed = 0; $bound = 0;
+    // ۲) هر زیردکمه یک محصول است: اگر محصول هم‌نام نبود، بساز و وصلش کن
+    $bound = 0; $created = 0;
     foreach (cfg()['buttons'] as $bid => $b) {
         foreach ($b['subs'] ?? [] as $sub) {
-            $match = productByName($sub['text'] ?? '');
-            if (!$match) continue;
-            if (isPlaceholder($sub['value'] ?? '') || ($sub['action'] ?? '') === 'product') {
-                // اگر دکمه مادر همان «خرید محصول» است، تکراری است → حذف
-                if (($b['action'] ?? '') === '' && $bid === 'buy') {
-                    cfgSet(function (&$c) use ($bid, $sub) {
-                        $c['buttons'][$bid]['subs'] = array_values(array_filter(
-                            $c['buttons'][$bid]['subs'] ?? [],
-                            fn($x) => ($x['id'] ?? '') !== ($sub['id'] ?? '')));
-                    });
-                    $removed++;
-                } else {
-                    subMutate($bid, $sub['id'], function (&$x) use ($match) {
-                        $x['action'] = 'product';
-                        $x['value']  = $match['id'];
-                    });
-                    $bound++;
-                }
+            if (($sub['action'] ?? '') === 'product' && Product::get($sub['value'] ?? '')) continue;
+
+            $name = trim((string)($sub['text'] ?? ''));
+            if ($name === '') continue;
+
+            $match = productByName($name);
+            if (!$match) {
+                // محصول تازه با همان نام و ایموجی و رنگ دکمه
+                $match = Product::create($name, 0, 'تومان', 0, '');
+                mutate('products', function (&$a) use ($match, $sub) {
+                    $a[$match['id']]['emoji'] = $sub['emoji'] ?? '💠';
+                    $a[$match['id']]['color'] = $sub['color'] ?? 'none';
+                    $a[$match['id']]['icon']  = $sub['icon'] ?? '';
+                    $a[$match['id']]['flow']['on'] = true;
+                    $a[$match['id']]['flow']['ask_admin'] = true;
+                });
+                $created++;
             }
+            subMutate($bid, $sub['id'], function (&$x) use ($match) {
+                $x['action'] = 'product';
+                $x['value']  = $match['id'];
+            });
+            $bound++;
         }
     }
-    if ($removed) $log[] = "🧹 <b>{$removed}</b> دکمه تکراری حذف شد (خود لیست محصولات دکمه می‌سازد)";
-    if ($bound)   $log[] = "🔗 <b>{$bound}</b> دکمه به محصول وصل شد";
+    if ($created) $log[] = "🆕 <b>{$created}</b> محصول از روی دکمه‌ها ساخته شد — قیمتشان را تنظیم کنید";
+    if ($bound)   $log[] = "🔗 <b>{$bound}</b> دکمه به محصولش وصل شد";
 
-    // ۳) دکمه «خرید محصول» روشن باشد
+    // ۳) جریان سفارش برای محصولات تازه هم روشن شود
+    foreach (Product::all() as $p) {
+        if (!empty($p['flow']['on']) && !empty($p['flow']['ask_admin'])) continue;
+        mutate('products', function (&$a) use ($p) {
+            $a[$p['id']]['flow']['on'] = true;
+            $a[$p['id']]['flow']['ask_admin'] = true;
+        });
+    }
+
+    // ۴) دکمه «خرید محصول» روشن باشد
     if (empty(cfg()['buttons']['buy']['on'])) {
         cfgSet(function (&$c) { $c['buttons']['buy']['on'] = true; });
         $log[] = "✅ دکمه «خرید محصول» روشن شد";
     }
 
-    // ۴) گزارش نهایی
+    // ۵) گزارش نهایی — فهرست را دوباره بخوان چون ممکن است محصول تازه ساخته باشیم
+    $prods = Product::all();
     $text  = "🔧 <b>راه‌اندازی خودکار</b>\n\n";
     $text .= $log ? implode("\n", $log) . "\n\n" : "همه چیز از قبل درست بود.\n\n";
 
@@ -2529,6 +2552,10 @@ function autoSetup($chatId, $msgId = null) {
     }
 
     $probs = [];
+    $zero = [];
+    foreach (Product::all() as $p) if ((float)$p['price'] <= 0) $zero[] = $p['name'];
+    if ($zero) $probs[] = "قیمت این محصولات هنوز صفر است: <b>" . h(implode('، ', $zero)) . "</b>\n" .
+                          "   /panel → 🛒 محصولات → روی محصول → 💰 قیمت";
     if (!$prods) $probs[] = "هیچ محصولی نساخته‌اید — از پنل وب → 🛒 محصولات بسازید";
     if ($prods && !$active) $probs[] = "هیچ محصولی فعال نیست";
     $w = cfg()['wallets'];

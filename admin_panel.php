@@ -787,7 +787,7 @@ foreach ($tabs as $k => $l): ?>
     </form>
     <div class="prev" style="margin-top:12px">
       <?php
-      $prods = activeProducts();
+      $prods = activeProducts("buy");
       $hasRows = false; foreach ($prods as $pp) if (!empty($pp['row'])) { $hasRows = true; break; }
       if ($hasRows) { $g = []; foreach ($prods as $pp) $g[(int)($pp['row'] ?: 99)][] = $pp; ksort($g); $g = array_values($g); }
       else $g = layoutRows($prods, $C['ui']['product_layout'] ?? '1');
