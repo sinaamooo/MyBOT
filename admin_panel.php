@@ -744,7 +744,35 @@ foreach ($tabs as $k => $l): ?>
 
 <?php // ================= محصولات ================= ?>
 <?php elseif ($tab === 'products'): ?>
-  <div class="card"><h2>➕ ساخت محصول (دکمه جدید)</h2><div class="body">
+  <?php $saleBtns = saleButtons(); ?>
+  <?php if ($saleBtns): ?>
+  <div class="card"><h2>🔘 دکمه‌های فروش (خودِ دکمه = محصول)</h2><div class="body">
+    <div class="note">
+      این دکمه‌ها خودشان محصول‌اند — رکورد محصول جداگانه لازم ندارند.
+      مشتری که رویشان بزند، مستقیم می‌رود سراغ <b>لینک کانال ← تعداد ← سرعت ← ادمین کردن ربات ← فاکتور</b>.
+      <br>قیمت و تعداد و سرعتشان را <b>داخل ربات</b> تنظیم کنید:
+      <code>/panel</code> ← 🔘 دکمه‌ها ← روی دکمه ← 💰 قیمت
+      (ایموجی پریمیوم فقط داخل تلگرام تایپ می‌شود).
+    </div>
+    <table>
+      <tr><th>دکمه</th><th>قیمت هر ۱۰۰۰</th><th>تعداد</th><th>سرعت‌ها</th><th>وضعیت</th></tr>
+      <?php foreach ($saleBtns as $sb): ?>
+        <?php $spdOn = 0; foreach ($sb['flow']['speeds'] ?? [] as $sx) if (!isset($sx['on']) || !empty($sx['on'])) $spdOn++; ?>
+        <tr>
+          <td><?= h(trim(($sb['emoji'] ?? '') . ' ' . $sb['name'])) ?></td>
+          <td><?= (float)$sb['price'] > 0
+                ? h(number_format((float)$sb['price']) . ' ' . $sb['currency'])
+                : '<span style="color:#e5484d">تنظیم نشده</span>' ?></td>
+          <td><?= h(number_format((int)$sb['flow']['min']) . ' — ' . number_format((int)$sb['flow']['max'])) ?></td>
+          <td><?= (int)$spdOn ?></td>
+          <td><?= !empty($sb['active']) ? '✅ روشن' : '❌ خاموش' ?></td>
+        </tr>
+      <?php endforeach; ?>
+    </table>
+  </div></div>
+  <?php endif; ?>
+
+  <div class="card"><h2>➕ ساخت محصول جداگانه (اختیاری)</h2><div class="body">
     <div class="note">
       هر محصول یک <b>دکمه</b> در بخش «خرید محصول» می‌سازد — مثلا «ممبر اخلاقی»، «ممبر فیک».
       برای هرکدام ایموجی، رنگ واقعی و ایموجی پریمیوم جدا تنظیم می‌شود.

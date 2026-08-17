@@ -80,6 +80,8 @@ function fmtNum($n) { return rtrim(rtrim(number_format((float)$n, 2, '.', ','), 
 if (!defined('TG_API_BASE')) define('TG_API_BASE', 'https://api.telegram.org');
 
 function tg($token, $method, $data = [], $timeout = 20) {
+    // درگاه تست — در حالت عادی وجود ندارد
+    if (function_exists('__tgHook')) return __tgHook($token, $method, $data);
     $ch = curl_init(TG_API_BASE . "/bot{$token}/{$method}");
     curl_setopt_array($ch, [
         CURLOPT_POST => true,
@@ -845,11 +847,89 @@ function clearState($uid) { mutate('states', function (&$s) use ($uid) { unset($
 // 🛒 محصولات
 // ============================================================
 
+/** تنظیمات پیش‌فرض جریان سفارش — یک جا تا همه‌جا یکسان بماند */
+function defaultFlow() {
+    return [
+        'on' => true, 'ask_link' => true, 'ask_qty' => true, 'ask_admin' => true,
+        'min' => 1000, 'max' => 100000, 'per' => 1000,
+        'speeds' => [
+            ['id' => 's1', 'text' => 'کند',       'emoji' => '🐢', 'mult' => 1,   'per_day' => 500,  'color' => 'primary', 'icon' => '', 'on' => true],
+            ['id' => 's2', 'text' => 'متوسط',     'emoji' => '🚶', 'mult' => 1.3, 'per_day' => 2000, 'color' => 'success', 'icon' => '', 'on' => true],
+            ['id' => 's3', 'text' => 'سرعت بالا', 'emoji' => '⚡️', 'mult' => 1.7, 'per_day' => 8000, 'color' => 'danger',  'icon' => '', 'on' => true],
+        ],
+        'speed_layout' => '1',
+    ];
+}
+
+/**
+ * 🔘 خودِ دکمه شیشه‌ای = محصول
+ * هیچ رکورد محصولی لازم نیست؛ قیمت و جریان روی خود دکمه ذخیره می‌شود.
+ * شناسه: btn:<شناسه‌دکمه>|<شناسه‌زیردکمه>
+ */
+function subProductId($bid, $sid) { return 'btn:' . $bid . '|' . $sid; }
+
+function parseSubProductId($id) {
+    if (!is_string($id) || !str_starts_with($id, 'btn:')) return null;
+    $rest = substr($id, 4);
+    $pos  = strrpos($rest, '|');
+    if ($pos === false) return null;
+    return [substr($rest, 0, $pos), substr($rest, $pos + 1)];
+}
+
+/** ساخت محصولِ مجازی از روی یک زیردکمه (بدون نوشتن در products.json) */
+function subProduct($bid, $sid, $sub = null) {
+    $sub = $sub ?: findSub($bid, $sid);
+    if (!$sub) return null;
+    $flow = defaultFlow();
+    foreach (($sub['flow'] ?? []) as $k => $v) $flow[$k] = $v;
+    return [
+        'id'        => subProductId($bid, $sid),
+        'name'      => trim((string)($sub['text'] ?? 'محصول')),
+        'desc'      => (string)($sub['desc'] ?? ''),
+        'price'     => (float)($sub['price'] ?? 0),
+        'currency'  => (string)($sub['currency'] ?? (cfg()['currency'] ?? 'تومان')),
+        'limit'     => (int)($sub['limit'] ?? 0),
+        'buyers'    => array_values($sub['buyers'] ?? []),
+        'bot_id'    => null,
+        'link_code' => (string)($sub['link_code'] ?? ''),
+        'emoji'     => (string)($sub['emoji'] ?? '💠'),
+        'color'     => (string)($sub['color'] ?? 'none'),
+        'icon'      => (string)($sub['icon'] ?? ''),
+        'row'       => (int)($sub['row'] ?? 0),
+        'order'     => (int)($sub['order'] ?? 99),
+        'flow'      => $flow,
+        'active'    => !empty($sub['on']),
+        'virtual'   => true,
+        'btn'       => [$bid, $sid],
+    ];
+}
+
+/** همهٔ زیردکمه‌هایی که نقش محصول دارند (برای گزارش و پنل) */
+function saleButtons() {
+    $out = [];
+    foreach (cfg()['buttons'] as $bid => $b) {
+        foreach ($b['subs'] ?? [] as $sub) {
+            if (trim((string)($sub['text'] ?? '')) === '') continue;
+            if (in_array($sub['action'] ?? 'text', ['section', 'url'], true)) continue;
+            if (($sub['action'] ?? '') === 'text' && !isPlaceholder($sub['value'] ?? '')
+                && trim((string)($sub['value'] ?? '')) !== '') continue;
+            if (($sub['action'] ?? '') === 'product' && !empty($sub['value'])
+                && Product::get($sub['value'])) continue;
+            $sp = subProduct($bid, $sub['id'], $sub);
+            if ($sp) $out[] = $sp;
+        }
+    }
+    return $out;
+}
+
 class Product
 {
     public static function all() { return load('products'); }
 
-    public static function get($id) { $a = load('products'); return $a[$id] ?? null; }
+    public static function get($id) {
+        if ($bs = parseSubProductId($id)) return subProduct($bs[0], $bs[1]);
+        $a = load('products'); return $a[$id] ?? null;
+    }
 
     public static function create($name, $price, $currency, $limit = 0, $desc = '', $botId = null) {
         $id = uid('pr');
@@ -862,16 +942,7 @@ class Product
                 'emoji' => '💠', 'color' => 'success', 'icon' => '',
                 'row' => 0, 'order' => 99,
                 // جریان سفارش — اگر روشن باشد از مشتری سوال می‌پرسد
-                'flow' => [
-                    'on' => true, 'ask_link' => true, 'ask_qty' => true, 'ask_admin' => true,
-                    'min' => 1000, 'max' => 100000, 'per' => 1000,
-                    'speeds' => [
-                        ['id' => 's1', 'text' => 'کند',       'emoji' => '🐢', 'mult' => 1,   'per_day' => 500,  'color' => 'primary', 'icon' => '', 'on' => true],
-                        ['id' => 's2', 'text' => 'متوسط',     'emoji' => '🚶', 'mult' => 1.3, 'per_day' => 2000, 'color' => 'success', 'icon' => '', 'on' => true],
-                        ['id' => 's3', 'text' => 'سرعت بالا', 'emoji' => '⚡️', 'mult' => 1.7, 'per_day' => 8000, 'color' => 'danger',  'icon' => '', 'on' => true],
-                    ],
-                    'speed_layout' => '1',
-                ],
+                'flow' => defaultFlow(),
                 'active' => true, 'created_at' => nowStr(),
             ];
         });
@@ -888,6 +959,13 @@ class Product
     }
 
     public static function addBuyer($pid, $uid) {
+        if ($bs = parseSubProductId($pid)) {
+            subMutate($bs[0], $bs[1], function (&$x) use ($uid) {
+                $b = array_map('intval', $x['buyers'] ?? []);
+                if (!in_array((int)$uid, $b, true)) { $b[] = (int)$uid; $x['buyers'] = array_values($b); }
+            });
+            return;
+        }
         mutate('products', function (&$a) use ($pid, $uid) {
             if (!isset($a[$pid])) return;
             $b = array_map('intval', $a[$pid]['buyers']);
@@ -2286,13 +2364,28 @@ function edSub($chatId, $msgId, $bid, $sid) {
     $text .= "✨ پریمیوم: " . (!empty($sub['icon']) ? '<code>' . h($sub['icon']) . '</code>' : '—') . "\n";
     $text .= "ردیف: " . (int)($sub['row'] ?? 0) . "  |  ترتیب: " . (int)($sub['order'] ?? 0) . "\n";
     $text .= "نوع: " . h($actLabel) . "\n";
+    $linked = (($sub['action'] ?? '') === 'product') ? Product::get($sub['value'] ?? '') : null;
     if (($sub['action'] ?? '') === 'product') {
-        $lp = Product::get($sub['value'] ?? '');
-        $text .= "محصول: " . ($lp ? h($lp['name']) . (!empty($lp['flow']['on']) ? ' 🔄' : '') : '<b>انتخاب نشده</b>') . "\n";
-    } else {
+        $text .= "محصول: " . ($linked ? h($linked['name']) . (!empty($linked['flow']['on']) ? ' 🔄' : '') : '<b>انتخاب نشده</b>') . "\n";
+    } elseif (($sub['action'] ?? '') === 'text' && !isPlaceholder($sub['value'] ?? '')
+              && trim((string)($sub['value'] ?? '')) !== '') {
         $text .= "مقدار: <code>" . h(mb_substr((string)($sub['value'] ?? ''), 0, 80)) . "</code>\n";
     }
-    $text .= "وضعیت: " . (!empty($sub['on']) ? '✅ روشن' : '❌ خاموش');
+
+    // خود دکمه محصول است؟
+    $sp = $linked ? null : subProduct($bid, $sid, $sub);
+    if ($sp) {
+        $text .= "\n🛒 <b>این دکمه خودش محصول است</b>\n";
+        $text .= "💰 قیمت هر " . number_format((int)($sp['flow']['per'] ?? 1000)) . " عدد: " .
+                 ((float)$sp['price'] > 0 ? '<b>' . fmtNum($sp['price']) . ' ' . h($sp['currency']) . '</b>'
+                                          : '<b>تنظیم نشده ⚠️</b>') . "\n";
+        $text .= "👥 تعداد: " . number_format((int)$sp['flow']['min']) . " تا " .
+                 number_format((int)$sp['flow']['max']) . "\n";
+        $ons = 0;
+        foreach ($sp['flow']['speeds'] ?? [] as $spd) if (!isset($spd['on']) || !empty($spd['on'])) $ons++;
+        $text .= "⚡️ سرعت‌ها: " . $ons . "\n";
+    }
+    $text .= "\nوضعیت: " . (!empty($sub['on']) ? '✅ روشن' : '❌ خاموش');
 
     $k = $bid . '|' . $sid;
     $rows = [
@@ -2303,10 +2396,13 @@ function edSub($chatId, $msgId, $bid, $sid) {
          (($sub['action'] ?? '') === 'product'
             ? btnCb('🛒 انتخاب محصول', 'sbpick_' . $k, 'buy')
             : btnCb('📝 مقدار', 'sbv_' . $k, 'admin'))],
+        ($sp ? [btnCb('💰 قیمت', 'sbpr_' . $k, 'buy'), btnCb('👥 تعداد', 'sbm_' . $k, 'info')] : null),
+        ($sp ? [btnCb('⚡️ سرعت‌ها', 'sbsp_' . $k, 'admin')] : null),
         [btnCb(!empty($sub['on']) ? '❌ خاموش' : '✅ روشن', 'sbx_' . $k, 'info'),
          btnCb('🗑 حذف', 'sbd_' . $k, 'reject')],
         [btnUI('back', 'sbs_' . $bid, 'nav')],
     ];
+    $rows = array_values(array_filter($rows));
     editMsg(BOT_TOKEN, $chatId, $msgId, $text, inlineKb($rows));
 }
 
@@ -2464,100 +2560,67 @@ function edUpText($chatId, $msgId, $key) {
  */
 function autoSetup($chatId, $msgId = null) {
     $log = [];
-    $prods = Product::all();
 
-    // ۱) محصولات: جریان سفارش را روشن کن
-    $flowOn = 0;
-    foreach ($prods as $p) {
-        if (empty($p['flow']['on']) || empty($p['flow']['ask_admin'])) {
-            mutate('products', function (&$a) use ($p) {
-                if (!is_array($a[$p['id']]['flow'] ?? null)) $a[$p['id']]['flow'] = [];
-                $a[$p['id']]['flow'] = array_merge(
-                    ['ask_link' => true, 'ask_qty' => true, 'ask_admin' => true,
-                     'min' => 1000, 'max' => 100000, 'per' => 1000, 'speed_layout' => '1',
-                     'speeds' => [
-                        ['id' => 's1', 'text' => 'کند',       'emoji' => '🐢', 'mult' => 1,   'per_day' => 500,  'color' => 'primary', 'icon' => '', 'on' => true],
-                        ['id' => 's2', 'text' => 'متوسط',     'emoji' => '🚶', 'mult' => 1.3, 'per_day' => 2000, 'color' => 'success', 'icon' => '', 'on' => true],
-                        ['id' => 's3', 'text' => 'سرعت بالا', 'emoji' => '⚡️', 'mult' => 1.7, 'per_day' => 8000, 'color' => 'danger',  'icon' => '', 'on' => true],
-                     ]],
-                    $a[$p['id']]['flow'],
-                    ['on' => true, 'ask_admin' => true]
-                );
-            });
-            $flowOn++;
-        }
-    }
-    if ($flowOn) $log[] = "✅ جریان سفارش برای <b>{$flowOn}</b> محصول روشن شد";
-
-    // ۲) هر زیردکمه یک محصول است: اگر محصول هم‌نام نبود، بساز و وصلش کن
-    $bound = 0; $created = 0;
+    // ۱) هر زیردکمهٔ شیشه‌ای خودش یک محصول است — فقط جریان سفارشش را روشن کن
+    $ready = 0; $noPrice = [];
     foreach (cfg()['buttons'] as $bid => $b) {
         foreach ($b['subs'] ?? [] as $sub) {
-            if (($sub['action'] ?? '') === 'product' && Product::get($sub['value'] ?? '')) continue;
-
             $name = trim((string)($sub['text'] ?? ''));
             if ($name === '') continue;
+            if (($sub['action'] ?? '') === 'product' && !empty($sub['value'])
+                && Product::get($sub['value'])) continue;   // دستی به محصولی وصل است، دست نزن
 
-            $match = productByName($name);
-            if (!$match) {
-                // محصول تازه با همان نام و ایموجی و رنگ دکمه
-                $match = Product::create($name, 0, 'تومان', 0, '');
-                mutate('products', function (&$a) use ($match, $sub) {
-                    $a[$match['id']]['emoji'] = $sub['emoji'] ?? '💠';
-                    $a[$match['id']]['color'] = $sub['color'] ?? 'none';
-                    $a[$match['id']]['icon']  = $sub['icon'] ?? '';
-                    $a[$match['id']]['flow']['on'] = true;
-                    $a[$match['id']]['flow']['ask_admin'] = true;
-                });
-                $created++;
-            }
-            subMutate($bid, $sub['id'], function (&$x) use ($match) {
-                $x['action'] = 'product';
-                $x['value']  = $match['id'];
+            subMutate($bid, $sub['id'], function (&$x) {
+                if (!is_array($x['flow'] ?? null)) $x['flow'] = [];
+                $x['flow'] = array_merge(defaultFlow(), $x['flow'], ['on' => true, 'ask_admin' => true]);
+                if (!isset($x['price']))    $x['price']    = 0;
+                if (!isset($x['currency'])) $x['currency'] = cfg()['currency'] ?? 'تومان';
+                if (!isset($x['buyers']))   $x['buyers']   = [];
+                $x['on'] = true;
             });
-            $bound++;
+            $ready++;
+            $sp = subProduct($bid, $sub['id']);
+            if ($sp && (float)$sp['price'] <= 0) $noPrice[] = $sp['name'];
         }
     }
-    if ($created) $log[] = "🆕 <b>{$created}</b> محصول از روی دکمه‌ها ساخته شد — قیمتشان را تنظیم کنید";
-    if ($bound)   $log[] = "🔗 <b>{$bound}</b> دکمه به محصولش وصل شد";
+    if ($ready) $log[] = "✅ <b>{$ready}</b> دکمه آمادهٔ فروش شد (خود دکمه = محصول)";
 
-    // ۳) جریان سفارش برای محصولات تازه هم روشن شود
+    // ۲) محصولات جداگانه (اگر ساخته‌اید) هم جریانشان روشن شود
+    $flowOn = 0;
     foreach (Product::all() as $p) {
         if (!empty($p['flow']['on']) && !empty($p['flow']['ask_admin'])) continue;
         mutate('products', function (&$a) use ($p) {
-            $a[$p['id']]['flow']['on'] = true;
-            $a[$p['id']]['flow']['ask_admin'] = true;
+            if (!is_array($a[$p['id']]['flow'] ?? null)) $a[$p['id']]['flow'] = [];
+            $a[$p['id']]['flow'] = array_merge(defaultFlow(), $a[$p['id']]['flow'],
+                                               ['on' => true, 'ask_admin' => true]);
         });
+        $flowOn++;
     }
+    if ($flowOn) $log[] = "✅ جریان سفارش برای <b>{$flowOn}</b> محصول جداگانه روشن شد";
 
-    // ۴) دکمه «خرید محصول» روشن باشد
+    // ۳) دکمه «خرید محصول» روشن باشد
     if (empty(cfg()['buttons']['buy']['on'])) {
         cfgSet(function (&$c) { $c['buttons']['buy']['on'] = true; });
         $log[] = "✅ دکمه «خرید محصول» روشن شد";
     }
 
-    // ۵) گزارش نهایی — فهرست را دوباره بخوان چون ممکن است محصول تازه ساخته باشیم
-    $prods = Product::all();
+    // ۴) گزارش
     $text  = "🔧 <b>راه‌اندازی خودکار</b>\n\n";
     $text .= $log ? implode("\n", $log) . "\n\n" : "همه چیز از قبل درست بود.\n\n";
 
-    $active = array_filter($prods, fn($p) => !empty($p['active']));
-    $text .= "📦 محصولات: <b>" . count($prods) . "</b> (فعال: " . count($active) . ")\n";
-    foreach (array_slice($prods, 0, 8) as $p) {
-        $pf = Product::get($p['id']);
-        $text .= "   " . (!empty($pf['active']) ? '✅' : '❌') . ' ' .
-                 h(trim(($pf['emoji'] ?? '') . ' ' . $pf['name'])) . ' — ' .
-                 fmtNum($pf['price']) . ' ' . h($pf['currency']) .
-                 (!empty($pf['flow']['on']) ? ' 🔄' : ' ⚠️ بدون جریان') . "\n";
+    $items = saleButtons();
+    $text .= "🛒 دکمه‌های فروش: <b>" . count($items) . "</b>\n";
+    foreach (array_slice($items, 0, 10) as $sp) {
+        $text .= "   " . (!empty($sp['active']) ? '✅' : '❌') . ' ' .
+                 h(trim(($sp['emoji'] ?? '') . ' ' . $sp['name'])) . ' — ' .
+                 ((float)$sp['price'] > 0 ? fmtNum($sp['price']) . ' ' . h($sp['currency'])
+                                          : '<b>قیمت ندارد</b>') . "\n";
     }
 
     $probs = [];
-    $zero = [];
-    foreach (Product::all() as $p) if ((float)$p['price'] <= 0) $zero[] = $p['name'];
-    if ($zero) $probs[] = "قیمت این محصولات هنوز صفر است: <b>" . h(implode('، ', $zero)) . "</b>\n" .
-                          "   /panel → 🛒 محصولات → روی محصول → 💰 قیمت";
-    if (!$prods) $probs[] = "هیچ محصولی نساخته‌اید — از پنل وب → 🛒 محصولات بسازید";
-    if ($prods && !$active) $probs[] = "هیچ محصولی فعال نیست";
+    if ($noPrice) $probs[] = "قیمت این دکمه‌ها صفر است: <b>" . h(implode('، ', array_unique($noPrice))) . "</b>\n" .
+                             "   /panel → 🔘 دکمه‌ها → روی دکمه → 💰 قیمت";
+    if (!$items) $probs[] = "هیچ دکمهٔ فروشی ندارید — /panel → 🔘 دکمه‌ها → ➕ زیردکمه";
     $w = cfg()['wallets'];
     if (trim($w['card'] ?? '') === '' && trim($w['usdt'] ?? '') === '')
         $probs[] = "مقصد پرداخت تنظیم نشده — پنل وب → ⚙️ تنظیمات";
@@ -2565,7 +2628,7 @@ function autoSetup($chatId, $msgId = null) {
     if ($probs) $text .= "\n⚠️ <b>باقی‌مانده:</b>\n• " . implode("\n• ", $probs) . "\n";
     else $text .= "\n✅ <b>آماده فروش است.</b>\n";
 
-    $text .= "\n🧪 تست کنید: /start ← دکمه خرید محصول ← روی یک محصول بزنید\n";
+    $text .= "\n🧪 تست: /start ← خرید محصول ← روی یکی از دکمه‌ها بزنید\n";
     $text .= "باید بپرسد: لینک کانال ← تعداد ← سرعت ← ادمین کردن ربات ← فاکتور";
 
     $rows = [[btnCb('🔧 دوباره بررسی کن', 'setup', 'admin')], [btnUI('back', 'adm_home', 'nav')]];
@@ -2635,7 +2698,8 @@ function edSpeeds($chatId, $msgId, $pid) {
                          'esp_' . $pid . '|' . $sp['id'], 'info')];
     }
     $rows[] = [btnCb('📐 چیدمان', 'espl_' . $pid, 'admin')];
-    $rows[] = [btnUI('back', 'ep_' . $pid, 'nav')];
+    $bs = parseSubProductId($pid);
+    $rows[] = [btnUI('back', $bs ? 'sb_' . $bs[0] . '|' . $bs[1] : 'ep_' . $pid, 'nav')];
     editMsg(BOT_TOKEN, $chatId, $msgId,
         "⚡️ <b>سرعت‌های سفارش</b>\n\nهر سرعت یک ضریب قیمت دارد.\nروی هرکدام بزنید:",
         inlineKb($rows));
@@ -2666,7 +2730,38 @@ function edSpeed($chatId, $msgId, $pid, $sid) {
     editMsg(BOT_TOKEN, $chatId, $msgId, $text, inlineKb($rows));
 }
 
+/** تغییر یک فیلد از flow — چه محصول واقعی، چه دکمه‌ای که خودش محصول است */
+function flowMutate($pid, callable $fn) {
+    if ($bs = parseSubProductId($pid)) {
+        subMutate($bs[0], $bs[1], function (&$x) use ($fn) {
+            if (!is_array($x['flow'] ?? null)) $x['flow'] = [];
+            $x['flow'] = array_merge(defaultFlow(), $x['flow']);
+            $fn($x['flow']);
+        });
+        return;
+    }
+    mutate('products', function (&$a) use ($pid, $fn) {
+        if (!isset($a[$pid])) return;
+        if (!is_array($a[$pid]['flow'] ?? null)) $a[$pid]['flow'] = defaultFlow();
+        $fn($a[$pid]['flow']);
+    });
+}
+
+/** تغییر یک فیلد سطح‌بالای محصول (قیمت، نام، …) */
+function prodMutate($pid, callable $fn) {
+    if ($bs = parseSubProductId($pid)) { subMutate($bs[0], $bs[1], $fn); return; }
+    mutate('products', function (&$a) use ($pid, $fn) { if (isset($a[$pid])) $fn($a[$pid]); });
+}
+
 function speedMutate($pid, $sid, callable $fn) {
+    if (parseSubProductId($pid)) {
+        flowMutate($pid, function (&$f) use ($sid, $fn) {
+            foreach ($f['speeds'] ?? [] as $i => $sp) {
+                if (($sp['id'] ?? '') === $sid) { $fn($f['speeds'][$i]); return; }
+            }
+        });
+        return;
+    }
     mutate('products', function (&$a) use ($pid, $sid, $fn) {
         if (empty($a[$pid]['flow']['speeds'])) return;
         foreach ($a[$pid]['flow']['speeds'] as $i => $sp) {
@@ -2748,44 +2843,34 @@ function masterHandle($update) {
             answerCb(BOT_TOKEN, $cbId);
             if (!$sub) return;
 
-            // نوع «محصول» — یا نوع «متن» که هنوز تنظیم نشده و هم‌نام یک محصول است
-            $p = null;
-            if (($sub['action'] ?? '') === 'product') {
-                $p = Product::get($sub['value'] ?? '');
-            } elseif (isPlaceholder($sub['value'] ?? '')) {
-                $p = productByName($sub['text'] ?? '');
-                // یک بار برای همیشه وصلش کن تا دفعه بعد سریع باشد
-                if ($p) subMutate($bid, $sid, function (&$x) use ($p) {
-                    $x['action'] = 'product';
-                    $x['value']  = $p['id'];
-                });
-            }
-
-            if ($p) {
-                if (empty($p['active'])) { sendMsg(BOT_TOKEN, $chatId, T('buy_empty')); return; }
-                // جریان سفارش روشن است → یک‌راست سراغ گرفتن لینک کانال
-                if (!empty($p['flow']['on'])) { flowStart($uid, $chatId, $p); return; }
-                showOneProduct($uid, $chatId, $p);
-                return;
-            }
-
-            if (isPlaceholder($sub['value'] ?? '')) {
-                // به کاربر عادی چیز عجیب نشان نده؛ به ادمین بگو چطور درستش کند
-                if ($uid === ADMIN_ID) {
-                    sendMsg(BOT_TOKEN, $chatId,
-                        "⚠️ دکمه «" . h($sub['text']) . "» هنوز به محصولی وصل نشده.\n\n" .
-                        "یا محصولی با همین نام بسازید، یا از دکمه زیر وصلش کنید:",
-                        inlineKb([[btnCb('🛒 انتخاب محصول', 'sbpick_' . $bid . '|' . $sid, 'buy')]]));
-                } else {
-                    sendMsg(BOT_TOKEN, $chatId, T('buy_empty'));
-                }
-                return;
-            }
             if (($sub['action'] ?? '') === 'section') {
                 runMenuAction($sub['value'] ?? '', $uid, $chatId, $uname, $fname);
                 return;
             }
-            sendMsg(BOT_TOKEN, $chatId, $sub['value'] !== '' ? $sub['value'] : '—');
+            if (($sub['action'] ?? '') === 'url') {
+                sendMsg(BOT_TOKEN, $chatId, (string)($sub['value'] ?? ''));
+                return;
+            }
+            // دکمه‌ای که واقعا متن دارد، همان متن را نشان می‌دهد
+            if (($sub['action'] ?? '') === 'text' && !isPlaceholder($sub['value'] ?? '')
+                && trim((string)($sub['value'] ?? '')) !== '') {
+                sendMsg(BOT_TOKEN, $chatId, $sub['value']);
+                return;
+            }
+
+            // 🔘 خودِ دکمه یک محصول است — یک‌راست سراغ گرفتن لینک کانال
+            $p = (($sub['action'] ?? '') === 'product' && !empty($sub['value']))
+                ? Product::get($sub['value'])         // اگر دستی به محصولی وصل شده، همان
+                : null;
+            if (!$p) $p = subProduct($bid, $sid, $sub);   // وگرنه خود دکمه
+
+            if ($p) {
+                if (empty($p['active'])) { sendMsg(BOT_TOKEN, $chatId, T('buy_empty')); return; }
+                if (!empty($p['flow']['on'])) { flowStart($uid, $chatId, $p); return; }
+                showOneProduct($uid, $chatId, $p);
+                return;
+            }
+            sendMsg(BOT_TOKEN, $chatId, T('buy_empty'));
             return;
         }
 
@@ -3086,12 +3171,25 @@ function masterHandle($update) {
             if ($pos !== false) { answerCb(BOT_TOKEN, $cbId); edSub($chatId, $msgId, substr($rest, 0, $pos), substr($rest, $pos + 1)); return; }
         }
 
+        // ⚡️ سرعت‌های یک دکمه‌ای که خودش محصول است
+        if (str_starts_with($data, 'sbsp_')) {
+            $rest = substr($data, 5); $pos = strrpos($rest, '|');
+            answerCb(BOT_TOKEN, $cbId);
+            if ($pos === false) return;
+            $bid = substr($rest, 0, $pos); $sid = substr($rest, $pos + 1);
+            if (!findSub($bid, $sid)) return;
+            edSpeeds($chatId, $msgId, subProductId($bid, $sid));
+            return;
+        }
+
         foreach ([['sbt_', 'sb_text', '✏️ متن جدید را بفرستید (ایموجی پریمیوم مجاز است):'],
                   ['sbe_', 'sb_emoji', '😀 ایموجی را بفرستید (خط تیره = حذف):'],
                   ['sbi_', 'sb_icon', '✨ ایموجی پریمیوم بفرستید یا کدش را (خط تیره = حذف):'],
                   ['sbr_', 'sb_row', '📐 شماره ردیف (۰ = خودکار):'],
                   ['sbo_', 'sb_order', '🔢 شماره ترتیب:'],
-                  ['sbv_', 'sb_value', "📝 مقدار را بفرستید.\n\nبسته به نوع: متن نمایشی، آدرس لینک، شناسه محصول، یا نام بخش."]] as $it) {
+                  ['sbv_', 'sb_value', "📝 مقدار را بفرستید.\n\nبسته به نوع: متن نمایشی، آدرس لینک، شناسه محصول، یا نام بخش."],
+                  ['sbpr_', 'sb_price', "💰 قیمت هر <b>۱۰۰۰</b> عدد را بفرستید (فقط عدد):"],
+                  ['sbm_', 'sb_minmax', "👥 حداقل و حداکثر تعداد را بفرستید، با خط تیره.\n\nمثال: <code>1000-100000</code>"]] as $it) {
             [$pref, $act, $ask] = $it;
             if (!str_starts_with($data, $pref)) continue;
             $rest = substr($data, strlen($pref)); $pos = strrpos($rest, '|');
@@ -3898,6 +3996,32 @@ function masterHandle($update) {
             subMutate($bid, $sid, function (&$x) use ($f, $v) { $x[$f] = $v; });
             clearState($uid); sendMsg(BOT_TOKEN, $chatId, "✅ ذخیره شد.", $back); return;
         }
+        if ($action === 'sb_price') {
+            $n = str_replace([',', '،', ' '], '', $plain);
+            if (!is_numeric($n) || (float)$n < 0) { sendMsg(BOT_TOKEN, $chatId, "⚠️ فقط عدد."); return; }
+            subMutate($bid, $sid, function (&$x) use ($n) {
+                $x['price'] = (float)$n;
+                if (!isset($x['currency'])) $x['currency'] = cfg()['currency'] ?? 'تومان';
+                if (!is_array($x['flow'] ?? null)) $x['flow'] = [];
+                $x['flow'] = array_merge(defaultFlow(), $x['flow'], ['on' => true, 'ask_admin' => true]);
+            });
+            clearState($uid);
+            sendMsg(BOT_TOKEN, $chatId, "✅ قیمت ذخیره شد: " . fmtNum((float)$n), $back); return;
+        }
+        if ($action === 'sb_minmax') {
+            if (!preg_match('/^\s*(\d+)\s*[-–]\s*(\d+)\s*$/u', str_replace(['،', ','], '', $plain), $mm)) {
+                sendMsg(BOT_TOKEN, $chatId, "⚠️ قالب درست: <code>1000-100000</code>"); return;
+            }
+            $lo = (int)$mm[1]; $hi = (int)$mm[2];
+            if ($lo < 1 || $hi <= $lo) { sendMsg(BOT_TOKEN, $chatId, "⚠️ حداکثر باید از حداقل بیشتر باشد."); return; }
+            subMutate($bid, $sid, function (&$x) use ($lo, $hi) {
+                if (!is_array($x['flow'] ?? null)) $x['flow'] = [];
+                $x['flow'] = array_merge(defaultFlow(), $x['flow']);
+                $x['flow']['min'] = $lo; $x['flow']['max'] = $hi;
+            });
+            clearState($uid);
+            sendMsg(BOT_TOKEN, $chatId, "✅ تعداد: " . number_format($lo) . " تا " . number_format($hi), $back); return;
+        }
         if ($action === 'sb_value') {
             $html = msgHtml($msg);
             subMutate($bid, $sid, function (&$x) use ($html, $plain) {
@@ -3954,7 +4078,7 @@ function masterHandle($update) {
             if ($action === 'ep_name' && $plain === '') { sendMsg(BOT_TOKEN, $chatId, "⚠️ خالی است."); return; }
             $f = $map[$action];
             $v = ($action === 'ep_price') ? $num : (($plain === '-' || $plain === '—') ? '' : $plain);
-            mutate('products', function (&$a) use ($pid, $f, $v) { $a[$pid][$f] = $v; });
+            prodMutate($pid, function (&$x) use ($f, $v) { $x[$f] = $v; });
             clearState($uid);
             sendMsg(BOT_TOKEN, $chatId, "✅ ذخیره شد.", $back);
             return;
@@ -3970,7 +4094,7 @@ function masterHandle($update) {
                 if ((int)$num <= 0) { sendMsg(BOT_TOKEN, $chatId, "⚠️ عدد معتبر بفرستید."); return; }
                 $v = (int)$num;
             }
-            mutate('products', function (&$a) use ($pid, $f, $v) { $a[$pid]['flow'][$f] = $v; });
+            flowMutate($pid, function (&$f2) use ($f, $v) { $f2[$f] = $v; });
             clearState($uid);
             sendMsg(BOT_TOKEN, $chatId, "✅ ذخیره شد.", $back);
             return;
