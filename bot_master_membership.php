@@ -390,7 +390,7 @@ function defaultConfig() {
             'text' => '📋 <b>لیست تعرفه‌ها</b>',   // {list} = جدول خودکار قیمت‌ها
             'btn'  => ['emoji' => '📋', 'text' => 'لیست تعرفه‌ها', 'color' => 'primary', 'icon' => ''],
             'back' => ['emoji' => '◀️', 'text' => 'برگشت', 'color' => 'nav', 'icon' => ''],
-            'auto' => true,   // جدول قیمت‌ها خودکار زیر متن اضافه شود
+            'auto' => false,  // جدول خودکار فقط اگر خودتان بخواهید — با {list} یا همین گزینه
         ],
 
         'buttons' => [
@@ -462,6 +462,8 @@ function defaultConfig() {
             'trust'        => "💚 <b>چرا می‌توانید به ما اعتماد کنید؟</b>\n\n✅ سال‌ها سابقه فعالیت\n✅ تحویل آنی و خودکار\n✅ پشتیبانی ۲۴ ساعته\n✅ ضمانت بازگشت وجه\n✅ هزاران مشتری راضی\n\nبرای مشاهده نظرات مشتریان به کانال ما مراجعه کنید.",
             'support'      => "📞 <b>پشتیبانی</b>\n\nاز روش‌های زیر می‌توانید با ما در ارتباط باشید:",
             'orders_empty' => "📊 هنوز سفارشی ثبت نکرده‌اید.",
+            'order_done'   => "{head}\n\n📦 محصول: <b>{product}</b>\n{link_line}{qty_line}{speed_line}{perday_line}{eta_line}💰 مبلغ: <b>{amount} {currency}</b>\n🧾 کد پیگیری: <code>{code}</code>\n📊 وضعیت: <b>{status}</b>\n{content}\n{note}",
+            'order_status' => "🔍 <b>وضعیت سفارش</b>\n\n🧾 کد پیگیری: <code>{code}</code>\n📊 وضعیت: <b>{status}</b>\n\n🛒 <b>{product}</b>\n{link_line}{qty_line}{perday_line}{eta_line}{progress}\n💰 مبلغ: <b>{amount} {currency}</b>\n📅 ثبت: {created}\n{approved_line}\n{hint}",
             'orders_head'  => "📊 <b>سفارش‌های شما</b>\n",
             'referral'     => "👥 <b>زیر مجموعه گیری</b>\n\nبا دعوت دوستان خود <b>{percent}%</b> از هر خرید آن‌ها را دریافت کنید.\n\n🔗 لینک اختصاصی شما:\n{link}\n\n👥 تعداد زیرمجموعه: <b>{referrals}</b>\n💵 درآمد شما: <b>{ref_earned}</b> تومان",
             'topup'        => "➕ <b>افزایش موجودی</b>\n\nمبلغ مورد نظر را به تومان وارد کنید (فقط عدد):",
@@ -1850,10 +1852,17 @@ function tariffTable() {
 function showTariff($uid, $chatId, $replyTo = null) {
     $tf = cfg()['tariff'] ?? [];
     $text = (string)($tf['text'] ?? '📋 <b>لیست تعرفه‌ها</b>');
-    $table = !empty($tf['auto']) ? tariffTable() : '';
-    $text = str_contains($text, '{list}')
-        ? str_replace('{list}', $table, $text)
-        : $text . ($table !== '' ? "\n" . $table : '');
+
+    // ✨ متنی که خودتان با ایموجی پریمیوم نوشته‌اید همان‌طور که هست نشان داده می‌شود.
+    // جدول خودکار فقط جایی می‌آید که خودتان {list} گذاشته باشید.
+    $hasPremium = str_contains($text, '<tg-emoji');
+
+    if (str_contains($text, '{list}')) {
+        $text = str_replace('{list}', tariffTable(), $text);
+    } elseif (!$hasPremium && !empty($tf['auto'])) {
+        $tbl = tariffTable();
+        if ($tbl !== '') $text .= "\n" . $tbl;
+    }
 
     $b = ['text' => trim(($tf['back']['emoji'] ?? '◀️') . ' ' . ($tf['back']['text'] ?? 'برگشت')),
           'callback_data' => 'menu_buy'];
@@ -1975,24 +1984,40 @@ function showOrderStatus($uid, $chatId, $code, $replyTo = null) {
     }
 
     [$stage, $label] = orderStage($o);
-
-    $text  = "🔍 <b>وضعیت سفارش</b>\n\n";
-    $text .= "🧾 کد پیگیری: <code>" . h($o['id']) . "</code>\n";
-    $text .= "📊 وضعیت: <b>" . $label . "</b>\n\n";
-    $text .= orderLines($o, '') . "\n\n";
-    $text .= "💰 مبلغ: <b>" . fmtNum($o['amount']) . ' ' . h($o['currency']) . "</b>\n";
-    $text .= "📅 ثبت: " . h($o['created_at']) . "\n";
-    if (!empty($o['decided_at'])) $text .= "✅ تایید: " . h($o['decided_at']) . "\n";
+    $m = $o['meta'] ?? [];
+    $p = Product::get($o['product_id']);
 
     $hint = [
-        'pending'  => "\n👇 مبلغ را واریز کنید و رسید را بفرستید.",
-        'review'   => "\n⏳ رسید شما رسید؛ بعد از تایید، سفارش شروع می‌شود.",
-        'running'  => "\n🔄 سفارش در حال انجام است. این صفحه را هر وقت خواستید ببینید.",
-        'paused'   => "\n⚠️ برای ادامه، ربات باید در کانال شما ادمین باشد.",
-        'done'     => "\n🎉 سفارش شما کامل شد. ممنون از خریدتان.",
-        'rejected' => "\n❌ این سفارش رد شد. با پشتیبانی تماس بگیرید.",
+        'pending'  => "👇 مبلغ را واریز کنید و رسید را بفرستید.",
+        'review'   => "⏳ رسید شما رسید؛ بعد از تایید، سفارش شروع می‌شود.",
+        'running'  => "🔄 سفارش در حال انجام است. این صفحه را هر وقت خواستید ببینید.",
+        'paused'   => "⚠️ برای ادامه، ربات باید در کانال شما ادمین باشد.",
+        'done'     => "🎉 سفارش شما کامل شد. ممنون از خریدتان.",
+        'rejected' => "❌ این سفارش رد شد. با پشتیبانی تماس بگیرید.",
     ][$stage] ?? '';
-    $text .= $hint;
+
+    $text = T('order_status', [
+        'code'         => h($o['id']),
+        'status'       => $label,
+        'product'      => h($p['name'] ?? ($o['type'] === 'topup' ? 'شارژ کیف پول' : '—')),
+        'link'         => h($m['link'] ?? '—'),
+        'qty'          => number_format((int)($m['qty'] ?? 0)),
+        'speed'        => h($m['speed'] ?? '—'),
+        'per_day'      => number_format((int)($m['per_day'] ?? 0)),
+        'eta'          => h($m['eta'] ?? '—'),
+        'progress'     => ltrim(orderProgress($o, ''), "\n"),
+        'amount'       => fmtNum($o['amount']),
+        'currency'     => h($o['currency']),
+        'created'      => h($o['created_at']),
+        'approved'     => h($o['decided_at'] ?? '—'),
+        'hint'         => $hint,
+        'link_line'    => !empty($m['link'])    ? "📣 " . h($m['link']) . "\n" : '',
+        'qty_line'     => !empty($m['qty'])     ? "👥 " . number_format((int)$m['qty']) . " نفر" .
+                                                 (!empty($m['speed']) ? ' · ' . h($m['speed']) : '') . "\n" : '',
+        'perday_line'  => !empty($m['per_day']) ? "🚀 " . number_format((int)$m['per_day']) . " نفر در روز\n" : '',
+        'eta_line'     => !empty($m['eta'])     ? "⏳ زمان تقریبی: " . h($m['eta']) . "\n" : '',
+        'approved_line'=> !empty($o['decided_at']) ? "✅ تایید: " . h($o['decided_at']) . "\n" : '',
+    ]);
 
     $rows = [];
     if ($stage === 'pending')  $rows[] = [btnCb(UT('receipt'), 'rcpt_' . $o['id'], 'confirm')];
@@ -2749,27 +2774,35 @@ function orderDoneText($order) {
     $m = $order['meta'] ?? [];
     $isTest = !empty($m['test']);
 
-    $t  = ($isTest ? "🧪 <b>سفارش تستی ثبت شد</b>\n\n" : T('approved') . "\n\n");
-    $t .= "📦 محصول: <b>" . h($p['name'] ?? '—') . "</b>\n";
-    if (!empty($m['link']))    $t .= "📣 کانال: " . h($m['link']) . "\n";
-    if (!empty($m['qty']))     $t .= "👥 تعداد: <b>" . number_format((int)$m['qty']) . "</b> نفر\n";
-    if (!empty($m['speed']))   $t .= "⚡️ سرعت: " . h($m['speed']) . "\n";
-    if (!empty($m['per_day'])) $t .= "🚀 سرعت تحویل: " . number_format((int)$m['per_day']) . " نفر در روز\n";
-    if (!empty($m['eta']))     $t .= "⏳ زمان تقریبی: <b>" . h($m['eta']) . "</b>\n";
-    $t .= "💰 مبلغ: <b>" . ($isTest ? '0' : fmtNum($order['amount'])) . ' ' . h($order['currency']) . "</b>\n";
-    $t .= "🧾 کد پیگیری: <code>" . h($order['id']) . "</code>\n";
-    $t .= "📊 وضعیت: <b>" . orderStage($order)[1] . "</b>\n";
-
-    // اگر محصول محتوا دارد، لینکش را همین‌جا بده — نه پیام جدا
+    $content = '';
     if ($p && !empty($p['bot_id']) && !empty($p['link_code'])) {
         $url = Links::url($p['bot_id'], $p['link_code']);
-        if ($url) $t .= "\n🔗 لینک دریافت محتوا:\n" . $url . "\n";
+        if ($url) $content = "\n🔗 لینک دریافت محتوا:\n" . $url . "\n";
     }
 
-    $t .= "\n" . ($isTest
-        ? "حالت تست روشن است، پس بدون پرداخت تایید شد."
-        : "ممبرها به‌تدریج اضافه می‌شوند. وضعیت را با همان کد پیگیری ببینید.");
-    return $t;
+    return T('order_done', [
+        'head'        => $isTest ? "🧪 <b>سفارش تستی ثبت شد</b>" : T('approved'),
+        'product'     => h($p['name'] ?? '—'),
+        'link'        => h($m['link'] ?? '—'),
+        'qty'         => number_format((int)($m['qty'] ?? 0)),
+        'speed'       => h($m['speed'] ?? '—'),
+        'per_day'     => number_format((int)($m['per_day'] ?? 0)),
+        'eta'         => h($m['eta'] ?? '—'),
+        'amount'      => $isTest ? '0' : fmtNum($order['amount']),
+        'currency'    => h($order['currency']),
+        'code'        => h($order['id']),
+        'status'      => orderStage($order)[1],
+        'content'     => $content,
+        'note'        => $isTest
+            ? 'حالت تست روشن است، پس بدون پرداخت تایید شد.'
+            : 'ممبرها به‌تدریج اضافه می‌شوند. وضعیت را با همان کد پیگیری ببینید.',
+        // خط‌هایی که اگر خالی باشند اصلا نوشته نمی‌شوند
+        'link_line'   => !empty($m['link'])    ? "📣 کانال: " . h($m['link']) . "\n" : '',
+        'qty_line'    => !empty($m['qty'])     ? "👥 تعداد: <b>" . number_format((int)$m['qty']) . "</b> نفر\n" : '',
+        'speed_line'  => !empty($m['speed'])   ? "⚡️ سرعت: " . h($m['speed']) . "\n" : '',
+        'perday_line' => !empty($m['per_day']) ? "🚀 سرعت تحویل: " . number_format((int)$m['per_day']) . " نفر در روز\n" : '',
+        'eta_line'    => !empty($m['eta'])     ? "⏳ زمان تقریبی: <b>" . h($m['eta']) . "</b>\n" : '',
+    ]);
 }
 
 function orderDoneKb($order) {
@@ -2921,7 +2954,10 @@ function admTariff($chatId, $msgId) {
     $tf = cfg()['tariff'] ?? [];
     $text  = "📋 <b>لیست تعرفه‌ها</b>\n\n";
     $text .= "وضعیت: " . (!empty($tf['on']) ? '✅ روشن' : '❌ خاموش') . "\n";
-    $text .= "جدول خودکار قیمت‌ها: " . (!empty($tf['auto']) ? '✅ اضافه می‌شود' : '❌ فقط متن خودتان') . "\n\n";
+    $text .= "جدول خودکار قیمت‌ها: " . (!empty($tf['auto']) ? '✅ اضافه می‌شود' : '❌ فقط متن خودتان') . "\n";
+    if (str_contains((string)($tf['text'] ?? ''), '<tg-emoji'))
+        $text .= "✨ متن شما ایموجی پریمیوم دارد — عینا نشان داده می‌شود.\n";
+    $text .= "\n";
     $text .= "🔘 دکمه: " . h(trim(($tf['btn']['emoji'] ?? '') . ' ' . ($tf['btn']['text'] ?? ''))) .
              " · " . (styleMap()[$tf['btn']['color'] ?? 'none'] ?? '—') . "\n";
     $text .= "◀️ دکمه برگشت: " . h(trim(($tf['back']['emoji'] ?? '') . ' ' . ($tf['back']['text'] ?? ''))) . "\n\n";
@@ -3103,6 +3139,8 @@ function textLabels() {
         'flow_invoice' => '📋 فاکتور سفارش',
         'sup_ticket' => '💬 پیام ارتباط غیر مستقیم', 'sup_sent' => '✅ پیام ارسال شد',
         'orders_item' => '📊 قالب هر سفارش',
+        'order_done'  => '✅ پیام ثبت سفارش',
+        'order_status'=> '🔍 پیام وضعیت سفارش',
     ];
 }
 
@@ -3417,6 +3455,28 @@ function edTexts($chatId, $msgId, $page = 0) {
 }
 
 /** 📝 نمایش یک متن */
+/** متغیرهای مجاز هر متن — زیر ویرایشگر نشان داده می‌شود */
+function textVars($key) {
+    return [
+        'welcome'      => '{name}',
+        'account'      => '{id} {name} {username} {balance} {orders} {referrals} {ref_earned} {joined}',
+        'referral'     => '{link} {count} {earned} {percent}',
+        'no_balance'   => '{balance}',
+        'pay_info'     => '{title} {amount} {currency} {method} {wallet} {id}',
+        'flow_qty'     => '{min} {max}',
+        'flow_qty_bad' => '{min} {max}',
+        'flow_rate'    => '{rate} {currency} {per} {qty} {link}',
+        'flow_admin_ok'=> '{title}',
+        'flow_invoice' => '{link} {qty} {product} {speed} {per_day} {eta} {per} {rate} {total} {currency}',
+        'orders_item'  => '{status} {title} {amount} {currency} {id} {date} {type}',
+        'order_done'   => "{head} {product} {link} {qty} {speed} {per_day} {eta} {amount} {currency} {code} {status} {content} {note}\n" .
+                          "خط‌های خودکار (اگر خالی باشند نوشته نمی‌شوند):\n" .
+                          "{link_line} {qty_line} {speed_line} {perday_line} {eta_line}",
+        'order_status' => "{code} {status} {product} {link} {qty} {speed} {per_day} {eta} {progress} {amount} {currency} {created} {approved} {hint}\n" .
+                          "خط‌های خودکار:\n{link_line} {qty_line} {perday_line} {eta_line} {approved_line}",
+    ][$key] ?? '';
+}
+
 function edText($chatId, $msgId, $key) {
     $labels = textLabels();
     if (!isset($labels[$key])) { edTexts($chatId, $msgId); return; }
@@ -3426,6 +3486,7 @@ function edText($chatId, $msgId, $key) {
     $text  = "📝 <b>" . h($labels[$key]) . "</b>\n\n";
     $text .= "<b>پیش‌نمایش:</b>\n" . ($cur !== '' ? $cur : '<i>خالی</i>') . "\n\n";
     $text .= "<b>کد:</b>\n<code>" . h(mb_substr($cur, 0, 700)) . "</code>";
+    if ($v = textVars($key)) $text .= "\n\n<b>متغیرها:</b>\n<code>" . h($v) . "</code>";
 
     $rows = [
         [btnCb('✏️ تغییر متن', 'ete_' . $key, 'confirm')],
