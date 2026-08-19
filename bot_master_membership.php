@@ -2275,7 +2275,9 @@ function gwCreateInvoice($orderId, $toman) {
         return [true, ['url' => $d['invoice_url'], 'address' => $d['pay_address'] ?? '',
                        'amount' => $d['pay_amount'] ?? $amt, 'coin' => $coin,
                        'expires_at' => time() + $exp * 60,
-                       'invoice' => (string)($d['id'] ?? $orderId)], ''];
+                       'invoice' => (string)($d['id'] ?? $orderId),
+                       'order_id' => $orderId,
+                       'payment_id' => ''], ''];
     }
 
     // oxapay (پیش‌فرض)
@@ -2309,11 +2311,36 @@ function gwCheck($order) {
     $prov = strtolower(trim((string)($g['provider'] ?? 'oxapay')));
 
     if ($prov === 'nowpayments') {
-        $r = gwHttp('https://api.nowpayments.io/v1/payment/' . rawurlencode($gw['invoice']),
-                    ['x-api-key: ' . trim((string)$g['api_key'])]);
+        $hdr  = ['x-api-key: ' . trim((string)$g['api_key'])];
+        $paid = ['finished', 'confirmed'];
+
+        // اگر شناسه پرداخت را از IPN گرفته‌ایم، مستقیم بپرس
+        if (!empty($gw['payment_id'])) {
+            $r = gwHttp('https://api.nowpayments.io/v1/payment/' . rawurlencode($gw['payment_id']), $hdr);
+            if (empty($r['ok'])) return [false, $r['error']];
+            $st = strtolower((string)($r['data']['payment_status'] ?? ''));
+            return [in_array($st, $paid, true), $st ?: 'نامشخص'];
+        }
+
+        // وگرنه در فهرست پرداخت‌ها دنبال همین سفارش بگرد
+        // (شناسه فاکتور با شناسه پرداخت فرق دارد، پس با order_id تطبیق می‌دهیم)
+        $mine = (string)($gw['order_id'] ?? $order['id']);
+        $r = gwHttp('https://api.nowpayments.io/v1/payment/?limit=100&page=0&sortBy=created_at&orderBy=desc', $hdr);
         if (empty($r['ok'])) return [false, $r['error']];
-        $st = strtolower((string)($r['data']['payment_status'] ?? ''));
-        return [in_array($st, ['finished', 'confirmed'], true), $st ?: 'نامشخص'];
+        $rows = $r['data']['data'] ?? [];
+        if (!is_array($rows)) return [false, 'پاسخ نامعتبر'];
+        foreach ($rows as $row) {
+            if ((string)($row['order_id'] ?? '') !== $mine) continue;
+            $st = strtolower((string)($row['payment_status'] ?? ''));
+            if (!empty($row['payment_id'])) {
+                $pidNow = (string)$row['payment_id'];
+                mutate('orders', function (&$a) use ($order, $pidNow) {
+                    if (isset($a[$order['id']])) $a[$order['id']]['gw']['payment_id'] = $pidNow;
+                });
+            }
+            return [in_array($st, $paid, true), $st ?: 'نامشخص'];
+        }
+        return [false, 'هنوز پرداختی برای این فاکتور ثبت نشده'];
     }
     if ($prov === 'custom') return [false, 'در حالت دلخواه، تایید فقط با IPN انجام می‌شود'];
 
@@ -2359,6 +2386,12 @@ function handleIpn() {
         if (!$sig || !hash_equals($calc, $sig)) { http_response_code(403); echo 'sig'; return; }
         $orderId = (string)($d['order_id'] ?? '');
         $paid = in_array(strtolower((string)($d['payment_status'] ?? '')), ['finished', 'confirmed'], true);
+        if ($orderId !== '' && !empty($d['payment_id'])) {
+            $pidNow = (string)$d['payment_id'];
+            mutate('orders', function (&$a) use ($orderId, $pidNow) {
+                if (isset($a[$orderId])) $a[$orderId]['gw']['payment_id'] = $pidNow;
+            });
+        }
     } else {
         // oxapay: HMAC-SHA512 بدنه خام با کلید مرچنت
         $sig = $_SERVER['HTTP_HMAC'] ?? '';
