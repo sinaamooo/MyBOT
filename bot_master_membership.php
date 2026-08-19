@@ -492,10 +492,10 @@ function defaultConfig() {
             'trust'        => "💚 <b>چرا می‌توانید به ما اعتماد کنید؟</b>\n\n✅ سال‌ها سابقه فعالیت\n✅ تحویل آنی و خودکار\n✅ پشتیبانی ۲۴ ساعته\n✅ ضمانت بازگشت وجه\n✅ هزاران مشتری راضی\n\nبرای مشاهده نظرات مشتریان به کانال ما مراجعه کنید.",
             'support'      => "📞 <b>پشتیبانی</b>\n\nاز روش‌های زیر می‌توانید با ما در ارتباط باشید:",
             'orders_empty' => "📊 هنوز سفارشی ثبت نکرده‌اید.",
-            'track_ask'    => "🔍 <b>پیگیری سفارش</b>\n\nکد پیگیری سفارش خود را بفرستید.\n<i>نمونه:</i> <code>or_tjwodm15a1a3</code>",
-            'track_bad'    => "❌ سفارشی با کد <code>{code}</code> پیدا نشد.\n\nکد پیگیری را از پیام ثبت سفارش کپی کنید.",
-            'order_done'   => "{head}\n\n📦 محصول: <b>{product}</b>\n{link_line}{qty_line}{speed_line}{perday_line}{eta_line}💰 مبلغ: <b>{amount} {currency}</b>\n🧾 کد پیگیری: <code>{code}</code>\n📊 وضعیت: <b>{status}</b>\n{content}\n{note}",
-            'order_status' => "🔍 <b>وضعیت سفارش</b>\n\n🧾 کد پیگیری: <code>{code}</code>\n📊 وضعیت: <b>{status}</b>\n\n🛒 <b>{product}</b>\n{link_line}{qty_line}{perday_line}{eta_line}{progress}\n💰 مبلغ: <b>{amount} {currency}</b>\n📅 ثبت: {created}\n{approved_line}\n{hint}",
+            'track_ask'    => "<b>پیگیری سفارش</b>\n\nکد پیگیری سفارش خود را بفرستید.\n<i>نمونه:</i> <code>or_tjwodm15a1a3</code>",
+            'track_bad'    => "سفارشی با کد <code>{code}</code> پیدا نشد.\n\nکد پیگیری را از پیام ثبت سفارش کپی کنید.",
+            'order_done'   => "{head}\n\nمحصول: <b>{product}</b>\n{link_line}{qty_line}{speed_line}{perday_line}{eta_line}مبلغ: <b>{amount} {currency}</b>\nکد پیگیری: <code>{code}</code>\nوضعیت: <b>{status}</b>\n{content}\n{note}",
+            'order_status' => "<b>وضعیت سفارش</b>\n\nکد پیگیری: <code>{code}</code>\nوضعیت: <b>{status}</b>\n\n<b>{product}</b>\n{link_line}{qty_line}{perday_line}{eta_line}{progress}\nمبلغ: <b>{amount} {currency}</b>\nثبت: {created}\n{approved_line}\n{hint}",
             'orders_head'  => "📊 <b>سفارش‌های شما</b>\n",
             'referral'     => "👥 <b>زیر مجموعه گیری</b>\n\nبا دعوت دوستان خود <b>{percent}%</b> از هر خرید آن‌ها را دریافت کنید.\n\n🔗 لینک اختصاصی شما:\n{link}\n\n👥 تعداد زیرمجموعه: <b>{referrals}</b>\n💵 درآمد شما: <b>{ref_earned}</b> تومان",
             'topup'        => "➕ <b>افزایش موجودی</b>\n\nمبلغ مورد نظر را به تومان وارد کنید (فقط عدد):",
@@ -504,7 +504,7 @@ function defaultConfig() {
             'pay_info'     => "💳 <b>اطلاعات پرداخت</b>\n\n{title}\nمبلغ: <b>{amount} {currency}</b>\nروش: {method}\n\n💠 مقصد پرداخت:\n<code>{wallet}</code>\n\n🧾 شناسه سفارش: <code>{id}</code>\n\n⚠️ بعد از واریز، دکمه «ارسال رسید» را بزنید.",
             'receipt_ask'  => "🧾 لطفا رسید پرداخت را بفرستید.\n\nمی‌توانید <b>عکس رسید</b> یا <b>کد تراکنش</b> ارسال کنید.",
             'receipt_ok'   => "✅ رسید شما ثبت شد.\n\n⏳ پس از تایید ادمین اطلاع داده می‌شود.",
-            'approved'     => "✅ <b>سفارش شما تایید شد!</b>",
+            'approved'     => "<b>سفارش شما تایید شد!</b>",
             'rejected'     => "❌ سفارش شما تایید نشد.\nدر صورت نیاز با پشتیبانی تماس بگیرید.",
             'no_balance'   => "❌ موجودی شما کافی نیست.\nموجودی فعلی: {balance} تومان",
             'banned'       => "🚫 دسترسی شما مسدود شده است.",
@@ -923,11 +923,12 @@ function defaultReport() {
         'on'        => false,
         'chat_id'   => '',    // آیدی گروه/کانال — مثلا -1001234567890
         'thread_id' => 0,     // شماره تاپیک داخل گروه (۰ = بدون تاپیک)
-        'text'      => "🎉 <b>فروش جدید</b>\n\n📦 {product}\n👥 {qty} ممبر\n⚡️ {speed}\n💰 {amount} {currency}\n\n🧾 <code>{code}</code>\n📅 {date}",
+        'text'      => "<b>فروش جدید</b>\n\n{product}\n{qty} ممبر\n{speed}\n{amount} {currency}\n\n<code>{code}</code>\n{date}",
         'buttons'   => [
-            ['text' => '🛒 ثبت سفارش',  'url' => '', 'color' => 'success', 'icon' => '', 'on' => true],
-            ['text' => '📞 پشتیبانی',   'url' => '', 'color' => 'primary', 'icon' => '', 'on' => true],
+            ['text' => 'ثبت سفارش', 'url' => '', 'color' => 'success', 'icon' => '', 'on' => true],
+            ['text' => 'پشتیبانی',  'url' => '', 'color' => 'primary', 'icon' => '', 'on' => true],
         ],
+        'btn_row'   => true,   // دو دکمه کنار هم
     ];
 }
 
@@ -1964,16 +1965,17 @@ function showOneProduct($uid, $chatId, $p) {
 
 /** وضعیت واقعی سفارش — پرداخت + تحویل */
 function orderStage($o) {
-    if ($o['status'] === Order::REJECTED) return ['rejected', '❌ رد شده'];
-    if ($o['status'] === Order::PENDING)  return ['pending',  '⏳ منتظر پرداخت'];
-    if ($o['status'] === Order::REVIEW)   return ['review',   '🧾 رسید در حال بررسی'];
+    // بدون ایموجی — ادمین خودش ایموجی پریمیوم می‌گذارد
+    if ($o['status'] === Order::REJECTED) return ['rejected', 'رد شده'];
+    if ($o['status'] === Order::PENDING)  return ['pending',  'منتظر پرداخت'];
+    if ($o['status'] === Order::REVIEW)   return ['review',   'رسید در حال بررسی'];
 
     // تایید شده — حالا تحویل
     $cmp = Campaign::forOrder($o['id']);
-    if (!$cmp) return ['done', '✅ انجام شد'];
-    if (!empty($cmp['done_at'])) return ['done', '✅ انجام شد'];
-    if (empty($cmp['active']))   return ['paused', '⏸ متوقف — نیاز به بررسی'];
-    return ['running', '🔄 در حال انجام'];
+    if (!$cmp) return ['done', 'انجام شد'];
+    if (!empty($cmp['done_at'])) return ['done', 'انجام شد'];
+    if (empty($cmp['active']))   return ['paused', 'متوقف — نیاز به بررسی'];
+    return ['running', 'در حال انجام'];
 }
 
 /** خط پیشرفت تحویل، اگر کمپین داشته باشد */
@@ -1984,15 +1986,15 @@ function orderProgress($o, $indent = '   ') {
     $tgt  = max(1, (int)$cmp['target']);
     $pct  = min(100, (int)round($done / $tgt * 100));
     $bars = (int)round($pct / 10);
-    $out  = "\n" . $indent . '📊 ' . str_repeat('█', $bars) . str_repeat('░', 10 - $bars) .
+    $out  = "\n" . $indent . str_repeat('█', $bars) . str_repeat('░', 10 - $bars) .
             ' ' . $pct . '%  (' . number_format($done) . '/' . number_format((int)$cmp['target']) . ')';
     if ((int)($cmp['per_day'] ?? 0) > 0 && empty($cmp['done_at'])) {
         $left = max(0, (int)$cmp['target'] - $done);
         $days = (int)ceil($left / (int)$cmp['per_day']);
-        $out .= "\n" . $indent . '⏳ باقی‌مانده: ' . number_format($left) . ' نفر' .
+        $out .= "\n" . $indent . 'باقی‌مانده: ' . number_format($left) . ' نفر' .
                 ($days > 0 ? ' · حدود ' . $days . ' روز' : '');
     }
-    if (!empty($cmp['done_at'])) $out .= "\n" . $indent . '🏁 تکمیل: ' . h($cmp['done_at']);
+    if (!empty($cmp['done_at'])) $out .= "\n" . $indent . 'تکمیل: ' . h($cmp['done_at']);
     return $out;
 }
 
@@ -2049,12 +2051,12 @@ function showOrderStatus($uid, $chatId, $code, $replyTo = null) {
     $p = Product::get($o['product_id']);
 
     $hint = [
-        'pending'  => "👇 مبلغ را واریز کنید و رسید را بفرستید.",
-        'review'   => "⏳ رسید شما رسید؛ بعد از تایید، سفارش شروع می‌شود.",
-        'running'  => "🔄 سفارش در حال انجام است. این صفحه را هر وقت خواستید ببینید.",
-        'paused'   => "⚠️ برای ادامه، ربات باید در کانال شما ادمین باشد.",
-        'done'     => "🎉 سفارش شما کامل شد. ممنون از خریدتان.",
-        'rejected' => "❌ این سفارش رد شد. با پشتیبانی تماس بگیرید.",
+        'pending'  => "مبلغ را واریز کنید و رسید را بفرستید.",
+        'review'   => "رسید شما رسید؛ بعد از تایید، سفارش شروع می‌شود.",
+        'running'  => "سفارش در حال انجام است. این صفحه را هر وقت خواستید ببینید.",
+        'paused'   => "برای ادامه، ربات باید در کانال شما ادمین باشد.",
+        'done'     => "سفارش شما کامل شد. ممنون از خریدتان.",
+        'rejected' => "این سفارش رد شد. با پشتیبانی تماس بگیرید.",
     ][$stage] ?? '';
 
     $text = T('order_status', [
@@ -2072,12 +2074,12 @@ function showOrderStatus($uid, $chatId, $code, $replyTo = null) {
         'created'      => h($o['created_at']),
         'approved'     => h($o['decided_at'] ?? '—'),
         'hint'         => $hint,
-        'link_line'    => !empty($m['link'])    ? "📣 " . h($m['link']) . "\n" : '',
-        'qty_line'     => !empty($m['qty'])     ? "👥 " . number_format((int)$m['qty']) . " نفر" .
+        'link_line'    => !empty($m['link'])    ? h($m['link']) . "\n" : '',
+        'qty_line'     => !empty($m['qty'])     ? number_format((int)$m['qty']) . " نفر" .
                                                  (!empty($m['speed']) ? ' · ' . h($m['speed']) : '') . "\n" : '',
-        'perday_line'  => !empty($m['per_day']) ? "🚀 " . number_format((int)$m['per_day']) . " نفر در روز\n" : '',
-        'eta_line'     => !empty($m['eta'])     ? "⏳ زمان تقریبی: " . h($m['eta']) . "\n" : '',
-        'approved_line'=> !empty($o['decided_at']) ? "✅ تایید: " . h($o['decided_at']) . "\n" : '',
+        'perday_line'  => !empty($m['per_day']) ? number_format((int)$m['per_day']) . " نفر در روز\n" : '',
+        'eta_line'     => !empty($m['eta'])     ? "زمان تقریبی: " . h($m['eta']) . "\n" : '',
+        'approved_line'=> !empty($o['decided_at']) ? "تایید: " . h($o['decided_at']) . "\n" : '',
     ]);
 
     $rows = [];
@@ -2931,7 +2933,7 @@ function reportSale($order, $force = false) {
         '{date}'     => h(nowStr()),
     ]);
 
-    $rows = [];
+    $line = [];
     foreach ($r['buttons'] as $b) {
         if (empty($b['on'])) continue;
         $t = trim((string)($b['text'] ?? ''));
@@ -2940,7 +2942,13 @@ function reportSale($order, $force = false) {
         $btn = ['text' => $t, 'url' => $url];
         if (isStyle($b['color'] ?? '')) $btn['style'] = $b['color'];
         if (!empty($b['icon'])) $btn['icon_custom_emoji_id'] = (string)$b['icon'];
-        $rows[] = [$btn];
+        $line[] = $btn;
+    }
+    // پیش‌فرض: کنار هم. اگر «زیر هم» انتخاب شده باشد، هرکدام یک ردیف
+    $rows = [];
+    if ($line) {
+        if (!isset($r['btn_row']) || !empty($r['btn_row'])) $rows[] = $line;
+        else foreach ($line as $b2) $rows[] = [$b2];
     }
 
     $extra = [];
@@ -3093,11 +3101,11 @@ function orderDoneText($order) {
     $content = '';
     if ($p && !empty($p['bot_id']) && !empty($p['link_code'])) {
         $url = Links::url($p['bot_id'], $p['link_code']);
-        if ($url) $content = "\n🔗 لینک دریافت محتوا:\n" . $url . "\n";
+        if ($url) $content = "\nلینک دریافت محتوا:\n" . $url . "\n";
     }
 
     return T('order_done', [
-        'head'        => $isTest ? "🧪 <b>سفارش تستی ثبت شد</b>" : T('approved'),
+        'head'        => $isTest ? "<b>سفارش تستی ثبت شد</b>" : T('approved'),
         'product'     => h($p['name'] ?? '—'),
         'link'        => h($m['link'] ?? '—'),
         'qty'         => number_format((int)($m['qty'] ?? 0)),
@@ -3113,16 +3121,16 @@ function orderDoneText($order) {
             ? 'حالت تست روشن است، پس بدون پرداخت تایید شد.'
             : 'ممبرها به‌تدریج اضافه می‌شوند. وضعیت را با همان کد پیگیری ببینید.',
         // خط‌هایی که اگر خالی باشند اصلا نوشته نمی‌شوند
-        'link_line'   => !empty($m['link'])    ? "📣 کانال: " . h($m['link']) . "\n" : '',
-        'qty_line'    => !empty($m['qty'])     ? "👥 تعداد: <b>" . number_format((int)$m['qty']) . "</b> نفر\n" : '',
-        'speed_line'  => !empty($m['speed'])   ? "⚡️ سرعت: " . h($m['speed']) . "\n" : '',
-        'perday_line' => !empty($m['per_day']) ? "🚀 سرعت تحویل: " . number_format((int)$m['per_day']) . " نفر در روز\n" : '',
-        'eta_line'    => !empty($m['eta'])     ? "⏳ زمان تقریبی: <b>" . h($m['eta']) . "</b>\n" : '',
+        'link_line'   => !empty($m['link'])    ? "کانال: " . h($m['link']) . "\n" : '',
+        'qty_line'    => !empty($m['qty'])     ? "تعداد: <b>" . number_format((int)$m['qty']) . "</b> نفر\n" : '',
+        'speed_line'  => !empty($m['speed'])   ? "سرعت: " . h($m['speed']) . "\n" : '',
+        'perday_line' => !empty($m['per_day']) ? "سرعت تحویل: " . number_format((int)$m['per_day']) . " نفر در روز\n" : '',
+        'eta_line'    => !empty($m['eta'])     ? "زمان تقریبی: <b>" . h($m['eta']) . "</b>\n" : '',
     ]);
 }
 
 function orderDoneKb($order) {
-    $rows = [[btnCb('🔍 وضعیت سفارش', 'trk_' . $order['id'], 'info')]];
+    $rows = [[btnCb('وضعیت سفارش', 'trk_' . $order['id'], 'info')]];
     $p = Product::get($order['product_id']);
     if ($p && !empty($p['bot_id']) && !empty($p['link_code'])) {
         $url = Links::url($p['bot_id'], $p['link_code']);
@@ -3742,8 +3750,10 @@ function edReport($chatId, $msgId, $pid) {
         [btnCb('🔗 لینک تاپیک', 'rplink_' . $pid, 'buy')],
         [btnCb('👥 آیدی گروه', 'rpc_' . $pid, 'admin'), btnCb('🧵 شماره تاپیک', 'rpth_' . $pid, 'admin')],
         [btnCb('✏️ متن گزارش', 'rpt_' . $pid, 'admin')],
-        [btnCb('1️⃣ دکمه اول', 'rpb_' . $pid . '|0', 'buy'),
-         btnCb('2️⃣ دکمه دوم', 'rpb_' . $pid . '|1', 'buy')],
+        [btnCb('دکمه اول', 'rpb_' . $pid . '|0', 'buy'),
+         btnCb('دکمه دوم', 'rpb_' . $pid . '|1', 'buy')],
+        [btnCb((!isset($r['btn_row']) || !empty($r['btn_row']))
+               ? 'چیدمان: کنار هم' : 'چیدمان: زیر هم', 'rprow_' . $pid, 'info')],
         [btnCb('🧪 ارسال آزمایشی', 'rptest_' . $pid, 'confirm')],
     ];
     $bs = parseSubProductId($pid);
@@ -4945,6 +4955,15 @@ function masterHandle($update) {
         }
         if (str_starts_with($data, 'rp_')) {
             answerCb(BOT_TOKEN, $cbId); edReport($chatId, $msgId, substr($data, 3)); return;
+        }
+        if (str_starts_with($data, 'rprow_')) {
+            $pid = substr($data, 6);
+            reportMutate($pid, function (&$r) {
+                $r['btn_row'] = !(!isset($r['btn_row']) || !empty($r['btn_row']));
+            });
+            answerCb(BOT_TOKEN, $cbId, '✅');
+            edReport($chatId, $msgId, $pid);
+            return;
         }
         if (str_starts_with($data, 'rpx_')) {
             $pid = substr($data, 4);

@@ -405,6 +405,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $r['thread_id'] = max(0, (int)($post['rthread'] ?? 0));
             $txt = (string)($post['rtext'] ?? '');
             if (trim($txt) !== '') $r['text'] = $txt;
+            $r['btn_row'] = !empty($post['brow']);
             foreach ([0, 1] as $i) {
                 if (!isset($r['buttons'][$i]))
                     $r['buttons'][$i] = ['text'=>'','url'=>'','color'=>'none','icon'=>'','on'=>true];
@@ -1199,13 +1200,18 @@ foreach ($tabs as $k => $l): ?>
             </div>
           </div>
 
+          <div style="margin-top:14px">
+            <label style="font-weight:500"><input type="checkbox" name="brow" value="1" style="width:auto"
+              <?= (!isset($rp['btn_row']) || !empty($rp['btn_row'])) ? 'checked' : '' ?>>
+              دو دکمه <b>کنار هم</b> باشند (تیک بردارید = زیر هم)</label>
+          </div>
           <div style="margin-top:14px"><label>🔘 دو دکمه زیر گزارش</label>
             <table style="margin-top:6px">
               <tr><th>#</th><th>متن دکمه</th><th>لینک</th><th>رنگ</th><th>روشن</th></tr>
               <?php foreach ([0, 1] as $i): $b = $rp['buttons'][$i] ?? ['text'=>'','url'=>'','color'=>'none','on'=>true]; ?>
                 <tr>
                   <td><?= $i + 1 ?></td>
-                  <td><input name="btext[<?= $i ?>]" value="<?= h($b['text'] ?? '') ?>" placeholder="🛒 ثبت سفارش"></td>
+                  <td><input name="btext[<?= $i ?>]" value="<?= h($b['text'] ?? '') ?>" placeholder="ثبت سفارش"></td>
                   <td><input name="burl[<?= $i ?>]" value="<?= h($b['url'] ?? '') ?>"
                              placeholder="https://t.me/YourBot" style="direction:ltr"></td>
                   <td><select name="bcolor[<?= $i ?>]" style="max-width:120px">
@@ -1218,7 +1224,9 @@ foreach ($tabs as $k => $l): ?>
               <?php endforeach; ?>
             </table>
             <div class="muted" style="margin-top:6px">
-              دکمه بدون لینک نشان داده نمی‌شود. ✨ ایموجی پریمیوم دکمه‌ها را داخل ربات بگذارید.
+              دکمه بدون لینک نشان داده نمی‌شود. متن‌ها عمداً بدون ایموجی‌اند —
+              ✨ ایموجی پریمیوم را داخل ربات بگذارید:
+              <code>/panel</code> ← 📢 گزارش خرید ← محصول ← دکمه اول/دوم ← ✨ پریمیوم
             </div>
           </div>
 
