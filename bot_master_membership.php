@@ -384,6 +384,29 @@ function defaultConfig() {
         // 🧪 حالت تست — اجازه سفارش با مبلغ صفر، برای امتحان کردن کل مسیر
         'test_mode' => false,
 
+        // 💠 درگاه پرداخت خودکار — لینک می‌سازد، آدرس ولت می‌دهد، خودش تایید می‌کند
+        'gateway' => [
+            'on'        => false,
+            'provider'  => 'oxapay',      // oxapay | nowpayments | custom
+            'api_key'   => '',
+            'ipn_secret'=> '',            // برای nowpayments؛ oxapay از همان کلید مرچنت استفاده می‌کند
+            'base_url'  => '',            // آدرس عمومی همین فایل، مثلا https://site.com/bot.php
+            'coin'      => 'USDT',
+            'network'   => 'TRC20',
+            'rate'      => 0,             // هر ۱ واحد ارز چند تومان؛ ۰ = از خود درگاه بپرس
+            'expire'    => 30,            // دقیقه
+            'min'       => 50000,         // حداقل مبلغ شارژ با درگاه (تومان)
+            'custom_url'=> '',            // حالت custom: {amount} {order} {callback}
+        ],
+
+        // 🔒 عضویت اجباری خودِ ربات مادر — تا عضو نشود نمی‌تواند کار کند
+        'join' => [
+            'on'       => false,
+            'channels' => [],   // [{chat_id, title, url}]
+            'text'     => "🔒 <b>برای استفاده از ربات، اول در کانال‌های زیر عضو شوید:</b>",
+            'btn'      => ['emoji' => '✅', 'text' => 'عضو شدم', 'color' => 'success', 'icon' => ''],
+        ],
+
         // 📋 لیست تعرفه‌ها — دکمه شیشه‌ای زیر بخش محصولات
         'tariff' => [
             'on'   => true,
@@ -1258,9 +1281,10 @@ class Channels
      * اگر بررسی ممکن نباشد، کانال «عضو نشده» حساب می‌شود (fail-closed)
      * تا کسی نتواند با خراب کردن دسترسی، قفل را دور بزند.
      */
-    public static function isMemberOf($chatId, $userId) {
+    public static function isMemberOf($chatId, $userId, $fresh = false) {
         static $cache = [];
         $k = $chatId . ':' . $userId;
+        if ($fresh) unset($cache[$k]);          // «عضو شدم» را زد — از نو بپرس
         if (isset($cache[$k])) return $cache[$k];
 
         $r = tg(BOT_TOKEN, 'getChatMember',
@@ -2124,6 +2148,194 @@ function askDirectPay($uid, $chatId, $p, $amount, $meta = []) {
     ]));
 }
 
+// ============================================================
+// 💠 درگاه پرداخت خودکار (ارز دیجیتال)
+//
+// مشتری «شارژ» می‌زند → ربات از درگاه یک فاکتور می‌گیرد →
+// لینک پرداخت + آدرس ولت + مهلت به مشتری داده می‌شود →
+// به‌محض واریز، درگاه به ربات خبر می‌دهد (IPN) → کیف پول خودکار شارژ می‌شود.
+// ============================================================
+
+function gwOn() {
+    $g = cfg()['gateway'] ?? [];
+    return !empty($g['on']) && trim((string)$g['api_key']) !== '' && trim((string)$g['base_url']) !== '';
+}
+
+function gwCallbackUrl() {
+    $g = cfg()['gateway'] ?? [];
+    $b = rtrim(trim((string)$g['base_url']), '/');
+    if ($b === '') return '';
+    return $b . (str_contains($b, '?') ? '&' : '?') . 'ipn=1';
+}
+
+/** درخواست HTTP ساده به درگاه */
+function gwHttp($url, $headers = [], $body = null, $timeout = 20) {
+    $ch = curl_init($url);
+    $opt = [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => $timeout,
+        CURLOPT_CONNECTTIMEOUT => min(10, $timeout),
+        CURLOPT_HTTPHEADER     => array_merge(['Content-Type: application/json'], $headers),
+    ];
+    if ($body !== null) { $opt[CURLOPT_POST] = true; $opt[CURLOPT_POSTFIELDS] = json_encode($body); }
+    curl_setopt_array($ch, $opt);
+    $res  = curl_exec($ch);
+    $err  = curl_error($ch);
+    curl_close($ch);
+    if ($res === false) return ['ok' => false, 'error' => $err ?: 'curl error'];
+    $j = json_decode($res, true);
+    return ['ok' => true, 'data' => is_array($j) ? $j : [], 'raw' => $res];
+}
+
+/** مبلغ تومان → مقدار ارز */
+function gwCryptoAmount($toman) {
+    $g = cfg()['gateway'] ?? [];
+    $rate = (float)($g['rate'] ?? 0);
+    if ($rate <= 0) return null;              // درگاه خودش تبدیل کند
+    return round($toman / $rate, 6);
+}
+
+/**
+ * ساخت فاکتور پرداخت
+ * برگشت: [ok, ['url'=>, 'address'=>, 'amount'=>, 'coin'=>, 'expires_at'=>, 'invoice'=>], error]
+ */
+function gwCreateInvoice($orderId, $toman) {
+    $g   = cfg()['gateway'] ?? [];
+    $cb  = gwCallbackUrl();
+    $exp = max(5, (int)($g['expire'] ?? 30));
+    $amt = gwCryptoAmount($toman);
+    $coin = strtoupper(trim((string)($g['coin'] ?? 'USDT')));
+    $net  = strtoupper(trim((string)($g['network'] ?? '')));
+    $prov = strtolower(trim((string)($g['provider'] ?? 'oxapay')));
+
+    if ($prov === 'custom') {
+        $u = strtr((string)($g['custom_url'] ?? ''), [
+            '{amount}'   => (string)$toman,
+            '{order}'    => rawurlencode($orderId),
+            '{callback}' => rawurlencode($cb),
+        ]);
+        if (trim($u) === '') return [false, null, 'آدرس درگاه دلخواه تنظیم نشده'];
+        return [true, ['url' => $u, 'address' => '', 'amount' => $amt, 'coin' => $coin,
+                       'expires_at' => time() + $exp * 60, 'invoice' => $orderId], ''];
+    }
+
+    if ($prov === 'nowpayments') {
+        $body = [
+            'price_amount'      => $amt !== null ? $amt : ($toman / 100000),
+            'price_currency'    => $amt !== null ? strtolower($coin) : 'usd',
+            'pay_currency'      => strtolower($coin . ($net === 'TRC20' ? 'trc20' : '')),
+            'order_id'          => $orderId,
+            'order_description' => 'Wallet top-up',
+            'ipn_callback_url'  => $cb,
+            'is_fixed_rate'     => true,
+        ];
+        $r = gwHttp('https://api.nowpayments.io/v1/invoice',
+                    ['x-api-key: ' . trim((string)$g['api_key'])], $body);
+        if (empty($r['ok'])) return [false, null, $r['error']];
+        $d = $r['data'];
+        if (empty($d['invoice_url'])) return [false, null, $d['message'] ?? 'پاسخ نامعتبر درگاه'];
+        return [true, ['url' => $d['invoice_url'], 'address' => $d['pay_address'] ?? '',
+                       'amount' => $d['pay_amount'] ?? $amt, 'coin' => $coin,
+                       'expires_at' => time() + $exp * 60,
+                       'invoice' => (string)($d['id'] ?? $orderId)], ''];
+    }
+
+    // oxapay (پیش‌فرض)
+    $body = [
+        'merchant'    => trim((string)$g['api_key']),
+        'amount'      => $amt !== null ? $amt : $toman,
+        'currency'    => $amt !== null ? $coin : 'IRT',
+        'lifeTime'    => $exp,
+        'feePaidByPayer' => 1,
+        'orderId'     => $orderId,
+        'description' => 'Wallet top-up',
+        'callbackUrl' => $cb,
+    ];
+    if ($net !== '') $body['network'] = $net;
+    $r = gwHttp('https://api.oxapay.com/merchants/request', [], $body);
+    if (empty($r['ok'])) return [false, null, $r['error']];
+    $d = $r['data'];
+    if ((string)($d['result'] ?? '') !== '100' || empty($d['payLink']))
+        return [false, null, $d['message'] ?? 'پاسخ نامعتبر درگاه'];
+    return [true, ['url' => $d['payLink'], 'address' => $d['address'] ?? '',
+                   'amount' => $amt, 'coin' => $coin,
+                   'expires_at' => time() + $exp * 60,
+                   'invoice' => (string)($d['trackId'] ?? $orderId)], ''];
+}
+
+/** پرسیدن وضعیت یک فاکتور از درگاه */
+function gwCheck($order) {
+    $g  = cfg()['gateway'] ?? [];
+    $gw = $order['gw'] ?? null;
+    if (!$gw || empty($gw['invoice'])) return [false, 'بدون فاکتور'];
+    $prov = strtolower(trim((string)($g['provider'] ?? 'oxapay')));
+
+    if ($prov === 'nowpayments') {
+        $r = gwHttp('https://api.nowpayments.io/v1/payment/' . rawurlencode($gw['invoice']),
+                    ['x-api-key: ' . trim((string)$g['api_key'])]);
+        if (empty($r['ok'])) return [false, $r['error']];
+        $st = strtolower((string)($r['data']['payment_status'] ?? ''));
+        return [in_array($st, ['finished', 'confirmed'], true), $st ?: 'نامشخص'];
+    }
+    if ($prov === 'custom') return [false, 'در حالت دلخواه، تایید فقط با IPN انجام می‌شود'];
+
+    $r = gwHttp('https://api.oxapay.com/merchants/inquiry', [], [
+        'merchant' => trim((string)$g['api_key']),
+        'trackId'  => $gw['invoice'],
+    ]);
+    if (empty($r['ok'])) return [false, $r['error']];
+    $st = strtolower((string)($r['data']['status'] ?? ''));
+    return [in_array($st, ['paid', 'confirming'], true) && $st === 'paid', $st ?: 'نامشخص'];
+}
+
+/** ✅ تایید نهایی یک پرداخت درگاهی — یک بار، هرچند بار که خبر برسد */
+function gwSettle($orderId, $note = 'پرداخت خودکار درگاه') {
+    $o = Order::get($orderId);
+    if (!$o) return false;
+    if (in_array($o['status'], [Order::APPROVED, Order::REJECTED], true)) return false;
+
+    Order::attachReceipt($orderId, 'text', $note);
+    [$ok, ] = Order::approve($orderId, ADMIN_ID);
+    if (!$ok) return false;
+
+    completeApprovedOrder(Order::get($orderId));
+    return true;
+}
+
+/** 📡 وبهوک درگاه */
+function handleIpn() {
+    $g   = cfg()['gateway'] ?? [];
+    $raw = file_get_contents('php://input');
+    $d   = json_decode($raw, true);
+    if (!is_array($d)) { http_response_code(400); echo 'bad'; return; }
+
+    $prov = strtolower(trim((string)($g['provider'] ?? 'oxapay')));
+    $orderId = ''; $paid = false;
+
+    if ($prov === 'nowpayments') {
+        // امضا: HMAC-SHA512 روی بدنه مرتب‌شده، با ipn_secret
+        $sig = $_SERVER['HTTP_X_NOWPAYMENTS_SIG'] ?? '';
+        $sorted = $d; ksort($sorted);
+        $calc = hash_hmac('sha512', json_encode($sorted, JSON_UNESCAPED_SLASHES),
+                          trim((string)$g['ipn_secret']));
+        if (!$sig || !hash_equals($calc, $sig)) { http_response_code(403); echo 'sig'; return; }
+        $orderId = (string)($d['order_id'] ?? '');
+        $paid = in_array(strtolower((string)($d['payment_status'] ?? '')), ['finished', 'confirmed'], true);
+    } else {
+        // oxapay: HMAC-SHA512 بدنه خام با کلید مرچنت
+        $sig = $_SERVER['HTTP_HMAC'] ?? '';
+        $calc = hash_hmac('sha512', $raw, trim((string)$g['api_key']));
+        if (!$sig || !hash_equals($calc, $sig)) { http_response_code(403); echo 'sig'; return; }
+        $orderId = (string)($d['orderId'] ?? '');
+        $paid = strtolower((string)($d['status'] ?? '')) === 'paid';
+    }
+
+    if ($orderId === '') { http_response_code(400); echo 'no order'; return; }
+    if ($paid) gwSettle($orderId);
+    http_response_code(200);
+    echo 'ok';
+}
+
 function walletFor($currency) {
     $w = cfg()['wallets'];
     $c = strtoupper(trim($currency));
@@ -2136,6 +2348,25 @@ function walletFor($currency) {
 
 function createOrderAndAsk($uid, $chatId, $username, $type, $productId, $amount, $currency, $title, $meta = []) {
     $isTopup = $type === 'topup';
+    $g = cfg()['gateway'] ?? [];
+
+    // 💠 درگاه خودکار — اگر روشن است و مبلغ به حد نصاب رسیده
+    $useGw = $isTopup && gwOn() && $amount >= (float)($g['min'] ?? 0);
+    if ($useGw) {
+        $oid = Order::create($uid, $username, $type, $productId, $amount, $currency, $meta);
+        [$ok, $inv, $err] = gwCreateInvoice($oid, $amount);
+        if ($ok) {
+            mutate('orders', function (&$a) use ($oid, $inv) { if (isset($a[$oid])) $a[$oid]['gw'] = $inv; });
+            sendMsg(BOT_TOKEN, $chatId, gwInvoiceText(Order::get($oid)), gwInvoiceKb(Order::get($oid)));
+            return $oid;
+        }
+        // درگاه جواب نداد → برگرد به کارت به کارت
+        mutate('orders', function (&$a) use ($oid) { unset($a[$oid]); });
+        sendMsg(BOT_TOKEN, ADMIN_ID,
+            "⚠️ <b>درگاه پرداخت جواب نداد</b>\n\n<code>" . h($err) . "</code>\n\n" .
+            "فعلا کارت به کارت استفاده می‌شود. /panel ← 💠 درگاه پرداخت");
+    }
+
     [$method, $wallet] = walletFor($currency);
 
     if (str_contains($wallet, 'تنظیم نشده')) {
@@ -2160,8 +2391,7 @@ function createOrderAndAsk($uid, $chatId, $username, $type, $productId, $amount,
         $pend = getUser($uid)['pending'] ?? null;
         if ($pend && Product::get($pend['pid'] ?? '')) {
             $pp = Product::get($pend['pid']);
-            $t .= "\n\n🛒 بعد از تایید شارژ، سفارش «<b>" . h($pp['name']) .
-                  "</b>» خودکار ثبت می‌شود.";
+            $t .= "\n\n🛒 بعد از تایید شارژ، سفارش «<b>" . h($pp['name']) . "</b>» خودکار ثبت می‌شود.";
         }
     }
 
@@ -2170,6 +2400,58 @@ function createOrderAndAsk($uid, $chatId, $username, $type, $productId, $amount,
         [['text' => UT('cancel'), 'callback_data' => 'ocancel_' . $oid, 'style' => gs('cancel') ?: null]],
     ]));
     return $oid;
+}
+
+/** ⏱ بررسی دوره‌ای فاکتورهای باز درگاه — اگر IPN نرسید، خودمان می‌پرسیم */
+function gwPoll($limit = 10) {
+    if (!gwOn()) return 0;
+    $n = 0;
+    foreach (Order::all() as $o) {
+        if ($n >= $limit) break;
+        if (($o['type'] ?? '') !== 'topup') continue;
+        if (($o['status'] ?? '') !== Order::PENDING) continue;
+        $gw = $o['gw'] ?? null;
+        if (!$gw || empty($gw['invoice'])) continue;
+        // تا یک ساعت بعد از انقضا هم چک کن (واریز دیرهنگام)
+        if (time() > (int)($gw['expires_at'] ?? 0) + 3600) continue;
+        $n++;
+        [$paid, ] = gwCheck($o);
+        if ($paid) gwSettle($o['id']);
+    }
+    return $n;
+}
+
+/** 💠 متن فاکتور درگاه — با مهلت زنده */
+function gwInvoiceText($order) {
+    $gw = $order['gw'] ?? [];
+    $left = max(0, (int)($gw['expires_at'] ?? 0) - time());
+    $mm = (int)floor($left / 60); $ss = $left % 60;
+
+    $t  = "💠 <b>پرداخت خودکار</b>\n\n";
+    $t .= "💰 مبلغ: <b>" . fmtNum($order['amount']) . " تومان</b>\n";
+    if (!empty($gw['amount'])) $t .= "🪙 معادل: <b>" . $gw['amount'] . ' ' . h($gw['coin'] ?? '') . "</b>\n";
+    if (!empty($gw['address'])) {
+        $t .= "\n📥 آدرس واریز" . (!empty(cfg()['gateway']['network'])
+              ? ' (' . h(cfg()['gateway']['network']) . ')' : '') . ":\n";
+        $t .= "<code>" . h($gw['address']) . "</code>\n";
+    }
+    $t .= "\n⏳ مهلت: <b>" . ($left > 0 ? sprintf('%02d:%02d', $mm, $ss) : 'تمام شد') . "</b>\n";
+    $t .= "🧾 کد پیگیری: <code>" . h($order['id']) . "</code>\n\n";
+    $t .= $left > 0
+        ? "به‌محض واریز، کیف پول شما <b>خودکار</b> شارژ می‌شود و همین‌جا خبرش را می‌دهیم.\n" .
+          "نیازی به فرستادن رسید نیست."
+        : "⌛️ مهلت این فاکتور تمام شد. دوباره درخواست شارژ بدهید.";
+    return $t;
+}
+
+function gwInvoiceKb($order) {
+    $gw = $order['gw'] ?? [];
+    $rows = [];
+    if (!empty($gw['url'])) $rows[] = [['text' => '💳 صفحه پرداخت', 'url' => $gw['url'],
+                                        'style' => gs('buy') ?: null]];
+    $rows[] = [btnCb('🔄 بررسی پرداخت', 'gwchk_' . $order['id'], 'confirm')];
+    $rows[] = [btnCb(UT('cancel'), 'ocancel_' . $order['id'], 'cancel')];
+    return inlineKb($rows);
 }
 
 /** جریان سفارش: شروع */
@@ -2538,11 +2820,8 @@ function campaignFromOrder($o) {
             $a[$c['id']]['paused_reason'] = 'ربات در کانال ادمین نیست';
         });
         sendMsg(BOT_TOKEN, ADMIN_ID,
-            "⏸ سفارش <code>" . h($o['id']) . "</code> پرداخت شد، کمپینش ساخته شد ولی <b>هنوز خاموش است</b>.\n\n" .
-            "📣 کانال: " . h($title) . "\n" .
-            "👥 هدف: <b>" . number_format($qty) . "</b> عضو\n\n" .
-            "دلیل: ربات در کانال ادمین نیست، پس نمی‌تواند عضویت را بشمارد.\n\n" .
-            "ربات را در کانال ادمین کنید، بعد پنل وب ← 🎯 کمپین‌ها ← آیدی کانال را بگذارید و روشنش کنید.");
+            "⏸ <b>" . h($title) . "</b> — قفل نشد، ربات در کانال ادمین نیست.\n" .
+            "<code>" . h($o['id']) . "</code> · /panel ← 🔒 قفل‌ها");
         return Campaign::get($c['id']);
     }
 
@@ -2557,20 +2836,7 @@ function campaignFromOrder($o) {
     $picked = assignCampaignBots($c['id']);   // 🎯 روی حداکثر ۲ ربات می‌نشیند
     $c = Campaign::get($c['id']);
 
-    sendMsg(BOT_TOKEN, ADMIN_ID,
-        "🎯 <b>کمپین خودکار ساخته شد</b>\n\n" .
-        "📣 کانال: <b>" . h($title) . "</b>\n" .
-        "👥 هدف: <b>" . number_format($qty) . "</b> عضو\n" .
-        ((int)($meta['per_day'] ?? 0) > 0
-            ? "🚀 سقف روزانه: <b>" . number_format((int)$meta['per_day']) . "</b> نفر\n" : '') .
-        "🧾 سفارش: <code>" . h($o['id']) . "</code>\n\n" .
-        (function () use ($picked) {
-            if (!$picked) return "⚠️ هنوز ربات اپلودری ندارید — این کانال جایی قفل نمی‌شود.\n";
-            $names = [];
-            foreach ($picked as $bid) { $b = BotManager::get($bid); if ($b) $names[] = '@' . $b['username']; }
-            return "🤖 قفل شد روی: <b>" . h(implode('، ', $names)) . "</b>\n";
-        })() .
-        "به‌محض رسیدن به هدف، خودکار برداشته می‌شود.");
+    // بدون پیام اضافه به ادمین — وضعیت قفل‌ها در /panel ← 🔒 قفل‌ها دیده می‌شود
 
     return $c;
 }
@@ -2876,6 +3142,8 @@ function admHome($chatId, $msgId = null) {
         [btnCb('🛒 محصولات', 'eprods', 'admin'),
          btnCb('🤖 ربات‌های زیرمجموعه', 'eupload', 'admin')],
         [btnCb('📢 گزارش خرید در گروه', 'adm_reports', 'admin')],
+        [btnCb('💠 درگاه پرداخت', 'adm_gw', 'admin')],
+        [btnCb('🔒 عضویت اجباری ربات مادر', 'adm_join', 'admin')],
         [btnCb('🔒 قفل‌های عضویت اجباری', 'adm_locks', 'admin')],
         [btnCb('📋 لیست تعرفه‌ها', 'adm_tariff', 'admin')],
         [btnCb('🧾 سفارش‌ها', 'adm_orders', 'admin'), btnCb('🤖 ربات‌ها', 'adm_bots', 'admin')],
@@ -2910,6 +3178,81 @@ function edProdBot($chatId, $msgId, $pid) {
                btnCb('🔗 کد لینک', 'sbcode_' . $pid, 'admin')];
     $bs = parseSubProductId($pid);
     $rows[] = [btnUI('back', $bs ? 'sb_' . $bs[0] . '|' . $bs[1] : 'ep_' . $pid, 'nav')];
+    editMsg(BOT_TOKEN, $chatId, $msgId, $text, inlineKb($rows));
+}
+
+/** 💠 تنظیم درگاه پرداخت خودکار */
+function admGateway($chatId, $msgId) {
+    $g = cfg()['gateway'] ?? [];
+    $prov = ['oxapay' => 'OxaPay', 'nowpayments' => 'NOWPayments', 'custom' => 'دلخواه'][$g['provider'] ?? 'oxapay'] ?? '—';
+
+    $text  = "💠 <b>درگاه پرداخت خودکار</b>\n\n";
+    $text .= "وضعیت: " . (gwOn() ? '✅ آماده' : (!empty($g['on']) ? '⚠️ روشن ولی ناقص' : '❌ خاموش')) . "\n";
+    $text .= "درگاه: <b>{$prov}</b>\n";
+    $text .= "کلید API: " . (trim((string)$g['api_key']) !== ''
+             ? '✅ ثبت شده (' . mb_substr($g['api_key'], 0, 4) . '…)' : '<b>خالی</b>') . "\n";
+    $text .= "آدرس بازگشت: " . (trim((string)$g['base_url']) !== ''
+             ? '<code>' . h(gwCallbackUrl()) . '</code>' : '<b>خالی</b>') . "\n";
+    $text .= "ارز: <b>" . h($g['coin'] ?? '—') . "</b>" .
+             (!empty($g['network']) ? ' · ' . h($g['network']) : '') . "\n";
+    $text .= "نرخ: " . ((float)($g['rate'] ?? 0) > 0
+             ? fmtNum($g['rate']) . ' تومان به ازای هر ۱ ' . h($g['coin'] ?? '')
+             : 'تبدیل با خود درگاه') . "\n";
+    $text .= "مهلت هر فاکتور: <b>" . (int)($g['expire'] ?? 30) . "</b> دقیقه\n";
+    $text .= "حداقل شارژ با درگاه: <b>" . fmtNum($g['min'] ?? 0) . "</b> تومان\n\n";
+
+    if (!gwOn()) {
+        $text .= "برای راه‌اندازی:\n";
+        $text .= "۱) در OxaPay یا NOWPayments حساب بسازید و آدرس ولت خودتان را آنجا ثبت کنید\n";
+        $text .= "۲) کلید API (Merchant Key) را بگیرید و اینجا بگذارید\n";
+        $text .= "۳) آدرس عمومی همین فایل ربات را بگذارید\n";
+        $text .= "۴) در پنل درگاه، آدرس بازگشت (Callback/IPN) را همان چیزی بگذارید که اینجا نشان داده می‌شود\n\n";
+        $text .= "بعد از آن، پول مستقیم به ولت خودتان می‌رود و کیف پول مشتری خودکار شارژ می‌شود.";
+    } else {
+        $text .= "✅ مشتری «افزایش موجودی» بزند، لینک پرداخت و آدرس ولت می‌گیرد.\n";
+        $text .= "به‌محض واریز، کیف پولش خودکار شارژ می‌شود.";
+    }
+
+    $rows = [
+        [btnCb(!empty($g['on']) ? '❌ خاموش کردن' : '✅ روشن کردن', 'gwx', 'info'),
+         btnCb('🔀 درگاه: ' . $prov, 'gwp', 'admin')],
+        [btnCb('🔑 کلید API', 'gwk', 'admin'), btnCb('🌐 آدرس ربات', 'gwu', 'admin')],
+        [btnCb('🪙 ارز', 'gwc', 'admin'), btnCb('🔗 شبکه', 'gwn', 'admin')],
+        [btnCb('💱 نرخ تومان', 'gwr', 'admin'), btnCb('⏳ مهلت', 'gwe', 'admin')],
+        [btnCb('🔢 حداقل مبلغ', 'gwm', 'admin')],
+    ];
+    if (($g['provider'] ?? '') === 'nowpayments') $rows[] = [btnCb('🔐 کلید IPN', 'gws', 'admin')];
+    if (($g['provider'] ?? '') === 'custom')      $rows[] = [btnCb('🔗 آدرس دلخواه', 'gwcu', 'admin')];
+    $rows[] = [btnCb('🧪 تست ساخت فاکتور', 'gwtest', 'confirm')];
+    $rows[] = [btnUI('back', 'adm_home', 'nav')];
+    editMsg(BOT_TOKEN, $chatId, $msgId, $text, inlineKb($rows));
+}
+
+/** 🔒 عضویت اجباری خود ربات مادر */
+function admJoin($chatId, $msgId) {
+    $j = cfg()['join'] ?? [];
+    $chs = $j['channels'] ?? [];
+
+    $text  = "🔒 <b>عضویت اجباری ربات مادر</b>\n\n";
+    $text .= "وضعیت: " . (!empty($j['on']) ? '✅ روشن' : '❌ خاموش') . "\n";
+    $text .= "کانال‌ها: <b>" . count($chs) . "</b>\n\n";
+    if ($chs) {
+        foreach ($chs as $i => $c) {
+            $text .= ($i + 1) . ') ' . h($c['title'] ?? $c['chat_id']) .
+                     "\n   <code>" . h($c['chat_id']) . "</code>\n";
+        }
+    } else {
+        $text .= "هنوز کانالی اضافه نکرده‌اید.\n";
+    }
+    $text .= "\n⚠️ ربات مادر باید در هر کانال <b>ادمین</b> باشد.\n";
+    $text .= "خودتان (ادمین) هیچ‌وقت پشت این قفل نمی‌مانید.";
+
+    $rows = [[btnCb(!empty($j['on']) ? '❌ خاموش کردن' : '✅ روشن کردن', 'jnx', 'info')],
+             [btnCb('➕ افزودن کانال', 'jnadd', 'confirm')]];
+    foreach ($chs as $i => $c)
+        $rows[] = [btnCb('🗑 ' . mb_substr((string)($c['title'] ?? $c['chat_id']), 0, 26), 'jndel_' . $i, 'reject')];
+    $rows[] = [btnCb('✏️ متن قفل', 'jnt', 'admin'), btnCb('🔘 متن دکمه', 'jnb', 'admin')];
+    $rows[] = [btnUI('back', 'adm_home', 'nav')];
     editMsg(BOT_TOKEN, $chatId, $msgId, $text, inlineKb($rows));
 }
 
@@ -3832,6 +4175,47 @@ function edGlass($chatId, $msgId) {
 // 🎬 ربات مادر — پردازش
 // ============================================================
 
+/**
+ * 🔒 عضویت اجباری ربات مادر
+ * برگشت: کانال‌هایی که کاربر هنوز عضو نشده. خالی = آزاد است.
+ */
+function masterJoinMissing($uid, $fresh = false) {
+    $j = cfg()['join'] ?? [];
+    if (empty($j['on']) || empty($j['channels'])) return [];
+    if ($uid === ADMIN_ID) return [];
+
+    $missing = [];
+    foreach ($j['channels'] as $ch) {
+        $cid = trim((string)($ch['chat_id'] ?? ''));
+        if ($cid === '') continue;
+        $r = Channels::isMemberOf($cid, $uid, $fresh);
+        if (!$r['ok'] || !$r['member']) {
+            $missing[] = ['title' => $ch['title'] ?? $cid, 'url' => $ch['url'] ?? '', 'chat_id' => $cid];
+        }
+    }
+    return $missing;
+}
+
+function masterJoinGate($uid, $chatId, $missing) {
+    $j = cfg()['join'] ?? [];
+    $rows = [];
+    foreach ($missing as $m) {
+        $url = trim((string)($m['url'] ?? ''));
+        if ($url === '' && str_starts_with((string)$m['chat_id'], '@'))
+            $url = 'https://t.me/' . ltrim((string)$m['chat_id'], '@');
+        if ($url === '') continue;
+        $rows[] = [['text' => '📢 ' . mb_substr((string)$m['title'], 0, 30), 'url' => $url,
+                    'style' => gs('link') ?: null]];
+    }
+    $b = ['text' => trim(($j['btn']['emoji'] ?? '✅') . ' ' . ($j['btn']['text'] ?? 'عضو شدم')),
+          'callback_data' => 'mjchk'];
+    if (isStyle($j['btn']['color'] ?? '')) $b['style'] = $j['btn']['color'];
+    if (!empty($j['btn']['icon'])) $b['icon_custom_emoji_id'] = (string)$j['btn']['icon'];
+    $rows[] = [$b];
+
+    sendMsg(BOT_TOKEN, $chatId, (string)($j['text'] ?? '🔒 اول عضو شوید:'), inlineKb($rows));
+}
+
 function masterHandle($update) {
 
     // ---------------- ربات مادر در کانالی ادمین شد ----------------
@@ -3854,6 +4238,21 @@ function masterHandle($update) {
 
         $u = getUser($uid);
         if ($u && !empty($u['banned'])) { answerCb(BOT_TOKEN, $cbId, T('banned'), true); return; }
+
+        // 🔒 عضویت اجباری ربات مادر
+        if ($data === 'mjchk') {
+            $miss = masterJoinMissing($uid, true);
+            if ($miss) { answerCb(BOT_TOKEN, $cbId, '❌ هنوز در همه کانال‌ها عضو نشده‌اید.', true); return; }
+            answerCb(BOT_TOKEN, $cbId, '✅ تایید شد');
+            if ($msgId) delMsg(BOT_TOKEN, $chatId, $msgId);
+            showHome($uid, $chatId, $fname);
+            return;
+        }
+        if (!$isAdmin && ($miss = masterJoinMissing($uid))) {
+            answerCb(BOT_TOKEN, $cbId, '🔒 اول در کانال‌ها عضو شوید.', true);
+            masterJoinGate($uid, $chatId, $miss);
+            return;
+        }
 
         // --- دکمه‌های منو در حالت شیشه‌ای ---
         if ($data === 'tariff') { answerCb(BOT_TOKEN, $cbId); showTariff($uid, $chatId); return; }
@@ -4052,6 +4451,27 @@ function masterHandle($update) {
             return;
         }
 
+        if (str_starts_with($data, 'gwchk_')) {
+            $oid = substr($data, 6);
+            $o = Order::get($oid);
+            if (!$o || (int)$o['user_id'] !== $uid) { answerCb(BOT_TOKEN, $cbId, 'پیدا نشد', true); return; }
+            if ($o['status'] === Order::APPROVED) {
+                answerCb(BOT_TOKEN, $cbId, '✅ قبلا تایید شده', true); return;
+            }
+            [$paid, $st] = gwCheck($o);
+            if ($paid) {
+                answerCb(BOT_TOKEN, $cbId, '✅ پرداخت تایید شد');
+                gwSettle($oid);
+                return;
+            }
+            $left = max(0, (int)(($o['gw']['expires_at'] ?? 0)) - time());
+            answerCb(BOT_TOKEN, $cbId,
+                $left > 0
+                    ? "⏳ هنوز واریزی دیده نشد.\nوضعیت: {$st}\nمهلت: " . sprintf('%02d:%02d', (int)floor($left/60), $left % 60)
+                    : "⌛️ مهلت تمام شد. دوباره درخواست شارژ بدهید.", true);
+            return;
+        }
+
         if ($data === 'track_ask') {
             answerCb(BOT_TOKEN, $cbId);
             setState($uid, 'track');
@@ -4145,7 +4565,7 @@ function masterHandle($update) {
         // ---------------- ادمین ----------------
         // همه کال‌بک‌های مدیریتی — شامل ویرایشگر داخل ربات
         $adminPrefixes = ['aok_', 'ano_', 'adm_', 'eb', 'et', 'eg', 'eu', 'sb', 'ep', 'esp',
-                          'rp', 'tf', 'reply_', 'setup'];
+                          'rp', 'tf', 'jn', 'gw', 'reply_', 'setup'];
         $isAdminCb = false;
         foreach ($adminPrefixes as $pref) {
             if (str_starts_with($data, $pref)) { $isAdminCb = true; break; }
@@ -4322,6 +4742,72 @@ function masterHandle($update) {
         if ($data === 'adm_tariff') { answerCb(BOT_TOKEN, $cbId); admTariff($chatId, $msgId); return; }
         if ($data === 'adm_reports') { answerCb(BOT_TOKEN, $cbId); admReports($chatId, $msgId); return; }
         if ($data === 'adm_locks')   { answerCb(BOT_TOKEN, $cbId); admLocks($chatId, $msgId); return; }
+        if ($data === 'adm_join')    { answerCb(BOT_TOKEN, $cbId); admJoin($chatId, $msgId); return; }
+        if ($data === 'adm_gw')      { answerCb(BOT_TOKEN, $cbId); admGateway($chatId, $msgId); return; }
+        if ($data === 'gwx') {
+            cfgSet(function (&$c) { $c['gateway']['on'] = empty($c['gateway']['on']); });
+            answerCb(BOT_TOKEN, $cbId, '✅'); admGateway($chatId, $msgId); return;
+        }
+        if ($data === 'gwp') {
+            cfgSet(function (&$c) {
+                $seq = ['oxapay', 'nowpayments', 'custom'];
+                $i = array_search($c['gateway']['provider'] ?? 'oxapay', $seq, true);
+                $c['gateway']['provider'] = $seq[(($i === false ? 0 : $i) + 1) % count($seq)];
+            });
+            answerCb(BOT_TOKEN, $cbId, '✅'); admGateway($chatId, $msgId); return;
+        }
+        if ($data === 'gwtest') {
+            answerCb(BOT_TOKEN, $cbId);
+            if (!gwOn()) { sendMsg(BOT_TOKEN, $chatId, "⚠️ اول کلید API و آدرس ربات را بگذارید و درگاه را روشن کنید."); return; }
+            $g2 = cfg()['gateway'];
+            [$ok2, $inv2, $err2] = gwCreateInvoice('or_TEST' . bin2hex(random_bytes(3)), max(50000, (int)$g2['min']));
+            sendMsg(BOT_TOKEN, $chatId, $ok2
+                ? "✅ <b>درگاه کار می‌کند</b>\n\n" .
+                  "🔗 لینک: " . h($inv2['url']) . "\n" .
+                  (!empty($inv2['address']) ? "📥 آدرس: <code>" . h($inv2['address']) . "</code>\n" : '') .
+                  "⏳ مهلت: " . (int)$g2['expire'] . " دقیقه\n\n" .
+                  "یادتان نرود در پنل درگاه، Callback را روی این بگذارید:\n<code>" . h(gwCallbackUrl()) . "</code>"
+                : "❌ <b>درگاه جواب نداد</b>\n\n<code>" . h($err2) . "</code>\n\nکلید API و تنظیمات را بررسی کنید.");
+            return;
+        }
+        foreach ([['gwk', 'gw_key',  "🔑 کلید API (Merchant Key) درگاه را بفرستید:"],
+                  ['gws', 'gw_ipn',  "🔐 کلید IPN Secret را بفرستید:"],
+                  ['gwu', 'gw_url',  "🌐 آدرس عمومی همین فایل ربات را بفرستید.\n\nمثال: <code>https://site.com/bot.php</code>"],
+                  ['gwc', 'gw_coin', "🪙 نماد ارز را بفرستید. مثال: <code>USDT</code> یا <code>TRX</code>"],
+                  ['gwn', 'gw_net',  "🔗 شبکه را بفرستید. مثال: <code>TRC20</code> (خط تیره = بدون شبکه)"],
+                  ['gwr', 'gw_rate', "💱 هر ۱ واحد ارز چند تومان است؟ (۰ = تبدیل با خود درگاه)"],
+                  ['gwe', 'gw_exp',  "⏳ مهلت هر فاکتور به دقیقه:"],
+                  ['gwm', 'gw_min',  "🔢 حداقل مبلغ شارژ با درگاه (تومان):"],
+                  ['gwcu','gw_curl', "🔗 آدرس درگاه دلخواه.\n\nمتغیرها: <code>{amount}</code> <code>{order}</code> <code>{callback}</code>"]] as [$d0, $act, $ask]) {
+            if ($data !== $d0) continue;
+            answerCb(BOT_TOKEN, $cbId);
+            setState(ADMIN_ID, $act, []);
+            sendMsg(BOT_TOKEN, $chatId, $ask, inlineKb([[btnUI('cancel', 'adm_gw', 'cancel')]]));
+            return;
+        }
+        if ($data === 'jnx') {
+            cfgSet(function (&$c) { $c['join']['on'] = empty($c['join']['on']); });
+            answerCb(BOT_TOKEN, $cbId, '✅'); admJoin($chatId, $msgId); return;
+        }
+        if (str_starts_with($data, 'jndel_')) {
+            $i = (int)substr($data, 6);
+            cfgSet(function (&$c) use ($i) {
+                if (isset($c['join']['channels'][$i])) {
+                    unset($c['join']['channels'][$i]);
+                    $c['join']['channels'] = array_values($c['join']['channels']);
+                }
+            });
+            answerCb(BOT_TOKEN, $cbId, '🗑 حذف شد'); admJoin($chatId, $msgId); return;
+        }
+        foreach ([['jnadd', 'jn_add', "➕ آیدی کانال را بفرستید.\n\nمثال: <code>@mychannel</code> یا <code>-1001234567890</code>\n\n⚠️ ربات باید در آن کانال ادمین باشد."],
+                  ['jnt', 'jn_text', "✏️ متن قفل عضویت را بفرستید.\n\n✨ ایموجی پریمیوم و نقل‌قول پشتیبانی می‌شود."],
+                  ['jnb', 'jn_btn', '🔘 متن دکمه «عضو شدم»:']] as [$d0, $act, $ask]) {
+            if ($data !== $d0) continue;
+            answerCb(BOT_TOKEN, $cbId);
+            setState(ADMIN_ID, $act, []);
+            sendMsg(BOT_TOKEN, $chatId, $ask, inlineKb([[btnUI('cancel', 'adm_join', 'cancel')]]));
+            return;
+        }
         if ($data === 'locks_rebalance') {
             $n = 0;
             foreach (Campaign::all() as $c) {
@@ -4975,6 +5461,7 @@ function masterHandle($update) {
         touchUser($uid, $uname, $fname, $ref);
         clearState($uid);
         slotClear($uid);   // منوی تازه، پیام‌های قدیمی رها می‌شوند
+        if ($miss = masterJoinMissing($uid)) { masterJoinGate($uid, $chatId, $miss); return; }
         showHome($uid, $chatId, $fname);
         hintHideOnce($uid, $chatId);
         return;
@@ -5027,6 +5514,12 @@ function masterHandle($update) {
         return;
     }
 
+    // 🔒 عضویت اجباری ربات مادر — روی همه کارهای دیگر
+    if ($uid !== ADMIN_ID && ($miss = masterJoinMissing($uid))) {
+        masterJoinGate($uid, $chatId, $miss);
+        return;
+    }
+
     // --- دکمه منو زده شد؟ ---
     $act = findMenuAction($text);
     if ($act) {
@@ -5050,6 +5543,97 @@ function masterHandle($update) {
         clearState($uid);
         sendMsg(BOT_TOKEN, $chatId, $v !== '' ? "✅ کد لینک ذخیره شد." : "✅ حذف شد.",
             inlineKb([[btnCb('🤖 ربات تحویل', 'sbbot_' . $pid, 'admin')]]));
+        return;
+    }
+
+    if (str_starts_with($action, 'gw_')) {
+        $plain = trim($msg['text'] ?? '');
+        $back  = inlineKb([[btnCb('💠 درگاه پرداخت', 'adm_gw', 'admin')]]);
+        $map = ['gw_key' => 'api_key', 'gw_ipn' => 'ipn_secret', 'gw_url' => 'base_url',
+                'gw_coin' => 'coin', 'gw_net' => 'network', 'gw_curl' => 'custom_url'];
+        $nums = ['gw_rate' => 'rate', 'gw_exp' => 'expire', 'gw_min' => 'min'];
+
+        if (isset($nums[$action])) {
+            $v = (float)str_replace([',', '،', ' '], '', $plain);
+            if ($v < 0) { sendMsg(BOT_TOKEN, $chatId, "⚠️ عدد معتبر بفرستید."); return; }
+            if ($action === 'gw_exp' && $v < 5) { sendMsg(BOT_TOKEN, $chatId, "⚠️ حداقل ۵ دقیقه."); return; }
+            $f = $nums[$action];
+            cfgSet(function (&$c) use ($f, $v) { $c['gateway'][$f] = $v; });
+            clearState($uid);
+            sendMsg(BOT_TOKEN, $chatId, "✅ ذخیره شد.", $back);
+            return;
+        }
+        if (isset($map[$action])) {
+            $f = $map[$action];
+            $v = ($plain === '-' || $plain === '—') ? '' : $plain;
+            if ($f === 'base_url' && $v !== '' && !preg_match('#^https://#i', $v)) {
+                sendMsg(BOT_TOKEN, $chatId, "⚠️ آدرس باید با <code>https://</code> شروع شود."); return;
+            }
+            if (in_array($f, ['coin', 'network'], true)) $v = strtoupper($v);
+            cfgSet(function (&$c) use ($f, $v) { $c['gateway'][$f] = $v; });
+            clearState($uid);
+            sendMsg(BOT_TOKEN, $chatId,
+                "✅ ذخیره شد." . ($f === 'base_url' && $v !== ''
+                    ? "\n\n📡 این آدرس را در پنل درگاه به‌عنوان Callback/IPN بگذارید:\n<code>" .
+                      h(gwCallbackUrl()) . "</code>" : ''), $back);
+            return;
+        }
+        clearState($uid);
+        return;
+    }
+
+    if (str_starts_with($action, 'jn_')) {
+        $plain = trim($msg['text'] ?? '');
+        $ids   = customEmojiIds($msg);
+        $back  = inlineKb([[btnCb('🔒 عضویت اجباری', 'adm_join', 'admin')]]);
+
+        if ($action === 'jn_add') {
+            if ($plain === '') { sendMsg(BOT_TOKEN, $chatId, "⚠️ آیدی کانال را بفرستید."); return; }
+            $info = tg(BOT_TOKEN, 'getChat', ['chat_id' => $plain], 8);
+            if (empty($info['ok'])) {
+                sendMsg(BOT_TOKEN, $chatId,
+                    "❌ ربات به این کانال دسترسی ندارد:\n<code>" . h($info['description'] ?? '—') . "</code>\n\n" .
+                    "اول ربات را در کانال ادمین کنید، بعد دوباره بفرستید.");
+                return;
+            }
+            $r = $info['result'];
+            $title = $r['title'] ?? $plain;
+            $url = !empty($r['username']) ? 'https://t.me/' . $r['username'] : '';
+            if ($url === '') {
+                $inv = tg(BOT_TOKEN, 'exportChatInviteLink', ['chat_id' => $plain], 8);
+                $url = $inv['result'] ?? '';
+            }
+            cfgSet(function (&$c) use ($plain, $title, $url) {
+                if (!is_array($c['join']['channels'] ?? null)) $c['join']['channels'] = [];
+                foreach ($c['join']['channels'] as $x) if ((string)$x['chat_id'] === (string)$plain) return;
+                $c['join']['channels'][] = ['chat_id' => $plain, 'title' => $title, 'url' => $url];
+                $c['join']['on'] = true;
+            });
+            clearState($uid);
+            sendMsg(BOT_TOKEN, $chatId,
+                "✅ <b>" . h($title) . "</b> اضافه شد و قفل روشن شد." .
+                ($url === '' ? "\n\n⚠️ لینک عضویت گرفته نشد — ربات باید اجازه «دعوت کاربر» داشته باشد." : ''), $back);
+            return;
+        }
+        if ($action === 'jn_text') {
+            $html = msgHtml($msg);
+            if (trim($html) === '') { sendMsg(BOT_TOKEN, $chatId, "⚠️ متن خالی است."); return; }
+            cfgSet(function (&$c) use ($html) { $c['join']['text'] = $html; });
+            clearState($uid);
+            sendMsg(BOT_TOKEN, $chatId, "✅ ذخیره شد." . ($ids ? "\n✨ ایموجی پریمیوم حفظ شد." : ''), $back);
+            return;
+        }
+        if ($action === 'jn_btn') {
+            if ($plain === '') { sendMsg(BOT_TOKEN, $chatId, "⚠️ متن خالی است."); return; }
+            cfgSet(function (&$c) use ($plain, $ids) {
+                $c['join']['btn']['text'] = $plain;
+                if ($ids) $c['join']['btn']['icon'] = $ids[0];
+            });
+            clearState($uid);
+            sendMsg(BOT_TOKEN, $chatId, "✅ ذخیره شد.", $back);
+            return;
+        }
+        clearState($uid);
         return;
     }
 
@@ -6489,6 +7073,12 @@ function handleApi($action) {
 
 if (defined('MEMBERSHIP_LIB_ONLY')) return;
 
+if (isset($_GET['ipn'])) {
+    try { handleIpn(); }
+    catch (Throwable $e) { error_log('[ipn] ' . $e->getMessage()); http_response_code(500); echo 'err'; }
+    exit;
+}
+
 if (isset($_GET['api'])) {
     try { handleApi((string)$_GET['api']); }
     catch (Throwable $e) {
@@ -6501,11 +7091,12 @@ if (isset($_GET['api'])) {
 if (isset($_GET['cron'])) {
     http_response_code(200);
     if (!hash_equals(CRON_KEY, (string)$_GET['cron'])) { echo 'forbidden'; exit; }
-    echo 'deleted: ' . processDeleteQueue(200);
+    echo 'deleted: ' . processDeleteQueue(200) . ' · gw: ' . gwPoll(50);
     exit;
 }
 
 processDeleteQueue(20);
+gwPoll(10);
 
 $raw = file_get_contents('php://input');
 $update = json_decode($raw, true);

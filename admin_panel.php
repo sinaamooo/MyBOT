@@ -175,6 +175,65 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         go('لیست تعرفه‌ها ذخیره شد.');
     }
 
+    if ($a === 'save_gateway') {
+        $post = $_POST;
+        $u = trim($post['gw_base'] ?? '');
+        if ($u !== '' && !preg_match('#^https://#i', $u)) go('آدرس ربات باید با https:// شروع شود.', 'err');
+        cfgSet(function (&$c) use ($post, $u) {
+            $c['gateway']['on']       = !empty($post['gw_on']);
+            $c['gateway']['provider'] = in_array($post['gw_prov'] ?? '', ['oxapay','nowpayments','custom'], true)
+                                        ? $post['gw_prov'] : 'oxapay';
+            $c['gateway']['api_key']   = trim($post['gw_key'] ?? '');
+            $c['gateway']['ipn_secret']= trim($post['gw_ipn'] ?? '');
+            $c['gateway']['base_url']  = $u;
+            $c['gateway']['coin']      = strtoupper(trim($post['gw_coin'] ?? 'USDT'));
+            $c['gateway']['network']   = strtoupper(trim($post['gw_net'] ?? ''));
+            $c['gateway']['rate']      = max(0, (float)str_replace(',', '', $post['gw_rate'] ?? 0));
+            $c['gateway']['expire']    = max(5, (int)($post['gw_exp'] ?? 30));
+            $c['gateway']['min']       = max(0, (float)str_replace(',', '', $post['gw_min'] ?? 0));
+            $c['gateway']['custom_url']= trim($post['gw_curl'] ?? '');
+        });
+        go('درگاه پرداخت ذخیره شد.');
+    }
+    if ($a === 'save_join') {
+        $post = $_POST;
+        cfgSet(function (&$c) use ($post) {
+            $c['join']['on'] = !empty($post['jn_on']);
+            $txt = (string)($post['jn_text'] ?? '');
+            if (trim($txt) !== '') $c['join']['text'] = $txt;
+            $c['join']['btn']['text'] = trim($post['jn_btn'] ?? '') ?: 'عضو شدم';
+        });
+        go('عضویت اجباری ذخیره شد.');
+    }
+    if ($a === 'add_join_channel') {
+        $cid = trim($_POST['chat_id'] ?? '');
+        if ($cid === '') go('آیدی کانال لازم است.', 'err');
+        $info = tg(BOT_TOKEN, 'getChat', ['chat_id' => $cid], 8);
+        if (empty($info['ok'])) go('ربات به این کانال دسترسی ندارد: ' . ($info['description'] ?? '—'), 'err');
+        $r = $info['result'];
+        $title = trim($_POST['title'] ?? '') ?: ($r['title'] ?? $cid);
+        $url = trim($_POST['url'] ?? '');
+        if ($url === '' && !empty($r['username'])) $url = 'https://t.me/' . $r['username'];
+        if ($url === '') { $inv = tg(BOT_TOKEN, 'exportChatInviteLink', ['chat_id' => $cid], 8); $url = $inv['result'] ?? ''; }
+        cfgSet(function (&$c) use ($cid, $title, $url) {
+            if (!is_array($c['join']['channels'] ?? null)) $c['join']['channels'] = [];
+            foreach ($c['join']['channels'] as $x) if ((string)$x['chat_id'] === (string)$cid) return;
+            $c['join']['channels'][] = ['chat_id' => $cid, 'title' => $title, 'url' => $url];
+            $c['join']['on'] = true;
+        });
+        go('کانال «' . $title . '» اضافه شد.');
+    }
+    if ($a === 'del_join_channel') {
+        $i = (int)($_POST['i'] ?? -1);
+        cfgSet(function (&$c) use ($i) {
+            if (isset($c['join']['channels'][$i])) {
+                unset($c['join']['channels'][$i]);
+                $c['join']['channels'] = array_values($c['join']['channels']);
+            }
+        });
+        go('کانال حذف شد.');
+    }
+
     if ($a === 'save_settings') {
         $post = $_POST;
         cfgSet(function (&$c) use ($post) {
@@ -2046,6 +2105,118 @@ def join_gate(user_id):
       </div>
 
       <div style="margin-top:16px"><button class="btn g">ذخیره تنظیمات</button></div>
+    </form>
+  </div></div>
+
+  <?php $G = cfg()['gateway'] ?? []; $J = cfg()['join'] ?? []; ?>
+
+  <div class="card"><h2>💠 درگاه پرداخت خودکار <?= (!empty($G['on']) && trim((string)$G['api_key']) !== '' && trim((string)$G['base_url']) !== '') ? '<span class="badge green">آماده</span>' : '<span class="badge">خاموش</span>' ?></h2><div class="body">
+    <div class="note">
+      مشتری «افزایش موجودی» می‌زند → ربات از درگاه یک <b>لینک پرداخت + آدرس ولت + مهلت</b> می‌گیرد →
+      به‌محض واریز، درگاه به ربات خبر می‌دهد و کیف پول <b>خودکار</b> شارژ می‌شود.
+      پول مستقیم به ولت خودتان در پنل درگاه می‌رود و از همان‌جا برداشت می‌کنید.
+      <br><br>
+      <b>راه‌اندازی:</b> در <a href="https://oxapay.com" target="_blank" rel="noopener">OxaPay</a> یا
+      <a href="https://nowpayments.io" target="_blank" rel="noopener">NOWPayments</a> حساب بسازید،
+      آدرس ولت خودتان را آنجا ثبت کنید، کلید API (Merchant Key) را بگیرید و اینجا بگذارید.
+      بعد در پنل همان سایت، آدرس <b>Callback / IPN</b> را روی آدرس زیر بگذارید.
+    </div>
+
+    <?php $cbUrl = trim((string)($G['base_url'] ?? '')) !== '' ? gwCallbackUrl() : ''; ?>
+    <?php if ($cbUrl): ?>
+      <div class="note" style="margin-top:10px">
+        📡 <b>آدرس Callback:</b> <code style="direction:ltr;display:inline-block"><?= h($cbUrl) ?></code>
+      </div>
+    <?php endif; ?>
+
+    <form method="post" style="margin-top:12px">
+      <input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="tab" value="settings">
+      <input type="hidden" name="action" value="save_gateway">
+      <div style="margin-bottom:10px">
+        <label style="font-weight:500"><input type="checkbox" name="gw_on" style="width:auto"
+          <?= !empty($G['on']) ? 'checked' : '' ?>> درگاه خودکار روشن باشد</label>
+      </div>
+      <div class="grid2">
+        <div><label>سرویس</label><select name="gw_prov">
+          <?php foreach (['oxapay'=>'OxaPay','nowpayments'=>'NOWPayments','custom'=>'دلخواه'] as $k2=>$v2): ?>
+            <option value="<?= h($k2) ?>" <?= ($G['provider'] ?? 'oxapay') === $k2 ? 'selected' : '' ?>><?= h($v2) ?></option>
+          <?php endforeach; ?></select></div>
+        <div><label>کلید API (Merchant Key)</label>
+          <input name="gw_key" value="<?= h($G['api_key'] ?? '') ?>" style="direction:ltr"></div>
+        <div><label>کلید IPN Secret (فقط NOWPayments)</label>
+          <input name="gw_ipn" value="<?= h($G['ipn_secret'] ?? '') ?>" style="direction:ltr"></div>
+        <div><label>آدرس عمومی فایل ربات</label>
+          <input name="gw_base" value="<?= h($G['base_url'] ?? '') ?>" placeholder="https://site.com/bot.php" style="direction:ltr"></div>
+        <div><label>ارز</label><input name="gw_coin" value="<?= h($G['coin'] ?? 'USDT') ?>" style="direction:ltr"></div>
+        <div><label>شبکه</label><input name="gw_net" value="<?= h($G['network'] ?? '') ?>" placeholder="TRC20" style="direction:ltr"></div>
+        <div><label>نرخ: هر ۱ واحد چند تومان؟ (۰ = تبدیل با خود درگاه)</label>
+          <input name="gw_rate" value="<?= h((float)($G['rate'] ?? 0)) ?>" style="direction:ltr"></div>
+        <div><label>مهلت هر فاکتور (دقیقه)</label>
+          <input name="gw_exp" type="number" min="5" value="<?= (int)($G['expire'] ?? 30) ?>"></div>
+        <div><label>حداقل شارژ با درگاه (تومان)</label>
+          <input name="gw_min" value="<?= h((float)($G['min'] ?? 0)) ?>" style="direction:ltr"></div>
+        <div><label>آدرس دلخواه (حالت custom)</label>
+          <input name="gw_curl" value="<?= h($G['custom_url'] ?? '') ?>" placeholder="https://…?amount={amount}&order={order}&cb={callback}" style="direction:ltr"></div>
+      </div>
+      <div class="muted" style="margin-top:8px">
+        زیر حداقل مبلغ، همان کارت به کارت با رسید استفاده می‌شود. اگر درگاه جواب ندهد هم خودکار به کارت به کارت برمی‌گردد.
+      </div>
+      <div style="margin-top:14px"><button class="btn g">ذخیره درگاه</button></div>
+    </form>
+  </div></div>
+
+  <div class="card"><h2>🔒 عضویت اجباری ربات مادر <?= !empty($J['on']) ? '<span class="badge green">روشن</span>' : '<span class="badge">خاموش</span>' ?></h2><div class="body">
+    <div class="note">
+      تا کاربر عضو کانال‌های زیر نشود، نمی‌تواند از ربات فروشگاه استفاده کند.
+      ربات مادر باید در هر کانال <b>ادمین</b> باشد. خودتان هیچ‌وقت پشت این قفل نمی‌مانید.
+    </div>
+
+    <table style="margin-top:12px">
+      <tr><th>#</th><th>کانال</th><th>آیدی</th><th>لینک</th><th></th></tr>
+      <?php foreach (($J['channels'] ?? []) as $i => $c2): ?>
+        <tr>
+          <td><?= $i + 1 ?></td>
+          <td><?= h($c2['title'] ?? '—') ?></td>
+          <td><code><?= h($c2['chat_id'] ?? '') ?></code></td>
+          <td><?= !empty($c2['url']) ? '<a href="' . h($c2['url']) . '" target="_blank" rel="noopener">باز کردن</a>' : '<span class="muted">—</span>' ?></td>
+          <td>
+            <form method="post" style="margin:0">
+              <input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="tab" value="settings">
+              <input type="hidden" name="action" value="del_join_channel"><input type="hidden" name="i" value="<?= $i ?>">
+              <button class="btn r">حذف</button>
+            </form>
+          </td>
+        </tr>
+      <?php endforeach; ?>
+      <?php if (empty($J['channels'])): ?>
+        <tr><td colspan="5" class="muted">هنوز کانالی اضافه نکرده‌اید.</td></tr>
+      <?php endif; ?>
+    </table>
+
+    <form method="post" style="margin-top:12px">
+      <input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="tab" value="settings">
+      <input type="hidden" name="action" value="add_join_channel">
+      <div class="grid2">
+        <div><label>آیدی کانال</label><input name="chat_id" required placeholder="@mychannel یا -100..." style="direction:ltr"></div>
+        <div><label>عنوان (خالی = از خود کانال)</label><input name="title"></div>
+        <div><label>لینک عضویت (خالی = خودکار)</label><input name="url" style="direction:ltr"></div>
+      </div>
+      <div style="margin-top:12px"><button class="btn g">افزودن کانال</button></div>
+    </form>
+
+    <form method="post" style="margin-top:16px">
+      <input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="tab" value="settings">
+      <input type="hidden" name="action" value="save_join">
+      <div style="margin-bottom:10px">
+        <label style="font-weight:500"><input type="checkbox" name="jn_on" style="width:auto"
+          <?= !empty($J['on']) ? 'checked' : '' ?>> قفل عضویت روشن باشد</label>
+      </div>
+      <label>متن قفل</label>
+      <textarea name="jn_text" rows="3" style="direction:rtl"><?= h($J['text'] ?? '') ?></textarea>
+      <div style="margin-top:10px"><label>متن دکمه</label>
+        <input name="jn_btn" value="<?= h($J['btn']['text'] ?? 'عضو شدم') ?>"></div>
+      <div class="muted" style="margin-top:6px">✨ برای ایموجی پریمیوم، متن را داخل ربات بنویسید: <code>/panel</code> ← 🔒 عضویت اجباری</div>
+      <div style="margin-top:14px"><button class="btn g">ذخیره</button></div>
     </form>
   </div></div>
 
