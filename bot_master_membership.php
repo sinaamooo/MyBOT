@@ -403,7 +403,7 @@ function defaultConfig() {
         'join' => [
             'on'       => false,
             'channels' => [],   // [{chat_id, title, url}]
-            'text'     => "🔒 <b>برای استفاده از ربات، اول در کانال‌های زیر عضو شوید:</b>",
+            'text'     => "🔒 <b>برای استفاده از ربات، اول در کانال‌های زیر عضو شوید:</b>\n\n{channels}\n\n👇 بعد از عضویت، دکمه پایین را بزنید.",
             'btn'      => ['emoji' => '✅', 'text' => 'عضو شدم', 'color' => 'success', 'icon' => ''],
         ],
 
@@ -485,6 +485,8 @@ function defaultConfig() {
             'trust'        => "💚 <b>چرا می‌توانید به ما اعتماد کنید؟</b>\n\n✅ سال‌ها سابقه فعالیت\n✅ تحویل آنی و خودکار\n✅ پشتیبانی ۲۴ ساعته\n✅ ضمانت بازگشت وجه\n✅ هزاران مشتری راضی\n\nبرای مشاهده نظرات مشتریان به کانال ما مراجعه کنید.",
             'support'      => "📞 <b>پشتیبانی</b>\n\nاز روش‌های زیر می‌توانید با ما در ارتباط باشید:",
             'orders_empty' => "📊 هنوز سفارشی ثبت نکرده‌اید.",
+            'track_ask'    => "🔍 <b>پیگیری سفارش</b>\n\nکد پیگیری سفارش خود را بفرستید.\n<i>نمونه:</i> <code>or_tjwodm15a1a3</code>",
+            'track_bad'    => "❌ سفارشی با کد <code>{code}</code> پیدا نشد.\n\nکد پیگیری را از پیام ثبت سفارش کپی کنید.",
             'order_done'   => "{head}\n\n📦 محصول: <b>{product}</b>\n{link_line}{qty_line}{speed_line}{perday_line}{eta_line}💰 مبلغ: <b>{amount} {currency}</b>\n🧾 کد پیگیری: <code>{code}</code>\n📊 وضعیت: <b>{status}</b>\n{content}\n{note}",
             'order_status' => "🔍 <b>وضعیت سفارش</b>\n\n🧾 کد پیگیری: <code>{code}</code>\n📊 وضعیت: <b>{status}</b>\n\n🛒 <b>{product}</b>\n{link_line}{qty_line}{perday_line}{eta_line}{progress}\n💰 مبلغ: <b>{amount} {currency}</b>\n📅 ثبت: {created}\n{approved_line}\n{hint}",
             'orders_head'  => "📊 <b>سفارش‌های شما</b>\n",
@@ -1969,24 +1971,11 @@ function orderLines($o, $indent = '   ') {
  * فهرست بلند نشان نمی‌دهد؛ کاربر کد را می‌فرستد، وضعیت همان سفارش می‌آید.
  */
 function showOrders($uid, $chatId, $extra = [], $replyTo = null) {
-    $orders = Order::forUser($uid);
     setState($uid, 'track');
-
-    $text  = "🔍 <b>پیگیری سفارش</b>\n\n";
-    $text .= "کد پیگیری سفارش خود را بفرستید.\n";
-    $text .= "<i>نمونه:</i> <code>or_tjwodm15a1a3</code>";
-
     $rows = [];
-    // آخرین سفارش‌ها فقط به شکل دکمه — بدون متن اضافه
-    foreach (array_slice($orders, 0, 5) as $o) {
-        [, $label] = orderStage($o);
-        $name = $o['type'] === 'topup' ? '➕ شارژ' : (Product::get($o['product_id'])['name'] ?? 'محصول');
-        $rows[] = [btnCb(mb_substr($label . ' · ' . $name, 0, 40), 'trk_' . $o['id'], 'info')];
-    }
     foreach ($extra as $r) $rows[] = $r;
     $rows[] = [btnUI('cancel', 'cancel', 'cancel')];
-
-    panelShow($uid, $chatId, 'menu', $text, inlineKb($rows), $replyTo);
+    panelShow($uid, $chatId, 'menu', T('track_ask'), inlineKb($rows), $replyTo);
 }
 
 /** 🔍 وضعیت یک سفارش با کد پیگیری */
@@ -1999,10 +1988,7 @@ function showOrderStatus($uid, $chatId, $code, $replyTo = null) {
         if ($o && $uid === ADMIN_ID) {
             // اجازه دارد
         } else {
-            sendMsg(BOT_TOKEN, $chatId,
-                "❌ سفارشی با کد <code>" . h($code) . "</code> پیدا نشد.\n\n" .
-                "کد پیگیری را از پیام ثبت سفارش کپی کنید، یا 📊 پیگیری سفارش را بزنید.",
-                mainKeyboard());
+            sendMsg(BOT_TOKEN, $chatId, T('track_bad', ['code' => h($code)]), mainKeyboard());
             return false;
         }
     }
@@ -2046,7 +2032,6 @@ function showOrderStatus($uid, $chatId, $code, $replyTo = null) {
     $rows = [];
     if ($stage === 'pending')  $rows[] = [btnCb(UT('receipt'), 'rcpt_' . $o['id'], 'confirm')];
     if ($stage === 'rejected' || $stage === 'paused') $rows[] = [btnUI('support', 'menu_support', 'info')];
-    $rows[] = [btnCb('📊 همه سفارش‌ها', 'menu_orders', 'nav')];
 
     panelShow($uid, $chatId, 'menu', $text, inlineKb($rows), $replyTo);
     return true;
@@ -3245,7 +3230,9 @@ function admJoin($chatId, $msgId) {
         $text .= "هنوز کانالی اضافه نکرده‌اید.\n";
     }
     $text .= "\n⚠️ ربات مادر باید در هر کانال <b>ادمین</b> باشد.\n";
-    $text .= "خودتان (ادمین) هیچ‌وقت پشت این قفل نمی‌مانید.";
+    $text .= "خودتان (ادمین) هیچ‌وقت پشت این قفل نمی‌مانید.\n\n";
+    $text .= "🔘 فقط <b>یک دکمه</b> نشان داده می‌شود؛ لینک کانال‌ها داخل خود متن است.\n";
+    $text .= "با <code>{channels}</code> فهرست خودکار می‌آید.";
 
     $rows = [[btnCb(!empty($j['on']) ? '❌ خاموش کردن' : '✅ روشن کردن', 'jnx', 'info')],
              [btnCb('➕ افزودن کانال', 'jnadd', 'confirm')]];
@@ -3484,6 +3471,8 @@ function textLabels() {
         'orders_item' => '📊 قالب هر سفارش',
         'order_done'  => '✅ پیام ثبت سفارش',
         'order_status'=> '🔍 پیام وضعیت سفارش',
+        'track_ask'   => '🔍 درخواست کد پیگیری',
+        'track_bad'   => '❌ کد پیگیری اشتباه',
     ];
 }
 
@@ -3817,6 +3806,7 @@ function textVars($key) {
                           "{link_line} {qty_line} {speed_line} {perday_line} {eta_line}",
         'order_status' => "{code} {status} {product} {link} {qty} {speed} {per_day} {eta} {progress} {amount} {currency} {created} {approved} {hint}\n" .
                           "خط‌های خودکار:\n{link_line} {qty_line} {perday_line} {eta_line} {approved_line}",
+        'track_bad'    => '{code}',
     ][$key] ?? '';
 }
 
@@ -4198,22 +4188,30 @@ function masterJoinMissing($uid, $fresh = false) {
 
 function masterJoinGate($uid, $chatId, $missing) {
     $j = cfg()['join'] ?? [];
-    $rows = [];
-    foreach ($missing as $m) {
-        $url = trim((string)($m['url'] ?? ''));
-        if ($url === '' && str_starts_with((string)$m['chat_id'], '@'))
-            $url = 'https://t.me/' . ltrim((string)$m['chat_id'], '@');
-        if ($url === '') continue;
-        $rows[] = [['text' => '📢 ' . mb_substr((string)$m['title'], 0, 30), 'url' => $url,
-                    'style' => gs('link') ?: null]];
-    }
+
+    // فقط یک دکمه — لینک کانال‌ها داخل خود متن نوشته می‌شود
     $b = ['text' => trim(($j['btn']['emoji'] ?? '✅') . ' ' . ($j['btn']['text'] ?? 'عضو شدم')),
           'callback_data' => 'mjchk'];
     if (isStyle($j['btn']['color'] ?? '')) $b['style'] = $j['btn']['color'];
     if (!empty($j['btn']['icon'])) $b['icon_custom_emoji_id'] = (string)$j['btn']['icon'];
-    $rows[] = [$b];
 
-    sendMsg(BOT_TOKEN, $chatId, (string)($j['text'] ?? '🔒 اول عضو شوید:'), inlineKb($rows));
+    $text = (string)($j['text'] ?? '🔒 اول عضو شوید:');
+
+    // {channels} = فهرست خودکار کانال‌ها، برای وقتی که نخواستید دستی بنویسید
+    if (str_contains($text, '{channels}')) {
+        $list = '';
+        foreach ($missing as $m) {
+            $url = trim((string)($m['url'] ?? ''));
+            if ($url === '' && str_starts_with((string)$m['chat_id'], '@'))
+                $url = 'https://t.me/' . ltrim((string)$m['chat_id'], '@');
+            $list .= "\n📣 " . ($url !== ''
+                     ? '<a href="' . h($url) . '">' . h((string)$m['title']) . '</a>'
+                     : h((string)$m['title']));
+        }
+        $text = str_replace('{channels}', ltrim($list, "\n"), $text);
+    }
+
+    sendMsg(BOT_TOKEN, $chatId, $text, inlineKb([[$b]]));
 }
 
 function masterHandle($update) {
@@ -4800,7 +4798,10 @@ function masterHandle($update) {
             answerCb(BOT_TOKEN, $cbId, '🗑 حذف شد'); admJoin($chatId, $msgId); return;
         }
         foreach ([['jnadd', 'jn_add', "➕ آیدی کانال را بفرستید.\n\nمثال: <code>@mychannel</code> یا <code>-1001234567890</code>\n\n⚠️ ربات باید در آن کانال ادمین باشد."],
-                  ['jnt', 'jn_text', "✏️ متن قفل عضویت را بفرستید.\n\n✨ ایموجی پریمیوم و نقل‌قول پشتیبانی می‌شود."],
+                  ['jnt', 'jn_text', "✏️ متن قفل عضویت را بفرستید.\n\n" .
+                                     "لینک کانال‌ها را <b>داخل همین متن</b> بنویسید (دکمه شیشه‌ای نداریم).\n\n" .
+                                     "اگر <code>{channels}</code> بنویسید، فهرست کانال‌ها خودکار همان‌جا می‌آید.\n\n" .
+                                     "✨ ایموجی پریمیوم و نقل‌قول پشتیبانی می‌شود."],
                   ['jnb', 'jn_btn', '🔘 متن دکمه «عضو شدم»:']] as [$d0, $act, $ask]) {
             if ($data !== $d0) continue;
             answerCb(BOT_TOKEN, $cbId);
