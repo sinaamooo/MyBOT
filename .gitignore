@@ -1,0 +1,13 @@
+# Secrets — never commit these
+config.php
+
+# Runtime state
+storage/*.sqlite
+storage/*.sqlite-wal
+storage/*.sqlite-shm
+storage/*.log
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store

@@ -1,7 +1,11 @@
+import os
+
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 
-TOKEN = "8713048674:AAG-leqn3bNxEW38C-dlzxI_AVUS2DB7n5Y"
+# هرگز توکن را داخل کد ننویسید — این مقدار قبلاً در گیت لو رفته بود و باید
+# از طریق @BotFather ابطال (revoke) شود.
+TOKEN = os.environ["BOT_TOKEN"]
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("دکمه 1", callback_data='btn1')]]

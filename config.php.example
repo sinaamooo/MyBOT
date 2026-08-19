@@ -1,0 +1,55 @@
+<?php
+
+declare(strict_types=1);
+
+/**
+ * پیکربندی MyBOT
+ *
+ * این فایل را به config.php کپی کنید و مقادیر را پر کنید.
+ * config.php در .gitignore است و هرگز نباید commit شود.
+ */
+
+return [
+    'bot' => [
+        // توکن از @BotFather — هرگز آن را در گیت یا جای عمومی نگذارید.
+        'token' => getenv('BOT_TOKEN') ?: '',
+
+        // آیدی عددی ادمین‌ها. آیدی خود را با دستور /id بگیرید.
+        'admins' => [
+            // 123456789,
+        ],
+
+        'api_base'     => 'https://api.telegram.org',
+        'timeout'      => 60, // ثانیه — سقف انتظار برای یک درخواست HTTP
+        'poll_timeout' => 30, // ثانیه — long polling
+    ],
+
+    'database' => [
+        'path' => 'storage/bot.sqlite',
+    ],
+
+    'logging' => [
+        'file'  => 'storage/bot.log',
+        'level' => 'info', // debug | info | warn | error
+    ],
+
+    /**
+     * محدودیت‌های ارسال.
+     *
+     * پیش‌فرض‌ها عمداً کمی محافظه‌کارانه‌تر از سقف رسمی تلگرام هستند
+     * (حدود ۳۰ پیام بر ثانیه، و ۲۰ پیام در دقیقه برای هر گروه).
+     * بالا بردن این اعداد باعث خطای 429 و کند شدن کل صف می‌شود.
+     */
+    'limits' => [
+        'global_per_second' => 25.0, // کل پیام‌ها در ثانیه
+        'group_interval'    => 3.0,  // فاصله بین دو پیام در یک گروه (ثانیه)
+        'private_interval'  => 0.05, // فاصله بین دو پیام به یک کاربر (ثانیه)
+        'max_attempts'      => 3,    // تعداد تلاش برای خطاهای موقتی
+        'batch_size'        => 50,   // تعداد ارسال در هر چرخه worker
+    ],
+
+    'worker' => [
+        'idle_sleep'               => 3,  // ثانیه — وقتی صف خالی است
+        'activity_retention_days'  => 90, // نگهداری آمار فعالیت گروه‌ها
+    ],
+];
