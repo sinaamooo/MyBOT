@@ -384,6 +384,13 @@ function defaultConfig() {
         // 🧪 حالت تست — اجازه سفارش با مبلغ صفر، برای امتحان کردن کل مسیر
         'test_mode' => false,
 
+        // 🤖 تایید خودکار رسیدهای کارت به کارت — بدون نیاز به حضور ادمین
+        // ⚠️ ریسک دارد: رسید بررسی نمی‌شود. فقط اگر می‌دانید چه می‌کنید روشن کنید.
+        'auto_approve' => false,
+
+        // 🧹 پاک کردن خودکار کمپین‌های تمام‌شده بعد از چند روز (۰ = هیچ‌وقت)
+        'campaign_keep_days' => 3,
+
         // 💠 درگاه پرداخت خودکار — لینک می‌سازد، آدرس ولت می‌دهد، خودش تایید می‌کند
         'gateway' => [
             'on'        => false,
@@ -922,6 +929,50 @@ function defaultReport() {
             ['text' => '📞 پشتیبانی',   'url' => '', 'color' => 'primary', 'icon' => '', 'on' => true],
         ],
     ];
+}
+
+/**
+ * 🔗 خواندن گروه و تاپیک از روی لینک
+ *
+ * پشتیبانی می‌کند از:
+ *   https://t.me/c/1234567890/11        → گروه خصوصی، تاپیک ۱۱
+ *   https://t.me/c/1234567890/11/50     → همان، با شماره پیام
+ *   https://t.me/mygroup/11             → گروه عمومی، تاپیک ۱۱
+ *   https://t.me/mygroup                → فقط گروه
+ *   @mygroup  یا  -1001234567890        → فقط گروه
+ *
+ * برگشت: [chat_id, thread_id] یا [null, 0]
+ */
+function parseChatLink($s) {
+    $s = trim((string)$s);
+    if ($s === '') return [null, 0];
+
+    // آیدی عددی یا @نام
+    if (preg_match('/^-?\d{5,}$/', $s)) return [$s, 0];
+    if (preg_match('/^@[A-Za-z0-9_]{4,}$/', $s)) return [$s, 0];
+
+    $s = preg_replace('#^https?://#i', '', $s);
+    $s = preg_replace('#^t\.me/#i', '', $s, 1, $n);
+    if (!$n) return [null, 0];
+    $s = trim($s, '/');
+    $parts = array_values(array_filter(explode('/', $s), fn($x) => $x !== ''));
+    if (!$parts) return [null, 0];
+
+    // گروه خصوصی: c/<internal>/<thread>[/<msg>]
+    if (strtolower($parts[0]) === 'c') {
+        if (!isset($parts[1]) || !ctype_digit($parts[1])) return [null, 0];
+        $chat = '-100' . $parts[1];
+        $th   = (isset($parts[2]) && ctype_digit($parts[2])) ? (int)$parts[2] : 0;
+        return [$chat, $th];
+    }
+
+    // لینک دعوت خصوصی — آیدی از آن درنمی‌آید
+    if (str_starts_with($parts[0], '+') || strtolower($parts[0]) === 'joinchat') return [null, 0];
+
+    if (!preg_match('/^[A-Za-z0-9_]{4,}$/', $parts[0])) return [null, 0];
+    $chat = '@' . $parts[0];
+    $th   = (isset($parts[1]) && ctype_digit($parts[1])) ? (int)$parts[1] : 0;
+    return [$chat, $th];
 }
 
 function reportOf($p) {
@@ -2388,6 +2439,20 @@ function createOrderAndAsk($uid, $chatId, $username, $type, $productId, $amount,
 }
 
 /** ⏱ بررسی دوره‌ای فاکتورهای باز درگاه — اگر IPN نرسید، خودمان می‌پرسیم */
+/** 🧹 کمپین‌های تمام‌شده بعد از چند روز پاک می‌شوند تا فهرست شلوغ نشود */
+function campaignCleanup() {
+    $days = (int)(cfg()['campaign_keep_days'] ?? 3);
+    if ($days <= 0) return 0;
+    $cut = time() - $days * 86400;
+    $n = 0;
+    foreach (Campaign::all() as $c) {
+        if (empty($c['done_at'])) continue;
+        $t = strtotime((string)$c['done_at']);
+        if ($t && $t < $cut) { Campaign::remove($c['id']); $n++; }
+    }
+    return $n;
+}
+
 function gwPoll($limit = 10) {
     if (!gwOn()) return 0;
     $n = 0;
@@ -3674,6 +3739,7 @@ function edReport($chatId, $msgId, $pid) {
 
     $rows = [
         [btnCb(!empty($r['on']) ? '❌ خاموش کردن' : '✅ روشن کردن', 'rpx_' . $pid, 'info')],
+        [btnCb('🔗 لینک تاپیک', 'rplink_' . $pid, 'buy')],
         [btnCb('👥 آیدی گروه', 'rpc_' . $pid, 'admin'), btnCb('🧵 شماره تاپیک', 'rpth_' . $pid, 'admin')],
         [btnCb('✏️ متن گزارش', 'rpt_' . $pid, 'admin')],
         [btnCb('1️⃣ دکمه اول', 'rpb_' . $pid . '|0', 'buy'),
@@ -4233,6 +4299,12 @@ function masterHandle($update) {
         $fname  = $cb['from']['first_name'] ?? '';
         $cbId   = $cb['id'];
         $isAdmin = ($uid === ADMIN_ID);
+
+        // 🤐 در گروه و کانال چیزی نمی‌فرستد
+        if (($cb['message']['chat']['type'] ?? 'private') !== 'private') {
+            answerCb(BOT_TOKEN, $cbId);
+            return;
+        }
 
         $u = getUser($uid);
         if ($u && !empty($u['banned'])) { answerCb(BOT_TOKEN, $cbId, T('banned'), true); return; }
@@ -4925,6 +4997,11 @@ function masterHandle($update) {
         }
         foreach ([['rpc_', 'rp_chat', "👥 آیدی گروه را بفرستید.\n\nمثال: <code>-1001234567890</code>\n\nربات باید در آن گروه ادمین باشد."],
                   ['rpth_', 'rp_thread', "🧵 شماره تاپیک را بفرستید (۰ = بدون تاپیک).\n\nاز لینک پیام تاپیک، عدد بعد از آیدی گروه."],
+                  ['rplink_', 'rp_link', "🔗 <b>لینک تاپیک</b> را بفرستید — گروه و تاپیک با هم تنظیم می‌شوند.\n\n" .
+                                          "روی یکی از پیام‌های همان تاپیک نگه دارید ← Copy Link.\n\n" .
+                                          "نمونه:\n<code>https://t.me/c/1234567890/11</code>\n" .
+                                          "<code>https://t.me/mygroup/11</code>\n\n" .
+                                          "⚠️ ربات باید در آن گروه ادمین باشد."],
                   ['rpt_', 'rp_text', "✏️ متن گزارش را بفرستید.\n\n✨ ایموجی پریمیوم و نقل‌قول (quote) پشتیبانی می‌شود.\n\nمتغیرها:\n<code>{product} {emoji} {qty} {speed} {per_day} {eta}</code>\n<code>{amount} {currency} {code} {link} {channel} {user} {user_id} {date} {delivered}</code>"]] as $it) {
             [$pref, $act, $ask] = $it;
             if (!str_starts_with($data, $pref)) continue;
@@ -5455,6 +5532,9 @@ function masterHandle($update) {
     $text   = trim($msg['text'] ?? '');
     if (!$uid) return;
 
+    // 🤐 ربات مادر فقط در چت خصوصی حرف می‌زند — در گروه و کانال هیچ‌وقت پیام نمی‌دهد
+    if (($msg['chat']['type'] ?? 'private') !== 'private') return;
+
     // /start [ref…]
     if (str_starts_with($text, '/start')) {
         $arg = trim(explode(' ', $text, 2)[1] ?? '');
@@ -5706,6 +5786,31 @@ function masterHandle($update) {
         $back  = inlineKb([[btnUI('back', 'rp_' . $pid, 'nav')]]);
         $backB = inlineKb([[btnUI('back', 'rpb_' . $pid . '|' . $i, 'nav')]]);
 
+        if ($action === 'rp_link') {
+            [$cid, $th] = parseChatLink($plain);
+            if ($cid === null) {
+                sendMsg(BOT_TOKEN, $chatId,
+                    "❌ لینک شناخته نشد.\n\nاز خود تاپیک: روی یک پیام نگه دارید ← Copy Link.\n" .
+                    "لینک دعوت (<code>t.me/+…</code>) کار نمی‌کند — لینک پیام لازم است.");
+                return;
+            }
+            $info = tg(BOT_TOKEN, 'getChat', ['chat_id' => $cid], 8);
+            if (empty($info['ok'])) {
+                sendMsg(BOT_TOKEN, $chatId,
+                    "❌ ربات به این گروه دسترسی ندارد:\n<code>" . h($info['description'] ?? '—') . "</code>\n\n" .
+                    "اول ربات را در گروه ادمین کنید.");
+                return;
+            }
+            reportMutate($pid, function (&$r) use ($cid, $th) {
+                $r['chat_id'] = $cid; $r['thread_id'] = $th; $r['on'] = true;
+            });
+            clearState($uid);
+            sendMsg(BOT_TOKEN, $chatId,
+                "✅ <b>" . h($info['result']['title'] ?? $cid) . "</b>\n" .
+                ($th > 0 ? "🧵 تاپیک: <b>{$th}</b>\n" : "بدون تاپیک\n") .
+                "📢 گزارش این محصول روشن شد.", $back);
+            return;
+        }
         if ($action === 'rp_chat') {
             if ($plain === '') { sendMsg(BOT_TOKEN, $chatId, "⚠️ آیدی گروه را بفرستید."); return; }
             reportMutate($pid, function (&$r) use ($plain) { $r['chat_id'] = $plain; $r['on'] = true; });
@@ -5804,6 +5909,15 @@ function masterHandle($update) {
         sendMsg(BOT_TOKEN, $chatId, $t,
             inlineKb([[btnCb('🔍 وضعیت سفارش', 'trk_' . $oid, 'info')]]));
 
+        if (!empty(cfg()['auto_approve'])) {
+            [$aok, ] = Order::approve($oid, ADMIN_ID);
+            if ($aok) {
+                completeApprovedOrder(Order::get($oid));
+                sendMsg(BOT_TOKEN, ADMIN_ID,
+                    "🤖 سفارش <code>" . h($oid) . "</code> خودکار تایید شد (تایید خودکار روشن است).");
+                return;
+            }
+        }
         notifyAdminOrder($oid);
         return;
     }
@@ -6415,6 +6529,10 @@ function broadcastToChildBots($text, $botIds = null) {
  * همیشه با توکن ربات مادر انجام می‌گیرد و ربات‌های اپلودر لازم نیست
  * اصلا عضو کانال باشند.
  */
+/**
+ * ربات مادر در جایی ادمین/غیرادمین شد.
+ * ⚠️ هیچ‌وقت داخل خود کانال یا گروه چیزی نمی‌فرستد — فقط ثبت می‌کند.
+ */
 function handleMasterChatMember($ev) {
     $chat = $ev['chat'] ?? [];
     $type = $chat['type'] ?? '';
@@ -6438,9 +6556,8 @@ function handleMasterChatMember($ev) {
                 $x[$k]['data']['data']['chat_id']    = $chatId;
                 $x[$k]['data']['data']['chat_title'] = $title;
             });
-            // پیام تایید داخل خود فاکتور می‌آید، پس پیام جدا نمی‌فرستیم
-            flowInvoice($byUser, $byUser);
-            return;   // این افزودن مربوط به سفارش بود، نه کانال عضویت اجباری
+            flowInvoice($byUser, $byUser);   // پیام در چت خصوصی خود مشتری
+            return;
         }
     }
 
@@ -6449,7 +6566,8 @@ function handleMasterChatMember($ev) {
         if (!$url) {
             $inv = tg(BOT_TOKEN, 'createChatInviteLink',
                       ['chat_id' => $chatId, 'name' => 'عضویت اجباری'], 8);
-            if (!empty($inv['ok'])) $url = $inv['result']['invite_link'];
+            if (!empty($inv['ok']) && is_array($inv['result'] ?? null))
+                $url = (string)($inv['result']['invite_link'] ?? '');
         }
         $existing = null;
         foreach (Channels::all() as $c) if ((string)$c['chat_id'] === (string)$chatId) $existing = $c;
@@ -6461,29 +6579,28 @@ function handleMasterChatMember($ev) {
                 if ($url) $a[$existing['id']]['url'] = $url;
                 $a[$existing['id']]['on'] = true;
             });
-            sendMsg(BOT_TOKEN, ADMIN_ID,
-                "✅ کانال <b>" . h($title) . "</b> دوباره فعال شد.\n\nربات مادر در آن ادمین است.");
-            return;
+            return;   // بی‌صدا — در پنل دیده می‌شود
         }
 
+        // ثبت بی‌صدا، بدون هیچ پیامی به ادمین یا کانال
         Channels::add($chatId, $title, $url);
-        sendMsg(BOT_TOKEN, ADMIN_ID,
-            "✅ <b>کانال جدید ثبت شد</b>\n\n📢 " . h($title) . "\n<code>" . h($chatId) . "</code>\n\n" .
-            "به‌صورت پیش‌فرض برای <b>همه</b> ربات‌های اپلودر فعال است.\n" .
-            "اگر می‌خواهید فقط برای یک ربات خاص باشد، از پنل → 📢 کانال‌ها تنظیمش کنید.\n\n" .
-            "ℹ️ ربات‌های اپلودر لازم نیست در این کانال عضو یا ادمین باشند.",
-            inlineKb([[btnCb('📢 مدیریت کانال‌ها', 'adm_chans', 'admin')]]));
+        mutate('channels', function (&$a) use ($chatId) {
+            foreach ($a as $k => $c) if ((string)$c['chat_id'] === (string)$chatId) {
+                $a[$k]['added_at'] = nowStr();
+                $a[$k]['seen'] = false;      // در پنل با نشان «تازه» می‌آید
+            }
+        });
         return;
     }
 
     if (in_array($newStatus, ['left', 'kicked', 'member'], true)) {
-        foreach (Channels::all() as $c) {
-            if ((string)$c['chat_id'] !== (string)$chatId) continue;
-            sendMsg(BOT_TOKEN, ADMIN_ID,
-                "⚠️ <b>ربات مادر دیگر در کانال «" . h($c['title']) . "» ادمین نیست.</b>\n\n" .
-                "تا وقتی ادمین نشود، قفل عضویت این کانال بسته می‌ماند و کاربران فایل نمی‌گیرند.");
-            return;
-        }
+        // فقط علامت بزن؛ پیام نده
+        mutate('channels', function (&$a) use ($chatId) {
+            foreach ($a as $k => $c) if ((string)$c['chat_id'] === (string)$chatId) {
+                $a[$k]['lost_admin'] = nowStr();
+            }
+        });
+        return;
     }
 }
 
@@ -7092,7 +7209,8 @@ if (isset($_GET['api'])) {
 if (isset($_GET['cron'])) {
     http_response_code(200);
     if (!hash_equals(CRON_KEY, (string)$_GET['cron'])) { echo 'forbidden'; exit; }
-    echo 'deleted: ' . processDeleteQueue(200) . ' · gw: ' . gwPoll(50);
+    echo 'deleted: ' . processDeleteQueue(200) . ' · gw: ' . gwPoll(50) .
+         ' · campaigns: ' . campaignCleanup();
     exit;
 }
 

@@ -195,6 +195,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         });
         go('درگاه پرداخت ذخیره شد.');
     }
+    if ($a === 'report_group_all') {
+        $lnk = trim($_POST['glink'] ?? '');
+        [$lc, ] = parseChatLink($lnk);
+        if ($lc === null) go('لینک یا آیدی گروه شناخته نشد.', 'err');
+        $info = tg(BOT_TOKEN, 'getChat', ['chat_id' => $lc], 8);
+        if (empty($info['ok'])) go('ربات به این گروه دسترسی ندارد: ' . ($info['description'] ?? '—'), 'err');
+        $n = 0;
+        foreach (saleButtons() as $sb) { reportMutate($sb['id'], function (&$r) use ($lc) { $r['chat_id'] = $lc; $r['on'] = true; }); $n++; }
+        foreach (Product::all() as $pr) { reportMutate($pr['id'], function (&$r) use ($lc) { $r['chat_id'] = $lc; $r['on'] = true; }); $n++; }
+        go('گروه «' . ($info['result']['title'] ?? $lc) . '» روی ' . $n . ' محصول نشست. حالا لینک تاپیک هرکدام را بگذارید.');
+    }
+    if ($a === 'seen_channels') {
+        mutate('channels', function (&$a2) {
+            foreach ($a2 as $k => $c) { $a2[$k]['seen'] = true; unset($a2[$k]['lost_admin']); }
+        });
+        go('علامت‌ها پاک شد.');
+    }
     if ($a === 'save_join') {
         $post = $_POST;
         cfgSet(function (&$c) use ($post) {
@@ -250,6 +267,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!empty($post['adv_scope'])) {
                 $c['test_mode']               = !empty($post['test_mode']);
                 $c['ui']['speed_show_perday'] = !empty($post['speed_perday']);
+                $c['auto_approve']            = !empty($post['auto_approve']);
+                $c['campaign_keep_days']      = max(0, (int)($post['keep_days'] ?? 3));
             }
         });
         go('تنظیمات ذخیره شد.');
@@ -370,6 +389,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $u = trim($post['burl'][$i] ?? '');
             if ($u !== '' && !preg_match('#^(https?://|tg://)#i', $u))
                 go('لینک دکمه ' . ($i + 1) . ' باید با https:// شروع شود.', 'err');
+        }
+
+        // اگر لینک تاپیک داده شده، گروه و تاپیک را از آن بخوان
+        $lnk = trim($post['rlink'] ?? '');
+        if ($lnk !== '') {
+            [$lc, $lt] = parseChatLink($lnk);
+            if ($lc === null) go('لینک تاپیک شناخته نشد. از خود تاپیک Copy Link بگیرید.', 'err');
+            $post['rchat'] = $lc; $post['rthread'] = $lt;
         }
 
         reportMutate(subProductId($bid, $sid), function (&$r) use ($post) {
@@ -1000,6 +1027,21 @@ foreach ($tabs as $k => $l): ?>
 
   <?php $saleBtns = saleButtons(); ?>
   <?php if ($saleBtns): ?>
+  <div class="card"><h2>📢 گروه گزارش خرید</h2><div class="body">
+    <div class="note">
+      یک گروه با <b>تاپیک</b> بسازید — برای هر محصول یک تاپیک. ربات را در گروه <b>ادمین</b> کنید.
+      بعد لینک هر تاپیک را روی محصول خودش بگذارید (پایین‌تر، داخل کارت هر محصول).<br>
+      لینک تاپیک را اینطور می‌گیرید: روی یکی از پیام‌های آن تاپیک نگه دارید ← <b>Copy Link</b>.
+    </div>
+    <form method="post" style="margin-top:12px;display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+      <input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="tab" value="products">
+      <input type="hidden" name="action" value="report_group_all">
+      <div style="flex:1;min-width:240px"><label>لینک یا آیدی گروه — روی همه محصولات می‌نشیند</label>
+        <input name="glink" required placeholder="https://t.me/c/1234567890/1 یا -1001234567890" style="direction:ltr"></div>
+      <button class="btn g">اعمال روی همه</button>
+    </form>
+  </div></div>
+
   <div class="card"><h2>💰 قیمت‌گذاری دکمه‌های فروش</h2><div class="body">
     <div class="note">
       این دکمه‌ها خودشان محصول‌اند — رکورد محصول جداگانه لازم ندارند.
@@ -1131,6 +1173,13 @@ foreach ($tabs as $k => $l): ?>
               <?= !empty($rp['on']) ? 'checked' : '' ?>> گزارش این محصول روشن باشد</label>
           </div>
 
+          <div style="margin-bottom:10px"><label>🔗 لینک تاپیک (ساده‌ترین راه)</label>
+            <input name="rlink" placeholder="https://t.me/c/1234567890/11" style="direction:ltr">
+            <div class="muted" style="margin-top:6px">
+              روی یکی از پیام‌های همان تاپیک نگه دارید ← <b>Copy Link</b> و اینجا بچسبانید.
+              گروه و شماره تاپیک با هم پر می‌شوند و دو فیلد پایین را نادیده می‌گیرد.
+            </div>
+          </div>
           <div class="grid2">
             <div><label>آیدی گروه</label>
               <input name="rchat" value="<?= h($rp['chat_id']) ?>" placeholder="-1001234567890" style="direction:ltr"></div>
@@ -1554,6 +1603,39 @@ foreach ($tabs as $k => $l): ?>
 
 <?php // ================= کانال‌ها ================= ?>
 <?php elseif ($tab === 'channels'): ?>
+  <?php
+    $fresh = []; $lost = [];
+    foreach (Channels::all() as $c9) {
+      if (isset($c9['seen']) && empty($c9['seen'])) $fresh[] = $c9;
+      if (!empty($c9['lost_admin'])) $lost[] = $c9;
+    }
+  ?>
+  <?php if ($fresh || $lost): ?>
+  <div class="card"><h2>🆕 تغییرات تازه</h2><div class="body">
+    <div class="note">
+      ربات دیگر برای این‌ها پیام نمی‌فرستد تا شلوغ نشود — همه‌شان اینجا نشان داده می‌شوند.
+    </div>
+    <table style="margin-top:12px">
+      <tr><th>کانال</th><th>آیدی</th><th>وضعیت</th></tr>
+      <?php foreach ($fresh as $c9): ?>
+        <tr><td><?= h($c9['title']) ?></td><td><code><?= h($c9['chat_id']) ?></code></td>
+            <td><span class="badge green">تازه ثبت شد</span>
+                <?= !empty($c9['added_at']) ? '<span class="muted"> · ' . h($c9['added_at']) . '</span>' : '' ?></td></tr>
+      <?php endforeach; ?>
+      <?php foreach ($lost as $c9): ?>
+        <tr><td><?= h($c9['title']) ?></td><td><code><?= h($c9['chat_id']) ?></code></td>
+            <td><span class="badge">ربات دیگر ادمین نیست</span>
+                <span class="muted"> · <?= h($c9['lost_admin']) ?></span></td></tr>
+      <?php endforeach; ?>
+    </table>
+    <form method="post" style="margin-top:12px">
+      <input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="tab" value="channels">
+      <input type="hidden" name="action" value="seen_channels">
+      <button class="btn">دیدم، پاک کن</button>
+    </form>
+  </div></div>
+  <?php endif; ?>
+
   <div class="card"><h2>📢 افزودن کانال عضویت اجباری</h2><div class="body">
     <form method="post">
       <input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="tab" value="channels">
@@ -2103,6 +2185,20 @@ def join_gate(user_id):
           <?= !empty($C['ui']['speed_show_perday']) ? 'checked' : '' ?>>
           🚀 «نفر در روز» روی دکمه سرعت هم نوشته شود</label>
       </div>
+
+      <h3 style="font-size:14px;margin:18px 0 10px">🤖 کار خودکار</h3>
+      <div class="note">
+        با <b>درگاه پرداخت</b> همه چیز از قبل خودکار است و نیازی به حضور شما نیست.
+        گزینه زیر فقط برای <b>رسید کارت به کارت</b> است: رسید که برسد، بدون بررسی تایید می‌شود.
+        ⚠️ ریسک دارد — فقط اگر می‌دانید چه می‌کنید.
+      </div>
+      <div style="margin-top:10px">
+        <label style="font-weight:500"><input type="checkbox" name="auto_approve" style="width:auto"
+          <?= !empty($C['auto_approve']) ? 'checked' : '' ?>>
+          🤖 تایید خودکار رسیدهای کارت به کارت</label>
+      </div>
+      <div style="margin-top:10px;max-width:320px"><label>🧹 پاک کردن کمپین‌های تمام‌شده بعد از (روز · ۰ = هیچ‌وقت)</label>
+        <input name="keep_days" type="number" min="0" value="<?= (int)($C['campaign_keep_days'] ?? 3) ?>"></div>
 
       <div style="margin-top:16px"><button class="btn g">ذخیره تنظیمات</button></div>
     </form>
