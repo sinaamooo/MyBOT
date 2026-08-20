@@ -681,29 +681,34 @@ function tg(string $method, array $params = [], int $timeout = 30)
 //  🎨  دکمه‌های شیشه‌ای  (Glass Buttons)
 // ═══════════════════════════════════════════════════════════════════════════
 
-/** نشانگر رنگی هر استایل — شبیه‌سازی دکمه رنگی در تلگرام */
-const BTN_STYLE_DOT = [
-    'success' => '🟢',
-    'danger'  => '🔴',
-    'primary' => '🔵',
-    'warning' => '🟡',
-    'gold'    => '🟠',
-    'plain'   => '',
-];
-
 /**
- * ساخت دکمه شیشه‌ای.
- * استایل بر اساس callback_data به‌صورت خودکار حدس زده می‌شود مگر صریح داده شود.
+ * ساخت دکمه شیشه‌ای رنگی.
+ *
+ * از Bot API 9.4 رنگ دکمه با فیلد style و ایموجی پریمیوم با
+ * icon_custom_emoji_id تنظیم می‌شود. هر دو از پنل /panel قابل تغییرند.
+ * استایل بر اساس callback_data خودکار حدس زده می‌شود مگر صریح داده شود.
  */
 function btn(string $text, ?string $data = null, ?string $style = null, ?string $url = null): array
 {
     if ($style === null) {
         $style = guessBtnStyle($data);
     }
-    $dot = BTN_STYLE_DOT[$style] ?? '';
-    $label = $dot === '' ? $text : $dot . ' ' . $text;
+    $conf = btnStyleConf($style);
+
+    $label = renderBtn($text);
+    if (($conf['prefix'] ?? '') !== '') {
+        $label = $conf['prefix'] . ' ' . $label;
+    }
 
     $b = ['text' => $label];
+
+    if (($conf['tg'] ?? '') !== '' && in_array($conf['tg'], TG_BTN_STYLES, true)) {
+        $b['style'] = $conf['tg'];
+    }
+    if (($conf['icon'] ?? '') !== '' && btnIconsEnabled()) {
+        $b['icon_custom_emoji_id'] = $conf['icon'];
+    }
+
     if ($url !== null) {
         $b['url'] = $url;
     } else {
@@ -826,11 +831,55 @@ function clampText(string $text, int $max = TG_MAX_TEXT): string
     return $cut . "\n…";
 }
 
+/**
+ * فراخوانی امن تلگرام با بازگشت خودکار در صورت رد شدن ایموجی پریمیوم.
+ * اگر مالک ربات پریمیوم نباشد، تلگرام ایموجی سفارشی را رد می‌کند؛
+ * در آن صورت یک‌بار بدون ایموجی دوباره تلاش می‌شود و قابلیت خاموش می‌گردد.
+ */
+function tgSafe(string $method, array $params)
+{
+    $res = tg($method, $params);
+    if ($res !== null) {
+        return $res;
+    }
+
+    $hasEmoji = (isset($params['text']) && str_contains((string) $params['text'], '<tg-emoji'))
+        || (isset($params['caption']) && str_contains((string) $params['caption'], '<tg-emoji'))
+        || (isset($params['reply_markup']) && str_contains(json_encode($params['reply_markup'], JSON_UNESCAPED_UNICODE) ?: '', 'icon_custom_emoji_id'));
+
+    if (!$hasEmoji) {
+        return null;
+    }
+
+    // حذف ایموجی پریمیوم و تلاش دوباره
+    if (isset($params['text'])) {
+        $params['text'] = stripPremiumEmoji((string) $params['text']);
+    }
+    if (isset($params['caption'])) {
+        $params['caption'] = stripPremiumEmoji((string) $params['caption']);
+    }
+    if (isset($params['reply_markup']['inline_keyboard'])) {
+        foreach ($params['reply_markup']['inline_keyboard'] as $ri => $row) {
+            foreach ($row as $bi => $b) {
+                unset($params['reply_markup']['inline_keyboard'][$ri][$bi]['icon_custom_emoji_id']);
+            }
+        }
+    }
+
+    $res = tg($method, $params);
+    if ($res !== null) {
+        setSetting('btn_icons_enabled', '0');
+        setSetting('premium_emoji_enabled', '0');
+        logMsg('⚠️ ایموجی پریمیوم پذیرفته نشد — غیرفعال شد (مالک ربات باید پریمیوم داشته باشد).');
+    }
+    return $res;
+}
+
 function sendMsg($chatId, string $text, ?array $keyboard = null, ?array $replyTo = null, array $extra = [])
 {
     $p = [
         'chat_id'    => $chatId,
-        'text'       => clampText($text),
+        'text'       => clampText(renderOut($text)),
         'parse_mode' => 'HTML',
         'link_preview_options' => ['is_disabled' => true],
     ];
@@ -843,7 +892,7 @@ function sendMsg($chatId, string $text, ?array $keyboard = null, ?array $replyTo
             'allow_sending_without_reply' => true,
         ];
     }
-    return tg('sendMessage', array_merge($p, $extra));
+    return tgSafe('sendMessage', array_merge($p, $extra));
 }
 
 /** ریپلای مستقیم به پیام کاربر (Quote واقعی تلگرام) */
@@ -863,19 +912,19 @@ function editMsg($chatId, int $messageId, string $text, ?array $keyboard = null)
     $p = [
         'chat_id'    => $chatId,
         'message_id' => $messageId,
-        'text'       => clampText($text),
+        'text'       => clampText(renderOut($text)),
         'parse_mode' => 'HTML',
         'link_preview_options' => ['is_disabled' => true],
     ];
     if ($keyboard !== null) {
         $p['reply_markup'] = $keyboard;
     }
-    return tg('editMessageText', $p);
+    return tgSafe('editMessageText', $p);
 }
 
 function editMarkup($chatId, int $messageId, ?array $keyboard)
 {
-    return tg('editMessageReplyMarkup', [
+    return tgSafe('editMessageReplyMarkup', [
         'chat_id'      => $chatId,
         'message_id'   => $messageId,
         'reply_markup' => $keyboard,
@@ -889,6 +938,7 @@ function deleteMsg($chatId, int $messageId)
 
 function answerCb(string $callbackId, string $text = '', bool $alert = false)
 {
+    $text = stripPremiumEmoji(applyTextRules($text));
     // تلگرام متن پاسخ کال‌بک را به ۲۰۰ کاراکتر محدود می‌کند
     if (mb_strlen($text) > TG_MAX_CB_TEXT) {
         $text = mb_substr($text, 0, TG_MAX_CB_TEXT - 1) . '…';
@@ -1098,6 +1148,509 @@ function mention(array $from): string
 function mentionId(int $userId, string $name): string
 {
     return '<a href="tg://user?id=' . $userId . '">' . h($name) . '</a>';
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  🎨  موتور شخصی‌سازی — متن‌ها، ایموجی پریمیوم، استایل دکمه‌ها
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * شمارندهٔ نسخهٔ پیکربندی — با هر تغییر، کش‌های داخلی فوری بی‌اعتبار می‌شوند.
+ * بدون این، تغییرات پنل تا چند ثانیه اعمال نمی‌شد.
+ */
+function cfgVersion(): int
+{
+    return (int) ($GLOBALS['__cfg_version'] ?? 0);
+}
+
+function cfgBump(): void
+{
+    $GLOBALS['__cfg_version'] = cfgVersion() + 1;
+}
+
+/**
+ * کاتالوگ متن‌های قابل ویرایش.
+ * key => [دسته, برچسب, متن پیش‌فرض]
+ * جای‌گذارها با {name} نوشته می‌شوند.
+ */
+function textCatalog(): array
+{
+    static $c = null;
+    if ($c !== null) {
+        return $c;
+    }
+    $c = [
+        // ── شروع ──────────────────────────────────────────────────────────
+        'start.private' => ['شروع', 'پیام خوش‌آمد پیوی',
+            "🐕 سلام {name} عزیز!\n\n"
+            . "<blockquote>من ربات هاپی هستم 🦴\n\n"
+            . "📌 دستورات اصلی فقط <b>توی گروه</b> کار می‌کنن.\n"
+            . "منو به گروهت اضافه کن و بنویس <b>هاپ</b> 🐾\n\n"
+            . "🎯 قابلیت جدید: <b>چالش دوز</b>\n"
+            . "توی گروه بنویس <code>چالش 500 میو</code></blockquote>"],
+        'start.btn_addgroup' => ['شروع', 'دکمه افزودن به گروه', 'افزودن من به گروه'],
+        'start.btn_help'     => ['شروع', 'دکمه راهنما', 'راهنما'],
+        'start.group' => ['شروع', 'پیام خوش‌آمد گروه',
+            "🐕 <b>ربات هاپی</b> اینجاست!\n\n"
+            . "<blockquote>🦴 بنویس <b>هاپ</b> تا پوینت بگیری!\n"
+            . "🎯 بنویس <code>چالش 500 میو</code> تا چالش دوز باز بشه</blockquote>\n"
+            . "📖 برای دیدن همه دستورات بنویس <b>راهنما</b> یا بزن /help"],
+
+        // ── راهنما ────────────────────────────────────────────────────────
+        'help.title'    => ['راهنما', 'عنوان راهنما', '🐾 <b>راهنمای هاپو</b> 🐾'],
+        'help.economy'  => ['راهنما', 'بخش اقتصاد',
+            "🐾 <b>هاپ</b> — جمع پوینت\n"
+            . "🐕 <b>سگ</b> — خرید و مدیریت سگ\n"
+            . "🎣 <b>قلاب</b> — خرید قلاب\n"
+            . "🦴 <b>استخوان</b> — صید استخوان\n"
+            . "🏦 <b>بانک</b> — حساب بانکی و سود\n"
+            . "🏭 <b>کارخونه</b> — تولید و فروش\n"
+            . "💳 <b>انتقال [عدد] @یوزر</b> — انتقال پوینت\n"
+            . "🎁 <b>اهدا [عدد]</b> — کمک به خزانه شهر"],
+        'help.games'    => ['راهنما', 'بخش بازی',
+            "🎯 <b>چالش [عدد] میو</b> — چالش دوز!\n"
+            . "🏅 <b>برترین چالش</b> — جدول چالش دوز\n"
+            . "🎲 <b>بازی</b> — منوی بازی‌ها\n"
+            . "🃏 <b>کازینو</b> — قمار، تاس، گردونه\n"
+            . "🥷 <b>قاچاق</b> — قاچاق سگ خیابونی"],
+        'help.city'     => ['راهنما', 'بخش شهر و سیاست',
+            "🏰 <b>شهر</b> — وضعیت شهر گروه\n"
+            . "🏛 <b>شهرداری</b> — شهردار و انتخابات\n"
+            . "🚨 <b>بحران</b> — وضعیت بحران شهر\n"
+            . "👑 <b>رهبر</b> — پنل رهبری کشور"],
+        'help.account'  => ['راهنما', 'بخش حساب کاربری',
+            "🐾 <b>هاپوهام</b> — پروفایل خودت\n"
+            . "🐾 <b>هاپ هاش</b> — پروفایل نفر ریپلای‌شده\n"
+            . "📊 <b>برترین</b> — لیدربرد\n"
+            . "⛓ <b>زندان</b> — وضعیت زندان\n"
+            . "🛒 <b>مارکت</b> — بازار کاربران"],
+
+        // ── چالش دوز ──────────────────────────────────────────────────────
+        'chal.open_title'  => ['چالش دوز', 'عنوان چالش باز', '🎯 <b>چالش دوز باز شد!</b>'],
+        'chal.open_body'   => ['چالش دوز', 'بدنه چالش باز',
+            "🎮 سازنده : {creator}\n"
+            . "💰 مبلغ چالش : <b>{bet}</b> میو پوینت\n"
+            . "🏆 جایزه برنده : <b>{prize}</b> میو پوینت\n"
+            . "⏳ مهلت پیوستن : {left}"],
+        'chal.open_footer' => ['چالش دوز', 'پانویس چالش باز',
+            "📌 هر کسی <b>{bet}</b> میو پوینت داشته باشه می‌تونه شرکت کنه!\n"
+            . "🟢 روی دکمه سبز بزن و بازی رو شروع کن 👇"],
+        'chal.btn_join'    => ['چالش دوز', 'دکمه شرکت (سبز)', 'شرکت در چالش دوز ({bet} میو)'],
+        'chal.btn_info'    => ['چالش دوز', 'دکمه وضعیت', 'وضعیت چالش'],
+        'chal.btn_cancel'  => ['چالش دوز', 'دکمه لغو', 'لغو چالش'],
+        'chal.play_title'  => ['چالش دوز', 'عنوان حین بازی', '🎯 <b>چالش دوز</b>'],
+        'chal.turn'        => ['چالش دوز', 'خط نوبت', '🎲 نوبت : {sym} <b>{name}</b>'],
+        'chal.win_title'   => ['چالش دوز', 'عنوان برد', '🏆 <b>{winner} برنده چالش دوز شد!</b>'],
+        'chal.draw_title'  => ['چالش دوز', 'عنوان مساوی', '🤝 <b>چالش دوز مساوی شد!</b>'],
+        'chal.expired'     => ['چالش دوز', 'عنوان انقضا', '⏰ <b>چالش دوز منقضی شد!</b>'],
+        'chal.timeout'     => ['چالش دوز', 'عنوان تایم‌اوت', '⏰ <b>وقت تموم شد!</b>'],
+        'chal.started'     => ['چالش دوز', 'پیام شروع بازی', '🔥 بازی شروع شد! موفق باشی 🐾'],
+        'chal.help_title'  => ['چالش دوز', 'عنوان راهنمای چالش', '🎯 <b>راهنمای چالش دوز</b>'],
+        'chal.help_body'   => ['چالش دوز', 'بدنه راهنمای چالش',
+            "برای ساخت چالش بنویس:\n"
+            . "<code>چالش 500 میو</code>\n"
+            . "<code>چالش 10k میو</code>\n\n"
+            . "هر کسی اون مقدار میو پوینت داشته باشه\n"
+            . "می‌تونه با دکمه سبز 🟢 وارد چالش بشه."],
+
+        // ── هاپ ───────────────────────────────────────────────────────────
+        'hop.title'    => ['هاپ', 'عنوان هاپ موفق', '🐕 <b>هاپ هاپ!</b> {name}'],
+        'hop.body'     => ['هاپ', 'بدنه هاپ موفق',
+            "🦴 +{reward} هاپ پوینت{boost}\n"
+            . "💰 موجودی : {points}\n"
+            . "⭐️ سطح : {level}  |  🐾 هاپ : {progress}"],
+        'hop.levelup'  => ['هاپ', 'پیام لول‌آپ', '🎉 <b>لِول آپ!</b> به سطح {level} رسیدی!'],
+        'hop.cooldown' => ['هاپ', 'پیام کولداون', '⏳ {name}، هنوز باید صبر کنی!\n⌛️ {left} دیگه می‌تونی هاپ کنی 🐾'],
+
+        // ── خطاهای مشترک ──────────────────────────────────────────────────
+        'err.group_only'   => ['خطاها', 'فقط در گروه', '❌ این دستور فقط توی گروه کار می‌کنه!'],
+        'err.not_yours'    => ['خطاها', 'دکمه مال تو نیست', '❌ این دکمه برای تو نیست!'],
+        'err.no_points'    => ['خطاها', 'پوینت کافی نیست', '❌ پوینت کافی نداری! لازم: {need}'],
+        'err.need_level'   => ['خطاها', 'سطح کافی نیست', '🔒 برای این کار باید حداقل سطح {level} باشی!'],
+        'err.jailed'       => ['خطاها', 'کاربر زندانی', '⛓️ تو زندانی هستی! نمی‌تونی این کار رو بکنی.'],
+        'err.cancelled'    => ['خطاها', 'عملیات لغو شد', '❌ عملیات لغو شد.'],
+        'err.invalid_num'  => ['خطاها', 'عدد نامعتبر', '❌ عدد معتبر وارد کن!'],
+
+        // ── برچسب دکمه‌های پرکاربرد ────────────────────────────────────────
+        'btn.back'    => ['دکمه‌ها', 'برگشت', 'برگشت 🔙'],
+        'btn.cancel'  => ['دکمه‌ها', 'انصراف', 'انصراف'],
+        'btn.confirm' => ['دکمه‌ها', 'تأیید', 'تأیید ✅'],
+        'btn.top'     => ['دکمه‌ها', 'برترین‌ها', 'برترین‌ها 📊'],
+        'btn.chalhelp'=> ['دکمه‌ها', 'راهنمای چالش', 'راهنمای چالش دوز 🎯'],
+    ];
+    return $c;
+}
+
+/** متن‌های بازنویسی‌شده توسط ادمین */
+function customTexts(): array
+{
+    static $cache = null;
+    static $ver = -1;
+    if ($cache !== null && $ver === cfgVersion()) {
+        return $cache;
+    }
+    $cache = [];
+    foreach (all('SELECT key, value FROM bot_texts') as $r) {
+        $cache[$r['key']] = (string) $r['value'];
+    }
+    $ver = cfgVersion();
+    return $cache;
+}
+
+/** خواندن یک متن با جای‌گذاری متغیرها */
+function t(string $key, array $vars = []): string
+{
+    $custom = customTexts();
+    if (isset($custom[$key])) {
+        $text = $custom[$key];
+    } else {
+        $cat = textCatalog();
+        $text = $cat[$key][2] ?? $key;
+    }
+    if ($vars !== []) {
+        $repl = [];
+        foreach ($vars as $k => $v) {
+            $repl['{' . $k . '}'] = (string) $v;
+        }
+        $text = strtr($text, $repl);
+    }
+    return $text;
+}
+
+/** متن پیش‌فرض یک کلید */
+function tDefault(string $key): string
+{
+    return textCatalog()[$key][2] ?? '';
+}
+
+function setText(string $key, string $value): void
+{
+    q('INSERT INTO bot_texts (key, value, updated_at) VALUES (?,?,?)
+       ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at',
+        [$key, $value, nowIso()]);
+    customTextsFlush();
+}
+
+function resetText(string $key): void
+{
+    q('DELETE FROM bot_texts WHERE key=?', [$key]);
+    customTextsFlush();
+}
+
+/** پاک‌سازی کش متن‌ها (با تغییر مهر زمانی) */
+function customTextsFlush(): void
+{
+    cfgBump();
+}
+
+// ── قواعد جایگزینی سراسری ─────────────────────────────────────────────────
+
+function textRules(): array
+{
+    static $cache = null;
+    static $ver = -1;
+    if ($cache !== null && $ver === cfgVersion()) {
+        return $cache;
+    }
+    $cache = [];
+    foreach (all('SELECT find, repl FROM text_rules WHERE enabled=1 ORDER BY LENGTH(find) DESC') as $r) {
+        if ((string) $r['find'] !== '') {
+            $cache[(string) $r['find']] = (string) $r['repl'];
+        }
+    }
+    $ver = cfgVersion();
+    return $cache;
+}
+
+// ── ایموجی پریمیوم ────────────────────────────────────────────────────────
+
+function premiumMap(): array
+{
+    static $cache = null;
+    static $ver = -1;
+    if ($cache !== null && $ver === cfgVersion()) {
+        return $cache;
+    }
+    $cache = [];
+    foreach (all('SELECT emoji, emoji_id FROM premium_emoji') as $r) {
+        $e = (string) $r['emoji'];
+        if ($e !== '') {
+            $cache[$e] = '<tg-emoji emoji-id="' . h($r['emoji_id']) . '">' . $e . '</tg-emoji>';
+        }
+    }
+    $ver = cfgVersion();
+    return $cache;
+}
+
+/**
+ * اجرای یک تابع فقط روی بخش‌های متنی (بیرون از تگ‌ها).
+ * $skipCode یعنی داخل <code> و <pre> و <tg-emoji> دست نخورد.
+ */
+function mapPlainSegments(string $text, callable $fn, bool $skipCode = true): string
+{
+    $parts = preg_split('/(<[^>]*>)/u', $text, -1, PREG_SPLIT_DELIM_CAPTURE);
+    if ($parts === false) {
+        return $text;
+    }
+    $out = '';
+    $code = 0;
+    $tge = 0;
+    foreach ($parts as $part) {
+        if ($part === '') {
+            continue;
+        }
+        if ($part[0] === '<') {
+            if (preg_match('~^<(code|pre)\b~i', $part))       { $code++; }
+            elseif (preg_match('~^</(code|pre)>~i', $part))    { $code = max(0, $code - 1); }
+            elseif (preg_match('~^<tg-emoji\b~i', $part))      { $tge++; }
+            elseif (preg_match('~^</tg-emoji>~i', $part))      { $tge = max(0, $tge - 1); }
+            $out .= $part;
+            continue;
+        }
+        if ($skipCode && ($code > 0 || $tge > 0)) {
+            $out .= $part;
+            continue;
+        }
+        $out .= $fn($part);
+    }
+    return $out;
+}
+
+/** اعمال قواعد جایگزینی سراسری */
+function applyTextRules(string $text): string
+{
+    $rules = textRules();
+    if ($rules === []) {
+        return $text;
+    }
+    return mapPlainSegments($text, static fn(string $seg) => strtr($seg, $rules), false);
+}
+
+/** تبدیل ایموجی‌های نگاشت‌شده به ایموجی پریمیوم */
+function applyPremiumEmoji(string $text): string
+{
+    if (setting('premium_emoji_enabled', '1') !== '1') {
+        return $text;
+    }
+    $map = premiumMap();
+    if ($map === []) {
+        return $text;
+    }
+    return mapPlainSegments($text, static fn(string $seg) => strtr($seg, $map));
+}
+
+/** حذف تگ‌های ایموجی پریمیوم و بازگرداندن ایموجی ساده */
+function stripPremiumEmoji(string $text): string
+{
+    return preg_replace('~<tg-emoji[^>]*>(.*?)</tg-emoji>~us', '$1', $text) ?? $text;
+}
+
+/** خط لولهٔ خروجی: قواعد جایگزینی + ایموجی پریمیوم */
+function renderOut(string $text): string
+{
+    return applyPremiumEmoji(applyTextRules($text));
+}
+
+/** خروجی برچسب دکمه — دکمه‌ها entity نمی‌پذیرند پس ایموجی پریمیوم حذف می‌شود */
+function renderBtn(string $label): string
+{
+    return stripPremiumEmoji(applyTextRules($label));
+}
+
+// ── استایل دکمه‌ها (Bot API 9.4) ──────────────────────────────────────────
+//  تلگرام از ۹ فوریه ۲۰۲۶ فیلدهای زیر را روی InlineKeyboardButton پشتیبانی می‌کند:
+//    style              : primary (آبی) | success (سبز) | danger (قرمز)
+//    icon_custom_emoji_id : ایموجی پریمیوم قبل از متن دکمه
+//  ایموجی پریمیوم روی دکمه وقتی کار می‌کند که مالک ربات اشتراک پریمیوم داشته
+//  باشد (یا ربات از Fragment یوزرنیم خریده باشد).
+
+/** رنگ‌های مجاز تلگرام */
+const TG_BTN_STYLES = ['primary', 'success', 'danger'];
+
+const TG_BTN_STYLE_FA = [
+    'primary' => '🔵 آبی',
+    'success' => '🟢 سبز',
+    'danger'  => '🔴 قرمز',
+    ''        => '⚪ پیش‌فرض برنامه',
+];
+
+/** استایل‌های داخلی ربات و پیکربندی پیش‌فرضشان */
+const BTN_STYLE_DEFAULT = [
+    'success' => ['tg' => 'success', 'icon' => '', 'prefix' => ''],
+    'danger'  => ['tg' => 'danger',  'icon' => '', 'prefix' => ''],
+    'primary' => ['tg' => 'primary', 'icon' => '', 'prefix' => ''],
+    'warning' => ['tg' => 'primary', 'icon' => '', 'prefix' => '🟡'],
+    'gold'    => ['tg' => 'primary', 'icon' => '', 'prefix' => '🟠'],
+    'plain'   => ['tg' => '',        'icon' => '', 'prefix' => ''],
+];
+
+const BTN_STYLE_LABEL = [
+    'success' => 'موفق / تأیید',
+    'danger'  => 'خطرناک / لغو',
+    'primary' => 'عادی',
+    'warning' => 'هشدار',
+    'gold'    => 'ویژه',
+    'plain'   => 'ساده',
+];
+
+/** پیکربندی کامل همهٔ استایل‌ها */
+function btnStyles(): array
+{
+    static $cache = null;
+    static $ver = -1;
+    if ($cache !== null && $ver === cfgVersion()) {
+        return $cache;
+    }
+    $cache = BTN_STYLE_DEFAULT;
+    foreach (all('SELECT style, tg_style, icon_emoji_id, prefix FROM btn_styles') as $r) {
+        $key = (string) $r['style'];
+        if (!isset($cache[$key])) {
+            continue;
+        }
+        $cache[$key] = [
+            'tg'     => $r['tg_style'] === null ? $cache[$key]['tg'] : (string) $r['tg_style'],
+            'icon'   => (string) ($r['icon_emoji_id'] ?? ''),
+            'prefix' => (string) ($r['prefix'] ?? ''),
+        ];
+    }
+    $ver = cfgVersion();
+    return $cache;
+}
+
+function btnStyleConf(string $style): array
+{
+    $all = btnStyles();
+    return $all[$style] ?? $all['primary'];
+}
+
+function setBtnStyleConf(string $style, ?string $tg = null, ?string $icon = null, ?string $prefix = null): void
+{
+    $cur = btnStyleConf($style);
+    cfgBump();
+    q('INSERT INTO btn_styles (style, tg_style, icon_emoji_id, prefix) VALUES (?,?,?,?)
+       ON CONFLICT(style) DO UPDATE SET tg_style=excluded.tg_style,
+         icon_emoji_id=excluded.icon_emoji_id, prefix=excluded.prefix',
+        [
+            $style,
+            $tg     === null ? $cur['tg']     : $tg,
+            $icon   === null ? $cur['icon']   : $icon,
+            $prefix === null ? $cur['prefix'] : $prefix,
+        ]);
+}
+
+function resetBtnStyles(): void
+{
+    q('DELETE FROM btn_styles');
+    cfgBump();
+}
+
+/** آیا ایموجی پریمیوم روی دکمه‌ها فعال است */
+function btnIconsEnabled(): bool
+{
+    return setting('btn_icons_enabled', '1') === '1';
+}
+
+// ── خواندن ایموجی پریمیوم از پیام ادمین ───────────────────────────────────
+
+/** برش رشته بر اساس آفست UTF-16 (استاندارد آفست‌های تلگرام) */
+function utf16Slice(string $text, int $offset, int $length): string
+{
+    $u = mb_convert_encoding($text, 'UTF-16LE', 'UTF-8');
+    $sub = substr($u, $offset * 2, $length * 2);
+    return $sub === '' ? '' : (string) mb_convert_encoding($sub, 'UTF-8', 'UTF-16LE');
+}
+
+/**
+ * استخراج ایموجی‌های پریمیوم پیام.
+ * @return array<int, array{emoji:string, id:string}>
+ */
+function extractPremiumEmoji(array $msg): array
+{
+    $text = (string) ($msg['text'] ?? $msg['caption'] ?? '');
+    $entities = $msg['entities'] ?? $msg['caption_entities'] ?? [];
+    $out = [];
+    foreach ($entities as $e) {
+        if (($e['type'] ?? '') !== 'custom_emoji') {
+            continue;
+        }
+        $emoji = utf16Slice($text, (int) $e['offset'], (int) $e['length']);
+        $id = (string) ($e['custom_emoji_id'] ?? '');
+        if ($emoji !== '' && $id !== '') {
+            $out[] = ['emoji' => $emoji, 'id' => $id];
+        }
+    }
+    return $out;
+}
+
+/**
+ * تبدیل متن پیام ادمین به HTML با حفظ ایموجی پریمیوم و قالب‌بندی‌های پایه.
+ * برای ذخیرهٔ متن‌های سفارشی استفاده می‌شود.
+ */
+function msgToHtml(array $msg): string
+{
+    $text = (string) ($msg['text'] ?? $msg['caption'] ?? '');
+    $entities = $msg['entities'] ?? $msg['caption_entities'] ?? [];
+    if ($entities === []) {
+        return $text;
+    }
+
+    $supported = ['bold', 'italic', 'underline', 'strikethrough', 'code', 'pre',
+                  'spoiler', 'blockquote', 'custom_emoji', 'text_link'];
+    $marks = [];
+    foreach ($entities as $e) {
+        $type = (string) ($e['type'] ?? '');
+        if (!in_array($type, $supported, true)) {
+            continue;
+        }
+        $off = (int) $e['offset'];
+        $len = (int) $e['length'];
+        [$open, $close] = entityTags($type, $e, utf16Slice($text, $off, $len));
+        if ($open === '') {
+            continue;
+        }
+        $marks[] = ['pos' => $off,        'tag' => $open,  'order' => 0];
+        $marks[] = ['pos' => $off + $len, 'tag' => $close, 'order' => 1];
+    }
+    if ($marks === []) {
+        return $text;
+    }
+
+    // مرتب‌سازی: بسته‌ها قبل از بازها در یک موقعیت
+    usort($marks, static function ($a, $b) {
+        if ($a['pos'] !== $b['pos']) {
+            return $b['pos'] <=> $a['pos'];   // از آخر به اول درج می‌کنیم
+        }
+        return $a['order'] <=> $b['order'];
+    });
+
+    $u16 = mb_convert_encoding($text, 'UTF-16LE', 'UTF-8');
+    foreach ($marks as $m) {
+        $tagU16 = mb_convert_encoding($m['tag'], 'UTF-16LE', 'UTF-8');
+        $u16 = substr($u16, 0, $m['pos'] * 2) . $tagU16 . substr($u16, $m['pos'] * 2);
+    }
+    return (string) mb_convert_encoding($u16, 'UTF-8', 'UTF-16LE');
+}
+
+/** @return array{0:string,1:string} تگ باز و بسته برای یک entity */
+function entityTags(string $type, array $e, string $inner): array
+{
+    switch ($type) {
+        case 'bold':          return ['<b>', '</b>'];
+        case 'italic':        return ['<i>', '</i>'];
+        case 'underline':     return ['<u>', '</u>'];
+        case 'strikethrough': return ['<s>', '</s>'];
+        case 'code':          return ['<code>', '</code>'];
+        case 'pre':           return ['<pre>', '</pre>'];
+        case 'spoiler':       return ['<tg-spoiler>', '</tg-spoiler>'];
+        case 'blockquote':    return ['<blockquote>', '</blockquote>'];
+        case 'custom_emoji':
+            $id = (string) ($e['custom_emoji_id'] ?? '');
+            return $id === '' ? ['', ''] : ['<tg-emoji emoji-id="' . h($id) . '">', '</tg-emoji>'];
+        case 'text_link':
+            $url = (string) ($e['url'] ?? '');
+            return $url === '' ? ['', ''] : ['<a href="' . h($url) . '">', '</a>'];
+    }
+    return ['', ''];
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1577,6 +2130,31 @@ function initDb(): void
             PRIMARY KEY (chat_id, message_id)
         )",
 
+        // ── شخصی‌سازی (پنل /panel) ────────────────────────────────────────
+        "CREATE TABLE IF NOT EXISTS bot_texts (
+            key        TEXT PRIMARY KEY,
+            value      TEXT,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )",
+        "CREATE TABLE IF NOT EXISTS text_rules (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            find       TEXT,
+            repl       TEXT,
+            enabled    INTEGER DEFAULT 1,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )",
+        "CREATE TABLE IF NOT EXISTS premium_emoji (
+            emoji    TEXT PRIMARY KEY,
+            emoji_id TEXT,
+            added_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )",
+        "CREATE TABLE IF NOT EXISTS btn_styles (
+            style         TEXT PRIMARY KEY,
+            tg_style      TEXT,
+            icon_emoji_id TEXT,
+            prefix        TEXT
+        )",
+
         // ── آفست پولینگ ───────────────────────────────────────────────────
         "CREATE TABLE IF NOT EXISTS bot_meta (key TEXT PRIMARY KEY, value TEXT)",
     ];
@@ -1615,6 +2193,7 @@ function migrateDb(): void
         'mayor_candidates' => ['pledges' => "TEXT DEFAULT ''"],
         'game_tables'   => ['message_id' => 'INTEGER DEFAULT NULL'],
         'challenges'    => ['moves' => 'INTEGER DEFAULT 0', 'turn_expires' => 'TEXT DEFAULT NULL', 'pot' => 'INTEGER DEFAULT 0'],
+        'btn_styles'    => ['tg_style' => 'TEXT', 'icon_emoji_id' => 'TEXT', 'prefix' => 'TEXT'],
     ];
 
     foreach ($required as $table => $cols) {
@@ -1662,6 +2241,7 @@ function setSetting(string $key, $value): void
 {
     q('INSERT INTO bot_settings (key, value) VALUES (?, ?)
        ON CONFLICT(key) DO UPDATE SET value=excluded.value', [$key, (string) $value]);
+    cfgBump();
 }
 
 function meta(string $key, $default = null)
@@ -2775,16 +3355,15 @@ function bumpChallengeStats(int $userId, string $field, float $earned = 0): void
 /** متن اعلان چالش باز */
 function challengeOpenText(array $c): string
 {
-    $left = secsLeft($c['expires_at']);
-    return "🎯 <b>چالش دوز باز شد!</b>\n\n"
-        . quote(
-            "🎮 سازنده : " . h($c['creator_name']) . "\n"
-            . "💰 مبلغ چالش : <b>" . nf($c['bet']) . "</b> میو پوینت\n"
-            . "🏆 جایزه برنده : <b>" . nf(challengePrize((int) $c['bet'])) . "</b> میو پوینت\n"
-            . "⏳ مهلت پیوستن : " . fmtDur($left)
-        )
-        . "\n📌 هر کسی <b>" . nf($c['bet']) . "</b> میو پوینت داشته باشه می‌تونه شرکت کنه!\n"
-        . "🟢 روی دکمه سبز بزن و بازی رو شروع کن 👇";
+    $vars = [
+        'creator' => h($c['creator_name']),
+        'bet'     => nf($c['bet']),
+        'prize'   => nf(challengePrize((int) $c['bet'])),
+        'left'    => fmtDur(secsLeft($c['expires_at'])),
+    ];
+    return t('chal.open_title') . "\n\n"
+        . quote(t('chal.open_body', $vars))
+        . "\n" . t('chal.open_footer', $vars);
 }
 
 /** جایزه برنده = دو برابر شرط + پاداش */
@@ -2798,10 +3377,10 @@ function challengeOpenKeyboard(array $c): array
 {
     $id = (int) $c['id'];
     return kb([
-        [btn('شرکت در چالش دوز (' . nf($c['bet']) . ' میو)', "chal_join_{$id}", 'success')],
+        [btn(t('chal.btn_join', ['bet' => nf($c['bet'])]), "chal_join_{$id}", 'success')],
         [
-            btn('وضعیت چالش', "chal_info_{$id}", 'primary'),
-            btn('لغو چالش', "chal_cancel_{$id}", 'danger'),
+            btn(t('chal.btn_info'), "chal_info_{$id}", 'primary'),
+            btn(t('chal.btn_cancel'), "chal_cancel_{$id}", 'danger'),
         ],
     ]);
 }
@@ -2814,14 +3393,14 @@ function challengePlayText(array $c, string $note = ''): string
     $turnSym  = ((int) $c['turn_id'] === (int) $c['creator_id']) ? '❌' : '⭕';
     $left = secsLeft($c['turn_expires']);
 
-    return "🎯 <b>چالش دوز</b>\n\n"
+    return t('chal.play_title') . "\n\n"
         . quote(
             "❌ " . h($c['creator_name']) . "\n"
             . "⭕ " . h($c['rival_name']) . "\n"
             . "💰 شرط : " . nf($c['bet']) . " میو  |  🏆 جایزه : " . nf(challengePrize((int) $c['bet']))
         )
         . "\n" . xoRender($b) . "\n\n"
-        . "🎲 نوبت : {$turnSym} <b>" . h($turnName) . "</b>\n"
+        . t('chal.turn', ['sym' => $turnSym, 'name' => h($turnName)]) . "\n"
         . "⏳ مهلت نوبت : " . fmtDur($left)
         . ($note !== '' ? "\n\n{$note}" : '');
 }
@@ -2978,7 +3557,7 @@ function challengeJoin(array $cbq, int $id): void
     $c = getChallenge($id);
     $chatId = (int) $c['group_id'];
     $mid = (int) ($c['message_id'] ?? 0);
-    $text = challengePlayText($c, '🔥 بازی شروع شد! موفق باشی 🐾');
+    $text = challengePlayText($c, t('chal.started'));
     $board = xoBoard((string) $c['board']);
 
     if ($mid > 0) {
@@ -3079,7 +3658,7 @@ function challengeFinishWin(array $c, array $board, int $winnerId, array $line =
 
     $wStats = challengeStats($winnerId);
 
-    $text = "🏆 <b>" . h($winnerName) . " برنده چالش دوز شد!</b>\n\n"
+    $text = t('chal.win_title', ['winner' => h($winnerName)]) . "\n\n"
         . xoRender($board) . "\n\n"
         . quote(
             "🥇 برنده : " . h($winnerName) . "\n"
@@ -3116,7 +3695,7 @@ function challengeFinishDraw(array $c, array $board): void
     bumpChallengeStats((int) $c['creator_id'], 'draws');
     bumpChallengeStats((int) $c['rival_id'], 'draws');
 
-    $text = "🤝 <b>چالش دوز مساوی شد!</b>\n\n"
+    $text = t('chal.draw_title') . "\n\n"
         . xoRender($board) . "\n\n"
         . quote(
             "❌ " . h($c['creator_name']) . "\n"
@@ -3146,7 +3725,7 @@ function challengeExpire(array $c): void
         return;
     }
 
-    $text = "⏰ <b>چالش دوز منقضی شد!</b>\n\n"
+    $text = t('chal.expired') . "\n\n"
         . quote(
             "🎮 سازنده : " . h($c['creator_name']) . "\n"
             . "💰 " . nf($bet) . " میو پوینت برگشت داده شد ✅"
@@ -3187,7 +3766,7 @@ function challengeTimeoutTurn(array $c): void
     bumpChallengeStats($loserId, 'losses', -$bet);
 
     $board = xoBoard((string) $c['board']);
-    $text = "⏰ <b>وقت تموم شد!</b>\n\n"
+    $text = t('chal.timeout') . "\n\n"
         . xoRender($board) . "\n\n"
         . quote(
             "😴 " . h($loserName) . " توی مهلتش بازی نکرد.\n"
@@ -3314,14 +3893,8 @@ function cmdChallengeTop(array $msg): void
 function cmdChallengeHelp(array $msg): void
 {
     reply($msg,
-        "🎯 <b>راهنمای چالش دوز</b>\n\n"
-        . quote(
-            "برای ساخت چالش بنویس:\n"
-            . "<code>چالش 500 میو</code>\n"
-            . "<code>چالش 10k میو</code>\n\n"
-            . "هر کسی اون مقدار میو پوینت داشته باشه\n"
-            . "می‌تونه با دکمه سبز 🟢 وارد چالش بشه."
-        )
+        t('chal.help_title') . "\n\n"
+        . quote(t('chal.help_body'))
         . "\n📋 قوانین:\n"
         . "┐─ 💰 حداقل شرط: " . nf(CHALLENGE_MIN_BET) . " میو\n"
         . "┐─ ⏳ مهلت پیوستن: " . fmtDur(CHALLENGE_JOIN_WINDOW) . "\n"
@@ -3368,8 +3941,10 @@ function cmdHop(array $msg, array $from): void
     if (!empty($u['last_hop'])) {
         $diff = time() - ts($u['last_hop']);
         if ($diff < $effectiveCd) {
-            reply($msg, "⏳ " . h(displayName($from)) . "، هنوز باید صبر کنی!\n⌛️ "
-                . fmtDur($effectiveCd - $diff) . ' دیگه می‌تونی هاپ کنی 🐾');
+            reply($msg, t('hop.cooldown', [
+                'name' => h(displayName($from)),
+                'left' => fmtDur($effectiveCd - $diff),
+            ]));
             return;
         }
     }
@@ -3397,16 +3972,20 @@ function cmdHop(array $msg, array $from): void
     $progress = $newLevel < 1000 ? "$newHops/$nextLvlHops" : 'MAX';
     $boostTag = abs($mult - 1.0) > 0.0001 ? ' 🎉' : '';
 
-    $body = "🦴 +" . nf($reward) . " هاپ پوینت{$boostTag}\n"
-        . "💰 موجودی : " . nf($newPoints) . "\n"
-        . "⭐️ سطح : {$newLevel}  |  🐾 هاپ : {$progress}";
+    $body = t('hop.body', [
+        'reward'   => nf($reward),
+        'boost'    => $boostTag,
+        'points'   => nf($newPoints),
+        'level'    => (string) $newLevel,
+        'progress' => $progress,
+    ]);
     if ($dailyPrize > 0) {
         $body .= "\n🎁 جایزه روزانه : +" . nf($dailyPrize);
     }
 
-    $text = '🐕 <b>هاپ هاپ!</b> ' . h(displayName($from)) . "\n\n" . quote($body);
+    $text = t('hop.title', ['name' => h(displayName($from))]) . "\n\n" . quote($body);
     if ($leveledUp) {
-        $text .= "\n\n🎉 <b>لِول آپ!</b> به سطح {$newLevel} رسیدی!";
+        $text .= "\n\n" . t('hop.levelup', ['level' => (string) $newLevel]);
     }
     reply($msg, $text);
 
@@ -4683,10 +5262,10 @@ function sendProfile(array $msg, array $targetFrom): void
         $sizes = $photos['photos'][0] ?? [];
         $fileId = $sizes ? ($sizes[count($sizes) - 1]['file_id'] ?? null) : null;
         if ($fileId) {
-            $ok = tg('sendPhoto', [
+            $ok = tgSafe('sendPhoto', [
                 'chat_id'    => $msg['chat']['id'],
                 'photo'      => $fileId,
-                'caption'    => clampText($text, 1024),
+                'caption'    => clampText(renderOut($text), 1024),
                 'parse_mode' => 'HTML',
                 'reply_parameters' => ['message_id' => $msg['message_id'], 'allow_sending_without_reply' => true],
             ]);
@@ -4728,48 +5307,27 @@ function cmdTop(array $msg): void
     reply($msg, "🏆 <b>برترین هاپوها</b> 🐾\n\n" . quote(trim($body)));
 }
 
+/** متن کامل راهنما — همه بخش‌ها از پنل قابل ویرایش‌اند */
+function helpText(): string
+{
+    return t('help.title') . "\n\n"
+        . "<b>💼 اقتصاد و رشد</b>\n" . quote(t('help.economy'))
+        . "\n<b>🎮 بازی و سرگرمی</b>\n" . quote(t('help.games'))
+        . "\n<b>🏛 شهر و سیاست</b>\n" . quote(t('help.city'))
+        . "\n<b>👤 حساب کاربری</b>\n" . quote(t('help.account'));
+}
+
+function helpKeyboard(): array
+{
+    return kb([
+        [btn(t('btn.chalhelp'), 'chal_help', 'success')],
+        [btn(t('btn.top'), 'show_top', 'primary')],
+    ]);
+}
+
 function cmdHelp(array $msg): void
 {
-    reply($msg,
-        "🐾 <b>راهنمای هاپو</b> 🐾\n\n"
-        . "<b>💼 اقتصاد و رشد</b>\n"
-        . quote(
-            "🐾 <b>هاپ</b> — جمع پوینت (کولداون ۵ دقیقه)\n"
-            . "🐕 <b>سگ</b> — خرید و مدیریت سگ\n"
-            . "🎣 <b>قلاب</b> — خرید قلاب ماهیگیری\n"
-            . "🦴 <b>استخوان</b> — صید استخوان\n"
-            . "🏦 <b>بانک</b> — حساب بانکی و سود\n"
-            . "🏭 <b>کارخونه</b> — تولید و فروش محصول\n"
-            . "💳 <b>انتقال [عدد] @یوزر</b> — انتقال پوینت\n"
-            . "🎁 <b>اهدا [عدد]</b> — کمک به خزانه شهر"
-        )
-        . "\n<b>🎮 بازی و سرگرمی</b>\n"
-        . quote(
-            "🎯 <b>چالش [عدد] میو</b> — چالش دوز! 🆕\n"
-            . "🏅 <b>برترین چالش</b> — جدول چالش دوز\n"
-            . "🎲 <b>بازی</b> — منوی بازی‌ها\n"
-            . "🃏 <b>کازینو</b> — قمار، تاس، گردونه\n"
-            . "🥷 <b>قاچاق</b> — قاچاق سگ خیابونی"
-        )
-        . "\n<b>🏛 شهر و سیاست</b>\n"
-        . quote(
-            "🏰 <b>شهر</b> — وضعیت شهر گروه\n"
-            . "🏛 <b>شهرداری</b> — پنل شهردار و انتخابات\n"
-            . "🚨 <b>بحران</b> — وضعیت بحران شهر\n"
-            . "👑 <b>رهبر</b> — پنل رهبری کشور"
-        )
-        . "\n<b>👤 حساب کاربری</b>\n"
-        . quote(
-            "🐾 <b>هاپوهام</b> — پروفایل خودت\n"
-            . "🐾 <b>هاپ هاش</b> — پروفایل نفر ریپلای‌شده\n"
-            . "📊 <b>برترین</b> — لیدربرد\n"
-            . "⛓ <b>زندان</b> — وضعیت زندان\n"
-            . "🛒 <b>مارکت</b> — بازار کاربران"
-        ),
-        kb([
-            [btn('راهنمای چالش دوز 🎯', 'chal_help', 'success')],
-            [btn('برترین‌ها 📊', 'show_top', 'primary')],
-        ]));
+    reply($msg, helpText(), helpKeyboard());
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -5747,7 +6305,7 @@ function ownsButton(array $cbq, int $ownerId): bool
     if ((int) $cbq['from']['id'] === $ownerId) {
         return true;
     }
-    answerCb($cbq['id'], '❌ این دکمه برای تو نیست!', true);
+    answerCb($cbq['id'], t('err.not_yours'), true);
     return false;
 }
 
@@ -5783,7 +6341,7 @@ function handleCallback(array $cbq): void
     if ($data === 'cancel') {
         answerCb($cbId, '❌ لغو شد');
         clearState($uid);
-        editMsg($chatId, $mid, '❌ عملیات لغو شد.', null);
+        editMsg($chatId, $mid, t('err.cancelled'), null);
         return;
     }
     if ($data === 'check_join') {
@@ -5799,6 +6357,11 @@ function handleCallback(array $cbq): void
     if ($data === 'show_top') {
         answerCb($cbId);
         cmdTop($message);
+        return;
+    }
+    if ($data === 'show_help') {
+        answerCb($cbId);
+        editMsg($chatId, $mid, helpText(), helpKeyboard());
         return;
     }
 
@@ -7171,6 +7734,10 @@ function handleCallback3(array $cbq, string $data, int $uid, string $cbId, int $
     }
     if (str_starts_with($data, 'lead_')) {
         handleLeaderCallback($cbq, $data, $uid, $cbId, $chatId, $mid, $message);
+        return;
+    }
+    if (str_starts_with($data, 'pnl_') || $data === 'ref_admin_panel') {
+        handlePanelCallback($cbq, $data, $uid, $cbId, $chatId, $mid);
         return;
     }
     if (str_starts_with($data, 'adm_') || str_starts_with($data, 'confirm_delete_user_')) {
@@ -8709,6 +9276,616 @@ function doResetUsers(int $threshold, int $initPoints, int $initLevel = 1): int
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+//  🛠  پنل مدیریت ربات  (/panel)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** کاتالوگ گروه‌بندی‌شده بر اساس دسته */
+function catalogGrouped(): array
+{
+    static $g = null;
+    if ($g !== null) {
+        return $g;
+    }
+    $g = [];
+    foreach (textCatalog() as $key => [$cat, $label, $def]) {
+        $g[$cat][] = ['key' => $key, 'label' => $label];
+    }
+    $g = array_values(array_map(
+        static fn($cat, $items) => ['name' => $cat, 'items' => $items],
+        array_keys($g), $g
+    ));
+    return $g;
+}
+
+function panelHome(int $uid): array
+{
+    $texts  = (int) val('SELECT COUNT(*) FROM bot_texts', [], 0);
+    $rules  = (int) val('SELECT COUNT(*) FROM text_rules WHERE enabled=1', [], 0);
+    $emojis = (int) val('SELECT COUNT(*) FROM premium_emoji', [], 0);
+    $styles = (int) val('SELECT COUNT(*) FROM btn_styles', [], 0);
+    $iconsOn = btnIconsEnabled();
+    $premOn  = setting('premium_emoji_enabled', '1') === '1';
+
+    $text = "🛠 <b>پنل مدیریت ربات</b>\n\n"
+        . quote(
+            "📝 متن‌های ویرایش‌شده : <b>{$texts}</b> از " . count(textCatalog()) . "\n"
+            . "🔁 قواعد جایگزینی : <b>{$rules}</b>\n"
+            . "✨ ایموجی پریمیوم : <b>{$emojis}</b> " . ($premOn ? '(فعال)' : '(خاموش)') . "\n"
+            . "🎨 استایل‌های تغییریافته : <b>{$styles}</b>\n"
+            . "🔘 ایموجی روی دکمه : " . ($iconsOn ? 'فعال ✅' : 'خاموش ❌')
+        )
+        . "\n💡 با این پنل می‌تونی <b>هر متن و هر دکمه</b> ربات رو عوض کنی.";
+
+    $rows = [
+        [btn('ویرایش متن‌ها 📝', 'pnl_texts', 'primary')],
+        [
+            btn('رنگ و ایموجی دکمه‌ها 🎨', 'pnl_styles', 'primary'),
+            btn('ایموجی پریمیوم ✨', 'pnl_emoji', 'primary'),
+        ],
+        [btn('جایگزینی سراسری 🔁', 'pnl_rules', 'primary')],
+        [btn('پیش‌نمایش 👀', 'pnl_preview', 'success')],
+        [btn('پنل‌های دیگر 🗂', 'pnl_other', 'primary')],
+        [btn('بازگردانی همه به پیش‌فرض ♻️', 'pnl_resetall', 'danger')],
+    ];
+    return [$text, kb($rows)];
+}
+
+function panelTextsCategories(): array
+{
+    $groups = catalogGrouped();
+    $custom = customTexts();
+    $rows = [];
+    $body = '';
+    foreach ($groups as $i => $g) {
+        $changed = 0;
+        foreach ($g['items'] as $it) {
+            if (isset($custom[$it['key']])) {
+                $changed++;
+            }
+        }
+        $n = count($g['items']);
+        $body .= "📂 {$g['name']} — {$n} متن" . ($changed ? " (✏️ {$changed})" : '') . "\n";
+        $rows[] = [btn($g['name'] . " ({$n})", "pnl_tcat_{$i}_0", 'primary')];
+    }
+    $rows[] = [btn(t('btn.back'), 'pnl_home', 'primary')];
+    return ["📝 <b>ویرایش متن‌های ربات</b>\n\n" . quote(trim($body), true)
+        . "\nیه دسته انتخاب کن:", kb($rows)];
+}
+
+function panelTextKeys(int $catIdx, int $page): array
+{
+    $groups = catalogGrouped();
+    $g = $groups[$catIdx] ?? null;
+    if (!$g) {
+        return panelTextsCategories();
+    }
+    $custom = customTexts();
+    $per = 8;
+    $items = $g['items'];
+    $total = count($items);
+    $slice = array_slice($items, $page * $per, $per);
+
+    $rows = [];
+    foreach ($slice as $it) {
+        $i = array_search($it, $items, true);
+        $mark = isset($custom[$it['key']]) ? '✏️ ' : '';
+        $rows[] = [btn($mark . $it['label'], "pnl_tkey_{$catIdx}_{$i}", 'primary')];
+    }
+    $nav = [];
+    if ($page > 0) {
+        $nav[] = btn('قبلی ◀️', "pnl_tcat_{$catIdx}_" . ($page - 1), 'primary');
+    }
+    if (($page + 1) * $per < $total) {
+        $nav[] = btn('بعدی ▶️', "pnl_tcat_{$catIdx}_" . ($page + 1), 'primary');
+    }
+    if ($nav !== []) {
+        $rows[] = $nav;
+    }
+    $rows[] = [btn(t('btn.back'), 'pnl_texts', 'primary')];
+
+    return ["📂 <b>{$g['name']}</b>  ({$total} متن)\n\nکدوم متن رو می‌خوای عوض کنی؟", kb($rows)];
+}
+
+function panelTextDetail(int $catIdx, int $keyIdx): array
+{
+    $groups = catalogGrouped();
+    $item = $groups[$catIdx]['items'][$keyIdx] ?? null;
+    if (!$item) {
+        return panelTextsCategories();
+    }
+    $key = $item['key'];
+    $custom = customTexts();
+    $isCustom = isset($custom[$key]);
+    $current = t($key);
+
+    // نمایش امن متن فعلی
+    $shown = mb_strlen($current) > 700 ? mb_substr($current, 0, 700) . '…' : $current;
+
+    $vars = [];
+    if (preg_match_all('/\{(\w+)\}/', tDefault($key), $m)) {
+        $vars = array_unique($m[1]);
+    }
+
+    $text = "✏️ <b>{$item['label']}</b>\n"
+        . "<code>{$key}</code>\n\n"
+        . "وضعیت : " . ($isCustom ? '✏️ ویرایش‌شده' : '📄 پیش‌فرض') . "\n\n"
+        . "<b>متن فعلی:</b>\n" . quote($shown, true);
+
+    if ($vars !== []) {
+        $text .= "\n🔑 جای‌گذارهای مجاز: <code>{" . implode('}</code> <code>{', $vars) . "}</code>\n"
+            . "<i>حتماً همین‌ها رو توی متن جدید هم بذار.</i>";
+    }
+
+    $rows = [[btn('ویرایش این متن ✏️', "pnl_tedit_{$catIdx}_{$keyIdx}", 'success')]];
+    if ($isCustom) {
+        $rows[] = [btn('بازگردانی به پیش‌فرض ♻️', "pnl_trst_{$catIdx}_{$keyIdx}", 'danger')];
+    }
+    $rows[] = [btn(t('btn.back'), "pnl_tcat_{$catIdx}_0", 'primary')];
+
+    return [$text, kb($rows)];
+}
+
+function panelRules(): array
+{
+    $rules = all('SELECT * FROM text_rules ORDER BY id DESC LIMIT 30');
+    $body = '';
+    $rows = [];
+    foreach ($rules as $r) {
+        $body .= '🔁 <code>' . h($r['find']) . '</code> ← <code>' . h($r['repl']) . "</code>\n";
+        $rows[] = [btn('حذف: ' . mb_substr((string) $r['find'], 0, 22), 'pnl_ruledel_' . (int) $r['id'], 'danger')];
+    }
+    if ($rules === []) {
+        $body = 'هیچ قاعده‌ای ثبت نشده.';
+    }
+    array_unshift($rows, [btn('افزودن قاعده ➕', 'pnl_ruleadd', 'success')]);
+    $rows[] = [btn(t('btn.back'), 'pnl_home', 'primary')];
+
+    return ["🔁 <b>جایگزینی سراسری متن</b>\n\n"
+        . quote("هر عبارتی که اینجا ثبت کنی، توی <b>همه</b> پیام‌های ربات\nخودکار جایگزین میشه — حتی متن‌هایی که کلید جدا ندارن.")
+        . "\n" . quote($body, true), kb($rows)];
+}
+
+function panelEmoji(): array
+{
+    $list = all('SELECT * FROM premium_emoji ORDER BY added_at DESC LIMIT 40');
+    $enabled = setting('premium_emoji_enabled', '1') === '1';
+    $body = '';
+    $rows = [];
+    foreach ($list as $e) {
+        $body .= $e['emoji'] . ' → <code>' . h($e['emoji_id']) . "</code>\n";
+        $rows[] = [btn('حذف ' . $e['emoji'], 'pnl_emojidel_' . rawurlencode((string) $e['emoji']), 'danger')];
+    }
+    if ($list === []) {
+        $body = 'هنوز ایموجی پریمیومی ثبت نشده.';
+    }
+    array_unshift($rows,
+        [btn('افزودن ایموجی پریمیوم ➕', 'pnl_emojiadd', 'success')],
+        [btn($enabled ? 'خاموش کردن ایموجی پریمیوم' : 'روشن کردن ایموجی پریمیوم',
+            'pnl_emojitoggle', $enabled ? 'danger' : 'success')]);
+    $rows[] = [btn(t('btn.back'), 'pnl_home', 'primary')];
+
+    return ["✨ <b>ایموجی پریمیوم</b>\n\n"
+        . quote(
+            "هر ایموجی معمولی که اینجا نگاشت کنی، توی متن پیام‌ها\n"
+            . "خودکار به ایموجی پریمیوم تبدیل میشه.\n\n"
+            . "⚠️ لازمه مالک ربات اشتراک <b>تلگرام پریمیوم</b> داشته باشه."
+        )
+        . "\nوضعیت : " . ($enabled ? '🟢 فعال' : '🔴 خاموش') . "\n\n" . quote($body, true), kb($rows)];
+}
+
+function panelStyles(): array
+{
+    $styles = btnStyles();
+    $iconsOn = btnIconsEnabled();
+    $body = '';
+    $rows = [];
+    foreach ($styles as $key => $conf) {
+        $label = BTN_STYLE_LABEL[$key] ?? $key;
+        $color = TG_BTN_STYLE_FA[$conf['tg']] ?? $conf['tg'];
+        $icon = $conf['icon'] !== '' ? ' | ✨' : '';
+        $prefix = $conf['prefix'] !== '' ? ' | ' . $conf['prefix'] : '';
+        $body .= "{$label} : {$color}{$icon}{$prefix}\n";
+        $rows[] = [btn($label . ' — ' . $color, "pnl_style_{$key}", 'primary')];
+    }
+    $rows[] = [btn($iconsOn ? 'خاموش کردن ایموجی روی دکمه' : 'روشن کردن ایموجی روی دکمه',
+        'pnl_icons_toggle', $iconsOn ? 'danger' : 'success')];
+    $rows[] = [btn('بازگردانی استایل‌ها ♻️', 'pnl_stylereset', 'danger')];
+    $rows[] = [btn(t('btn.back'), 'pnl_home', 'primary')];
+
+    return ["🎨 <b>رنگ و ایموجی دکمه‌ها</b>\n\n"
+        . quote(
+            "تلگرام از Bot API 9.4 سه رنگ رسمی داره:\n"
+            . "🔵 آبی (primary) · 🟢 سبز (success) · 🔴 قرمز (danger)\n\n"
+            . "ایموجی پریمیوم روی دکمه هم پشتیبانی میشه اگر\n"
+            . "مالک ربات اشتراک <b>پریمیوم</b> داشته باشه."
+        )
+        . "\n" . quote(trim($body), true), kb($rows)];
+}
+
+function panelStyleDetail(string $style): array
+{
+    if (!isset(BTN_STYLE_LABEL[$style])) {
+        return panelStyles();
+    }
+    $conf = btnStyleConf($style);
+    $label = BTN_STYLE_LABEL[$style];
+
+    $text = "🎨 <b>استایل: {$label}</b>\n\n"
+        . quote(
+            "🎨 رنگ : " . (TG_BTN_STYLE_FA[$conf['tg']] ?? $conf['tg']) . "\n"
+            . "✨ ایموجی پریمیوم : " . ($conf['icon'] !== '' ? '<code>' . h($conf['icon']) . '</code>' : '— ندارد') . "\n"
+            . "🔤 پیشوند متنی : " . ($conf['prefix'] !== '' ? $conf['prefix'] : '— ندارد')
+        )
+        . "\n👇 نمونهٔ زندهٔ این استایل:";
+
+    $rows = [
+        [btn('نمونه دکمه ' . $label, 'noop', $style)],
+        [
+            btn('آبی 🔵', "pnl_stylecol_{$style}_primary", 'primary'),
+            btn('سبز 🟢', "pnl_stylecol_{$style}_success", 'success'),
+            btn('قرمز 🔴', "pnl_stylecol_{$style}_danger", 'danger'),
+        ],
+        [btn('بدون رنگ (پیش‌فرض برنامه)', "pnl_stylecol_{$style}_none", 'plain')],
+        [btn('تنظیم ایموجی پریمیوم ✨', "pnl_styleicon_{$style}", 'success')],
+    ];
+    if ($conf['icon'] !== '') {
+        $rows[] = [btn('حذف ایموجی پریمیوم', "pnl_styleiconclr_{$style}", 'danger')];
+    }
+    $rows[] = [btn('تنظیم پیشوند متنی 🔤', "pnl_styleprefix_{$style}", 'primary')];
+    $rows[] = [btn(t('btn.back'), 'pnl_styles', 'primary')];
+
+    return [$text, kb($rows)];
+}
+
+function panelPreview(): array
+{
+    $sample = "👀 <b>پیش‌نمایش زنده</b>\n\n"
+        . quote(
+            "🐕 هاپ هاپ! کاربر نمونه\n"
+            . "🦴 +۱٬۲۳۴ هاپ پوینت\n"
+            . "💰 موجودی : ۹۸٬۷۶۵\n"
+            . "⭐️ سطح : ۱۲"
+        )
+        . "\n🎯 چالش دوز — نمونهٔ دکمه‌ها:";
+
+    return [$sample, kb([
+        [btn('دکمه موفق', 'noop', 'success')],
+        [btn('دکمه عادی', 'noop', 'primary'), btn('دکمه خطرناک', 'noop', 'danger')],
+        [btn('دکمه هشدار', 'noop', 'warning'), btn('دکمه ویژه', 'noop', 'gold')],
+        [btn(t('btn.back'), 'pnl_home', 'primary')],
+    ])];
+}
+
+function panelOther(): array
+{
+    return ["🗂 <b>پنل‌های دیگر</b>\n\n" . quote('برای مدیریت بخش‌های دیگر ربات:'),
+        kb([
+            [btn('قرعه‌کشی 🎰', 'lot_panel', 'primary')],
+            [btn('مارکت 🛒', 'mkt_admin_back', 'primary')],
+            [btn('دعوت دوستان 🎁', 'ref_admin_panel', 'primary')],
+            [btn(t('btn.back'), 'pnl_home', 'primary')],
+        ])];
+}
+
+/** کال‌بک‌های پنل مدیریت */
+function handlePanelCallback(array $cbq, string $data, int $uid, string $cbId, int $chatId, int $mid): void
+{
+    if (!isAdmin($uid)) {
+        answerCb($cbId, '❌ فقط ادمین اصلی!', true);
+        return;
+    }
+
+    $show = static function (array $pair) use ($chatId, $mid, $cbId) {
+        answerCb($cbId);
+        editMsg($chatId, $mid, $pair[0], $pair[1]);
+    };
+
+    if ($data === 'pnl_home')   { $show(panelHome($uid)); return; }
+    if ($data === 'pnl_texts')  { $show(panelTextsCategories()); return; }
+    if ($data === 'pnl_rules')  { $show(panelRules()); return; }
+    if ($data === 'pnl_emoji')  { $show(panelEmoji()); return; }
+    if ($data === 'pnl_styles') { $show(panelStyles()); return; }
+    if ($data === 'pnl_preview'){ $show(panelPreview()); return; }
+    if ($data === 'pnl_other')  { $show(panelOther()); return; }
+
+    if (preg_match('/^pnl_tcat_(\d+)_(\d+)$/', $data, $m)) {
+        $show(panelTextKeys((int) $m[1], (int) $m[2]));
+        return;
+    }
+    if (preg_match('/^pnl_tkey_(\d+)_(\d+)$/', $data, $m)) {
+        $show(panelTextDetail((int) $m[1], (int) $m[2]));
+        return;
+    }
+    if (preg_match('/^pnl_tedit_(\d+)_(\d+)$/', $data, $m)) {
+        $groups = catalogGrouped();
+        $item = $groups[(int) $m[1]]['items'][(int) $m[2]] ?? null;
+        if (!$item) { answerCb($cbId, '❌ متن پیدا نشد!', true); return; }
+        setState($uid, ['flow' => 'panel_text', 'key' => $item['key'], 'cat' => (int) $m[1], 'idx' => (int) $m[2]]);
+        answerCb($cbId);
+        $vars = '';
+        if (preg_match_all('/\{(\w+)\}/', tDefault($item['key']), $mm)) {
+            $vars = "\n🔑 جای‌گذارها: <code>{" . implode('}</code> <code>{', array_unique($mm[1])) . "}</code>";
+        }
+        editMsg($chatId, $mid,
+            "✏️ <b>متن جدید «{$item['label']}» رو بفرست:</b>\n\n"
+            . quote(
+                "می‌تونی از <b>بولد</b>، <i>ایتالیک</i>، <code>کد</code>، اسپویلر،\n"
+                . "نقل‌قول و <b>ایموجی پریمیوم</b> استفاده کنی — همه حفظ میشن."
+                . $vars
+            )
+            . "\nبرای لغو بنویس: <b>لغو</b>", null);
+        return;
+    }
+    if (preg_match('/^pnl_trst_(\d+)_(\d+)$/', $data, $m)) {
+        $groups = catalogGrouped();
+        $item = $groups[(int) $m[1]]['items'][(int) $m[2]] ?? null;
+        if ($item) {
+            resetText($item['key']);
+        }
+        answerCb($cbId, '♻️ به پیش‌فرض برگشت!');
+        $show(panelTextDetail((int) $m[1], (int) $m[2]));
+        return;
+    }
+
+    if ($data === 'pnl_ruleadd') {
+        setState($uid, ['flow' => 'panel_rule']);
+        answerCb($cbId);
+        editMsg($chatId, $mid,
+            "🔁 <b>افزودن قاعده جایگزینی</b>\n\n"
+            . quote("قاعده رو با این قالب بفرست:\n<code>متن قدیمی | متن جدید</code>\n\nمثال:\n<code>هاپ پوینت | میو پوینت</code>")
+            . "\nبرای لغو بنویس: <b>لغو</b>", null);
+        return;
+    }
+    if (preg_match('/^pnl_ruledel_(\d+)$/', $data, $m)) {
+        q('DELETE FROM text_rules WHERE id=?', [(int) $m[1]]);
+        cfgBump();
+        answerCb($cbId, '🗑 قاعده حذف شد!');
+        $show(panelRules());
+        return;
+    }
+
+    if ($data === 'pnl_emojiadd') {
+        setState($uid, ['flow' => 'panel_emoji']);
+        answerCb($cbId);
+        editMsg($chatId, $mid,
+            "✨ <b>افزودن ایموجی پریمیوم</b>\n\n"
+            . quote(
+                "یه پیام بفرست که توش <b>ایموجی پریمیوم</b> داشته باشه.\n"
+                . "می‌تونی چندتا با هم بفرستی.\n\n"
+                . "هر ایموجی پریمیوم به شکل معمولی خودش نگاشت میشه؛\n"
+                . "از اون به بعد هر جای ربات اون ایموجی بیاد، پریمیوم نشون داده میشه."
+            )
+            . "\nبرای لغو بنویس: <b>لغو</b>", null);
+        return;
+    }
+    if (str_starts_with($data, 'pnl_emojidel_')) {
+        $emoji = rawurldecode(substr($data, 13));
+        q('DELETE FROM premium_emoji WHERE emoji=?', [$emoji]);
+        cfgBump();
+        answerCb($cbId, '🗑 حذف شد!');
+        $show(panelEmoji());
+        return;
+    }
+    if ($data === 'pnl_emojitoggle') {
+        $on = setting('premium_emoji_enabled', '1') === '1';
+        setSetting('premium_emoji_enabled', $on ? '0' : '1');
+        answerCb($cbId, $on ? '🔴 خاموش شد' : '🟢 روشن شد');
+        $show(panelEmoji());
+        return;
+    }
+
+    if (preg_match('/^pnl_style_(\w+)$/', $data, $m)) {
+        $show(panelStyleDetail($m[1]));
+        return;
+    }
+    if (preg_match('/^pnl_stylecol_(\w+)_(\w+)$/', $data, $m)) {
+        $style = $m[1];
+        $color = $m[2] === 'none' ? '' : $m[2];
+        if ($color !== '' && !in_array($color, TG_BTN_STYLES, true)) {
+            answerCb($cbId, '❌ رنگ نامعتبر!', true);
+            return;
+        }
+        setBtnStyleConf($style, $color);
+        answerCb($cbId, '🎨 رنگ تغییر کرد!');
+        $show(panelStyleDetail($style));
+        return;
+    }
+    if (preg_match('/^pnl_styleicon_(\w+)$/', $data, $m)) {
+        setState($uid, ['flow' => 'panel_styleicon', 'style' => $m[1]]);
+        answerCb($cbId);
+        editMsg($chatId, $mid,
+            "✨ <b>ایموجی پریمیوم دکمه</b>\n\n"
+            . quote("یه ایموجی پریمیوم بفرست تا قبل از متن این دسته دکمه‌ها نشون داده بشه.")
+            . "\nبرای لغو بنویس: <b>لغو</b>", null);
+        return;
+    }
+    if (preg_match('/^pnl_styleiconclr_(\w+)$/', $data, $m)) {
+        setBtnStyleConf($m[1], null, '');
+        answerCb($cbId, '🗑 ایموجی حذف شد!');
+        $show(panelStyleDetail($m[1]));
+        return;
+    }
+    if (preg_match('/^pnl_styleprefix_(\w+)$/', $data, $m)) {
+        setState($uid, ['flow' => 'panel_styleprefix', 'style' => $m[1]]);
+        answerCb($cbId);
+        editMsg($chatId, $mid,
+            "🔤 <b>پیشوند متنی دکمه</b>\n\n"
+            . quote("یه ایموجی یا کاراکتر بفرست تا اول متن دکمه‌ها بیاد.\nبرای حذف بنویس: <b>خالی</b>")
+            . "\nبرای لغو بنویس: <b>لغو</b>", null);
+        return;
+    }
+    if ($data === 'pnl_stylereset') {
+        resetBtnStyles();
+        answerCb($cbId, '♻️ استایل‌ها بازگردانی شد!');
+        $show(panelStyles());
+        return;
+    }
+    if ($data === 'pnl_icons_toggle') {
+        $on = btnIconsEnabled();
+        setSetting('btn_icons_enabled', $on ? '0' : '1');
+        answerCb($cbId, $on ? '🔴 خاموش شد' : '🟢 روشن شد');
+        $show(panelStyles());
+        return;
+    }
+
+    if ($data === 'pnl_resetall') {
+        answerCb($cbId);
+        editMsg($chatId, $mid,
+            "⚠️ <b>بازگردانی کامل</b>\n\n"
+            . quote("همهٔ متن‌های سفارشی، قواعد جایگزینی، ایموجی‌های پریمیوم\nو استایل دکمه‌ها پاک میشن و ربات به حالت اولیه برمی‌گرده.\n\nمطمئنی؟"),
+            kb([
+                [btn('بله، همه رو پاک کن', 'pnl_resetall_yes', 'danger')],
+                [btn(t('btn.cancel'), 'pnl_home', 'primary')],
+            ]));
+        return;
+    }
+    if ($data === 'pnl_resetall_yes') {
+        transact(static function () {
+            q('DELETE FROM bot_texts');
+            q('DELETE FROM text_rules');
+            q('DELETE FROM premium_emoji');
+            q('DELETE FROM btn_styles');
+        });
+        cfgBump();
+        setSetting('btn_icons_enabled', '1');
+        setSetting('premium_emoji_enabled', '1');
+        customTextsFlush();
+        answerCb($cbId, '♻️ همه چیز بازگردانی شد!');
+        $show(panelHome($uid));
+        return;
+    }
+
+    if ($data === 'ref_admin_panel') {
+        answerCb($cbId);
+        [$tt, $kk] = referralAdminPanelData();
+        editMsg($chatId, $mid, $tt, $kk);
+        return;
+    }
+
+    answerCb($cbId);
+}
+
+/** ورودی‌های متنی پنل — true اگر مصرف شد */
+function handlePanelInput(array $msg, array $from, string $raw, array $state): bool
+{
+    $uid = (int) $from['id'];
+    if (!isAdmin($uid)) {
+        clearState($uid);
+        return false;
+    }
+    $flow = (string) ($state['flow'] ?? '');
+
+    if ($flow === 'panel_text') {
+        $key = (string) ($state['key'] ?? '');
+        if ($key === '') {
+            clearState($uid);
+            return true;
+        }
+        $html = msgToHtml($msg);
+        if (trim($html) === '') {
+            reply($msg, '❌ متن نمی‌تونه خالی باشه!');
+            return true;
+        }
+        // بررسی جای‌گذارهای لازم
+        $missing = [];
+        if (preg_match_all('/\{(\w+)\}/', tDefault($key), $m)) {
+            foreach (array_unique($m[1]) as $v) {
+                if (!str_contains($html, '{' . $v . '}')) {
+                    $missing[] = $v;
+                }
+            }
+        }
+        setText($key, $html);
+        clearState($uid);
+
+        $warn = $missing !== []
+            ? "\n⚠️ این جای‌گذارها رو نذاشتی: <code>{" . implode('}</code> <code>{', $missing) . "}</code>\nممکنه پیام ناقص نشون داده بشه."
+            : '';
+        [$tt, $kk] = panelTextDetail((int) ($state['cat'] ?? 0), (int) ($state['idx'] ?? 0));
+        reply($msg, "✅ <b>متن ذخیره شد!</b>{$warn}\n\n" . $tt, $kk);
+        return true;
+    }
+
+    if ($flow === 'panel_rule') {
+        $parts = array_map('trim', explode('|', $raw, 2));
+        if (count($parts) < 2 || $parts[0] === '') {
+            reply($msg, "❌ قالب اشتباهه!\n\n" . quote('<code>متن قدیمی | متن جدید</code>'));
+            return true;
+        }
+        q('INSERT INTO text_rules (find, repl, enabled, created_at) VALUES (?,?,1,?)',
+            [$parts[0], $parts[1], nowIso()]);
+        cfgBump();
+        clearState($uid);
+        [$tt, $kk] = panelRules();
+        reply($msg, "✅ <b>قاعده اضافه شد!</b>\n\n" . $tt, $kk);
+        return true;
+    }
+
+    if ($flow === 'panel_emoji') {
+        $found = extractPremiumEmoji($msg);
+        if ($found === []) {
+            reply($msg, "❌ توی پیامت ایموجی پریمیوم پیدا نشد!\n\n"
+                . quote('باید از ایموجی‌های پریمیوم تلگرام استفاده کنی (نه ایموجی معمولی).'));
+            return true;
+        }
+        $n = 0;
+        foreach ($found as $f) {
+            q('INSERT INTO premium_emoji (emoji, emoji_id, added_at) VALUES (?,?,?)
+               ON CONFLICT(emoji) DO UPDATE SET emoji_id=excluded.emoji_id', [$f['emoji'], $f['id'], nowIso()]);
+            $n++;
+            cfgBump();
+        }
+        clearState($uid);
+        [$tt, $kk] = panelEmoji();
+        reply($msg, "✅ <b>{$n} ایموجی پریمیوم ثبت شد!</b>\n\n" . $tt, $kk);
+        return true;
+    }
+
+    if ($flow === 'panel_styleicon') {
+        $style = (string) ($state['style'] ?? '');
+        $found = extractPremiumEmoji($msg);
+        if ($found === []) {
+            reply($msg, '❌ توی پیامت ایموجی پریمیوم پیدا نشد!');
+            return true;
+        }
+        setBtnStyleConf($style, null, $found[0]['id']);
+        setSetting('btn_icons_enabled', '1');
+        clearState($uid);
+        [$tt, $kk] = panelStyleDetail($style);
+        reply($msg, "✅ <b>ایموجی دکمه تنظیم شد!</b>\n\n" . $tt, $kk);
+        return true;
+    }
+
+    if ($flow === 'panel_styleprefix') {
+        $style = (string) ($state['style'] ?? '');
+        $prefix = normalizeText($raw) === 'خالی' ? '' : trim($raw);
+        if (mb_strlen($prefix) > 8) {
+            reply($msg, '❌ پیشوند حداکثر ۸ کاراکتر!');
+            return true;
+        }
+        setBtnStyleConf($style, null, null, $prefix);
+        clearState($uid);
+        [$tt, $kk] = panelStyleDetail($style);
+        reply($msg, "✅ <b>پیشوند تنظیم شد!</b>\n\n" . $tt, $kk);
+        return true;
+    }
+
+    return false;
+}
+
+/** دستور /panel */
+function cmdPanel(array $msg, array $from): void
+{
+    $uid = (int) $from['id'];
+    if (!isAdmin($uid)) {
+        return;
+    }
+    ensureUser($from);
+    [$text, $keyboard] = panelHome($uid);
+    reply($msg, $text, $keyboard);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 //  ⌨️  پردازش ورودی متنی (وضعیت مکالمه)
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -8730,8 +9907,17 @@ function handleStateInput(array $msg, array $from, string $text): bool
 
     if (in_array(normalizeText($text), ['لغو', 'انصراف', 'کنسل', 'cancel'], true)) {
         clearState($uid);
-        reply($msg, '❌ عملیات لغو شد.');
+        reply($msg, t('err.cancelled'));
         return true;
+    }
+
+    // ورودی‌های پنل مدیریت
+    if (str_starts_with($flow, 'panel_')) {
+        if (handlePanelInput($msg, $from, $text, $state)) {
+            return true;
+        }
+        clearState($uid);
+        return false;
     }
 
     switch ($flow) {
@@ -9296,34 +10482,30 @@ function cmdStart(array $msg, array $from, string $text): void
             }
         }
 
+        // منوی کیبورد حذف شده — فقط پیام خوش‌آمد و دکمه افزودن به گروه
         sendMsg($chat['id'],
-            "🐕 سلام " . h(displayName($from)) . " عزیز!\n\n"
-            . quote(
-                "من ربات هاپی هستم 🦴\n\n"
-                . "📌 دستورات اصلی فقط <b>توی گروه</b> کار می‌کنن — منو به گروهت اضافه کن!\n\n"
-                . "🆕 قابلیت جدید: <b>چالش دوز</b>\n"
-                . "توی گروه بنویس <code>چالش 500 میو</code> تا یه چالش باز بشه!"
-            )
-            . "\n👇 از دکمه‌های زیر استفاده کن:",
-            rkb([
-                ['🎁 دعوت دوستان', '🐾 هاپوهام'],
-                ['🛒 مارکت', '📖 راهنما'],
-                ['📊 لیدربرد'],
-            ]), $msg);
+            t('start.private', ['name' => h(displayName($from))]),
+            kb([
+                [urlBtn(t('start.btn_addgroup'), 'https://t.me/' . BOT_USERNAME . '?startgroup=true', 'success')],
+                [btn(t('start.btn_help'), 'show_help', 'primary')],
+            ]),
+            $msg);
+
+        // حذف کیبورد منوی قدیمی از چت‌هایی که قبلاً منو داشتند
+        $rm = tg('sendMessage', [
+            'chat_id'      => $chat['id'],
+            'text'         => '⌨️',
+            'reply_markup' => ['remove_keyboard' => true],
+        ]);
+        if (is_array($rm) && isset($rm['message_id'])) {
+            deleteMsg($chat['id'], (int) $rm['message_id']);
+        }
         return;
     }
 
     ensureUser($from);
     ensureGroup($chat);
-    reply($msg,
-        "🐕 <b>ربات هاپی</b> اینجاست!\n\n"
-        . quote(
-            "🦴 توی گروه بنویس <b>هاپ</b> تا هاپ پوینت بگیری!\n"
-            . "هر ۵ دقیقه یه بار می‌تونی هاپ کنی 🐾\n\n"
-            . "🎯 <b>چالش دوز</b> — بنویس <code>چالش 500 میو</code>"
-        )
-        . "\n📖 برای دیدن همه دستورات بنویس <b>راهنما</b>",
-        kb([[btn('راهنمای کامل 📖', 'chal_help', 'primary')]]));
+    reply($msg, t('start.group'), kb([[btn(t('start.btn_help'), 'show_help', 'primary')]]));
 }
 
 /** تشخیص و اجرای دستورات ادمین متنی */
@@ -9595,7 +10777,10 @@ function handleGroupMessage(array $msg, array $from): void
             sendProfile($msg, $from); return;
         case in_array($lower, ['هاپ هاش', 'هاپو هاش', 'هاپوهاش', 'پروفایلش', 'hapohash'], true):
             cmdProfileOther($msg); return;
-        case in_array($lower, ['پنل', 'قرعه کشی', 'قرعه‌کشی'], true):
+        case in_array($lower, ['پنل', 'panel', 'تنظیمات'], true):
+            cmdPanel($msg, $from);
+            return;
+        case in_array($lower, ['قرعه کشی', 'قرعه‌کشی'], true):
             if (isAdmin($uid)) {
                 [$t2, $k2] = lotteryAdminPanelData();
                 reply($msg, $t2, $k2);
@@ -9657,7 +10842,11 @@ function handlePrivateMessage(array $msg, array $from): void
         reply($msg, $t2, $k2);
         return;
     }
-    if (in_array($lower, ['پنل', 'قرعه کشی', 'قرعه‌کشی'], true) && isAdmin($uid)) {
+    if (in_array($lower, ['پنل', 'panel', 'تنظیمات'], true) && isAdmin($uid)) {
+        cmdPanel($msg, $from);
+        return;
+    }
+    if (in_array($lower, ['قرعه کشی', 'قرعه‌کشی'], true) && isAdmin($uid)) {
         [$t2, $k2] = lotteryAdminPanelData();
         reply($msg, $t2, $k2);
         return;
@@ -9926,8 +11115,11 @@ function processUpdate(array $update): void
                     [$t2, $k2] = referralPanelData((int) $from['id']);
                     reply($msg, $t2, $k2);
                     return;
-                case '/lottery':
                 case '/panel':
+                case '/settings':
+                    cmdPanel($msg, $from);
+                    return;
+                case '/lottery':
                     ensureUser($from);
                     if (isAdmin((int) $from['id'])) {
                         [$t2, $k2] = lotteryAdminPanelData();
@@ -9975,6 +11167,7 @@ function setBotCommands(): void
         ['command' => 'top',       'description' => 'برترین‌ها'],
         ['command' => 'invite',    'description' => 'دعوت دوستان'],
         ['command' => 'leader',    'description' => 'پنل رهبری کشور'],
+        ['command' => 'panel',     'description' => 'پنل مدیریت (فقط ادمین)'],
     ]]);
 }
 
