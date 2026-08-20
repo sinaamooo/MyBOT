@@ -1,0 +1,9 @@
+# دیتابیس و لاگ‌های زمان اجرا
+happy_bot.db
+happy_bot.db-wal
+happy_bot.db-shm
+*.db
+*.db-wal
+*.db-shm
+bot.log
+*.log
