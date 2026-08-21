@@ -109,6 +109,7 @@ function maDefaultConfig() {
             'auth_type'  => 'header',           // header | query | body | none
             'auth_key'   => 'Authorization',
             'auth_value' => '',                 // توکن یا کلید API
+            'spec_url'   => '',                 // آدرس openapi.json پنل — برای خواندن خودکار مسیرها
             'timeout'    => 20,
             'retry'      => 3,                  // چند بار تلاش دوباره
             'auto_pay'   => true,               // بلافاصله بعد از پرداخت اجرا شود؟
@@ -2646,10 +2647,12 @@ function maAdmFulfill($chatId, $msgId) {
 
     $rows = [
         [btnCb(!empty($f['on']) ? '❌ خاموش کن' : '✅ روشن کن', 'maadm_fftog', 'info')],
+        [btnCb('📖 خواندن مستندات API', 'maadm_spec', 'confirm')],
         [btnCb('🔌 تست موجودی پنل', 'maadm_fftest', 'confirm')],
         [btnCb('🔗 آدرس پنل', 'maadm_ff_base', 'admin'), btnCb('🏷 نام', 'maadm_ff_name', 'admin')],
         [btnCb('🔐 نوع احراز', 'maadm_ffauth', 'admin'), btnCb('🔑 کلید API', 'maadm_ff_auth_value', 'admin')],
-        [btnCb('📛 نام هدر/پارامتر', 'maadm_ff_auth_key', 'admin')],
+        [btnCb('📛 نام هدر/پارامتر', 'maadm_ff_auth_key', 'admin'),
+         btnCb('📄 آدرس مستندات', 'maadm_ff_spec_url', 'admin')],
         [btnCb('⭐️ عملیات استارز', 'maadm_ffop_stars', 'admin')],
         [btnCb('💎 عملیات پریمیوم', 'maadm_ffop_premium', 'admin')],
         [btnCb('🎁 عملیات گیفت', 'maadm_ffop_gift', 'admin')],
@@ -2692,6 +2695,170 @@ function maAdmFulfillOp($chatId, $msgId, $op) {
         [btnCb(UT('back'), 'maadm_fulfill', 'nav')],
     ];
     editMsg(BOT_TOKEN, $chatId, $msgId, $text, inlineKb($rows));
+}
+
+/**
+ * 📖 خواندن مستندات OpenAPI پنل.
+ *
+ * صفحه Swagger هر API یک فایل openapi.json دارد که همه مسیرها، متدها و
+ * فیلدها را دقیق توصیف می‌کند. به‌جای حدس زدن یا اسکرین‌شات گرفتن،
+ * همان فایل را می‌خوانیم و فهرست واقعی را نشان می‌دهیم.
+ */
+function maSpecUrlGuess() {
+    $f = maCfg()['fulfill'] ?? [];
+    $u = trim((string)($f['spec_url'] ?? ''));
+    if ($u !== '') return $u;
+    $base = rtrim((string)($f['base'] ?? ''), '/');
+    return $base !== '' ? $base . '/openapi.json' : '';
+}
+
+/** کلیدواژه‌های هر عملیات — برای پیشنهاد خودکار مسیر */
+function maSpecKeywords() {
+    return [
+        'balance' => ['balance', 'deposit', 'wallet', 'account', 'credit', 'me', 'profile', 'funds'],
+        'stars'   => ['star'],
+        'premium' => ['premium'],
+        'gift'    => ['gift'],
+    ];
+}
+
+function maAdmSpecRead($chatId) {
+    $url  = maSpecUrlGuess();
+    $back = inlineKb([[btnCb('🤖 تحویل خودکار', 'maadm_fulfill', 'admin')]]);
+
+    if ($url === '') {
+        sendMsg(BOT_TOKEN, $chatId, "⚠️ اول «🔗 آدرس پنل» را ثبت کنید.", $back);
+        return;
+    }
+
+    [$j, $err] = maHttp($url, 'GET', '', '', 20);
+    if (!$j) {
+        sendMsg(BOT_TOKEN, $chatId,
+            "❌ <b>مستندات خوانده نشد</b>\n\n<code>" . h($url) . "</code>\n" . h($err) . "\n\n" .
+            "اگر آدرس فرق دارد، «📄 آدرس مستندات» را دستی ثبت کنید. " .
+            "معمولا یکی از اینهاست:\n<code>/openapi.json</code> · <code>/v1/openapi.json</code> · <code>/docs/openapi.json</code>",
+            $back);
+        return;
+    }
+
+    $paths = $j['paths'] ?? null;
+    if (!is_array($paths)) {
+        sendMsg(BOT_TOKEN, $chatId,
+            "⚠️ فایل خوانده شد ولی بخش <code>paths</code> نداشت.\nکلیدها: <code>" .
+            h(implode(', ', array_slice(array_keys($j), 0, 10))) . '</code>', $back);
+        return;
+    }
+
+    // همه مسیرها را صاف می‌کنیم
+    $all = [];
+    foreach ($paths as $path => $methods) {
+        if (!is_array($methods)) continue;
+        foreach ($methods as $m => $def) {
+            $m = strtolower($m);
+            if (!in_array($m, ['get', 'post', 'put', 'patch', 'delete'], true)) continue;
+            $all[] = [
+                'method'  => strtoupper($m),
+                'path'    => (string)$path,
+                'summary' => (string)($def['summary'] ?? ''),
+            ];
+        }
+    }
+    if (!$all) { sendMsg(BOT_TOKEN, $chatId, "⚠️ هیچ مسیری در مستندات نبود.", $back); return; }
+
+    save('ma_spec', $all);
+
+    // 🎯 مهم‌ترین سوال: آیا حساب اعتباری دارد یا نه؟
+    $hits = [];
+    foreach (maSpecKeywords() as $op => $words) {
+        foreach ($all as $i => $e) {
+            $hay = mb_strtolower($e['path'] . ' ' . $e['summary']);
+            foreach ($words as $w) {
+                if (str_contains($hay, $w)) { $hits[$op][] = $i; break; }
+            }
+        }
+    }
+
+    $t  = "📖 <b>مستندات پنل خوانده شد</b>\n\n";
+    $t .= "مجموع مسیرها: <b>" . count($all) . "</b>\n\n";
+
+    $labels = ['balance' => '💰 موجودی / اعتبار', 'stars' => '⭐️ استارز',
+               'premium' => '💎 پریمیوم', 'gift' => '🎁 گیفت'];
+    $rows = [];
+    foreach ($labels as $op => $lbl) {
+        $list = $hits[$op] ?? [];
+        $t .= $lbl . ': ' . (count($list) ? '<b>' . count($list) . '</b> مسیر' : '❌ پیدا نشد') . "\n";
+        foreach (array_slice($list, 0, 5) as $i) {
+            $e = $all[$i];
+            $t .= "   <code>" . h($e['method'] . ' ' . $e['path']) . "</code>\n";
+            if ($e['summary'] !== '') $t .= "      " . h(mb_substr($e['summary'], 0, 46)) . "\n";
+        }
+        if (count($list)) {
+            $rows[] = [btnCb($lbl . ' — انتخاب مسیر', 'maadm_spick_' . $op, 'info')];
+        }
+        $t .= "\n";
+    }
+
+    $hasBalance = !empty($hits['balance']);
+    $t .= $hasBalance
+        ? "✅ <b>مسیر موجودی/اعتبار پیدا شد</b> — یعنی احتمالا می‌شود بدون کلید ولت، از حساب اعتباری خرید کرد. مسیرها را ببینید.\n"
+        : "⚠️ <b>هیچ مسیر موجودی/اعتباری پیدا نشد.</b> یعنی این پنل با تراکنش ولت کار می‌کند، نه حساب شارژشده.\n";
+
+    $rows[] = [btnCb('📜 دیدن همه مسیرها', 'maadm_sall_0', 'admin')];
+    $rows[] = [btnCb(UT('back'), 'maadm_fulfill', 'nav')];
+
+    sendMsg(BOT_TOKEN, $chatId, mb_substr($t, 0, 3800), inlineKb($rows));
+}
+
+/** 📜 فهرست همه مسیرها، صفحه‌به‌صفحه */
+function maAdmSpecAll($chatId, $msgId, $page = 0) {
+    $all = load('ma_spec');
+    if (!is_array($all) || !$all) {
+        editMsg(BOT_TOKEN, $chatId, $msgId, "اول «📖 خواندن مستندات» را بزنید.",
+            inlineKb([[btnCb(UT('back'), 'maadm_fulfill', 'nav')]]));
+        return;
+    }
+    $per   = 18;
+    $pages = (int)ceil(count($all) / $per);
+    $page  = max(0, min($pages - 1, (int)$page));
+
+    $t = "📜 <b>مسیرهای پنل</b> — صفحه " . ($page + 1) . " از {$pages}\n\n";
+    foreach (array_slice($all, $page * $per, $per) as $e) {
+        $t .= "<code>" . h($e['method'] . ' ' . $e['path']) . "</code>\n";
+        if ($e['summary'] !== '') $t .= "   " . h(mb_substr($e['summary'], 0, 44)) . "\n";
+    }
+
+    $nav = [];
+    if ($page > 0)          $nav[] = btnCb('◀️ قبلی', 'maadm_sall_' . ($page - 1), 'nav');
+    if ($page < $pages - 1) $nav[] = btnCb('بعدی ▶️', 'maadm_sall_' . ($page + 1), 'nav');
+    $rows = $nav ? [$nav] : [];
+    $rows[] = [btnCb(UT('back'), 'maadm_fulfill', 'nav')];
+
+    editMsg(BOT_TOKEN, $chatId, $msgId, mb_substr($t, 0, 3800), inlineKb($rows));
+}
+
+/** 🎯 انتخاب مسیر برای یک عملیات، از روی مستندات */
+function maAdmSpecPick($chatId, $msgId, $op) {
+    $all = load('ma_spec');
+    if (!is_array($all) || !$all) { maAdmFulfill($chatId, $msgId); return; }
+
+    $words = maSpecKeywords()[$op] ?? [];
+    $rows  = [];
+    $n     = 0;
+    foreach ($all as $i => $e) {
+        $hay = mb_strtolower($e['path'] . ' ' . $e['summary']);
+        $ok  = false;
+        foreach ($words as $w) if (str_contains($hay, $w)) { $ok = true; break; }
+        if (!$ok) continue;
+        $rows[] = [btnCb($e['method'] . ' ' . mb_substr($e['path'], 0, 40), 'maadm_sset_' . $op . '|' . $i, 'info')];
+        if (++$n >= 14) break;
+    }
+    $rows[] = [btnCb(UT('back'), 'maadm_fulfill', 'nav')];
+
+    editMsg(BOT_TOKEN, $chatId, $msgId,
+        "🎯 <b>مسیر عملیات را انتخاب کنید</b>\n\n" .
+        "با زدن هرکدام، مسیر و متدش روی این عملیات می‌نشیند. " .
+        "بعدش فقط «📦 بدنه» را با متغیرهای <code>{username}</code> و <code>{qty}</code> پر کنید.",
+        inlineKb($rows));
 }
 
 /** 🔌 تست اتصال به پنل */
@@ -2900,6 +3067,29 @@ function maAdminCallback($data, $uid, $chatId, $msgId, $cbId) {
     if ($data === 'maadm_fulfill') { answerCb(BOT_TOKEN, $cbId); maAdmFulfill($chatId, $msgId); return true; }
     if ($data === 'maadm_ffstuck') { answerCb(BOT_TOKEN, $cbId); maAdmStuck($chatId, $msgId); return true; }
     if ($data === 'maadm_fftest')  { answerCb(BOT_TOKEN, $cbId, '⏳ تست…'); maAdmFulfillTest($chatId); return true; }
+    if ($data === 'maadm_spec')    { answerCb(BOT_TOKEN, $cbId, '⏳ خواندن…'); maAdmSpecRead($chatId); return true; }
+
+    if (preg_match('/^maadm_sall_(\d+)$/', $data, $sm)) {
+        answerCb(BOT_TOKEN, $cbId); maAdmSpecAll($chatId, $msgId, (int)$sm[1]); return true;
+    }
+    if (preg_match('/^maadm_spick_([a-z]+)$/', $data, $sm)) {
+        answerCb(BOT_TOKEN, $cbId); maAdmSpecPick($chatId, $msgId, $sm[1]); return true;
+    }
+    if (preg_match('/^maadm_sset_([a-z]+)\|(\d+)$/', $data, $sm)) {
+        [$all2, $op2, $idx] = [load('ma_spec'), $sm[1], (int)$sm[2]];
+        $e = is_array($all2) ? ($all2[$idx] ?? null) : null;
+        if ($e) {
+            maSetRoot(function (&$m) use ($op2, $e) {
+                $m['fulfill']['ops'][$op2]['path']   = $e['path'];
+                $m['fulfill']['ops'][$op2]['method'] = $e['method'];
+            });
+            answerCb(BOT_TOKEN, $cbId, '✅ ' . $e['method'] . ' ' . mb_substr($e['path'], 0, 28), true);
+            maAdmFulfillOp($chatId, $msgId, $op2);
+        } else {
+            answerCb(BOT_TOKEN, $cbId, '❌');
+        }
+        return true;
+    }
 
     if ($data === 'maadm_fftog') {
         maSetRoot(function (&$m) { $m['fulfill']['on'] = empty($m['fulfill']['on']); });
@@ -2926,6 +3116,7 @@ function maAdminCallback($data, $uid, $chatId, $msgId, $cbId) {
         answerCb(BOT_TOKEN, $cbId);
         $hints = [
             'base'       => "آدرس پایه پنل، بدون اسلش آخر:\n<code>https://api.marketapp.org</code>",
+            'spec_url'   => "آدرس فایل openapi.json پنل. خالی بگذارید تا خودش حدس بزند:\n<code>{آدرس پنل}/openapi.json</code>",
             'name'       => 'نامی که در پیام‌ها نشان داده می‌شود.',
             'auth_key'   => "اسم هدر یا پارامتر کلید — مثلا <code>Authorization</code> یا <code>api_key</code>",
             'auth_value' => "مقدار کلید. اگر پنل <code>Bearer</code> می‌خواهد، کاملش را بنویسید:\n<code>Bearer xxxxx</code>",
@@ -3311,7 +3502,7 @@ function maAdminState($action, $sd, $msg, $uid, $chatId, $plain, $ids) {
     // ---- 🤖 تنظیمات تحویل خودکار ----
     if ($action === 'ma_ffcfg') {
         $f = (string)($sd['f'] ?? '');
-        if ($f === 'base') {
+        if ($f === 'base' || $f === 'spec_url') {
             $v = $dash ? '' : rtrim($plain, '/');
             if ($v !== '' && !preg_match('#^https://#i', $v)) {
                 sendMsg(BOT_TOKEN, $chatId, '⚠️ آدرس باید با https:// شروع شود.'); return true;
