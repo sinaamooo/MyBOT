@@ -46,6 +46,48 @@ function maDefaultConfig() {
     return [
         // آدرس عمومی همین فایل — بدون این، دکمه مینی‌اپ ساخته نمی‌شود
         'base_url' => '',
+
+        // 🔌 قیمت‌گیری زنده از مارکت گیفت (Tonnel / Portals / هر API دیگر)
+        // چون هر مارکت ساختار پاسخ خودش را دارد، آدرس و مسیر فیلدها اینجا تنظیم می‌شود
+        // و با دکمه «تست اتصال» در پنل بررسی می‌شود.
+        'market' => [
+            'on'          => false,
+            'name'        => 'مارکت گیفت',
+            'url'         => '',
+            'method'      => 'GET',
+            'headers'     => '',        // هر خط: Key: Value
+            'body'        => '',        // برای POST — JSON
+            'list_path'   => '',        // مسیر آرایه نتایج، مثل: data.results
+            'key_field'   => 'name',    // فیلدی که اسم/شناسه گیفت در آن است
+            'price_field' => 'price',   // فیلدی که قیمت در آن است
+            'price_cur'   => 'TON',     // TON | USDT | IRT
+            'margin'      => 10,        // درصد سود روی قیمت مارکت
+            'round'       => 1000,      // گرد کردن نهایی به تومان
+            'ttl'         => 600,       // ثانیه کش
+        ],
+
+        // 💱 نرخ ارز — پیش‌فرض نوبیتکس (همان منبعی که سورس GiftIx استفاده می‌کرد)
+        'rates' => [
+            'on'       => true,
+            'ton_url'  => 'https://api.nobitex.ir/market/stats?srcCurrency=ton&dstCurrency=rls',
+            'ton_path' => 'stats.ton-rls.latest',
+            'trx_url'  => 'https://api.nobitex.ir/market/stats?srcCurrency=trx&dstCurrency=rls',
+            'trx_path' => 'stats.trx-rls.latest',
+            'usdt_url' => 'https://api.nobitex.ir/market/stats?srcCurrency=usdt&dstCurrency=rls',
+            'usdt_path'=> 'stats.usdt-rls.latest',
+            'div'      => 10,           // ریال → تومان
+            'margin'   => 5,            // درصد سود روی نرخ ارز
+            'round'    => 100,
+            'ttl'      => 300,
+        ],
+
+        // ⭐️ نرخ استارز — قیمت هر ۱ استارز به تومان
+        'stars' => [
+            'on'    => false,
+            'price' => 1900,
+            'round' => 1000,
+        ],
+
         'apps' => [
             'tg'  => maDefaultTg(),
             'cfg' => maDefaultCfg(),
@@ -78,6 +120,7 @@ function maDefaultTg() {
             'bg'  => '#080512',   // پس‌زمینه
             'glow' => 1,          // درخشش
             'grain' => 1,         // بافت
+            'fx'    => 2,         // سطح افکت: ۲ کامل · ۱ سبک · ۰ خاموش
         ],
 
         // ✏️ متن دکمه‌های داخل مینی‌اپ
@@ -111,10 +154,52 @@ function maDefaultTg() {
         ],
 
         'items' => [
-            ['id' => 'i_star1', 'cat' => 'c_star', 'emoji' => '⭐️', 'name' => 'استارز تلگرام',
-             'desc' => 'قیمت هر ۱ استارز — حداقل ۵۰ عدد', 'price' => 1900, 'unit' => 'استارز',
-             'badge' => 'پرفروش', 'ask' => 'qty', 'min' => 50, 'max' => 100000, 'on' => true, 'order' => 1],
+            // ── ⭐️ استارز: بسته‌های آماده + مقدار دلخواه ──
+            ['id' => 'i_star_free', 'cat' => 'c_star', 'emoji' => '⭐️', 'name' => 'استارز — مقدار دلخواه',
+             'desc' => 'هر تعداد که بخواهید — قیمت هر ۱ استارز', 'price' => 1900, 'unit' => 'استارز',
+             'badge' => 'دلخواه', 'ask' => 'qty', 'min' => 50, 'max' => 1000000, 'on' => true, 'order' => 1],
 
+            ['id' => 'i_star_50',    'cat' => 'c_star', 'emoji' => '⭐️', 'name' => '۵۰ استارز',
+             'desc' => 'کمترین مقدار قابل خرید', 'price' => 95000, 'unit' => '', 'badge' => '',
+             'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 2, 'stars' => 50],
+            ['id' => 'i_star_75',    'cat' => 'c_star', 'emoji' => '⭐️', 'name' => '۷۵ استارز',
+             'desc' => '', 'price' => 142500, 'unit' => '', 'badge' => '',
+             'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 3, 'stars' => 75],
+            ['id' => 'i_star_100',   'cat' => 'c_star', 'emoji' => '🌟', 'name' => '۱۰۰ استارز',
+             'desc' => 'مناسب گیفت و ری‌اکشن', 'price' => 190000, 'unit' => '', 'badge' => 'پرفروش',
+             'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 4, 'stars' => 100],
+            ['id' => 'i_star_150',   'cat' => 'c_star', 'emoji' => '🌟', 'name' => '۱۵۰ استارز',
+             'desc' => '', 'price' => 285000, 'unit' => '', 'badge' => '',
+             'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 5, 'stars' => 150],
+            ['id' => 'i_star_250',   'cat' => 'c_star', 'emoji' => '🌟', 'name' => '۲۵۰ استارز',
+             'desc' => '', 'price' => 475000, 'unit' => '', 'badge' => '',
+             'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 6, 'stars' => 250],
+            ['id' => 'i_star_350',   'cat' => 'c_star', 'emoji' => '✨', 'name' => '۳۵۰ استارز',
+             'desc' => '', 'price' => 665000, 'unit' => '', 'badge' => '',
+             'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 7, 'stars' => 350],
+            ['id' => 'i_star_500',   'cat' => 'c_star', 'emoji' => '✨', 'name' => '۵۰۰ استارز',
+             'desc' => 'مناسب خرید پریمیوم با استارز', 'price' => 950000, 'unit' => '', 'badge' => 'اقتصادی',
+             'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 8, 'stars' => 500],
+            ['id' => 'i_star_750',   'cat' => 'c_star', 'emoji' => '✨', 'name' => '۷۵۰ استارز',
+             'desc' => '', 'price' => 1425000, 'unit' => '', 'badge' => '',
+             'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 9, 'stars' => 750],
+            ['id' => 'i_star_1000',  'cat' => 'c_star', 'emoji' => '💫', 'name' => '۱۰۰۰ استارز',
+             'desc' => 'بسته حرفه‌ای', 'price' => 1900000, 'unit' => '', 'badge' => 'ویژه',
+             'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 10, 'stars' => 1000],
+            ['id' => 'i_star_1500',  'cat' => 'c_star', 'emoji' => '💫', 'name' => '۱۵۰۰ استارز',
+             'desc' => '', 'price' => 2850000, 'unit' => '', 'badge' => '',
+             'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 11, 'stars' => 1500],
+            ['id' => 'i_star_2500',  'cat' => 'c_star', 'emoji' => '💫', 'name' => '۲۵۰۰ استارز',
+             'desc' => '', 'price' => 4750000, 'unit' => '', 'badge' => '',
+             'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 12, 'stars' => 2500],
+            ['id' => 'i_star_5000',  'cat' => 'c_star', 'emoji' => '🌠', 'name' => '۵۰۰۰ استارز',
+             'desc' => 'بسته عمده', 'price' => 9500000, 'unit' => '', 'badge' => 'عمده',
+             'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 13, 'stars' => 5000],
+            ['id' => 'i_star_10000', 'cat' => 'c_star', 'emoji' => '🌠', 'name' => '۱۰۰۰۰ استارز',
+             'desc' => 'بسته عمده — بهترین قیمت', 'price' => 19000000, 'unit' => '', 'badge' => 'عمده',
+             'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 14, 'stars' => 10000],
+
+            // ── 💎 پریمیوم ──
             ['id' => 'i_prem3', 'cat' => 'c_prem', 'emoji' => '💎', 'name' => 'پریمیوم ۳ ماهه',
              'desc' => 'فعال‌سازی روی آیدی شما — بدون نیاز به رمز', 'price' => 690000, 'unit' => '',
              'badge' => '', 'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 1],
@@ -125,22 +210,64 @@ function maDefaultTg() {
              'desc' => 'یک سال کامل — بهترین قیمت', 'price' => 1690000, 'unit' => '',
              'badge' => 'ویژه', 'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 3],
 
-            ['id' => 'i_gift_teddy', 'cat' => 'c_gift', 'emoji' => '🧸', 'name' => 'گیفت تدی',
-             'desc' => '۱۵ استارز — قابل نمایش روی پروفایل', 'price' => 33000, 'unit' => '',
-             'badge' => '', 'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 1],
-            ['id' => 'i_gift_heart', 'cat' => 'c_gift', 'emoji' => '💗', 'name' => 'گیفت قلب',
-             'desc' => '۱۵ استارز — هدیه‌ای برای سوپرایز کردن', 'price' => 33000, 'unit' => '',
-             'badge' => '', 'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 2],
-            ['id' => 'i_gift_rose', 'cat' => 'c_gift', 'emoji' => '🌹', 'name' => 'گیفت گل رز',
-             'desc' => '۲۵ استارز', 'price' => 54000, 'unit' => '',
-             'badge' => '', 'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 3],
+            // ── 🎁 گیفت‌های استارزی (قیمت بر پایه استارز، قابل اتصال به مارکت) ──
+            ['id' => 'g_teddy',     'cat' => 'c_gift', 'emoji' => '🧸', 'name' => 'گیفت تدی',
+             'desc' => '۱۵ استارز', 'price' => 33000, 'unit' => '', 'badge' => '',
+             'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 1,
+             'stars' => 15, 'market_key' => 'teddy'],
+            ['id' => 'g_heart',     'cat' => 'c_gift', 'emoji' => '💗', 'name' => 'گیفت قلب',
+             'desc' => '۱۵ استارز', 'price' => 33000, 'unit' => '', 'badge' => '',
+             'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 2,
+             'stars' => 15, 'market_key' => 'heart'],
+            ['id' => 'g_rose',      'cat' => 'c_gift', 'emoji' => '🌹', 'name' => 'گیفت گل رز',
+             'desc' => '۲۵ استارز', 'price' => 54000, 'unit' => '', 'badge' => '',
+             'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 3,
+             'stars' => 25, 'market_key' => 'rose'],
+            ['id' => 'g_gift',      'cat' => 'c_gift', 'emoji' => '🎁', 'name' => 'گیفت کادو',
+             'desc' => '۲۵ استارز', 'price' => 54000, 'unit' => '', 'badge' => '',
+             'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 4,
+             'stars' => 25, 'market_key' => 'gift_box'],
+            ['id' => 'g_cake',      'cat' => 'c_gift', 'emoji' => '🎂', 'name' => 'گیفت کیک تولد',
+             'desc' => '۵۰ استارز', 'price' => 105000, 'unit' => '', 'badge' => '',
+             'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 5,
+             'stars' => 50, 'market_key' => 'birthday_cake'],
+            ['id' => 'g_flowers',   'cat' => 'c_gift', 'emoji' => '💐', 'name' => 'گیفت دسته گل',
+             'desc' => '۵۰ استارز', 'price' => 105000, 'unit' => '', 'badge' => '',
+             'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 6,
+             'stars' => 50, 'market_key' => 'bouquet'],
+            ['id' => 'g_rocket',    'cat' => 'c_gift', 'emoji' => '🚀', 'name' => 'گیفت موشک',
+             'desc' => '۵۰ استارز', 'price' => 105000, 'unit' => '', 'badge' => '',
+             'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 7,
+             'stars' => 50, 'market_key' => 'rocket'],
+            ['id' => 'g_champagne', 'cat' => 'c_gift', 'emoji' => '🍾', 'name' => 'گیفت شامپاین',
+             'desc' => '۵۰ استارز', 'price' => 105000, 'unit' => '', 'badge' => '',
+             'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 8,
+             'stars' => 50, 'market_key' => 'champagne'],
+            ['id' => 'g_trophy',    'cat' => 'c_gift', 'emoji' => '🏆', 'name' => 'گیفت جام قهرمانی',
+             'desc' => '۱۰۰ استارز', 'price' => 205000, 'unit' => '', 'badge' => 'لاکچری',
+             'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 9,
+             'stars' => 100, 'market_key' => 'trophy'],
+            ['id' => 'g_ring',      'cat' => 'c_gift', 'emoji' => '💍', 'name' => 'گیفت حلقه',
+             'desc' => '۱۰۰ استارز', 'price' => 205000, 'unit' => '', 'badge' => 'لاکچری',
+             'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 10,
+             'stars' => 100, 'market_key' => 'ring'],
+            ['id' => 'g_diamond',   'cat' => 'c_gift', 'emoji' => '💎', 'name' => 'گیفت الماس',
+             'desc' => '۱۰۰ استارز', 'price' => 205000, 'unit' => '', 'badge' => 'لاکچری',
+             'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 11,
+             'stars' => 100, 'market_key' => 'diamond'],
+            ['id' => 'g_custom',    'cat' => 'c_gift', 'emoji' => '🎀', 'name' => 'گیفت دلخواه از مارکت',
+             'desc' => 'اسم گیفت موردنظرت را بنویس تا قیمت بدهیم', 'price' => 0, 'unit' => '',
+             'badge' => 'سفارشی', 'ask' => 'text', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 12],
 
+            // ── 💱 ارز ──
             ['id' => 'i_ton', 'cat' => 'c_coin', 'emoji' => '💎', 'name' => 'تون (TON)',
              'desc' => 'قیمت هر ۱ TON — تحویل مستقیم به ولت', 'price' => 210000, 'unit' => 'TON',
-             'badge' => '', 'ask' => 'wallet', 'min' => 1, 'max' => 5000, 'on' => true, 'order' => 1],
+             'badge' => '', 'ask' => 'wallet', 'min' => 1, 'max' => 5000, 'on' => true, 'order' => 1,
+             'rate_key' => 'ton'],
             ['id' => 'i_trx', 'cat' => 'c_coin', 'emoji' => '🚀', 'name' => 'ترون (TRX)',
              'desc' => 'قیمت هر ۱ TRX — شبکه TRC20', 'price' => 21000, 'unit' => 'TRX',
-             'badge' => '', 'ask' => 'wallet', 'min' => 10, 'max' => 100000, 'on' => true, 'order' => 2],
+             'badge' => '', 'ask' => 'wallet', 'min' => 10, 'max' => 100000, 'on' => true, 'order' => 2,
+             'rate_key' => 'trx'],
         ],
     ];
 }
@@ -168,6 +295,7 @@ function maDefaultCfg() {
             'bg'  => '#04070A',
             'glow' => 1,
             'grain' => 1,
+            'fx'    => 2,
         ],
 
         'ui' => [
@@ -231,6 +359,10 @@ function maMergeConfig($def, $saved) {
     if (!is_array($saved)) return $def;
     $out = $def;
     if (isset($saved['base_url'])) $out['base_url'] = (string)$saved['base_url'];
+    foreach (['market', 'rates', 'stars'] as $sec) {
+        if (isset($saved[$sec]) && is_array($saved[$sec]))
+            $out[$sec] = array_replace($def[$sec] ?? [], $saved[$sec]);
+    }
 
     foreach (maKeys() as $k) {
         $d = $def['apps'][$k] ?? [];
@@ -297,6 +429,235 @@ function maGlassBtn($key, $slug, $callbackData) {
     if (isStyle($g['color'] ?? '')) $b['style'] = $g['color'];
     if (!empty($g['icon'])) $b['icon_custom_emoji_id'] = (string)$g['icon'];
     return $b;
+}
+
+// ============================================================
+// 🔌 قیمت‌گیری زنده — مارکت گیفت، نرخ ارز، نرخ استارز
+// ============================================================
+
+/** «stats.ton-rls.latest» را داخل آرایه دنبال می‌کند */
+function maJsonPath($data, $path) {
+    $path = trim((string)$path);
+    if ($path === '') return $data;
+    foreach (explode('.', $path) as $seg) {
+        if ($seg === '') continue;
+        if (is_array($data) && array_key_exists($seg, $data)) { $data = $data[$seg]; continue; }
+        if (is_array($data) && ctype_digit($seg) && array_key_exists((int)$seg, $data)) { $data = $data[(int)$seg]; continue; }
+        return null;
+    }
+    return $data;
+}
+
+/** «1,234.5» یا «۱۲۳۴» → 1234.5 */
+function maNum($v) {
+    if (is_int($v) || is_float($v)) return (float)$v;
+    $v = norm_fa_digits((string)$v);
+    // جداکننده‌های هزارگان لاتین/عربی/فارسی و فاصله‌های نامرئی
+    $v = str_replace([',', '،', '٬', '_', ' ', "\u{00A0}", "\u{200C}", "\u{200F}"], '', $v);
+    $v = trim($v);
+    return is_numeric($v) ? (float)$v : 0.0;
+}
+
+/** درخواست HTTP ساده با تایم‌اوت کوتاه — هیچ‌وقت نباید مینی‌اپ را معطل کند */
+function maHttp($url, $method = 'GET', $headersRaw = '', $body = '', $timeout = 8) {
+    $url = trim((string)$url);
+    if ($url === '' || !preg_match('#^https?://#i', $url)) return [null, 'آدرس نامعتبر'];
+
+    $headers = [];
+    foreach (preg_split('/\r?\n/', (string)$headersRaw) as $line) {
+        $line = trim($line);
+        if ($line !== '' && str_contains($line, ':')) $headers[] = $line;
+    }
+
+    $ch = curl_init($url);
+    $opt = [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => $timeout,
+        CURLOPT_CONNECTTIMEOUT => 5,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_MAXREDIRS      => 3,
+        CURLOPT_SSL_VERIFYPEER => true,
+        CURLOPT_USERAGENT      => 'Mozilla/5.0 (compatible; ShopBot/1.0)',
+    ];
+    if (strtoupper($method) === 'POST') {
+        $opt[CURLOPT_POST] = true;
+        $opt[CURLOPT_POSTFIELDS] = (string)$body;
+        if (!$headers) $headers[] = 'Content-Type: application/json';
+    }
+    if ($headers) $opt[CURLOPT_HTTPHEADER] = $headers;
+    curl_setopt_array($ch, $opt);
+
+    $res  = curl_exec($ch);
+    $err  = curl_error($ch);
+    $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($res === false) return [null, 'اتصال برقرار نشد: ' . $err];
+    if ($code < 200 || $code >= 300) return [null, 'کد پاسخ ' . $code];
+
+    $j = json_decode((string)$res, true);
+    if (!is_array($j)) return [null, 'پاسخ JSON نبود: ' . mb_substr((string)$res, 0, 120)];
+    return [$j, ''];
+}
+
+// ---------- کش ----------
+
+function maCacheGet($key, $ttl) {
+    $c = load('ma_cache');
+    $x = $c[$key] ?? null;
+    if (!is_array($x)) return null;
+    if ($ttl > 0 && (time() - (int)($x['at'] ?? 0)) > $ttl) return null;
+    return $x['v'] ?? null;
+}
+
+function maCachePut($key, $value) {
+    mutate('ma_cache', function (&$c) use ($key, $value) {
+        $c[$key] = ['at' => time(), 'v' => $value];
+    });
+}
+
+// ---------- نرخ ارز ----------
+
+/** نرخ یک ارز به تومان (با سود و گرد کردن) — 0 یعنی در دسترس نیست */
+function maRate($which, $fresh = false) {
+    $r = maCfg()['rates'] ?? [];
+    if (empty($r['on'])) return 0.0;
+    $which = strtolower($which);
+    $url  = (string)($r[$which . '_url'] ?? '');
+    $path = (string)($r[$which . '_path'] ?? '');
+    if ($url === '') return 0.0;
+
+    $ck = 'rate_' . $which;
+    if (!$fresh) {
+        $hit = maCacheGet($ck, (int)($r['ttl'] ?? 300));
+        if ($hit !== null) return (float)$hit;
+    }
+
+    [$j, $err] = maHttp($url, 'GET', '', '', 8);
+    if (!$j) return (float)(maCacheGet($ck, 0) ?? 0);   // کش قدیمی بهتر از هیچ
+
+    $raw = maNum(maJsonPath($j, $path));
+    if ($raw <= 0) return (float)(maCacheGet($ck, 0) ?? 0);
+
+    $div = max(1, (float)($r['div'] ?? 1));
+    $val = ($raw / $div) * (1 + ((float)($r['margin'] ?? 0) / 100));
+    $val = maRound($val, (float)($r['round'] ?? 0));
+
+    maCachePut($ck, $val);
+    return $val;
+}
+
+function maRound($v, $step) {
+    $v = (float)$v;
+    if ($step <= 0) return round($v, 2);
+    return ceil($v / $step) * $step;
+}
+
+// ---------- مارکت گیفت ----------
+
+/** [شناسه گیفت => قیمت به ارز مبدا] — از کش یا از API */
+function maMarketMap($fresh = false) {
+    $m = maCfg()['market'] ?? [];
+    if (empty($m['on'])) return [];
+
+    if (!$fresh) {
+        $hit = maCacheGet('market_map', (int)($m['ttl'] ?? 600));
+        if (is_array($hit)) return $hit;
+    }
+
+    [$list, $err] = maMarketFetch($m);
+    if (!is_array($list)) {
+        $old = maCacheGet('market_map', 0);
+        return is_array($old) ? $old : [];
+    }
+
+    maCachePut('market_map', $list);
+    return $list;
+}
+
+/** خواندن و تجزیه پاسخ مارکت — برگشت: [آرایه شناسه=>قیمت, خطا] */
+function maMarketFetch($m) {
+    [$j, $err] = maHttp($m['url'] ?? '', $m['method'] ?? 'GET',
+                        $m['headers'] ?? '', $m['body'] ?? '', 10);
+    if (!$j) return [null, $err];
+
+    $rows = maJsonPath($j, (string)($m['list_path'] ?? ''));
+    if (!is_array($rows)) return [null, 'مسیر فهرست پیدا نشد: ' . ($m['list_path'] ?: '(خالی)')];
+
+    $kf = (string)($m['key_field'] ?? 'name');
+    $pf = (string)($m['price_field'] ?? 'price');
+
+    $out = [];
+    foreach ($rows as $row) {
+        if (!is_array($row)) continue;
+        $k = maJsonPath($row, $kf);
+        $p = maNum(maJsonPath($row, $pf));
+        if (!is_scalar($k) || $p <= 0) continue;
+        $key = maMarketKey((string)$k);
+        // ارزان‌ترین آگهی هر گیفت ملاک است
+        if (!isset($out[$key]) || $p < $out[$key]) $out[$key] = $p;
+    }
+    if (!$out) return [null, 'هیچ ردیف معتبری پیدا نشد — فیلد نام یا قیمت درست نیست'];
+    return [$out, ''];
+}
+
+/** «Birthday Cake» و «birthday_cake» یکی حساب می‌شوند */
+function maMarketKey($s) {
+    $s = mb_strtolower(trim((string)$s));
+    return preg_replace('/[^a-z0-9\x{0600}-\x{06FF}]+/u', '_', $s);
+}
+
+// ---------- قیمت نهایی هر سرویس ----------
+
+/**
+ * قیمت زنده یک سرویس به تومان — یا null اگر منبع زنده‌ای ندارد.
+ * هم موقع نمایش و هم موقع ثبت سفارش از همین تابع استفاده می‌شود
+ * تا قیمت نمایش‌داده‌شده و قیمت فاکتور هیچ‌وقت از هم جدا نشوند.
+ */
+function maLivePrice($item) {
+    $c = maCfg();
+
+    // ۱) مارکت گیفت
+    $mk = trim((string)($item['market_key'] ?? ''));
+    if ($mk !== '' && !empty($c['market']['on'])) {
+        $map = maMarketMap();
+        $raw = (float)($map[maMarketKey($mk)] ?? 0);
+        if ($raw > 0) {
+            $cur = strtolower((string)($c['market']['price_cur'] ?? 'ton'));
+            $unit = in_array($cur, ['ton', 'trx', 'usdt'], true) ? maRate($cur) : 1.0;
+            if ($unit > 0) {
+                $v = $raw * $unit * (1 + ((float)($c['market']['margin'] ?? 0) / 100));
+                return maRound($v, (float)($c['market']['round'] ?? 0));
+            }
+        }
+    }
+
+    // ۲) نرخ استارز
+    $st = (float)($item['stars'] ?? 0);
+    if ($st > 0 && !empty($c['stars']['on'])) {
+        $p = (float)($c['stars']['price'] ?? 0);
+        if ($p > 0) return maRound($st * $p, (float)($c['stars']['round'] ?? 0));
+    }
+
+    // ۳) نرخ ارز (تون/ترون) — قیمت هر واحد
+    $rk = trim((string)($item['rate_key'] ?? ''));
+    if ($rk !== '' && !empty($c['rates']['on'])) {
+        $v = maRate($rk);
+        if ($v > 0) return $v;
+    }
+
+    return null;
+}
+
+/** قیمت قابل استفاده: زنده اگر بود، وگرنه قیمت دستی */
+function maItemPrice($item) {
+    $live = maLivePrice($item);
+    return $live !== null ? (float)$live : (float)($item['price'] ?? 0);
+}
+
+/** آیا این سرویس قیمتش زنده است؟ (برای نشان دادن نشانه در مینی‌اپ) */
+function maIsLive($item) {
+    return maLivePrice($item) !== null;
 }
 
 // ============================================================
@@ -429,9 +790,9 @@ class MaOrder
  * امضای initData را با توکن ربات بررسی می‌کند.
  * برگشت: آرایه کاربر یا null. بدون این، هرکسی می‌توانست به جای دیگری سفارش بدهد.
  */
-function maVerifyInitData($initData, $maxAge = 86400) {
+function maVerifyInitData($initData, $maxAge = 3600) {
     $initData = (string)$initData;
-    if ($initData === '') return null;
+    if ($initData === '' || strlen($initData) > 4096) return null;
 
     parse_str($initData, $q);
     if (empty($q['hash']) || empty($q['user'])) return null;
@@ -455,6 +816,94 @@ function maVerifyInitData($initData, $maxAge = 86400) {
 }
 
 // ============================================================
+// 🛡 لایه امنیتی — محدودیت نرخ، ضد تکرار، ضد بازپخش
+// ============================================================
+
+/**
+ * پنجره لغزان ساده: بیش از $limit بار در $win ثانیه = رد.
+ * جلوی سیل درخواست، اسکریپت خودکار و آزمون‌وخطای مهاجم را می‌گیرد.
+ */
+function maRateOk($bucket, $id, $limit, $win) {
+    $ok = true;
+    mutate('ma_rate', function (&$a) use ($bucket, $id, $limit, $win, &$ok) {
+        $now = time();
+        $k   = $bucket . ':' . $id;
+        $hits = array_values(array_filter((array)($a[$k] ?? []), fn($t) => ($now - (int)$t) < $win));
+        if (count($hits) >= $limit) { $ok = false; }
+        else { $hits[] = $now; }
+        $a[$k] = $hits;
+
+        // خانه‌تکانی تا فایل بی‌نهایت بزرگ نشود
+        if (count($a) > 400) {
+            foreach ($a as $kk => $vv) {
+                $last = is_array($vv) && $vv ? (int)max($vv) : 0;
+                if (($now - $last) > 3600) unset($a[$kk]);
+            }
+        }
+    });
+    return $ok;
+}
+
+/**
+ * سقف تعداد سفارش با یک initData.
+ *
+ * یک‌بارمصرف کردنش غلط بود: کاربر عادی در یک بار باز کردن مینی‌اپ ممکن است
+ * چند چیز بخرد و initData در تمام آن نشست ثابت می‌ماند. پس به‌جای «فقط یک بار»،
+ * سقف معقولی می‌گذاریم که خرید عادی آزاد باشد ولی کسی نتواند با یک initData
+ * شنودشده صدها سفارش بسازد.
+ */
+function maNonceOk($initData, $max = 15) {
+    $sig = substr(hash('sha256', (string)$initData), 0, 32);
+    $ok  = true;
+    mutate('ma_nonce', function (&$a) use ($sig, $max, &$ok) {
+        $now = time();
+        foreach ($a as $k => $v) {
+            $last = is_array($v) ? (int)($v['at'] ?? 0) : (int)$v;
+            if (($now - $last) > 7200) unset($a[$k]);
+        }
+        $cur = is_array($a[$sig] ?? null) ? $a[$sig] : ['n' => 0, 'at' => $now];
+        if ((int)$cur['n'] >= $max) { $ok = false; return; }
+        $a[$sig] = ['n' => (int)$cur['n'] + 1, 'at' => $now];
+    });
+    return $ok;
+}
+
+/** همان سفارش، دوبار پشت سر هم (دابل‌کلیک یا اسکریپت) */
+function maDuplicateOrder($uid, $app, $itemId, $qty, $field, $win = 45) {
+    $sig = hash('sha256', $uid . '|' . $app . '|' . $itemId . '|' . $qty . '|' . $field);
+    $dup = false;
+    mutate('ma_dup', function (&$a) use ($sig, $win, &$dup) {
+        $now = time();
+        foreach ($a as $k => $t) if (($now - (int)$t) > 600) unset($a[$k]);
+        if (isset($a[$sig]) && ($now - (int)$a[$sig]) < $win) { $dup = true; return; }
+        $a[$sig] = $now;
+    });
+    return $dup;
+}
+
+/** هدرهای امنیتی — مینی‌اپ فقط داخل تلگرام باز می‌شود، نه داخل سایت دیگران */
+function maSecurityHeaders() {
+    header('Content-Type: text/html; charset=utf-8');
+    header('Cache-Control: no-store, no-cache, must-revalidate');
+    header('X-Content-Type-Options: nosniff');
+    header('Referrer-Policy: no-referrer');
+    header('Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=(), usb=()');
+    header('Cross-Origin-Opener-Policy: same-origin');
+    header(
+        "Content-Security-Policy: " .
+        "default-src 'none'; " .
+        "script-src 'self' 'unsafe-inline' https://telegram.org https://*.telegram.org; " .
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " .
+        "font-src https://fonts.gstatic.com data:; " .
+        "img-src 'self' data:; " .
+        "connect-src 'self'; " .
+        "base-uri 'none'; form-action 'none'; " .
+        "frame-ancestors https://web.telegram.org https://*.telegram.org; " .
+        "object-src 'none'"
+    );
+}
+
+// ============================================================
 // 🌐 سرو کردن مینی‌اپ
 // ============================================================
 
@@ -470,9 +919,7 @@ function maServe($key) {
         exit;
     }
 
-    header('Content-Type: text/html; charset=utf-8');
-    header('Cache-Control: no-store');
-    header('X-Frame-Options: ALLOWALL');
+    maSecurityHeaders();
     echo $key === 'tg' ? maViewTg($a, maBoot($key, $a)) : maViewCfg($a, maBoot($key, $a));
     exit;
 }
@@ -531,7 +978,8 @@ function maItemsPublic($a) {
             'name'  => (string)$i['name'],
             'desc'  => (string)($i['desc'] ?? ''),
             'badge' => (string)($i['badge'] ?? ''),
-            'price' => (float)$i['price'],
+            'price' => maItemPrice($i),
+            'live'  => maIsLive($i) ? 1 : 0,
             'unit'  => (string)($i['unit'] ?? ''),
             'ask'   => (string)($i['ask'] ?? 'none'),
             'min'   => (float)($i['min'] ?? 1),
@@ -568,17 +1016,39 @@ function maApiOut($data, $code = 200) {
 }
 
 function maApi() {
-    $body = json_decode(file_get_contents('php://input'), true);
+    header('Content-Type: application/json; charset=utf-8');
+    header('X-Content-Type-Options: nosniff');
+    header('Referrer-Policy: no-referrer');
+
+    // فقط POST — و بدنه بزرگ‌تر از ۳۲ کیلوبایت اصلا خوانده نمی‌شود
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST')
+        maApiOut(['ok' => false, 'error' => 'bad_method'], 405);
+    if ((int)($_SERVER['CONTENT_LENGTH'] ?? 0) > 32768)
+        maApiOut(['ok' => false, 'error' => 'too_large'], 413);
+
+    // 🛡 سد اول: محدودیت نرخ روی IP، قبل از هر کار سنگینی
+    $ip = (string)($_SERVER['REMOTE_ADDR'] ?? '0');
+    if (!maRateOk('ip', $ip, 90, 60))
+        maApiOut(['ok' => false, 'error' => 'rate_limited', 'message' => 'درخواست‌ها زیاد است، کمی صبر کنید.'], 429);
+
+    $raw  = file_get_contents('php://input', false, null, 0, 32768);
+    $body = json_decode((string)$raw, true);
     if (!is_array($body)) $body = $_POST;
 
     $action = (string)($body['action'] ?? $_GET['action'] ?? '');
     $key    = (string)($body['app'] ?? $_GET['app'] ?? '');
     if (!in_array($key, maKeys(), true)) maApiOut(['ok' => false, 'error' => 'bad_app'], 400);
 
-    $user = maVerifyInitData($body['initData'] ?? '');
+    $initData = (string)($body['initData'] ?? '');
+    $user = maVerifyInitData($initData);
     if (!$user) maApiOut(['ok' => false, 'error' => 'unauthorized', 'message' => 'اعتبارسنجی تلگرام ناموفق بود.'], 401);
 
     $uid   = (int)$user['id'];
+
+    // 🛡 سد دوم: محدودیت نرخ روی خود کاربر
+    if (!maRateOk('u', $uid, 40, 60))
+        maApiOut(['ok' => false, 'error' => 'rate_limited', 'message' => 'درخواست‌ها زیاد است، کمی صبر کنید.'], 429);
+
     $uname = (string)($user['username'] ?? '');
     touchUser($uid, $uname, (string)($user['first_name'] ?? ''));
 
@@ -604,6 +1074,16 @@ function maApi() {
 
     // ---- ثبت سفارش ----
     if ($action === 'order') {
+        // 🛡 سقف تعداد سفارش در دقیقه
+        if (!maRateOk('ord', $uid, 6, 60))
+            maApiOut(['ok' => false, 'error' => 'rate_limited',
+                      'message' => 'تعداد سفارش‌های پشت‌سرهم زیاد است. یک دقیقه صبر کنید.'], 429);
+
+        // 🛡 هر initData فقط یک سفارش — جلوی بازپخش (replay) را می‌گیرد
+        if (!maNonceOk($initData))
+            maApiOut(['ok' => false, 'error' => 'replay',
+                      'message' => 'سقف سفارش این نشست پر شد. مینی‌اپ را ببندید و دوباره باز کنید.'], 409);
+
         // 🔒 عضویت اجباری ربات مادر هم اینجا اعمال می‌شود
         if ($uid !== ADMIN_ID && function_exists('masterJoinMissing')) {
             $miss = masterJoinMissing($uid);
@@ -625,7 +1105,9 @@ function maApi() {
         $ask = (string)($item['ask'] ?? 'none');
         $qty = 1.0;
         if ($ask === 'qty') {
-            $qty = (float)str_replace([',', '،', ' '], '', (string)($body['qty'] ?? 0));
+            $qty = (float)str_replace([',', '،', ' '], '', norm_fa_digits((string)($body['qty'] ?? 0)));
+            if (!is_finite($qty)) $qty = 0;
+            $qty = floor($qty);
             $min = (float)($item['min'] ?? 1);
             $max = (float)($item['max'] ?? 0);
             if ($qty <= 0) maApiOut(['ok' => false, 'error' => 'bad_qty', 'message' => 'تعداد را درست وارد کنید.'], 400);
@@ -649,9 +1131,27 @@ function maApi() {
         if (mb_strlen($field) > 300) $field = mb_substr($field, 0, 300);
 
         $item['currency'] = (string)($a['currency'] ?? 'تومان');
-        $total = round((float)$item['price'] * ($ask === 'qty' ? $qty : 1), 2);
+
+        // 🔒 قیمت همیشه اینجا و از نو حساب می‌شود — هرچه کاربر بفرستد نادیده گرفته می‌شود
+        $unitPrice = maItemPrice($item);
+        $item['price'] = $unitPrice;
+        $total = round($unitPrice * ($ask === 'qty' ? $qty : 1), 2);
+
         if ($total <= 0 && empty(cfg()['test_mode']))
             maApiOut(['ok' => false, 'error' => 'bad_price', 'message' => 'قیمت این سرویس تنظیم نشده است.'], 400);
+
+        // اگر بین باز شدن مینی‌اپ و زدن دکمه، نرخ زنده عوض شده باشد،
+        // به‌جای فاکتور کردن قیمت قدیمی، از کاربر می‌خواهیم صفحه را تازه کند.
+        $seen = (float)($body['seen_price'] ?? 0);
+        if ($seen > 0 && abs($seen - $unitPrice) > max(1.0, $unitPrice * 0.005)) {
+            maApiOut(['ok' => false, 'error' => 'price_changed', 'price' => $unitPrice,
+                      'message' => 'قیمت این سرویس به‌روز شد. لطفا دوباره تلاش کنید.'], 409);
+        }
+
+        // 🛡 همان سفارش دوبار پشت سر هم (دابل‌کلیک یا اسکریپت)
+        if (maDuplicateOrder($uid, $key, $itemId, $qty, $field))
+            maApiOut(['ok' => false, 'error' => 'duplicate',
+                      'message' => 'همین سفارش چند لحظه پیش ثبت شد — فاکتورش داخل ربات است.'], 409);
 
         $oid = MaOrder::create($key, $uid, $uname, $item, $qty, $total, $field);
 
@@ -1017,6 +1517,7 @@ function maAdmHome($chatId, $msgId = null) {
         [btnCb('🌟 مینی‌اپ خدمات تلگرام', 'maadm_app_tg', 'info')],
         [btnCb('🛡 مینی‌اپ فروش کانفیگ',  'maadm_app_cfg', 'info')],
         [btnCb('🔗 آدرس عمومی', 'maadm_base', 'admin')],
+        [btnCb('🔌 قیمت‌گذاری زنده', 'maadm_pricing', 'confirm')],
         [btnCb("🧾 سفارش‌ها ({$pend} منتظر · {$paid} آماده تحویل)", 'maadm_orders', 'admin')],
         [btnCb(UT('back'), 'adm_home', 'nav')],
     ];
@@ -1097,7 +1598,10 @@ function maAdmTheme($chatId, $msgId, $key) {
     $text .= '🎨 رنگ تاکید: <code>' . h($th['c3'] ?? '') . "</code>\n";
     $text .= '🖼 پس‌زمینه: <code>' . h($th['bg'] ?? '') . "</code>\n\n";
     $text .= '✨ درخشش: ' . (!empty($th['glow']) ? '✅ روشن' : '❌ خاموش') . "\n";
-    $text .= '🌫 بافت دانه‌ای: ' . (!empty($th['grain']) ? '✅ روشن' : '❌ خاموش') . "\n\n";
+    $text .= '🌫 بافت دانه‌ای: ' . (!empty($th['grain']) ? '✅ روشن' : '❌ خاموش') . "\n";
+    $text .= '⚡️ سطح افکت: <b>' . maFxLabel(maFxLevel($th)) . "</b>\n\n";
+    $text .= "💡 اگر مینی‌اپ روی گوشی‌های ضعیف کند است، سطح افکت را «سبک» یا «خاموش» کنید — " .
+             "سنگین‌ترین جلوه‌ها (بلور شیشه‌ای و انیمیشن پس‌زمینه) کنار می‌روند و بقیه ظاهر می‌ماند.\n\n";
     $text .= 'رنگ را به شکل <code>#RRGGBB</code> بفرستید.';
 
     $rows = [
@@ -1105,10 +1609,15 @@ function maAdmTheme($chatId, $msgId, $key) {
         [btnCb('🎨 رنگ تاکید', 'maadm_c3_' . $key, 'admin'), btnCb('🖼 پس‌زمینه', 'maadm_bg_' . $key, 'admin')],
         [btnCb(!empty($th['glow']) ? '✨ درخشش: روشن' : '✨ درخشش: خاموش', 'maadm_glow_' . $key, 'info'),
          btnCb(!empty($th['grain']) ? '🌫 بافت: روشن' : '🌫 بافت: خاموش', 'maadm_grain_' . $key, 'info')],
+        [btnCb('⚡️ سطح افکت: ' . maFxLabel(maFxLevel($th)), 'maadm_fx_' . $key, 'confirm')],
         [btnCb('🎭 پالت‌های آماده', 'maadm_pal_' . $key, 'confirm')],
         [btnCb(UT('back'), 'maadm_app_' . $key, 'nav')],
     ];
     editMsg(BOT_TOKEN, $chatId, $msgId, $text, inlineKb($rows));
+}
+
+function maFxLabel($n) {
+    return [0 => '❌ خاموش (سریع‌ترین)', 1 => '🔸 سبک', 2 => '✨ کامل'][(int)$n] ?? '—';
 }
 
 function maPresetLabel($p) {
@@ -1272,8 +1781,15 @@ function maAdmItem($chatId, $msgId, $key, $iid) {
     $a = maGet($key);
     $cat = maFindCat($key, (string)($i['cat'] ?? ''));
 
+    $live = maLivePrice($i);
+
     $text  = "🛒 <b>" . h(trim(($i['emoji'] ?? '') . ' ' . $i['name'])) . "</b>\n\n";
-    $text .= '💰 قیمت: <b>' . fmtNum($i['price']) . ' ' . h($a['currency'] ?? 'تومان') . "</b>\n";
+    $text .= '💰 قیمت دستی: <b>' . fmtNum($i['price']) . ' ' . h($a['currency'] ?? 'تومان') . "</b>\n";
+    if ($live !== null) {
+        $text .= '🔌 قیمت زنده: <b>' . fmtNum($live) . ' ' . h($a['currency'] ?? 'تومان') . "</b> ← همین فروخته می‌شود\n";
+    }
+    if (trim((string)($i['market_key'] ?? '')) !== '') $text .= '🔗 کلید مارکت: <code>' . h($i['market_key']) . "</code>\n";
+    if ((float)($i['stars'] ?? 0) > 0)                 $text .= '⭐️ ارزش استارز: <b>' . fmtNum($i['stars']) . "</b>\n";
     $text .= '📂 دسته: ' . h($cat ? trim(($cat['emoji'] ?? '') . ' ' . $cat['name']) : '—') . "\n";
     $text .= '📝 توضیح: ' . h($i['desc'] ?: '—') . "\n";
     $text .= '🏷 برچسب: ' . h($i['badge'] ?: '—') . "\n";
@@ -1292,6 +1808,7 @@ function maAdmItem($chatId, $msgId, $key, $iid) {
         [btnCb('🏷 برچسب', 'maadm_ib_' . $p, 'admin'), btnCb('📂 دسته', 'maadm_ic_' . $p, 'admin')],
         [btnCb('❓ نوع سوال', 'maadm_ia_' . $p, 'admin'), btnCb('📐 واحد', 'maadm_iu_' . $p, 'admin')],
         [btnCb('🔽 حداقل', 'maadm_imin_' . $p, 'admin'), btnCb('🔼 حداکثر', 'maadm_imax_' . $p, 'admin')],
+        [btnCb('🔗 کلید مارکت', 'maadm_imk_' . $p, 'admin'), btnCb('⭐️ ارزش استارز', 'maadm_ist_' . $p, 'admin')],
         [btnCb('🔢 ترتیب', 'maadm_io_' . $p, 'admin'),
          btnCb(!empty($i['on']) ? '❌ خاموش کن' : '✅ روشن کن', 'maadm_ix_' . $p, 'info')],
         [btnCb('🗑 حذف سرویس', 'maadm_idel_' . $p, 'reject')],
@@ -1355,6 +1872,161 @@ function maAdmOrder($chatId, $msgId, $id) {
         $rows[] = [btnCb('🖼 دیدن رسید', 'maadm_rcp_' . $o['id'], 'info')];
     }
     $rows[] = [btnCb(UT('back'), 'maadm_orders', 'nav')];
+    editMsg(BOT_TOKEN, $chatId, $msgId, $text, inlineKb($rows));
+}
+
+/** 🔌 صفحه اصلی قیمت‌گذاری زنده */
+function maAdmPricing($chatId, $msgId) {
+    $c  = maCfg();
+    $mk = $c['market'] ?? []; $rt = $c['rates'] ?? []; $st = $c['stars'] ?? [];
+
+    $text  = "🔌 <b>قیمت‌گذاری زنده</b>\n\n";
+    $text .= "قیمت‌ها به‌جای عدد ثابت، از منبع زنده گرفته و با درصد سود شما حساب می‌شوند.\n\n";
+
+    $text .= "🎁 <b>مارکت گیفت</b>: " . (!empty($mk['on']) ? '✅ روشن' : '❌ خاموش') . "\n";
+    if (trim((string)($mk['url'] ?? '')) !== '') {
+        $text .= "   آدرس: <code>" . h(mb_substr((string)$mk['url'], 0, 48)) . "</code>\n";
+        $map = maMarketMap();
+        $text .= "   گیفت‌های خوانده‌شده: <b>" . count($map) . "</b>\n";
+    } else {
+        $text .= "   ⚠️ آدرس API ثبت نشده\n";
+    }
+    $text .= "   سود: " . (float)($mk['margin'] ?? 0) . "% · ارز مبدا: " . h($mk['price_cur'] ?? '—') . "\n\n";
+
+    $text .= "💱 <b>نرخ ارز</b>: " . (!empty($rt['on']) ? '✅ روشن' : '❌ خاموش') . "\n";
+    if (!empty($rt['on'])) {
+        foreach (['ton' => 'TON', 'trx' => 'TRX', 'usdt' => 'USDT'] as $k => $lbl) {
+            $v = maRate($k);
+            $text .= "   {$lbl}: " . ($v > 0 ? '<b>' . fmtNum($v) . '</b> تومان' : '—') . "\n";
+        }
+        $text .= "   سود: " . (float)($rt['margin'] ?? 0) . "%\n";
+    }
+    $text .= "\n⭐️ <b>نرخ استارز</b>: " . (!empty($st['on']) ? '✅ روشن' : '❌ خاموش') .
+             " · هر استارز: <b>" . fmtNum($st['price'] ?? 0) . "</b> تومان\n\n";
+    $text .= "💡 هر سرویسی که منبع زنده نداشته باشد، با همان قیمت دستی خودش فروخته می‌شود.";
+
+    $rows = [
+        [btnCb('🎁 مارکت گیفت', 'maadm_market', 'admin')],
+        [btnCb('💱 نرخ ارز', 'maadm_rates', 'admin'), btnCb('⭐️ نرخ استارز', 'maadm_starp', 'admin')],
+        [btnCb('♻️ تازه‌سازی قیمت‌ها', 'maadm_refresh', 'confirm')],
+        [btnCb(UT('back'), 'maadm_home', 'nav')],
+    ];
+    editMsg(BOT_TOKEN, $chatId, $msgId, $text, inlineKb($rows));
+}
+
+/** 🎁 تنظیم مارکت گیفت */
+function maAdmMarket($chatId, $msgId) {
+    $m = maCfg()['market'] ?? [];
+
+    $text  = "🎁 <b>مارکت گیفت</b>\n\n";
+    $text .= "وضعیت: " . (!empty($m['on']) ? '✅ روشن' : '❌ خاموش') . "\n";
+    $text .= "نام: " . h($m['name'] ?? '—') . "\n";
+    $text .= "آدرس: " . (trim((string)$m['url']) !== '' ? '<code>' . h($m['url']) . '</code>' : '<b>ثبت نشده</b>') . "\n";
+    $text .= "متد: <b>" . h($m['method'] ?? 'GET') . "</b>\n";
+    $text .= "هدرها: " . (trim((string)$m['headers']) !== '' ? '✅ ثبت شده' : '—') . "\n";
+    $text .= "مسیر فهرست: <code>" . h($m['list_path'] ?: '(ریشه)') . "</code>\n";
+    $text .= "فیلد نام: <code>" . h($m['key_field']) . "</code>\n";
+    $text .= "فیلد قیمت: <code>" . h($m['price_field']) . "</code>\n";
+    $text .= "ارز مبدا: <b>" . h($m['price_cur']) . "</b>\n";
+    $text .= "سود: <b>" . (float)$m['margin'] . "%</b> · گرد کردن: " . fmtNum($m['round']) . " تومان\n";
+    $text .= "کش: " . (int)$m['ttl'] . " ثانیه\n\n";
+    $text .= "💡 <b>راهنما:</b> اول آدرس API را بدهید، بعد «🔌 تست اتصال» را بزنید. " .
+             "خروجی خام نشان داده می‌شود تا اسم فیلدها را از داخلش بردارید.";
+
+    $rows = [
+        [btnCb(!empty($m['on']) ? '❌ خاموش کن' : '✅ روشن کن', 'maadm_mktog', 'info')],
+        [btnCb('🔌 تست اتصال', 'maadm_mktest', 'confirm')],
+        [btnCb('🔗 آدرس API', 'maadm_mk_url', 'admin'), btnCb('📮 متد', 'maadm_mk_method', 'admin')],
+        [btnCb('📋 هدرها', 'maadm_mk_headers', 'admin'), btnCb('📦 بدنه POST', 'maadm_mk_body', 'admin')],
+        [btnCb('📂 مسیر فهرست', 'maadm_mk_list_path', 'admin')],
+        [btnCb('🏷 فیلد نام', 'maadm_mk_key_field', 'admin'), btnCb('💰 فیلد قیمت', 'maadm_mk_price_field', 'admin')],
+        [btnCb('💱 ارز مبدا', 'maadm_mk_price_cur', 'admin'), btnCb('📈 سود %', 'maadm_mk_margin', 'admin')],
+        [btnCb('🔢 گرد کردن', 'maadm_mk_round', 'admin'), btnCb('⏱ کش', 'maadm_mk_ttl', 'admin')],
+        [btnCb(UT('back'), 'maadm_pricing', 'nav')],
+    ];
+    editMsg(BOT_TOKEN, $chatId, $msgId, $text, inlineKb($rows));
+}
+
+/** 🔌 تست اتصال — پاسخ خام را نشان می‌دهد تا ادمین فیلدها را پیدا کند */
+function maAdmMarketTest($chatId) {
+    $m = maCfg()['market'] ?? [];
+    if (trim((string)$m['url']) === '') {
+        sendMsg(BOT_TOKEN, $chatId, "⚠️ اول آدرس API را ثبت کنید.");
+        return;
+    }
+
+    [$j, $err] = maHttp($m['url'], $m['method'] ?? 'GET', $m['headers'] ?? '', $m['body'] ?? '', 12);
+    if (!$j) {
+        sendMsg(BOT_TOKEN, $chatId, "❌ <b>اتصال ناموفق</b>\n\n" . h($err),
+            inlineKb([[btnCb('🎁 مارکت', 'maadm_market', 'admin')]]));
+        return;
+    }
+
+    $text = "✅ <b>پاسخ گرفته شد</b>\n\n";
+    $keys = array_slice(array_keys($j), 0, 12);
+    $text .= "کلیدهای سطح اول: <code>" . h(implode(', ', $keys)) . "</code>\n\n";
+
+    [$map, $perr] = maMarketFetch($m);
+    if (is_array($map)) {
+        $text .= "🎯 <b>" . count($map) . " گیفت خوانده شد</b>\n\n<b>نمونه:</b>\n";
+        $n = 0;
+        foreach ($map as $k => $v) {
+            $text .= "• <code>" . h($k) . "</code> → " . $v . ' ' . h($m['price_cur']) . "\n";
+            if (++$n >= 8) break;
+        }
+        $text .= "\n💡 همین <code>شناسه</code>ها را در «🔗 کلید مارکت» هر گیفت بگذارید.";
+    } else {
+        $text .= "⚠️ <b>تجزیه نشد:</b> " . h($perr) . "\n\n";
+        $text .= "<b>نمونه پاسخ خام:</b>\n<code>" .
+                 h(mb_substr(json_encode($j, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), 0, 900)) . "</code>\n\n";
+        $text .= "از روی همین، «مسیر فهرست» و «فیلد نام/قیمت» را درست کنید.";
+    }
+
+    sendMsg(BOT_TOKEN, $chatId, $text, inlineKb([[btnCb('🎁 مارکت', 'maadm_market', 'admin')]]));
+}
+
+/** 💱 تنظیم نرخ ارز */
+function maAdmRates($chatId, $msgId) {
+    $r = maCfg()['rates'] ?? [];
+    $text  = "💱 <b>نرخ ارز</b>\n\n";
+    $text .= "وضعیت: " . (!empty($r['on']) ? '✅ روشن' : '❌ خاموش') . "\n\n";
+    foreach (['ton' => 'TON', 'trx' => 'TRX', 'usdt' => 'USDT'] as $k => $lbl) {
+        $v = maRate($k);
+        $text .= "<b>{$lbl}</b>: " . ($v > 0 ? fmtNum($v) . ' تومان' : '—') . "\n";
+        $text .= "   <code>" . h(mb_substr((string)($r[$k . '_url'] ?? ''), 0, 54)) . "</code>\n";
+    }
+    $text .= "\nتقسیم بر: <b>" . (float)$r['div'] . "</b> (ریال→تومان)\n";
+    $text .= "سود: <b>" . (float)$r['margin'] . "%</b> · گرد کردن: " . fmtNum($r['round']) . "\n";
+    $text .= "کش: " . (int)$r['ttl'] . " ثانیه";
+
+    $rows = [
+        [btnCb(!empty($r['on']) ? '❌ خاموش کن' : '✅ روشن کن', 'maadm_rttog', 'info')],
+        [btnCb('🔗 آدرس TON', 'maadm_rt_ton_url', 'admin'), btnCb('📂 مسیر TON', 'maadm_rt_ton_path', 'admin')],
+        [btnCb('🔗 آدرس TRX', 'maadm_rt_trx_url', 'admin'), btnCb('📂 مسیر TRX', 'maadm_rt_trx_path', 'admin')],
+        [btnCb('🔗 آدرس USDT', 'maadm_rt_usdt_url', 'admin'), btnCb('📂 مسیر USDT', 'maadm_rt_usdt_path', 'admin')],
+        [btnCb('➗ تقسیم بر', 'maadm_rt_div', 'admin'), btnCb('📈 سود %', 'maadm_rt_margin', 'admin')],
+        [btnCb('🔢 گرد کردن', 'maadm_rt_round', 'admin'), btnCb('⏱ کش', 'maadm_rt_ttl', 'admin')],
+        [btnCb(UT('back'), 'maadm_pricing', 'nav')],
+    ];
+    editMsg(BOT_TOKEN, $chatId, $msgId, $text, inlineKb($rows));
+}
+
+/** ⭐️ نرخ استارز */
+function maAdmStarPrice($chatId, $msgId) {
+    $st = maCfg()['stars'] ?? [];
+    $text  = "⭐️ <b>نرخ استارز</b>\n\n";
+    $text .= "وضعیت: " . (!empty($st['on']) ? '✅ روشن' : '❌ خاموش') . "\n";
+    $text .= "قیمت هر ۱ استارز: <b>" . fmtNum($st['price'] ?? 0) . "</b> تومان\n";
+    $text .= "گرد کردن: " . fmtNum($st['round'] ?? 0) . " تومان\n\n";
+    $text .= "با روشن بودن این گزینه، قیمت همه بسته‌های استارز و گیفت‌های استارزی " .
+             "خودکار از همین نرخ حساب می‌شود — دیگر لازم نیست تک‌تک را دستی عوض کنید.";
+
+    $rows = [
+        [btnCb(!empty($st['on']) ? '❌ خاموش کن' : '✅ روشن کن', 'maadm_sttog', 'info')],
+        [btnCb('💰 قیمت هر استارز', 'maadm_st_price', 'admin'),
+         btnCb('🔢 گرد کردن', 'maadm_st_round', 'admin')],
+        [btnCb(UT('back'), 'maadm_pricing', 'nav')],
+    ];
     editMsg(BOT_TOKEN, $chatId, $msgId, $text, inlineKb($rows));
 }
 
@@ -1434,6 +2106,65 @@ function maAdminCallback($data, $uid, $chatId, $msgId, $cbId) {
         if ($o && $o['receipt_type'] === 'photo') {
             sendFile(BOT_TOKEN, $chatId, 'photo', $o['receipt'], '🧾 رسید سفارش <code>' . h($o['id']) . '</code>');
         }
+        return true;
+    }
+
+    // ---- 🔌 قیمت‌گذاری زنده (سراسری، نه مخصوص یک اپ) ----
+    if ($data === 'maadm_pricing') { answerCb(BOT_TOKEN, $cbId); maAdmPricing($chatId, $msgId); return true; }
+    if ($data === 'maadm_market')  { answerCb(BOT_TOKEN, $cbId); maAdmMarket($chatId, $msgId); return true; }
+    if ($data === 'maadm_rates')   { answerCb(BOT_TOKEN, $cbId); maAdmRates($chatId, $msgId); return true; }
+    if ($data === 'maadm_starp')   { answerCb(BOT_TOKEN, $cbId); maAdmStarPrice($chatId, $msgId); return true; }
+
+    if ($data === 'maadm_mktest')  { answerCb(BOT_TOKEN, $cbId, '⏳ در حال تست…'); maAdmMarketTest($chatId); return true; }
+
+    if ($data === 'maadm_mktog') {
+        maSetRoot(function (&$m) { $m['market']['on'] = empty($m['market']['on']); });
+        answerCb(BOT_TOKEN, $cbId, '✅'); maAdmMarket($chatId, $msgId); return true;
+    }
+    if ($data === 'maadm_rttog') {
+        maSetRoot(function (&$m) { $m['rates']['on'] = empty($m['rates']['on']); });
+        answerCb(BOT_TOKEN, $cbId, '✅'); maAdmRates($chatId, $msgId); return true;
+    }
+    if ($data === 'maadm_sttog') {
+        maSetRoot(function (&$m) { $m['stars']['on'] = empty($m['stars']['on']); });
+        answerCb(BOT_TOKEN, $cbId, '✅'); maAdmStarPrice($chatId, $msgId); return true;
+    }
+    if ($data === 'maadm_refresh') {
+        save('ma_cache', []);
+        maMarketMap(true);
+        foreach (['ton', 'trx', 'usdt'] as $k) maRate($k, true);
+        answerCb(BOT_TOKEN, $cbId, '♻️ تازه شد');
+        maAdmPricing($chatId, $msgId);
+        return true;
+    }
+
+    // maadm_mk_<field> / maadm_rt_<field> / maadm_st_<field>
+    if (preg_match('/^maadm_(mk|rt|st)_([a-z_]+)$/', $data, $mm)) {
+        $sec   = ['mk' => 'market', 'rt' => 'rates', 'st' => 'stars'][$mm[1]];
+        $field = $mm[2];
+        $cur   = maCfg()[$sec][$field] ?? '';
+        answerCb(BOT_TOKEN, $cbId);
+        $hints = [
+            'url'         => 'آدرس کامل API را بفرستید (با https).',
+            'method'      => "<code>GET</code> یا <code>POST</code>",
+            'headers'     => "هر خط یک هدر:\n<code>Authorization: Bearer xxx</code>\nبرای پاک کردن <code>-</code>",
+            'body'        => "بدنه JSON برای POST — برای پاک کردن <code>-</code>",
+            'list_path'   => "مسیر آرایه نتایج، مثل <code>data.results</code>\nاگر خودِ پاسخ آرایه است، <code>-</code> بفرستید.",
+            'key_field'   => "اسم فیلدی که نام گیفت در آن است، مثل <code>name</code>",
+            'price_field' => "اسم فیلدی که قیمت در آن است، مثل <code>price</code>",
+            'price_cur'   => "<code>TON</code> یا <code>USDT</code> یا <code>IRT</code>",
+            'margin'      => 'درصد سود روی قیمت پایه — فقط عدد.',
+            'round'       => 'قیمت نهایی به این عدد گرد می‌شود (بالا). مثلا 1000',
+            'ttl'         => 'چند ثانیه قیمت‌ها کش شوند؟ مثلا 600',
+            'div'         => 'نرخ بر این عدد تقسیم می‌شود. نوبیتکس ریال می‌دهد پس 10',
+            'price'       => 'قیمت هر ۱ استارز به تومان — فقط عدد.',
+        ];
+        $hint = $hints[$field] ?? '';
+        if (str_ends_with($field, '_url'))  $hint = $hints['url'];
+        if (str_ends_with($field, '_path')) $hint = "مسیر مقدار داخل JSON، مثل <code>stats.ton-rls.latest</code>";
+        maAskState($uid, $chatId, 'ma_pcfg', ['sec' => $sec, 'f' => $field],
+            '✏️ مقدار جدید را بفرستید:',
+            ($hint !== '' ? $hint . "\n\n" : '') . 'الان: <code>' . h(mb_substr((string)$cur, 0, 120)) . '</code>');
         return true;
     }
 
@@ -1521,6 +2252,14 @@ function maAdminCallback($data, $uid, $chatId, $msgId, $cbId) {
             maAskState($uid, $chatId, 'ma_theme', ['k' => $key, 'f' => $op],
                 '🎨 ' . $names[$op] . ' را بفرستید:',
                 "به شکل <code>#RRGGBB</code>\nالان: <code>" . h($a['theme'][$op] ?? '') . '</code>');
+            return true;
+        case 'fx':
+            maSet($key, function (&$x) {
+                $cur = isset($x['theme']['fx']) ? (int)$x['theme']['fx'] : 2;
+                $x['theme']['fx'] = ($cur + 2) % 3;   // ۲ → ۱ → ۰ → ۲
+            });
+            answerCb(BOT_TOKEN, $cbId, maFxLabel(maGet($key)['theme']['fx']));
+            maAdmTheme($chatId, $msgId, $key);
             return true;
         case 'glow':
             maSet($key, function (&$x) { $x['theme']['glow'] = empty($x['theme']['glow']) ? 1 : 0; });
@@ -1629,7 +2368,7 @@ function maAdminCallback($data, $uid, $chatId, $msgId, $cbId) {
                 '🛒 نام سرویس جدید را بفرستید:', 'بعدش قیمت و بقیه تنظیماتش را می‌پرسم.');
             return true;
         case 'in': case 'ie': case 'ip': case 'id': case 'ib': case 'iu':
-        case 'io': case 'imin': case 'imax':
+        case 'io': case 'imin': case 'imax': case 'imk': case 'ist':
             answerCb(BOT_TOKEN, $cbId);
             $map = [
                 'in'   => ['name',  '✏️ نام سرویس:', ''],
@@ -1641,6 +2380,10 @@ function maAdminCallback($data, $uid, $chatId, $msgId, $cbId) {
                 'io'   => ['order', '🔢 ترتیب نمایش (عدد):', ''],
                 'imin' => ['min',   '🔽 حداقل تعداد:', ''],
                 'imax' => ['max',   '🔼 حداکثر تعداد:', '۰ یعنی بی‌نهایت.'],
+                'imk'  => ['market_key', '🔗 کلید این گیفت در مارکت:',
+                           "همان شناسه‌ای که در «🔌 تست اتصال» دیدید، مثل <code>birthday_cake</code>.\nبرای حذف <code>-</code>."],
+                'ist'  => ['stars', '⭐️ ارزش این سرویس به استارز:',
+                           "مثلا برای گیفت تدی <code>15</code>.\nبا روشن بودن «نرخ استارز»، قیمت خودکار حساب می‌شود. ۰ = غیرفعال."],
             ];
             [$f, $title, $hint] = $map[$op];
             maAskState($uid, $chatId, 'ma_item_field', ['k' => $key, 'i' => $arg, 'f' => $f], $title, $hint);
@@ -1721,6 +2464,52 @@ function maAdminState($action, $sd, $msg, $uid, $chatId, $plain, $ids) {
             $v === '' ? '✅ آدرس پاک شد.' :
             "✅ آدرس ثبت شد.\n\n🌟 <code>" . h(maUrl('tg')) . "</code>\n🛡 <code>" . h(maUrl('cfg')) . '</code>',
             inlineKb([[btnCb('🚀 مینی‌اپ‌ها', 'maadm_home', 'admin')]]));
+        return true;
+    }
+
+    // ---- 🔌 تنظیمات قیمت‌گذاری ----
+    if ($action === 'ma_pcfg') {
+        $sec = (string)($sd['sec'] ?? '');
+        $f   = (string)($sd['f'] ?? '');
+        if (!in_array($sec, ['market', 'rates', 'stars'], true)) { clearState($uid); return true; }
+
+        $numeric = in_array($f, ['margin', 'round', 'ttl', 'div', 'price'], true);
+        if ($numeric) {
+            $v = (float)str_replace([',', '،', ' '], '', norm_fa_digits($plain));
+            if (!is_finite($v) || $v < 0) { sendMsg(BOT_TOKEN, $chatId, '⚠️ عدد معتبر بفرستید.'); return true; }
+        } elseif (str_ends_with($f, '_url') || $f === 'url') {
+            $v = $dash ? '' : $plain;
+            if ($v !== '' && !preg_match('#^https?://#i', $v)) {
+                sendMsg(BOT_TOKEN, $chatId, '⚠️ آدرس باید با http:// یا https:// شروع شود.'); return true;
+            }
+        } elseif ($f === 'method') {
+            $v = strtoupper(trim($plain));
+            if (!in_array($v, ['GET', 'POST'], true)) {
+                sendMsg(BOT_TOKEN, $chatId, '⚠️ فقط <code>GET</code> یا <code>POST</code>.'); return true;
+            }
+        } elseif ($f === 'price_cur') {
+            $v = strtoupper(trim($plain));
+            if (!in_array($v, ['TON', 'TRX', 'USDT', 'IRT'], true)) {
+                sendMsg(BOT_TOKEN, $chatId, '⚠️ فقط TON یا TRX یا USDT یا IRT.'); return true;
+            }
+        } else {
+            $v = $dash ? '' : $plain;
+        }
+
+        maSetRoot(function (&$m) use ($sec, $f, $v) { $m[$sec][$f] = $v; });
+        save('ma_cache', []);          // تنظیمات عوض شد، کش قیمت باید دور ریخته شود
+        clearState($uid);
+
+        $back = ['market' => 'maadm_market', 'rates' => 'maadm_rates', 'stars' => 'maadm_starp'][$sec];
+        $extra = '';
+        if ($sec === 'rates' && str_ends_with($f, '_url')) {
+            $w = str_replace('_url', '', $f);
+            $rv = maRate($w, true);
+            $extra = "\n\n" . ($rv > 0 ? "✅ نرخ خوانده شد: <b>" . fmtNum($rv) . "</b> تومان"
+                                        : "⚠️ نرخ خوانده نشد — مسیر مقدار را بررسی کنید.");
+        }
+        sendMsg(BOT_TOKEN, $chatId, '✅ ذخیره شد.' . $extra,
+            inlineKb([[btnCb('🔌 قیمت‌گذاری', $back, 'admin')]]));
         return true;
     }
 
@@ -1875,7 +2664,7 @@ function maAdminState($action, $sd, $msg, $uid, $chatId, $plain, $ids) {
         $f   = (string)($sd['f'] ?? '');
         if (!maFindItem($key, $iid)) { clearState($uid); return true; }
 
-        $numeric = in_array($f, ['price', 'order', 'min', 'max'], true);
+        $numeric = in_array($f, ['price', 'order', 'min', 'max', 'stars'], true);
         if ($numeric) {
             $v = (float)str_replace([',', '،', ' '], '', norm_fa_digits($plain));
             if ($v < 0) { sendMsg(BOT_TOKEN, $chatId, '⚠️ عدد معتبر بفرستید.'); return true; }

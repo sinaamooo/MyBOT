@@ -13,6 +13,7 @@ function maViewTg($a, $boot) {
     $bg   = $th['bg'] ?? '#080512';
     $glow = !empty($th['glow']) ? '1' : '0';
     $grain= !empty($th['grain']) ? '1' : '0';
+    $fx   = (string)maFxLevel($th);
 
     $tpl = maTplTg();
     return strtr($tpl, [
@@ -22,6 +23,7 @@ function maViewTg($a, $boot) {
         '__BG__'    => $bg,
         '__GLOW__'  => $glow,
         '__GRAIN__' => $grain,
+        '__FX__'    => $fx,
         '__TITLE__' => htmlspecialchars((string)$a['title'], ENT_QUOTES, 'UTF-8'),
         '__BOOT__'  => json_encode($boot, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT),
     ]);
@@ -54,21 +56,34 @@ body{
   overflow-x:hidden; -webkit-font-smoothing:antialiased;
 }
 
-/* ═══ شفق پس‌زمینه ═══ */
-.sky{position:fixed;inset:0;z-index:0;overflow:hidden;pointer-events:none}
-.blob{position:absolute;border-radius:50%;filter:blur(70px);opacity:.55;will-change:transform}
-.b1{width:78vw;height:78vw;background:var(--c1);top:-26vw;right:-20vw;animation:drift1 22s ease-in-out infinite}
-.b2{width:66vw;height:66vw;background:var(--c2);top:24vh;left:-26vw;opacity:.4;animation:drift2 26s ease-in-out infinite}
-.b3{width:56vw;height:56vw;background:var(--c3);bottom:-18vh;right:-10vw;opacity:.34;animation:drift3 30s ease-in-out infinite}
-@keyframes drift1{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(-8vw,7vh) scale(1.14)}}
-@keyframes drift2{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(9vw,-6vh) scale(1.2)}}
-@keyframes drift3{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(-6vw,-8vh) scale(1.1)}}
+/* ═══ شفق پس‌زمینه ═══
+   قبلا سه دایره با filter:blur(70px) بودند که transformشان انیمیت می‌شد؛
+   مرورگر مجبور بود بلورِ یک لایه غول‌پیکر را هر فریم از نو بسازد و
+   اسکرول روی موبایل کند می‌شد. حالا همان ظاهر با گرادیان‌های رادیالِ
+   ثابت ساخته می‌شود — بدون filter، بدون انیمیشن، هزینه صفر. */
+.sky{position:fixed;inset:0;z-index:0;overflow:hidden;pointer-events:none;
+  background:
+    radial-gradient(58vw 58vw at 88% -6%,color-mix(in srgb,var(--c1) 52%,transparent),transparent 68%),
+    radial-gradient(52vw 52vw at 6% 34%,color-mix(in srgb,var(--c2) 38%,transparent),transparent 66%),
+    radial-gradient(46vw 46vw at 78% 104%,color-mix(in srgb,var(--c3) 32%,transparent),transparent 64%)}
+/* نفس کشیدن ملایم — فقط opacity که کاملا روی GPU است */
+.sky:after{content:"";position:absolute;inset:0;
+  background:radial-gradient(48vw 48vw at 20% 12%,color-mix(in srgb,var(--c2) 26%,transparent),transparent 62%);
+  opacity:0}
+body.fx2 .sky:after{animation:breathe 9s ease-in-out infinite}
+@keyframes breathe{0%,100%{opacity:0}50%{opacity:.85}}
+@media (prefers-reduced-motion:reduce){ .sky:after{animation:none!important} }
 #stars{position:fixed;inset:0;z-index:1;pointer-events:none;opacity:.75}
 .veil{position:fixed;inset:0;z-index:2;pointer-events:none;
   background:radial-gradient(120% 80% at 50% 0%,transparent 20%,var(--bg) 92%)}
 .grain{position:fixed;inset:0;z-index:3;pointer-events:none;opacity:.05;display:none;
   background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/></filter><rect width='140' height='140' filter='url(%23n)' opacity='.55'/></svg>")}
 body.grain-on .grain{display:block}
+
+/* روی گوشی‌های ضعیف، سنگین‌ترین افکت‌ها (بلور شیشه‌ای و انیمیشن شفق) کنار می‌روند */
+body.fx1 .purse,body.fx0 .purse{backdrop-filter:none;-webkit-backdrop-filter:none;background:#171232}
+body.fx0 #stars{display:none}
+@media (prefers-reduced-motion:reduce){ #stars{display:none} }
 
 .wrap{position:relative;z-index:5;max-width:560px;margin:0 auto;padding:0 16px calc(28px + var(--safe))}
 
@@ -116,11 +131,15 @@ body.grain-on .grain{display:block}
 
 /* ═══ کارت سرویس ═══ */
 .grid{display:grid;gap:12px}
-.card{position:relative;border-radius:var(--r);padding:15px;overflow:hidden;cursor:pointer;
-  border:1px solid var(--line);background:var(--card);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
-  display:flex;align-items:center;gap:13px;transition:transform .18s,border-color .18s;
+/* بدون backdrop-filter — روی ۳۰ کارت، بلورِ هر کارت اسکرول موبایل را کند می‌کرد.
+   پس‌زمینه نیمه‌مات همان حس شیشه‌ای را با هزینه صفر می‌دهد. */
+.card{position:relative;border-radius:var(--r);padding:15px;overflow:hidden;cursor:pointer;contain:content;
+  border:1px solid var(--line);background:#171232;
+  display:flex;align-items:center;gap:13px;transition:border-color .18s;
   animation:rise .42s cubic-bezier(.2,.9,.3,1) backwards}
 @keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+.grid:not(.first) .card{animation:none}
+@media (prefers-reduced-motion:reduce){ .card{animation:none} }
 .card:active{transform:scale(.982)}
 .card:before{content:"";position:absolute;inset:0;opacity:0;transition:.25s;
   background:linear-gradient(120deg,color-mix(in srgb,var(--c1) 22%,transparent),transparent 60%)}
@@ -135,6 +154,9 @@ body.glow-on .orb{box-shadow:0 10px 26px -12px var(--c1)}
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .tag{font-size:9.5px;font-weight:800;padding:2px 7px;border-radius:7px;color:#0B0616;
   background:linear-gradient(135deg,var(--c3),var(--c1));flex:0 0 auto}
+.live{font-size:8.5px;font-weight:800;padding:2px 6px;border-radius:6px;color:#0B0616;
+  background:var(--c2);flex:0 0 auto;letter-spacing:.4px}
+.card.hide{display:none}
 .price{position:relative;text-align:center;flex:0 0 auto}
 .price b{display:block;font-size:15px;font-weight:900;letter-spacing:-.3px;
   background:linear-gradient(90deg,var(--c2),var(--c1));-webkit-background-clip:text;background-clip:text;color:transparent}
@@ -226,7 +248,7 @@ body.glow-on .go{box-shadow:0 14px 34px -14px var(--c1)}
 </style>
 </head>
 <body>
-<div class="sky"><div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div></div>
+<div class="sky"></div>
 <canvas id="stars"></canvas>
 <div class="veil"></div><div class="grain"></div>
 
@@ -280,8 +302,10 @@ body.glow-on .go{box-shadow:0 14px 34px -14px var(--c1)}
 (function(){
 "use strict";
 var B = __BOOT__;
+var FX = __FX__;
 var TG = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
 var $ = function(id){ return document.getElementById(id); };
+document.body.classList.add('fx' + FX);
 
 /* ── راه‌اندازی تلگرام ── */
 if (TG) {
@@ -298,20 +322,30 @@ if (__GRAIN__) document.body.classList.add('grain-on');
 
 /* ── ستاره‌های پس‌زمینه ── */
 (function stars(){
+  if (FX < 1) return;
   var cv = $('stars'), cx = cv.getContext('2d'), st = [], W, H;
   function size(){ W = cv.width = innerWidth; H = cv.height = innerHeight; }
   size(); addEventListener('resize', size);
-  for (var i=0;i<64;i++) st.push({x:Math.random()*W,y:Math.random()*H,r:Math.random()*1.4+.3,
+  var COUNT = FX >= 2 ? 34 : 18;
+  for (var i=0;i<COUNT;i++) st.push({x:Math.random()*W,y:Math.random()*H,r:Math.random()*1.4+.3,
                                   s:Math.random()*.22+.04,o:Math.random()*.6+.2});
-  (function loop(){
+  var run = true;
+  document.addEventListener('visibilitychange', function(){
+    run = !document.hidden; if (run) requestAnimationFrame(loop);
+  });
+  var prev = 0;
+  (function loop(ts){
+    if (!run) return;
+    requestAnimationFrame(loop);
+    if (ts - prev < 33) return;      // ۳۰ فریم در ثانیه کافی است
+    prev = ts || 0;
     cx.clearRect(0,0,W,H);
     for (var i=0;i<st.length;i++){ var p=st[i];
       p.y -= p.s; if (p.y < -3){ p.y = H+3; p.x = Math.random()*W; }
       cx.globalAlpha = p.o; cx.fillStyle = '#fff';
       cx.beginPath(); cx.arc(p.x,p.y,p.r,0,6.284); cx.fill();
     }
-    requestAnimationFrame(loop);
-  })();
+  })(0);
 })();
 
 /* ── اعداد فارسی ── */
@@ -335,18 +369,22 @@ $('ava').textContent  = (B.title || '★').trim().charAt(0);
 document.title = B.title;
 
 /* ── وضعیت ── */
-var S = { cat:'', q:'', item:null, qty:1, busy:false, bal:0 };
+var S = { cat:'', q:'', item:null, qty:1, busy:false, bal:0, nodes:[] };
 
 /* ── ارتباط با سرور ── */
 function api(action, extra, ok, bad){
   var body = Object.assign({ action:action, app:B.app,
     initData: (TG && TG.initData) ? TG.initData : '' }, extra || {});
+  var ctl = null, timer = null;
+  try { ctl = new AbortController(); timer = setTimeout(function(){ ctl.abort(); }, 20000); } catch(e){}
+
   fetch(B.api, {
     method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify(body)
+    body: JSON.stringify(body), signal: ctl ? ctl.signal : undefined,
+    cache:'no-store', credentials:'omit', referrerPolicy:'no-referrer'
   }).then(function(r){ return r.json().catch(function(){ return {ok:false,message:'پاسخ سرور نامعتبر بود.'}; }); })
-    .then(function(j){ if (j && j.ok) ok(j); else bad(j || {}); })
-    .catch(function(){ bad({ message:'ارتباط با سرور برقرار نشد.' }); });
+    .then(function(j){ if (timer) clearTimeout(timer); if (j && j.ok) ok(j); else bad(j || {}); })
+    .catch(function(){ if (timer) clearTimeout(timer); bad({ message:'ارتباط با سرور برقرار نشد.' }); });
 }
 
 var toastT;
@@ -374,10 +412,13 @@ function drawTabs(){
             (c.emoji ? c.emoji + ' ' : '') + esc(c.name) + '</div>';
   });
   box.innerHTML = html;
-  [].forEach.call(box.children, function(el){
-    el.onclick = function(){ S.cat = el.getAttribute('data-c'); tap(); drawTabs(); drawGrid(); };
-  });
 }
+$('tabs').addEventListener('click', function(ev){
+  var el = ev.target.closest ? ev.target.closest('.tab') : null;
+  if (!el) return;
+  S.cat = el.getAttribute('data-c');
+  tap(); drawTabs(); applyFilter();
+});
 
 function esc(s){
   return String(s == null ? '' : s).replace(/[&<>"']/g, function(m){
@@ -385,42 +426,66 @@ function esc(s){
   });
 }
 
-/* ── فهرست سرویس‌ها ── */
-function visible(){
-  var q = S.q.trim().toLowerCase();
-  return B.items.filter(function(i){
-    if (S.cat && i.cat !== S.cat) return false;
-    if (!q) return true;
-    return (i.name + ' ' + i.desc + ' ' + i.badge).toLowerCase().indexOf(q) >= 0;
-  });
-}
-
-function drawGrid(){
-  var list = visible(), box = $('grid');
-  if (!list.length){
+/* ── فهرست سرویس‌ها — یک بار ساخته می‌شود، بعد فقط فیلتر ── */
+function buildGrid(){
+  var box = $('grid');
+  if (!B.items.length){
     box.innerHTML = '<div class="void"><div>🌙</div>' + esc(B.ui.empty) + '</div>';
     return;
   }
   var html = '';
-  list.forEach(function(i, n){
+  B.items.forEach(function(i, n){
     html += '<div class="card' + (i.badge ? ' hot' : '') + '" data-i="' + esc(i.id) + '"' +
-            ' style="animation-delay:' + Math.min(n*45, 380) + 'ms">' +
+            ' style="animation-delay:' + Math.min(n*40, 340) + 'ms">' +
               '<div class="orb">' + esc(i.emoji || '💠') + '</div>' +
               '<div class="meta">' +
-                '<h3>' + esc(i.name) + (i.badge ? '<span class="tag">' + esc(i.badge) + '</span>' : '') + '</h3>' +
+                '<h3>' + esc(i.name) +
+                  (i.badge ? '<span class="tag">' + esc(i.badge) + '</span>' : '') +
+                  (i.live  ? '<span class="live">زنده</span>' : '') +
+                '</h3>' +
                 (i.desc ? '<p>' + esc(i.desc) + '</p>' : '') +
               '</div>' +
               '<div class="price"><b>' + fa(i.price) + '</b><i>' + esc(B.currency) +
                 (i.ask === 'qty' && i.unit ? ' / ' + esc(i.unit) : '') + '</i></div>' +
             '</div>';
   });
+  box.classList.add('first');
   box.innerHTML = html;
-  [].forEach.call(box.children, function(el){
-    el.onclick = function(){ open(el.getAttribute('data-i')); };
+  S.nodes = [].slice.call(box.children);
+  setTimeout(function(){ box.classList.remove('first'); }, 700);
+
+  box.addEventListener('click', function(ev){
+    var el = ev.target.closest ? ev.target.closest('.card') : null;
+    if (el && el.getAttribute) open(el.getAttribute('data-i'));
   });
 }
 
-$('q').oninput = function(){ S.q = this.value; drawGrid(); };
+function applyFilter(){
+  var q = S.q.trim().toLowerCase(), shown = 0;
+  for (var n = 0; n < S.nodes.length; n++){
+    var el = S.nodes[n], it = B.items[n];
+    var ok = (!S.cat || it.cat === S.cat) &&
+             (!q || (it.name + ' ' + it.desc + ' ' + it.badge).toLowerCase().indexOf(q) >= 0);
+    el.classList.toggle('hide', !ok);
+    if (ok) shown++;
+  }
+  var none = document.getElementById('voidBox');
+  if (!shown && !none){
+    none = document.createElement('div');
+    none.id = 'voidBox'; none.className = 'void';
+    none.innerHTML = '<div>🌙</div>' + esc(B.ui.empty);
+    $('grid').appendChild(none);
+  } else if (shown && none){
+    none.remove();
+  }
+}
+
+var qT;
+$('q').addEventListener('input', function(){
+  var v = this.value;
+  clearTimeout(qT);
+  qT = setTimeout(function(){ S.q = v; applyFilter(); }, 120);
+});
 
 /* ── شیت خرید ── */
 function open(id){
@@ -536,7 +601,7 @@ $('sGo').onclick = function(){
   this.textContent = B.ui.sending;
   tap('medium');
 
-  api('order', { item: it.id, qty: S.qty, field: fv }, function(j){
+  api('order', { item: it.id, qty: S.qty, field: fv, seen_price: it.price }, function(j){
     S.busy = false;
     shut();
     $('wCode').textContent = j.order || '';
@@ -547,6 +612,16 @@ $('sGo').onclick = function(){
     S.busy = false;
     $('sGo').disabled = false;
     $('sGo').textContent = B.ui.submit;
+    // نرخ زنده بین باز کردن و زدن دکمه عوض شده — قیمت تازه را نشان بده
+    if (j && j.error === 'price_changed' && j.price){
+      it.price = j.price;
+      total();
+      var node = S.nodes[B.items.indexOf(it)];
+      if (node){
+        var pb = node.querySelector('.price b');
+        if (pb) pb.textContent = fa(j.price);
+      }
+    }
     toast((j && j.message) ? j.message : 'ثبت سفارش انجام نشد.');
   });
 };
@@ -554,7 +629,8 @@ $('sGo').onclick = function(){
 $('wGo').onclick = function(){ if (TG) { try{ TG.close(); }catch(e){} } else location.reload(); };
 
 drawTabs();
-drawGrid();
+buildGrid();
+applyFilter();
 })();
 </script>
 </body>
