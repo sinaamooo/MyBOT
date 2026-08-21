@@ -31,6 +31,16 @@ function maAppLabels() {
     return ['tg' => '🌟 خدمات تلگرام', 'cfg' => '🛡 فروش کانفیگ'];
 }
 
+/** عملیات تحویل خودکار روی پنل فروش */
+function maAutoLabels() {
+    return [
+        ''        => '— دستی (بدون تحویل خودکار)',
+        'stars'   => '⭐️ خرید استارز',
+        'premium' => '💎 خرید پریمیوم',
+        'gift'    => '🎁 خرید گیفت',
+    ];
+}
+
 /** نوع سوالی که هر آیتم از کاربر می‌پرسد */
 function maAskLabels() {
     return [
@@ -66,9 +76,10 @@ function maDefaultConfig() {
             'ttl'         => 600,       // ثانیه کش
         ],
 
-        // 💱 نرخ ارز — پیش‌فرض نوبیتکس (همان منبعی که سورس GiftIx استفاده می‌کرد)
+        // 💱 نرخ ارز — نوبیتکس یا والکس (از پنل قابل تعویض)
         'rates' => [
             'on'       => true,
+            'source'   => 'nobitex',    // nobitex | wallex | custom
             'ton_url'  => 'https://api.nobitex.ir/market/stats?srcCurrency=ton&dstCurrency=rls',
             'ton_path' => 'stats.ton-rls.latest',
             'trx_url'  => 'https://api.nobitex.ir/market/stats?srcCurrency=trx&dstCurrency=rls',
@@ -79,6 +90,36 @@ function maDefaultConfig() {
             'margin'   => 5,            // درصد سود روی نرخ ارز
             'round'    => 100,
             'ttl'      => 300,
+        ],
+
+        // 🤖 تحویل خودکار — به هر پنل/API فروشی وصل می‌شود
+        // (marketapp و مشابهش). چون هر سرویس قرارداد خودش را دارد،
+        // مسیر، احراز هویت، قالب بدنه و مسیر فیلدهای پاسخ اینجا تنظیم می‌شود.
+        'fulfill' => [
+            'on'         => false,
+            'name'       => 'پنل فروش',
+            'base'       => '',                 // مثل https://api.marketapp.org
+            'auth_type'  => 'header',           // header | query | body | none
+            'auth_key'   => 'Authorization',
+            'auth_value' => '',                 // توکن یا کلید API
+            'timeout'    => 20,
+            'retry'      => 3,                  // چند بار تلاش دوباره
+            'auto_pay'   => true,               // بلافاصله بعد از پرداخت اجرا شود؟
+            'ops' => [
+                'balance' => ['path' => '/balance', 'method' => 'GET',  'body' => '',
+                              'val_path' => 'balance', 'err_path' => 'message'],
+                'stars'   => ['path' => '', 'method' => 'POST',
+                              'body' => '{"username":"{username}","quantity":{qty}}',
+                              'id_path' => 'order_id', 'err_path' => 'message'],
+                'premium' => ['path' => '', 'method' => 'POST',
+                              'body' => '{"username":"{username}","months":{qty}}',
+                              'id_path' => 'order_id', 'err_path' => 'message'],
+                'gift'    => ['path' => '', 'method' => 'POST',
+                              'body' => '{"username":"{username}","gift_id":"{gift}"}',
+                              'id_path' => 'order_id', 'err_path' => 'message'],
+                'status'  => ['path' => '', 'method' => 'GET', 'body' => '',
+                              'val_path' => 'status', 'err_path' => 'message'],
+            ],
         ],
 
         // ⭐️ نرخ استارز — قیمت هر ۱ استارز به تومان
@@ -135,6 +176,11 @@ function maDefaultTg() {
             'done_sub' => 'فاکتور پرداخت داخل ربات برایتان فرستاده شد.',
             'search'   => 'جستجو در سرویس‌ها…',
             'empty'    => 'فعلا سرویسی در این بخش نیست.',
+            'pay_wallet' => 'پرداخت از کیف پول',
+            'pay_other'  => 'روش‌های دیگر پرداخت',
+            'low_bal'    => 'موجودی کافی نیست',
+            'paid_ok'    => 'پرداخت شد',
+            'topup_hint' => 'برای شارژ کیف پول، داخل ربات «افزایش موجودی» را بزنید.',
         ],
 
         // 💠 دکمه‌های شیشه‌ای فاکتور داخل ربات — متن و رنگ هردو قابل ویرایش
@@ -145,6 +191,8 @@ function maDefaultTg() {
             'cancel'  => ['emoji' => '🔴', 'text' => 'انصراف',            'color' => 'danger',  'icon' => ''],
             'open'    => ['emoji' => '🚀', 'text' => 'باز کردن مینی‌اپ',   'color' => 'primary', 'icon' => ''],
         ],
+        // چیدمان دکمه‌های فاکتور: «1,2» یعنی ردیف اول ۱ دکمه، ردیف دوم ۲ دکمه
+        'glass_layout' => '1,1,1',
 
         'cats' => [
             ['id' => 'c_star', 'emoji' => '⭐️', 'name' => 'استارز',  'on' => true, 'order' => 1],
@@ -309,6 +357,11 @@ function maDefaultCfg() {
             'done_sub' => 'فاکتور پرداخت داخل ربات برایتان فرستاده شد.',
             'search'   => 'جستجو در پلن‌ها…',
             'empty'    => 'فعلا پلنی در این بخش نیست.',
+            'pay_wallet' => 'پرداخت از کیف پول',
+            'pay_other'  => 'روش‌های دیگر پرداخت',
+            'low_bal'    => 'موجودی کافی نیست',
+            'paid_ok'    => 'پرداخت شد',
+            'topup_hint' => 'برای شارژ کیف پول، داخل ربات «افزایش موجودی» را بزنید.',
         ],
 
         'glass' => [
@@ -318,6 +371,7 @@ function maDefaultCfg() {
             'cancel'  => ['emoji' => '🔴', 'text' => 'انصراف',            'color' => 'danger',  'icon' => ''],
             'open'    => ['emoji' => '🛡', 'text' => 'باز کردن مینی‌اپ',   'color' => 'success', 'icon' => ''],
         ],
+        'glass_layout' => '1,1,1',
 
         'cats' => [
             ['id' => 'k_vol',  'emoji' => '📦', 'name' => 'حجمی',      'on' => true, 'order' => 1],
@@ -359,7 +413,7 @@ function maMergeConfig($def, $saved) {
     if (!is_array($saved)) return $def;
     $out = $def;
     if (isset($saved['base_url'])) $out['base_url'] = (string)$saved['base_url'];
-    foreach (['market', 'rates', 'stars'] as $sec) {
+    foreach (['market', 'rates', 'stars', 'fulfill'] as $sec) {
         if (isset($saved[$sec]) && is_array($saved[$sec]))
             $out[$sec] = array_replace($def[$sec] ?? [], $saved[$sec]);
     }
@@ -545,6 +599,45 @@ function maRate($which, $fresh = false) {
 
     maCachePut($ck, $val);
     return $val;
+}
+
+/** تنظیمات آماده هر صرافی — کاربر فقط اسم صرافی را انتخاب می‌کند */
+function maRateSources() {
+    return [
+        'nobitex' => [
+            'name'     => 'نوبیتکس',
+            'ton_url'  => 'https://api.nobitex.ir/market/stats?srcCurrency=ton&dstCurrency=rls',
+            'ton_path' => 'stats.ton-rls.latest',
+            'trx_url'  => 'https://api.nobitex.ir/market/stats?srcCurrency=trx&dstCurrency=rls',
+            'trx_path' => 'stats.trx-rls.latest',
+            'usdt_url' => 'https://api.nobitex.ir/market/stats?srcCurrency=usdt&dstCurrency=rls',
+            'usdt_path'=> 'stats.usdt-rls.latest',
+            'div'      => 10,           // نوبیتکس ریال می‌دهد
+        ],
+        'wallex' => [
+            'name'     => 'والکس',
+            'ton_url'  => 'https://api.wallex.ir/v1/markets',
+            'ton_path' => 'result.symbols.TONTMN.stats.lastPrice',
+            'trx_url'  => 'https://api.wallex.ir/v1/markets',
+            'trx_path' => 'result.symbols.TRXTMN.stats.lastPrice',
+            'usdt_url' => 'https://api.wallex.ir/v1/markets',
+            'usdt_path'=> 'result.symbols.USDTTMN.stats.lastPrice',
+            'div'      => 1,            // والکس تومان می‌دهد
+        ],
+    ];
+}
+
+/** اعمال تنظیمات آماده یک صرافی */
+function maApplyRateSource($id) {
+    $src = maRateSources()[$id] ?? null;
+    if (!$src) return false;
+    maSetRoot(function (&$m) use ($id, $src) {
+        $m['rates']['source'] = $id;
+        foreach (['ton_url','ton_path','trx_url','trx_path','usdt_url','usdt_path','div'] as $k)
+            $m['rates'][$k] = $src[$k];
+    });
+    save('ma_cache', []);
+    return true;
 }
 
 function maRound($v, $step) {
@@ -750,11 +843,16 @@ class MaOrder
         return $id;
     }
 
+    /**
+     * تغییر یک سفارش زیر قفل.
+     * اگر کال‌بک چیزی برگرداند، همان برمی‌گردد — این برای «قفل گرفتن» لازم است:
+     * تابع می‌تواند false برگرداند تا بگوید شرط برقرار نبود.
+     */
     public static function set($id, callable $fn) {
         return mutate('ma_orders', function (&$a) use ($id, $fn) {
             if (!isset($a[$id])) return false;
-            $fn($a[$id]);
-            return true;
+            $r = $fn($a[$id]);
+            return $r === null ? true : $r;
         });
     }
 
@@ -813,6 +911,310 @@ function maVerifyInitData($initData, $maxAge = 3600) {
 
     $user = json_decode((string)$q['user'], true);
     return (is_array($user) && !empty($user['id'])) ? $user : null;
+}
+
+// ============================================================
+// 🤖 تحویل خودکار — اتصال به پنل فروش بیرونی
+// ============================================================
+
+/** جای‌گذاری {username} و {qty} و … در قالب مسیر یا بدنه */
+function maFillTpl($tpl, $vars) {
+    $out = (string)$tpl;
+    foreach ($vars as $k => $v) {
+        // داخل JSON، رشته باید امن escape شود
+        $json = trim(json_encode((string)$v, JSON_UNESCAPED_UNICODE), '"');
+        $out  = str_replace('{' . $k . '}', $json, $out);
+    }
+    return $out;
+}
+
+/** یک عملیات روی پنل فروش — برگشت: [پاسخ, خطا] */
+function maFulfillCall($op, $vars = []) {
+    $f = maCfg()['fulfill'] ?? [];
+    if (trim((string)($f['base'] ?? '')) === '') return [null, 'آدرس پنل ثبت نشده'];
+
+    $cfgOp = $f['ops'][$op] ?? null;
+    if (!is_array($cfgOp)) return [null, 'عملیات «' . $op . '» تعریف نشده'];
+
+    $path = maFillTpl($cfgOp['path'] ?? '', $vars);
+    $url  = rtrim((string)$f['base'], '/') . '/' . ltrim($path, '/');
+    $body = maFillTpl($cfgOp['body'] ?? '', $vars);
+    $method = strtoupper((string)($cfgOp['method'] ?? 'POST'));
+
+    // احراز هویت به شکلی که پنل می‌خواهد
+    $headers = '';
+    $ak = trim((string)($f['auth_key'] ?? ''));
+    $av = (string)($f['auth_value'] ?? '');
+    switch ((string)($f['auth_type'] ?? 'header')) {
+        case 'header':
+            if ($ak !== '') $headers = $ak . ': ' . $av;
+            break;
+        case 'query':
+            if ($ak !== '') $url .= (str_contains($url, '?') ? '&' : '?') . rawurlencode($ak) . '=' . rawurlencode($av);
+            break;
+        case 'body':
+            if ($ak !== '' && $method === 'POST') {
+                $b = json_decode($body ?: '{}', true);
+                if (is_array($b)) { $b[$ak] = $av; $body = json_encode($b, JSON_UNESCAPED_UNICODE); }
+            }
+            break;
+    }
+
+    return maHttp($url, $method, $headers, $body, (int)($f['timeout'] ?? 20));
+}
+
+/** آیا این پاسخ یعنی موفقیت؟ */
+function maFulfillOk($resp, $cfgOp) {
+    if (!is_array($resp)) return false;
+    // اگر پنل فیلد خطا پر کرده، شکست است
+    $errPath = (string)($cfgOp['err_path'] ?? '');
+    if ($errPath !== '') {
+        $e = maJsonPath($resp, $errPath);
+        if (is_string($e) && trim($e) !== '' && strtolower(trim($e)) !== 'ok' && strtolower(trim($e)) !== 'success')
+            return false;
+    }
+    // فیلدهای رایج «موفق بود؟»
+    foreach (['ok', 'success', 'status'] as $k) {
+        if (!array_key_exists($k, $resp)) continue;
+        $v = $resp[$k];
+        if (is_bool($v)) return $v;
+        if (is_numeric($v)) return (int)$v > 0;
+        if (is_string($v)) {
+            $v = strtolower(trim($v));
+            if (in_array($v, ['ok', 'true', 'success', 'done', 'completed', 'processing', 'pending'], true)) return true;
+            if (in_array($v, ['error', 'false', 'failed', 'fail', 'rejected'], true)) return false;
+        }
+    }
+    return true;   // پاسخ JSON آمد و خطایی اعلام نشد
+}
+
+/** متن خطای پنل */
+function maFulfillErr($resp, $cfgOp) {
+    if (!is_array($resp)) return 'پاسخ نامعتبر';
+    foreach ([(string)($cfgOp['err_path'] ?? ''), 'message', 'error', 'detail', 'msg'] as $pth) {
+        if ($pth === '') continue;
+        $v = maJsonPath($resp, $pth);
+        if (is_string($v) && trim($v) !== '') return mb_substr($v, 0, 200);
+    }
+    return 'خطای نامشخص';
+}
+
+/** سرویسِ یک سفارش، کدام عملیات خودکار را می‌خواهد؟ */
+function maAutoOp($o) {
+    $i = maFindItem($o['app'], $o['item_id']);
+    if (!$i) return [null, []];
+    $op = trim((string)($i['auto'] ?? ''));
+    if ($op === '' || $op === 'none') return [null, []];
+
+    $uname = ltrim(trim((string)$o['field']), '@');
+    $qty   = (float)($i['auto_qty'] ?? 0);
+    if ($qty <= 0) $qty = (float)($o['qty'] ?? 1);
+
+    return [$op, [
+        'username' => $uname,
+        'user'     => $uname,
+        'qty'      => (int)$qty,
+        'amount'   => (int)$qty,
+        'gift'     => (string)($i['auto_id'] ?? $i['market_key'] ?? ''),
+        'order'    => (string)$o['id'],
+        'user_id'  => (string)$o['user_id'],
+        'field'    => (string)$o['field'],
+    ]];
+}
+
+/**
+ * تحویل خودکار یک سفارش پرداخت‌شده.
+ * هیچ‌وقت پول را برنمی‌گرداند و هیچ‌وقت دوبار سفارش نمی‌دهد —
+ * قبل از تماس، سفارش را «در حال ارسال» علامت می‌زند تا اجرای همزمان رخ ندهد.
+ */
+function maAutoFulfill($orderId, $manual = false) {
+    $f = maCfg()['fulfill'] ?? [];
+    $o = MaOrder::get($orderId);
+    if (!$o) return [false, 'سفارش پیدا نشد'];
+    if ($o['status'] !== MaOrder::PAID) return [false, 'سفارش در وضعیت پرداخت‌شده نیست'];
+
+    [$op, $vars] = maAutoOp($o);
+    if (!$op) return [false, 'این سرویس تحویل خودکار ندارد'];
+    if (empty($f['on'])) return [false, 'تحویل خودکار خاموش است'];
+
+    // 🔒 قفل: فقط یک اجرا در لحظه — جلوی سفارش دوباره روی پنل را می‌گیرد
+    $claimed = MaOrder::set($orderId, function (&$x) {
+        if (!empty($x['sending'])) return false;
+        $x['sending'] = time();
+        $x['tries']   = (int)($x['tries'] ?? 0) + 1;
+        return true;
+    });
+    if (!$claimed) return [false, 'همین حالا در حال ارسال است'];
+
+    $cfgOp = $f['ops'][$op] ?? [];
+    [$resp, $err] = maFulfillCall($op, $vars);
+
+    if (!$resp) {
+        MaOrder::set($orderId, function (&$x) use ($err) {
+            $x['sending'] = 0; $x['last_error'] = $err;
+        });
+        maAutoFailNotice($orderId, $err);
+        return [false, $err];
+    }
+
+    if (!maFulfillOk($resp, $cfgOp)) {
+        $msg = maFulfillErr($resp, $cfgOp);
+        MaOrder::set($orderId, function (&$x) use ($msg) {
+            $x['sending'] = 0; $x['last_error'] = $msg;
+        });
+        maAutoFailNotice($orderId, $msg);
+        return [false, $msg];
+    }
+
+    $ref = '';
+    if (!empty($cfgOp['id_path'])) {
+        $v = maJsonPath($resp, (string)$cfgOp['id_path']);
+        if (is_scalar($v)) $ref = (string)$v;
+    }
+
+    MaOrder::set($orderId, function (&$x) use ($ref) {
+        $x['status'] = MaOrder::DONE;
+        $x['sending'] = 0;
+        $x['last_error'] = '';
+        $x['provider_ref'] = $ref;
+        $x['delivered_at'] = nowStr();
+        $x['auto'] = true;
+    });
+
+    $o = MaOrder::get($orderId);
+    sendMsg(BOT_TOKEN, $o['user_id'],
+        "✅ <b>سفارش شما انجام شد</b>\n\n" .
+        '📦 ' . h(maOrderTitle($o)) . "\n" .
+        ((float)$o['qty'] > 1 ? '🔢 ' . fmtNum($o['qty']) . ' ' . h($o['unit']) . "\n" : '') .
+        (trim((string)$o['field']) !== '' ? '📎 ' . h($o['field']) . "\n" : '') .
+        '🔑 <code>' . h($o['id']) . "</code>\n" .
+        ($ref !== '' ? '🧾 کد پنل: <code>' . h($ref) . "</code>\n" : '') .
+        "\n🙏 از خرید شما سپاسگزاریم.");
+
+    sendMsg(BOT_TOKEN, ADMIN_ID,
+        "🤖 <b>تحویل خودکار انجام شد</b>\n\n" .
+        '📦 ' . h(maOrderTitle($o)) . "\n" .
+        '👤 <code>' . $o['user_id'] . "</code>\n" .
+        '💰 ' . fmtNum($o['total']) . ' ' . h($o['currency']) . "\n" .
+        '🔑 <code>' . h($o['id']) . '</code>' .
+        ($ref !== '' ? "\n🧾 " . h($ref) : ''));
+
+    return [true, $ref];
+}
+
+/** به ادمین خبر بده که تحویل خودکار نشد و راه‌های ادامه را بده */
+function maAutoFailNotice($orderId, $err) {
+    $o = MaOrder::get($orderId);
+    if (!$o) return;
+    $max = (int)(maCfg()['fulfill']['retry'] ?? 3);
+    $n   = (int)($o['tries'] ?? 1);
+
+    $t  = "⚠️ <b>تحویل خودکار ناموفق</b>\n\n";
+    $t .= '📦 ' . h(maOrderTitle($o)) . "\n";
+    $t .= '👤 <code>' . $o['user_id'] . '</code> ' . ($o['username'] ? '@' . h($o['username']) : '') . "\n";
+    if (trim((string)$o['field']) !== '') $t .= '📎 ' . h($o['field']) . "\n";
+    $t .= '💰 ' . fmtNum($o['total']) . ' ' . h($o['currency']) . "\n";
+    $t .= '🔑 <code>' . h($o['id']) . "</code>\n";
+    $t .= '🔁 تلاش ' . $n . ' از ' . $max . "\n\n";
+    $t .= '❌ ' . h($err) . "\n\n";
+    $t .= ($n < $max
+        ? 'خودکار دوباره تلاش می‌شود. می‌توانید همین حالا هم دستی اقدام کنید:'
+        : '<b>تلاش خودکار تمام شد</b> — پول کاربر گرفته شده و سفارش تحویل نشده. یکی را انتخاب کنید:');
+
+    sendMsg(BOT_TOKEN, ADMIN_ID, $t, inlineKb([
+        [btnCb('🔁 تلاش دوباره', 'maretry_' . $o['id'], 'confirm')],
+        [btnCb('📤 تحویل دستی', 'madlv_' . $o['id'], 'link')],
+        [btnCb('💰 برگشت پول به کاربر', 'marefund_' . $o['id'], 'reject')],
+    ]));
+}
+
+/**
+ * صف تلاش دوباره — از همان cron موجود ربات صدا زده می‌شود.
+ * سفارش‌های پرداخت‌شده‌ای که تحویل نشده‌اند و هنوز تلاش باقی دارند.
+ */
+function maAutoQueue($limit = 5) {
+    $f = maCfg()['fulfill'] ?? [];
+    if (empty($f['on'])) return 0;
+
+    $max  = (int)($f['retry'] ?? 3);
+    $done = 0;
+    $now  = time();
+
+    foreach (MaOrder::all() as $o) {
+        if ($done >= $limit) break;
+        if ($o['status'] !== MaOrder::PAID) continue;
+
+        [$op] = maAutoOp($o);
+        if (!$op) continue;
+
+        $tries = (int)($o['tries'] ?? 0);
+        if ($tries >= $max) continue;
+
+        // قفل رهاشده (اجرای قبلی وسط کار مرد) بعد از ۵ دقیقه آزاد می‌شود
+        $sending = (int)($o['sending'] ?? 0);
+        if ($sending > 0 && ($now - $sending) < 300) continue;
+        if ($sending > 0) MaOrder::set($o['id'], function (&$x) { $x['sending'] = 0; });
+
+        // فاصله فزاینده بین تلاش‌ها: ۱، ۴، ۹ دقیقه
+        $last = strtotime((string)($o['decided_at'] ?? $o['created_at'])) ?: 0;
+        if ($tries > 0 && ($now - $last) < (60 * $tries * $tries)) continue;
+
+        maAutoFulfill($o['id']);
+        $done++;
+    }
+    return $done;
+}
+
+// ============================================================
+// 👛 کیف پول — کسر اتمیک
+// ============================================================
+
+/**
+ * برداشت از کیف پول در یک قفل واحد.
+ *
+ * مهم: بررسی موجودی و کسر باید داخل یک mutate باشند. اگر جدا باشند،
+ * دو درخواست همزمان هر دو موجودی را کافی می‌بینند و هر دو کم می‌کنند —
+ * یعنی کاربر با یک موجودی دو خرید می‌کند و حساب منفی می‌شود.
+ *
+ * برگشت: true اگر واقعا کسر شد.
+ */
+function maDebit($userId, $amount) {
+    $amount = round((float)$amount, 2);
+    if ($amount <= 0) return false;
+
+    return (bool)mutate('users', function (&$users) use ($userId, $amount) {
+        $k = (string)$userId;
+        if (!isset($users[$k])) return false;
+        $bal = round((float)($users[$k]['balance'] ?? 0), 2);
+        if ($bal + 0.001 < $amount) return false;          // موجودی کافی نیست
+        $users[$k]['balance'] = round($bal - $amount, 2);
+        return true;
+    });
+}
+
+/** برگرداندن پول به کیف پول (وقتی تحویل خودکار شکست بخورد و ادمین لغو کند) */
+function maRefund($userId, $amount, $note = '') {
+    $amount = round((float)$amount, 2);
+    if ($amount <= 0) return;
+    addBalance($userId, $amount);
+    sendMsg(BOT_TOKEN, $userId,
+        "💰 <b>مبلغ به کیف پول شما برگشت</b>\n\n" .
+        '➕ ' . fmtNum($amount) . " تومان\n" .
+        ($note !== '' ? '📝 ' . h($note) : ''));
+}
+
+/** پرداخت یک سفارش مینی‌اپ از کیف پول — برگشت: [موفق, پیام] */
+function maPayFromWallet($orderId, $uid) {
+    $o = MaOrder::get($orderId);
+    if (!$o || (int)$o['user_id'] !== (int)$uid) return [false, 'سفارش پیدا نشد.'];
+    if ($o['status'] !== MaOrder::PENDING)       return [false, 'این فاکتور قبلا بررسی شده.'];
+
+    if (!maDebit($uid, (float)$o['total']))
+        return [false, 'موجودی کیف پول کافی نیست.'];
+
+    payReferralCommission($uid, (float)$o['total']);
+    maMarkPaid($orderId, 'wallet');
+    return [true, ''];
 }
 
 // ============================================================
@@ -1155,6 +1557,28 @@ function maApi() {
 
         $oid = MaOrder::create($key, $uid, $uname, $item, $qty, $total, $field);
 
+        // 👛 پرداخت مستقیم از کیف پول، بدون خروج از مینی‌اپ
+        if (($body['pay'] ?? '') === 'wallet') {
+            [$paid, $perr] = maPayFromWallet($oid, $uid);
+            if ($paid) {
+                $o = MaOrder::get($oid);
+                $bal = (float)(getUser($uid)['balance'] ?? 0);
+                maApiOut([
+                    'ok' => true, 'order' => $oid, 'total' => $total, 'paid' => true,
+                    'balance' => $bal,
+                    'done' => ($o['status'] === MaOrder::DONE),
+                    'message' => ($o['status'] === MaOrder::DONE)
+                        ? 'پرداخت شد و سفارش انجام شد ✅'
+                        : 'پرداخت از کیف پول انجام شد. سفارش در حال پردازش است.',
+                ]);
+            }
+            // موجودی کافی نبود — فاکتور می‌رود داخل ربات تا شارژ کند
+            $o = MaOrder::get($oid);
+            sendMsg(BOT_TOKEN, $uid, maInvoiceText($o), maInvoiceKb($o));
+            maApiOut(['ok' => false, 'error' => 'no_balance', 'order' => $oid,
+                      'message' => $perr . ' فاکتور داخل ربات فرستاده شد.'], 402);
+        }
+
         // فاکتور را داخل خود ربات می‌فرستیم — پرداخت آنجا انجام می‌شود
         $o = MaOrder::get($oid);
         sendMsg(BOT_TOKEN, $uid, maInvoiceText($o), maInvoiceKb($o));
@@ -1206,12 +1630,15 @@ function maInvoiceText($o) {
 }
 
 function maInvoiceKb($o) {
-    $rows = [];
-    $bal = (float)(getUser($o['user_id'])['balance'] ?? 0);
-    if ($bal >= (float)$o['total']) $rows[] = [maGlassBtn($o['app'], 'wallet', 'mapay_' . $o['id'])];
-    $rows[] = [maGlassBtn($o['app'], 'card', 'macard_' . $o['id'])];
-    $rows[] = [maGlassBtn($o['app'], 'cancel', 'macan_' . $o['id'])];
-    return inlineKb($rows);
+    $bal   = (float)(getUser($o['user_id'])['balance'] ?? 0);
+    $items = [];
+    if ($bal >= (float)$o['total']) $items[] = maGlassBtn($o['app'], 'wallet', 'mapay_' . $o['id']);
+    $items[] = maGlassBtn($o['app'], 'card',   'macard_' . $o['id']);
+    $items[] = maGlassBtn($o['app'], 'cancel', 'macan_'  . $o['id']);
+
+    // چیدمان دلخواه ادمین — «2,1» یعنی دو دکمه بالا، یکی پایین
+    $layout = trim((string)(maGet($o['app'])['glass_layout'] ?? ''));
+    return inlineKb($layout !== '' ? layoutRows($items, $layout) : array_map(fn($b) => [$b], $items));
 }
 
 /** ادمین را از سفارش تازه خبر می‌کند */
@@ -1267,6 +1694,15 @@ function maMarkPaid($id, $payMethod) {
         '🔑 <code>' . h($o['id']) . "</code>\n\n" .
         (trim((string)$a['note']) !== '' ? '💡 ' . h($a['note']) : '⏳ سفارش شما در حال انجام است.'));
 
+    // 🤖 اگر این سرویس تحویل خودکار دارد، همین حالا اقدام کن
+    [$op] = maAutoOp($o);
+    $f = maCfg()['fulfill'] ?? [];
+    if ($op && !empty($f['on']) && !empty($f['auto_pay'])) {
+        [$ok] = maAutoFulfill($id);
+        if ($ok) return MaOrder::get($id);      // تحویل شد، دیگر لازم نیست ادمین کاری کند
+        return MaOrder::get($id);               // ناموفق — ادمین از maAutoFailNotice خبردار شد
+    }
+
     maNotifyAdmin($o, '💸 <b>سفارش پرداخت‌شده — آماده تحویل</b>');
     return $o;
 }
@@ -1292,16 +1728,10 @@ function maCallback($data, $uid, $chatId, $msgId, $cbId, $isAdmin) {
         if (!$o || (int)$o['user_id'] !== $uid) { answerCb(BOT_TOKEN, $cbId, 'پیدا نشد', true); return true; }
         if ($o['status'] !== MaOrder::PENDING) { answerCb(BOT_TOKEN, $cbId, 'این فاکتور قبلا بررسی شده.', true); return true; }
 
-        $bal = (float)(getUser($uid)['balance'] ?? 0);
-        if ($bal < (float)$o['total']) {
-            answerCb(BOT_TOKEN, $cbId, '❌ موجودی کافی نیست.', true);
-            return true;
-        }
-        addBalance($uid, -1 * (float)$o['total']);
-        payReferralCommission($uid, (float)$o['total']);
+        [$ok, $err] = maPayFromWallet($id, $uid);
+        if (!$ok) { answerCb(BOT_TOKEN, $cbId, '❌ ' . $err, true); return true; }
         answerCb(BOT_TOKEN, $cbId, '✅ پرداخت شد');
         if ($msgId) delMsg(BOT_TOKEN, $chatId, $msgId);
-        maMarkPaid($id, 'wallet');
         return true;
     }
 
@@ -1389,6 +1819,34 @@ function maCallback($data, $uid, $chatId, $msgId, $cbId, $isAdmin) {
             '📦 ' . h(maOrderTitle($o)) . "\n" .
             '🔑 <code>' . h($o['id']) . "</code>\n\n" .
             'در صورت اشتباه، با پشتیبانی تماس بگیرید.');
+        return true;
+    }
+
+    // ---------- 🔁 تلاش دوباره تحویل خودکار ----------
+    if (str_starts_with($data, 'maretry_')) {
+        if (!$isAdmin) { answerCb(BOT_TOKEN, $cbId, '🔒', true); return true; }
+        $id = substr($data, 8);
+        answerCb(BOT_TOKEN, $cbId, '⏳ در حال تلاش…');
+        [$ok, $msg] = maAutoFulfill($id, true);
+        if (!$ok) sendMsg(BOT_TOKEN, $chatId, "❌ باز هم نشد:\n<code>" . h($msg) . '</code>',
+            inlineKb([[btnCb('📤 تحویل دستی', 'madlv_' . $id, 'link')],
+                      [btnCb('💰 برگشت پول', 'marefund_' . $id, 'reject')]]));
+        return true;
+    }
+
+    // ---------- 💰 برگشت پول به کاربر ----------
+    if (str_starts_with($data, 'marefund_')) {
+        if (!$isAdmin) { answerCb(BOT_TOKEN, $cbId, '🔒', true); return true; }
+        $id = substr($data, 9);
+        $o  = MaOrder::get($id);
+        if (!$o) { answerCb(BOT_TOKEN, $cbId, 'پیدا نشد', true); return true; }
+        if (!empty($o['refunded'])) { answerCb(BOT_TOKEN, $cbId, 'قبلا برگشت خورده.', true); return true; }
+        if ($o['status'] === MaOrder::DONE) { answerCb(BOT_TOKEN, $cbId, 'این سفارش تحویل شده.', true); return true; }
+
+        MaOrder::set($id, function (&$x) { $x['refunded'] = true; $x['status'] = MaOrder::REJECT; });
+        maRefund($o['user_id'], (float)$o['total'], 'سفارش ' . maOrderTitle($o) . ' انجام نشد.');
+        answerCb(BOT_TOKEN, $cbId, '✅ برگشت خورد');
+        sendMsg(BOT_TOKEN, $chatId, '💰 مبلغ <b>' . fmtNum($o['total']) . '</b> تومان به کیف پول کاربر برگشت.');
         return true;
     }
 
@@ -1518,6 +1976,7 @@ function maAdmHome($chatId, $msgId = null) {
         [btnCb('🛡 مینی‌اپ فروش کانفیگ',  'maadm_app_cfg', 'info')],
         [btnCb('🔗 آدرس عمومی', 'maadm_base', 'admin')],
         [btnCb('🔌 قیمت‌گذاری زنده', 'maadm_pricing', 'confirm')],
+        [btnCb('🤖 تحویل خودکار', 'maadm_fulfill', 'confirm')],
         [btnCb("🧾 سفارش‌ها ({$pend} منتظر · {$paid} آماده تحویل)", 'maadm_orders', 'admin')],
         [btnCb(UT('back'), 'adm_home', 'nav')],
     ];
@@ -1675,6 +2134,11 @@ function maUiLabels() {
         'done_sub' => '💬 زیرمتن موفقیت',
         'search'   => '🔎 متن جستجو',
         'empty'    => '🕳 متن خالی بودن',
+        'pay_wallet' => '👛 دکمه پرداخت از کیف پول',
+        'pay_other'  => '💳 دکمه روش دیگر پرداخت',
+        'low_bal'    => '⚠️ متن موجودی کم',
+        'paid_ok'    => '✅ متن پرداخت موفق',
+        'topup_hint' => '💡 راهنمای شارژ',
     ];
 }
 
@@ -1688,6 +2152,9 @@ function maAdmGlass($chatId, $msgId, $key) {
                  ' · ' . (styleMap()[$g['color'] ?? 'none'] ?? '') . "\n";
     }
 
+    $text .= "\n📐 چیدمان فاکتور: <code>" . h($a['glass_layout'] ?: '۱ در هر ردیف') . "</code>\n";
+    $text .= "\n💡 «✏️» متن و ایموجی · «🎨» رنگ · «✨» ایموجی پریمیوم";
+
     $rows = [];
     foreach (maGlassLabels() as $slug => $lbl) {
         $g = $a['glass'][$slug] ?? [];
@@ -1697,6 +2164,7 @@ function maAdmGlass($chatId, $msgId, $key) {
             btnCb('✨', 'maadm_gi_' . $key . '|' . $slug, 'admin'),
         ];
     }
+    $rows[] = [btnCb('📐 چیدمان دکمه‌های فاکتور', 'maadm_glay_' . $key, 'confirm')];
     $rows[] = [btnCb(UT('back'), 'maadm_app_' . $key, 'nav')];
     editMsg(BOT_TOKEN, $chatId, $msgId, $text, inlineKb($rows));
 }
@@ -1788,6 +2256,14 @@ function maAdmItem($chatId, $msgId, $key, $iid) {
     if ($live !== null) {
         $text .= '🔌 قیمت زنده: <b>' . fmtNum($live) . ' ' . h($a['currency'] ?? 'تومان') . "</b> ← همین فروخته می‌شود\n";
     }
+    $autoOp = trim((string)($i['auto'] ?? ''));
+    $text .= '🤖 تحویل: <b>' . h(maAutoLabels()[$autoOp] ?? 'دستی') . "</b>\n";
+    if ($autoOp !== '') {
+        $text .= '   مقدار ارسالی به پنل: <b>' . fmtNum($i['auto_qty'] ?? 0) . "</b>" .
+                 ((float)($i['auto_qty'] ?? 0) <= 0 ? ' (از تعداد سفارش)' : '') . "\n";
+        if (trim((string)($i['auto_id'] ?? '')) !== '')
+            $text .= '   شناسه در پنل: <code>' . h($i['auto_id']) . "</code>\n";
+    }
     if (trim((string)($i['market_key'] ?? '')) !== '') $text .= '🔗 کلید مارکت: <code>' . h($i['market_key']) . "</code>\n";
     if ((float)($i['stars'] ?? 0) > 0)                 $text .= '⭐️ ارزش استارز: <b>' . fmtNum($i['stars']) . "</b>\n";
     $text .= '📂 دسته: ' . h($cat ? trim(($cat['emoji'] ?? '') . ' ' . $cat['name']) : '—') . "\n";
@@ -1809,6 +2285,7 @@ function maAdmItem($chatId, $msgId, $key, $iid) {
         [btnCb('❓ نوع سوال', 'maadm_ia_' . $p, 'admin'), btnCb('📐 واحد', 'maadm_iu_' . $p, 'admin')],
         [btnCb('🔽 حداقل', 'maadm_imin_' . $p, 'admin'), btnCb('🔼 حداکثر', 'maadm_imax_' . $p, 'admin')],
         [btnCb('🔗 کلید مارکت', 'maadm_imk_' . $p, 'admin'), btnCb('⭐️ ارزش استارز', 'maadm_ist_' . $p, 'admin')],
+        [btnCb('🤖 تحویل خودکار', 'maadm_iau_' . $p, 'confirm')],
         [btnCb('🔢 ترتیب', 'maadm_io_' . $p, 'admin'),
          btnCb(!empty($i['on']) ? '❌ خاموش کن' : '✅ روشن کن', 'maadm_ix_' . $p, 'info')],
         [btnCb('🗑 حذف سرویس', 'maadm_idel_' . $p, 'reject')],
@@ -1988,8 +2465,10 @@ function maAdmMarketTest($chatId) {
 /** 💱 تنظیم نرخ ارز */
 function maAdmRates($chatId, $msgId) {
     $r = maCfg()['rates'] ?? [];
+    $srcName = maRateSources()[$r['source'] ?? '']['name'] ?? 'دلخواه';
     $text  = "💱 <b>نرخ ارز</b>\n\n";
-    $text .= "وضعیت: " . (!empty($r['on']) ? '✅ روشن' : '❌ خاموش') . "\n\n";
+    $text .= "وضعیت: " . (!empty($r['on']) ? '✅ روشن' : '❌ خاموش') . "\n";
+    $text .= "منبع: <b>" . h($srcName) . "</b>\n\n";
     foreach (['ton' => 'TON', 'trx' => 'TRX', 'usdt' => 'USDT'] as $k => $lbl) {
         $v = maRate($k);
         $text .= "<b>{$lbl}</b>: " . ($v > 0 ? fmtNum($v) . ' تومان' : '—') . "\n";
@@ -2001,6 +2480,8 @@ function maAdmRates($chatId, $msgId) {
 
     $rows = [
         [btnCb(!empty($r['on']) ? '❌ خاموش کن' : '✅ روشن کن', 'maadm_rttog', 'info')],
+        [btnCb('🏦 نوبیتکس', 'maadm_rtsrc_nobitex', 'confirm'),
+         btnCb('🏦 والکس', 'maadm_rtsrc_wallex', 'confirm')],
         [btnCb('🔗 آدرس TON', 'maadm_rt_ton_url', 'admin'), btnCb('📂 مسیر TON', 'maadm_rt_ton_path', 'admin')],
         [btnCb('🔗 آدرس TRX', 'maadm_rt_trx_url', 'admin'), btnCb('📂 مسیر TRX', 'maadm_rt_trx_path', 'admin')],
         [btnCb('🔗 آدرس USDT', 'maadm_rt_usdt_url', 'admin'), btnCb('📂 مسیر USDT', 'maadm_rt_usdt_path', 'admin')],
@@ -2027,6 +2508,137 @@ function maAdmStarPrice($chatId, $msgId) {
          btnCb('🔢 گرد کردن', 'maadm_st_round', 'admin')],
         [btnCb(UT('back'), 'maadm_pricing', 'nav')],
     ];
+    editMsg(BOT_TOKEN, $chatId, $msgId, $text, inlineKb($rows));
+}
+
+/** 🤖 پنل تحویل خودکار */
+function maAdmFulfill($chatId, $msgId) {
+    $f = maCfg()['fulfill'] ?? [];
+
+    $text  = "🤖 <b>تحویل خودکار</b>\n\n";
+    $text .= "وضعیت: " . (!empty($f['on']) ? '✅ روشن' : '❌ خاموش') . "\n";
+    $text .= "نام پنل: " . h($f['name'] ?? '—') . "\n";
+    $text .= "آدرس: " . (trim((string)$f['base']) !== '' ? '<code>' . h($f['base']) . '</code>' : '<b>ثبت نشده</b>') . "\n";
+    $text .= "احراز هویت: <b>" . h($f['auth_type'] ?? '—') . "</b>";
+    $text .= trim((string)$f['auth_key']) !== '' ? ' · <code>' . h($f['auth_key']) . '</code>' : '';
+    $text .= "\nکلید: " . (trim((string)$f['auth_value']) !== ''
+             ? '✅ ثبت شده (' . h(mb_substr((string)$f['auth_value'], 0, 6)) . '…)' : '<b>خالی</b>') . "\n";
+    $text .= "تلاش دوباره: <b>" . (int)$f['retry'] . "</b> بار · مهلت: " . (int)$f['timeout'] . " ثانیه\n";
+    $text .= "اجرای فوری بعد از پرداخت: " . (!empty($f['auto_pay']) ? '✅' : '❌') . "\n\n";
+
+    $text .= "<b>عملیات‌ها:</b>\n";
+    foreach (['balance' => '💰 موجودی', 'stars' => '⭐️ استارز', 'premium' => '💎 پریمیوم', 'gift' => '🎁 گیفت'] as $k => $lbl) {
+        $o = $f['ops'][$k] ?? [];
+        $p = trim((string)($o['path'] ?? ''));
+        $text .= $lbl . ': ' . ($p !== '' ? '<code>' . h($o['method'] ?? 'POST') . ' ' . h($p) . '</code>' : '<b>تنظیم نشده</b>') . "\n";
+    }
+
+    $pend = 0;
+    foreach (MaOrder::all() as $o) {
+        if ($o['status'] === MaOrder::PAID && !empty($o['tries'])) $pend++;
+    }
+    if ($pend) $text .= "\n⚠️ <b>{$pend}</b> سفارش پرداخت‌شده تحویل نشده است.";
+
+    $text .= "\n\n💡 اول آدرس و کلید را بدهید، بعد «🔌 تست موجودی» را بزنید.";
+
+    $rows = [
+        [btnCb(!empty($f['on']) ? '❌ خاموش کن' : '✅ روشن کن', 'maadm_fftog', 'info')],
+        [btnCb('🔌 تست موجودی پنل', 'maadm_fftest', 'confirm')],
+        [btnCb('🔗 آدرس پنل', 'maadm_ff_base', 'admin'), btnCb('🏷 نام', 'maadm_ff_name', 'admin')],
+        [btnCb('🔐 نوع احراز', 'maadm_ffauth', 'admin'), btnCb('🔑 کلید API', 'maadm_ff_auth_value', 'admin')],
+        [btnCb('📛 نام هدر/پارامتر', 'maadm_ff_auth_key', 'admin')],
+        [btnCb('⭐️ عملیات استارز', 'maadm_ffop_stars', 'admin')],
+        [btnCb('💎 عملیات پریمیوم', 'maadm_ffop_premium', 'admin')],
+        [btnCb('🎁 عملیات گیفت', 'maadm_ffop_gift', 'admin')],
+        [btnCb('💰 عملیات موجودی', 'maadm_ffop_balance', 'admin')],
+        [btnCb('🔁 تعداد تلاش', 'maadm_ff_retry', 'admin'), btnCb('⏱ مهلت', 'maadm_ff_timeout', 'admin')],
+        [btnCb(!empty($f['auto_pay']) ? '⚡️ اجرای فوری: روشن' : '⚡️ اجرای فوری: خاموش', 'maadm_ffauto', 'info')],
+        [btnCb('🧾 سفارش‌های تحویل‌نشده', 'maadm_ffstuck', 'reject')],
+        [btnCb(UT('back'), 'maadm_home', 'nav')],
+    ];
+    editMsg(BOT_TOKEN, $chatId, $msgId, $text, inlineKb($rows));
+}
+
+/** ⚙️ تنظیم یک عملیات */
+function maAdmFulfillOp($chatId, $msgId, $op) {
+    $labels = ['balance' => '💰 موجودی', 'stars' => '⭐️ استارز', 'premium' => '💎 پریمیوم', 'gift' => '🎁 گیفت'];
+    $o = maCfg()['fulfill']['ops'][$op] ?? [];
+
+    $text  = (($labels[$op] ?? $op)) . " <b>— تنظیم عملیات</b>\n\n";
+    $text .= "متد: <b>" . h($o['method'] ?? 'POST') . "</b>\n";
+    $text .= "مسیر: <code>" . h($o['path'] ?: '(خالی)') . "</code>\n";
+    $text .= "بدنه:\n<code>" . h($o['body'] ?: '(خالی)') . "</code>\n";
+    $text .= "مسیر شناسه سفارش: <code>" . h($o['id_path'] ?? '—') . "</code>\n";
+    $text .= "مسیر مقدار: <code>" . h($o['val_path'] ?? '—') . "</code>\n";
+    $text .= "مسیر خطا: <code>" . h($o['err_path'] ?? '—') . "</code>\n\n";
+    $text .= "<b>متغیرهای قابل استفاده در مسیر و بدنه:</b>\n";
+    $text .= "<code>{username}</code> آیدی گیرنده (بدون @)\n";
+    $text .= "<code>{qty}</code> مقدار (تعداد استارز یا ماه پریمیوم)\n";
+    $text .= "<code>{gift}</code> شناسه گیفت در پنل\n";
+    $text .= "<code>{order}</code> کد سفارش ما\n";
+    $text .= "<code>{user_id}</code> آیدی عددی کاربر\n\n";
+    $text .= "مثال بدنه:\n<code>{\"username\":\"{username}\",\"quantity\":{qty}}</code>";
+
+    $rows = [
+        [btnCb('📮 متد', 'maadm_ffo_' . $op . '|method', 'admin'),
+         btnCb('📂 مسیر', 'maadm_ffo_' . $op . '|path', 'admin')],
+        [btnCb('📦 بدنه', 'maadm_ffo_' . $op . '|body', 'admin')],
+        [btnCb('🧾 مسیر شناسه', 'maadm_ffo_' . $op . '|id_path', 'admin'),
+         btnCb('💠 مسیر مقدار', 'maadm_ffo_' . $op . '|val_path', 'admin')],
+        [btnCb('⚠️ مسیر خطا', 'maadm_ffo_' . $op . '|err_path', 'admin')],
+        [btnCb(UT('back'), 'maadm_fulfill', 'nav')],
+    ];
+    editMsg(BOT_TOKEN, $chatId, $msgId, $text, inlineKb($rows));
+}
+
+/** 🔌 تست اتصال به پنل */
+function maAdmFulfillTest($chatId) {
+    $f = maCfg()['fulfill'] ?? [];
+    if (trim((string)$f['base']) === '') {
+        sendMsg(BOT_TOKEN, $chatId, "⚠️ اول آدرس پنل را ثبت کنید.");
+        return;
+    }
+    [$resp, $err] = maFulfillCall('balance', []);
+    $back = inlineKb([[btnCb('🤖 تحویل خودکار', 'maadm_fulfill', 'admin')]]);
+
+    if (!$resp) {
+        sendMsg(BOT_TOKEN, $chatId, "❌ <b>اتصال ناموفق</b>\n\n" . h($err) . "\n\n" .
+            "اگر «کد پاسخ ۴۰۱» یا «۴۰۳» است، کلید API یا نوع احراز هویت درست نیست.", $back);
+        return;
+    }
+
+    $cfgOp = $f['ops']['balance'] ?? [];
+    $val   = maJsonPath($resp, (string)($cfgOp['val_path'] ?? ''));
+
+    $t  = "✅ <b>پنل جواب داد</b>\n\n";
+    $t .= 'کلیدهای پاسخ: <code>' . h(implode(', ', array_slice(array_keys($resp), 0, 12))) . "</code>\n\n";
+    $t .= is_scalar($val)
+        ? "💰 موجودی خوانده‌شده: <b>" . h((string)$val) . "</b>\n\n"
+        : "⚠️ «مسیر مقدار» درست نیست — از پاسخ زیر مسیر موجودی را پیدا کنید.\n\n";
+    $t .= "<b>پاسخ خام:</b>\n<code>" .
+          h(mb_substr(json_encode($resp, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), 0, 900)) . '</code>';
+
+    sendMsg(BOT_TOKEN, $chatId, $t, $back);
+}
+
+/** 🧾 سفارش‌های پرداخت‌شده که تحویل نشده‌اند */
+function maAdmStuck($chatId, $msgId) {
+    $rows = []; $n = 0;
+    $text = "🧾 <b>سفارش‌های تحویل‌نشده</b>\n\nپول گرفته شده ولی سرویس تحویل نشده:\n\n";
+
+    foreach (MaOrder::all() as $o) {
+        if ($o['status'] !== MaOrder::PAID) continue;
+        $text .= '• ' . h(maOrderTitle($o)) . ' — ' . fmtNum($o['total']) . " تومان\n";
+        $text .= '  👤 <code>' . $o['user_id'] . '</code> · 🔁 ' . (int)($o['tries'] ?? 0) . " تلاش\n";
+        if (!empty($o['last_error'])) $text .= '  ❌ ' . h(mb_substr((string)$o['last_error'], 0, 80)) . "\n";
+        $rows[] = [btnCb(mb_substr(maOrderTitle($o), 0, 22), 'maadm_ord_' . $o['id'], 'info'),
+                   btnCb('🔁', 'maretry_' . $o['id'], 'confirm'),
+                   btnCb('💰', 'marefund_' . $o['id'], 'reject')];
+        if (++$n >= 10) break;
+    }
+    if (!$n) $text .= '✅ هیچ سفارش معطلی نیست.';
+
+    $rows[] = [btnCb(UT('back'), 'maadm_fulfill', 'nav')];
     editMsg(BOT_TOKEN, $chatId, $msgId, $text, inlineKb($rows));
 }
 
@@ -2129,6 +2741,17 @@ function maAdminCallback($data, $uid, $chatId, $msgId, $cbId) {
         maSetRoot(function (&$m) { $m['stars']['on'] = empty($m['stars']['on']); });
         answerCb(BOT_TOKEN, $cbId, '✅'); maAdmStarPrice($chatId, $msgId); return true;
     }
+    if (preg_match('/^maadm_rtsrc_([a-z]+)$/', $data, $rs)) {
+        if (maApplyRateSource($rs[1])) {
+            $v = maRate('ton', true);
+            answerCb(BOT_TOKEN, $cbId, $v > 0 ? '✅ ' . fmtNum($v) . ' تومان' : '⚠️ نرخ خوانده نشد', true);
+        } else {
+            answerCb(BOT_TOKEN, $cbId, '❌');
+        }
+        maAdmRates($chatId, $msgId);
+        return true;
+    }
+
     if ($data === 'maadm_refresh') {
         save('ma_cache', []);
         maMarketMap(true);
@@ -2165,6 +2788,63 @@ function maAdminCallback($data, $uid, $chatId, $msgId, $cbId) {
         maAskState($uid, $chatId, 'ma_pcfg', ['sec' => $sec, 'f' => $field],
             '✏️ مقدار جدید را بفرستید:',
             ($hint !== '' ? $hint . "\n\n" : '') . 'الان: <code>' . h(mb_substr((string)$cur, 0, 120)) . '</code>');
+        return true;
+    }
+
+    // ---- 🤖 تحویل خودکار ----
+    if ($data === 'maadm_fulfill') { answerCb(BOT_TOKEN, $cbId); maAdmFulfill($chatId, $msgId); return true; }
+    if ($data === 'maadm_ffstuck') { answerCb(BOT_TOKEN, $cbId); maAdmStuck($chatId, $msgId); return true; }
+    if ($data === 'maadm_fftest')  { answerCb(BOT_TOKEN, $cbId, '⏳ تست…'); maAdmFulfillTest($chatId); return true; }
+
+    if ($data === 'maadm_fftog') {
+        maSetRoot(function (&$m) { $m['fulfill']['on'] = empty($m['fulfill']['on']); });
+        answerCb(BOT_TOKEN, $cbId, '✅'); maAdmFulfill($chatId, $msgId); return true;
+    }
+    if ($data === 'maadm_ffauto') {
+        maSetRoot(function (&$m) { $m['fulfill']['auto_pay'] = empty($m['fulfill']['auto_pay']); });
+        answerCb(BOT_TOKEN, $cbId, '✅'); maAdmFulfill($chatId, $msgId); return true;
+    }
+    if ($data === 'maadm_ffauth') {
+        $cur = maCfg()['fulfill']['auth_type'] ?? 'header';
+        $seq = ['header' => 'query', 'query' => 'body', 'body' => 'none', 'none' => 'header'];
+        maSetRoot(function (&$m) use ($seq, $cur) { $m['fulfill']['auth_type'] = $seq[$cur] ?? 'header'; });
+        answerCb(BOT_TOKEN, $cbId, maCfg()['fulfill']['auth_type']);
+        maAdmFulfill($chatId, $msgId);
+        return true;
+    }
+    if (preg_match('/^maadm_ffop_([a-z]+)$/', $data, $fm)) {
+        answerCb(BOT_TOKEN, $cbId); maAdmFulfillOp($chatId, $msgId, $fm[1]); return true;
+    }
+    if (preg_match('/^maadm_ff_([a-z_]+)$/', $data, $fm)) {
+        $field = $fm[1];
+        $cur = maCfg()['fulfill'][$field] ?? '';
+        answerCb(BOT_TOKEN, $cbId);
+        $hints = [
+            'base'       => "آدرس پایه پنل، بدون اسلش آخر:\n<code>https://api.marketapp.org</code>",
+            'name'       => 'نامی که در پیام‌ها نشان داده می‌شود.',
+            'auth_key'   => "اسم هدر یا پارامتر کلید — مثلا <code>Authorization</code> یا <code>api_key</code>",
+            'auth_value' => "مقدار کلید. اگر پنل <code>Bearer</code> می‌خواهد، کاملش را بنویسید:\n<code>Bearer xxxxx</code>",
+            'retry'      => 'چند بار تلاش دوباره؟ مثلا 3',
+            'timeout'    => 'مهلت هر تماس به ثانیه — مثلا 20',
+        ];
+        maAskState($uid, $chatId, 'ma_ffcfg', ['f' => $field], '✏️ مقدار جدید:',
+            ($hints[$field] ?? '') . "\n\nالان: <code>" . h(mb_substr((string)$cur, 0, 120)) . '</code>');
+        return true;
+    }
+    if (preg_match('/^maadm_ffo_([a-z]+)\|([a-z_]+)$/', $data, $fm)) {
+        [$all, $op2, $field] = $fm;
+        $cur = maCfg()['fulfill']['ops'][$op2][$field] ?? '';
+        answerCb(BOT_TOKEN, $cbId);
+        $hints = [
+            'method'   => "<code>GET</code> یا <code>POST</code>",
+            'path'     => "مسیر بعد از آدرس پایه، مثل <code>/order/stars</code>\nمتغیرها مجازند: <code>{username}</code> <code>{qty}</code>",
+            'body'     => "بدنه JSON. مثال:\n<code>{\"username\":\"{username}\",\"quantity\":{qty}}</code>\nبرای خالی کردن <code>-</code>",
+            'id_path'  => "مسیر شناسه سفارش در پاسخ، مثل <code>data.order_id</code>",
+            'val_path' => "مسیر مقدار در پاسخ، مثل <code>balance</code>",
+            'err_path' => "مسیر پیام خطا، مثل <code>message</code>",
+        ];
+        maAskState($uid, $chatId, 'ma_ffop', ['op' => $op2, 'f' => $field], '✏️ مقدار جدید:',
+            ($hints[$field] ?? '') . "\n\nالان: <code>" . h(mb_substr((string)$cur, 0, 200)) . '</code>');
         return true;
     }
 
@@ -2320,6 +3000,16 @@ function maAdminCallback($data, $uid, $chatId, $msgId, $cbId) {
             answerCb(BOT_TOKEN, $cbId, styleMap()[maGet($key)['glass'][$arg]['color'] ?? 'none'] ?? '');
             maAdmGlass($chatId, $msgId, $key);
             return true;
+        case 'glay':
+            answerCb(BOT_TOKEN, $cbId);
+            maAskState($uid, $chatId, 'ma_glay', ['k' => $key],
+                '📐 چیدمان دکمه‌های فاکتور را بفرستید:',
+                "با کاما جدا کنید — هر عدد یعنی تعداد دکمه آن ردیف.\n\n" .
+                "<code>1,1,1</code> هر کدام در یک ردیف\n" .
+                "<code>2,1</code> دو تا بالا، یکی پایین\n" .
+                "<code>3</code> هر سه کنار هم\n\n" .
+                'الان: <code>' . h($a['glass_layout'] ?: '1,1,1') . '</code>');
+            return true;
         case 'gi':
             answerCb(BOT_TOKEN, $cbId);
             if (!isset(maGlassLabels()[$arg])) return true;
@@ -2406,6 +3096,41 @@ function maAdminCallback($data, $uid, $chatId, $msgId, $cbId) {
             answerCb(BOT_TOKEN, $cbId, '✅');
             maAdmItem($chatId, $msgId, $key, $parts[0] ?? '');
             return true;
+        case 'iau':
+            answerCb(BOT_TOKEN, $cbId);
+            $it = maFindItem($key, $arg);
+            $rows = [];
+            foreach (maAutoLabels() as $ak => $al) {
+                $mark = (trim((string)($it['auto'] ?? '')) === $ak) ? '✅ ' : '';
+                $rows[] = [btnCb($mark . $al, 'maadm_iauset_' . $key . '|' . $arg . '~' . $ak, 'info')];
+            }
+            $rows[] = [btnCb('🔢 مقدار ارسالی به پنل', 'maadm_iaq_' . $key . '|' . $arg, 'admin'),
+                       btnCb('🏷 شناسه در پنل', 'maadm_iai_' . $key . '|' . $arg, 'admin')];
+            $rows[] = [btnCb(UT('back'), 'maadm_item_' . $key . '|' . $arg, 'nav')];
+            editMsg(BOT_TOKEN, $chatId, $msgId,
+                "🤖 <b>تحویل خودکار این سرویس</b>\n\n" .
+                "بعد از پرداخت، ربات خودش سفارش را روی پنل فروش ثبت می‌کند.\n\n" .
+                "• <b>مقدار ارسالی</b>: مثلا برای «۱۰۰ استارز» عدد <code>100</code>، " .
+                "برای «پریمیوم ۳ ماهه» عدد <code>3</code>.\n" .
+                "  اگر <code>0</code> بگذارید، همان تعداد سفارش کاربر فرستاده می‌شود.\n" .
+                "• <b>شناسه در پنل</b>: برای گیفت‌ها، همان شناسه‌ای که پنل می‌شناسد.",
+                inlineKb($rows));
+            return true;
+        case 'iauset':
+            $parts = explode('~', $arg, 2);
+            if (count($parts) === 2 && isset(maAutoLabels()[$parts[1]])) {
+                maItemMutate($key, $parts[0], function (&$i) use ($parts) { $i['auto'] = $parts[1]; });
+            }
+            answerCb(BOT_TOKEN, $cbId, '✅');
+            maAdminCallback('maadm_iau_' . $key . '|' . ($parts[0] ?? ''), $uid, $chatId, $msgId, $cbId);
+            return true;
+        case 'iaq': case 'iai':
+            answerCb(BOT_TOKEN, $cbId);
+            $mp = ['iaq' => ['auto_qty', '🔢 مقدار ارسالی به پنل (عدد):', '۰ = همان تعداد سفارش کاربر'],
+                   'iai' => ['auto_id', '🏷 شناسه این سرویس در پنل:', 'برای حذف <code>-</code>']];
+            [$f2, $t2, $h2] = $mp[$op];
+            maAskState($uid, $chatId, 'ma_item_field', ['k' => $key, 'i' => $arg, 'f' => $f2], $t2, $h2);
+            return true;
         case 'ia':
             answerCb(BOT_TOKEN, $cbId);
             $rows = [];
@@ -2464,6 +3189,60 @@ function maAdminState($action, $sd, $msg, $uid, $chatId, $plain, $ids) {
             $v === '' ? '✅ آدرس پاک شد.' :
             "✅ آدرس ثبت شد.\n\n🌟 <code>" . h(maUrl('tg')) . "</code>\n🛡 <code>" . h(maUrl('cfg')) . '</code>',
             inlineKb([[btnCb('🚀 مینی‌اپ‌ها', 'maadm_home', 'admin')]]));
+        return true;
+    }
+
+    // ---- 🤖 تنظیمات تحویل خودکار ----
+    if ($action === 'ma_ffcfg') {
+        $f = (string)($sd['f'] ?? '');
+        if ($f === 'base') {
+            $v = $dash ? '' : rtrim($plain, '/');
+            if ($v !== '' && !preg_match('#^https://#i', $v)) {
+                sendMsg(BOT_TOKEN, $chatId, '⚠️ آدرس باید با https:// شروع شود.'); return true;
+            }
+        } elseif (in_array($f, ['retry', 'timeout'], true)) {
+            $v = (int)preg_replace('/\D/', '', norm_fa_digits($plain));
+            if ($v < 1) { sendMsg(BOT_TOKEN, $chatId, '⚠️ عدد معتبر بفرستید.'); return true; }
+            if ($f === 'timeout') $v = min(60, $v);
+            if ($f === 'retry')   $v = min(10, $v);
+        } else {
+            $v = $dash ? '' : $plain;
+        }
+        maSetRoot(function (&$m) use ($f, $v) { $m['fulfill'][$f] = $v; });
+        clearState($uid);
+        sendMsg(BOT_TOKEN, $chatId, '✅ ذخیره شد.',
+            inlineKb([[btnCb('🤖 تحویل خودکار', 'maadm_fulfill', 'admin')]]));
+        return true;
+    }
+    if ($action === 'ma_ffop') {
+        $op2 = (string)($sd['op'] ?? '');
+        $f   = (string)($sd['f'] ?? '');
+        if ($f === 'method') {
+            $v = strtoupper(trim($plain));
+            if (!in_array($v, ['GET', 'POST'], true)) {
+                sendMsg(BOT_TOKEN, $chatId, '⚠️ فقط GET یا POST.'); return true;
+            }
+        } else {
+            $v = $dash ? '' : $plain;
+            // قالب خودش JSON معتبر نیست ({qty} جای عدد است)؛ پس با مقدار نمونه پرش می‌کنیم
+            if ($f === 'body' && $v !== '') {
+                $probe = maFillTpl($v, ['username' => 'test', 'user' => 'test', 'qty' => 1,
+                                        'amount' => 1, 'gift' => 'g1', 'order' => 'ma_1',
+                                        'user_id' => '1', 'field' => 'test']);
+                if (json_decode($probe, true) === null && strtolower(trim($probe)) !== 'null') {
+                    sendMsg(BOT_TOKEN, $chatId,
+                        "⚠️ بدنه بعد از جای‌گذاری، JSON معتبر نشد:\n<code>" . h(mb_substr($probe, 0, 200)) . "</code>\n\n" .
+                        "متغیرهای عددی مثل <code>{qty}</code> نباید داخل کوتیشن باشند، " .
+                        "و متغیرهای متنی مثل <code>{username}</code> باید داخل کوتیشن باشند.");
+                    return true;
+                }
+            }
+        }
+        maSetRoot(function (&$m) use ($op2, $f, $v) { $m['fulfill']['ops'][$op2][$f] = $v; });
+        clearState($uid);
+        sendMsg(BOT_TOKEN, $chatId, '✅ ذخیره شد.',
+            inlineKb([[btnCb('⚙️ همین عملیات', 'maadm_ffop_' . $op2, 'admin')],
+                      [btnCb('🤖 تحویل خودکار', 'maadm_fulfill', 'nav')]]));
         return true;
     }
 
@@ -2607,6 +3386,19 @@ function maAdminState($action, $sd, $msg, $uid, $chatId, $plain, $ids) {
         return true;
     }
 
+    if ($action === 'ma_glay') {
+        $v = trim(norm_fa_digits($plain));
+        if (!parseLayout($v)) {
+            sendMsg(BOT_TOKEN, $chatId, "⚠️ چیدمان معتبر نیست. مثال: <code>2,1</code>");
+            return true;
+        }
+        maSet($key, function (&$x) use ($v) { $x['glass_layout'] = $v; });
+        clearState($uid);
+        sendMsg(BOT_TOKEN, $chatId, '✅ چیدمان ذخیره شد.',
+            inlineKb([[btnCb('💠 دکمه‌های شیشه‌ای', 'maadm_gl_' . $key, 'admin')]]));
+        return true;
+    }
+
     // ---- دسته‌ها ----
     if ($action === 'ma_cat_new') {
         if ($plain === '') { sendMsg(BOT_TOKEN, $chatId, '⚠️ نام خالی است.'); return true; }
@@ -2664,7 +3456,7 @@ function maAdminState($action, $sd, $msg, $uid, $chatId, $plain, $ids) {
         $f   = (string)($sd['f'] ?? '');
         if (!maFindItem($key, $iid)) { clearState($uid); return true; }
 
-        $numeric = in_array($f, ['price', 'order', 'min', 'max', 'stars'], true);
+        $numeric = in_array($f, ['price', 'order', 'min', 'max', 'stars', 'auto_qty'], true);
         if ($numeric) {
             $v = (float)str_replace([',', '،', ' '], '', norm_fa_digits($plain));
             if ($v < 0) { sendMsg(BOT_TOKEN, $chatId, '⚠️ عدد معتبر بفرستید.'); return true; }

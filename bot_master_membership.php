@@ -7270,12 +7270,14 @@ if (isset($_GET['cron'])) {
     http_response_code(200);
     if (!hash_equals(CRON_KEY, (string)$_GET['cron'])) { echo 'forbidden'; exit; }
     echo 'deleted: ' . processDeleteQueue(200) . ' · gw: ' . gwPoll(50) .
-         ' · campaigns: ' . campaignCleanup();
+         ' · campaigns: ' . campaignCleanup() .
+         ' · miniapp: ' . maAutoQueue(10);
     exit;
 }
 
 processDeleteQueue(20);
 gwPoll(10);
+maAutoQueue(2);   // تحویل خودکارِ معطل‌مانده — بدون نیاز به cron هم پیش می‌رود
 
 $raw = file_get_contents('php://input');
 $update = json_decode($raw, true);

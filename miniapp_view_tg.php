@@ -219,7 +219,13 @@ body.glow-on .orb{box-shadow:0 10px 26px -12px var(--c1)}
   background:linear-gradient(135deg,var(--c1),var(--c2));transition:.2s;position:relative;overflow:hidden}
 body.glow-on .go{box-shadow:0 14px 34px -14px var(--c1)}
 .go:active{transform:scale(.985)}
-.go[disabled]{opacity:.55;cursor:default}
+.go[disabled]{cursor:default;color:var(--dim);background:rgba(255,255,255,.05);
+  border:1px solid var(--line);box-shadow:none}
+.go.alt{margin-top:9px;color:var(--ink);background:rgba(255,255,255,.07);
+  border:1px solid var(--line);box-shadow:none;font-weight:700;font-size:13.5px}
+.walbox{margin-top:10px;padding:11px 14px;border-radius:13px;font-size:11.5px;line-height:1.8;
+  border:1px solid var(--line);background:rgba(255,255,255,.035);color:var(--dim)}
+.walbox b{color:var(--c2)}
 .ghost{width:100%;margin-top:9px;padding:14px;border-radius:16px;cursor:pointer;
   border:1px solid var(--line);background:transparent;color:var(--dim);font-family:inherit;font-size:13.5px;font-weight:700}
 
@@ -282,7 +288,9 @@ body.glow-on .go{box-shadow:0 14px 34px -14px var(--c1)}
   </div>
   <div id="sField"></div>
   <div class="total"><span>مبلغ قابل پرداخت</span><b id="sTotal">۰</b></div>
-  <button class="go" id="sGo">تایید و ادامه</button>
+  <button class="go" id="sWal">پرداخت از کیف پول</button>
+  <button class="go alt" id="sGo">روش‌های دیگر پرداخت</button>
+  <div class="walbox" id="sWalNote"></div>
   <button class="ghost" id="sNo">بستن</button>
 </div>
 
@@ -361,7 +369,8 @@ $('hero').textContent = B.hero || '';
 $('cur').textContent  = B.currency;
 $('balLbl').textContent = B.ui.balance;
 $('q').placeholder    = B.ui.search;
-$('sGo').textContent  = B.ui.submit;
+$('sWal').textContent = B.ui.pay_wallet;
+$('sGo').textContent  = B.ui.pay_other;
 $('sNo').textContent  = B.ui.close;
 $('wTtl').textContent = B.ui.done;
 $('wSub').textContent = B.ui.done_sub;
@@ -395,10 +404,13 @@ function toast(m){
 }
 
 /* ── موجودی ── */
-api('me', {}, function(j){
-  S.bal = j.balance || 0;
+function setBal(v){
+  S.bal = Number(v) || 0;
   $('bal').textContent = fa(S.bal);
-}, function(j){
+  if (S.item) walletState();
+}
+
+api('me', {}, function(j){ setBal(j.balance); }, function(j){
   $('bal').textContent = '—';
   if (j && j.message) toast(j.message);
 });
@@ -565,10 +577,25 @@ function setQty(v, typing){
   total();
 }
 
+function sum(){
+  var it = S.item; if (!it) return 0;
+  return it.ask === 'qty' ? it.price * Math.max(0, S.qty) : it.price;
+}
+
 function total(){
-  var it = S.item; if (!it) return;
-  var t = it.ask === 'qty' ? it.price * Math.max(0, S.qty) : it.price;
-  $('sTotal').textContent = fa(t) + ' ' + B.currency;
+  $('sTotal').textContent = fa(sum()) + ' ' + B.currency;
+  walletState();
+}
+
+/* دکمه کیف پول فقط با موجودی کافی فعال می‌شود */
+function walletState(){
+  var t = sum(), enough = S.bal >= t;
+  $('sWal').disabled = !enough;
+  $('sWalNote').innerHTML = enough
+    ? '👛 موجودی شما: <b>' + fa(S.bal) + '</b> ' + esc(B.currency) +
+      ' · بعد از پرداخت: <b>' + fa(S.bal - t) + '</b>'
+    : '⚠️ ' + esc(B.ui.low_bal) + ' — موجودی: <b>' + fa(S.bal) + '</b> ' + esc(B.currency) +
+      ' · کسری: <b>' + fa(t - S.bal) + '</b><br>' + esc(B.ui.topup_hint);
 }
 
 function shut(){
@@ -582,49 +609,64 @@ $('sNo').onclick   = function(){ tap(); shut(); };
 if (TG && TG.BackButton){ try{ TG.BackButton.onClick(shut); }catch(e){} }
 
 /* ── ثبت سفارش ── */
-$('sGo').onclick = function(){
-  if (S.busy || !S.item) return;
+function validate(){
   var it = S.item, fv = '';
   var fx = $('fTxt');
   if (fx) fv = fx.value.trim();
 
   if (it.ask === 'qty'){
-    if (!S.qty || S.qty < (it.min || 1)) { toast('حداقل تعداد ' + fa(it.min || 1) + ' است.'); return; }
-    if (it.max > 0 && S.qty > it.max)    { toast('حداکثر تعداد ' + fa(it.max) + ' است.'); return; }
+    if (!S.qty || S.qty < (it.min || 1)) { toast('حداقل تعداد ' + fa(it.min || 1) + ' است.'); return null; }
+    if (it.max > 0 && S.qty > it.max)    { toast('حداکثر تعداد ' + fa(it.max) + ' است.'); return null; }
   }
   if ((it.ask === 'username' || it.ask === 'wallet' || it.ask === 'text') && !fv){
-    toast('لطفا فیلد بالا را پر کنید.'); return;
+    toast('لطفا فیلد بالا را پر کنید.'); return null;
   }
+  return fv;
+}
+
+function send(payMode, btn){
+  if (S.busy || !S.item) return;
+  var fv = validate();
+  if (fv === null) return;
+  var it = S.item;
 
   S.busy = true;
-  this.disabled = true;
-  this.textContent = B.ui.sending;
+  btn.disabled = true;
+  var old = btn.textContent;
+  btn.textContent = B.ui.sending;
   tap('medium');
 
-  api('order', { item: it.id, qty: S.qty, field: fv, seen_price: it.price }, function(j){
-    S.busy = false;
-    shut();
-    $('wCode').textContent = j.order || '';
-    $('wSub').textContent  = j.message || B.ui.done_sub;
-    $('win').classList.add('on');
-    buzz('success');
-  }, function(j){
-    S.busy = false;
-    $('sGo').disabled = false;
-    $('sGo').textContent = B.ui.submit;
-    // نرخ زنده بین باز کردن و زدن دکمه عوض شده — قیمت تازه را نشان بده
-    if (j && j.error === 'price_changed' && j.price){
-      it.price = j.price;
-      total();
-      var node = S.nodes[B.items.indexOf(it)];
-      if (node){
-        var pb = node.querySelector('.price b');
-        if (pb) pb.textContent = fa(j.price);
+  api('order', { item: it.id, qty: S.qty, field: fv, seen_price: it.price, pay: payMode },
+    function(j){
+      S.busy = false;
+      if (typeof j.balance === 'number') setBal(j.balance);
+      shut();
+      $('wCode').textContent = j.order || '';
+      $('wSub').textContent  = j.message || B.ui.done_sub;
+      $('wTtl').textContent  = j.paid ? B.ui.paid_ok : B.ui.done;
+      $('win').classList.add('on');
+      buzz('success');
+    },
+    function(j){
+      S.busy = false;
+      btn.disabled = false;
+      btn.textContent = old;
+      if (j && j.error === 'price_changed' && j.price){
+        it.price = j.price;
+        total();
+        var node = S.nodes[B.items.indexOf(it)];
+        if (node){
+          var pb = node.querySelector('.price b');
+          if (pb) pb.textContent = fa(j.price);
+        }
       }
-    }
-    toast((j && j.message) ? j.message : 'ثبت سفارش انجام نشد.');
-  });
-};
+      if (j && j.error === 'no_balance'){ shut(); }
+      toast((j && j.message) ? j.message : 'ثبت سفارش انجام نشد.');
+    });
+}
+
+$('sWal').onclick = function(){ send('wallet', this); };
+$('sGo').onclick  = function(){ send('',       this); };
 
 $('wGo').onclick = function(){ if (TG) { try{ TG.close(); }catch(e){} } else location.reload(); };
 
