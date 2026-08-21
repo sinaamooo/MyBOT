@@ -564,6 +564,29 @@ function maHttp($url, $method = 'GET', $headersRaw = '', $body = '', $timeout = 
     return [$j, ''];
 }
 
+/** مثل maHttp ولی متن خام برمی‌گرداند — برای خواندن HTML صفحه Swagger */
+function maHttpRaw($url, $timeout = 12) {
+    $url = trim((string)$url);
+    if ($url === '' || !preg_match('#^https?://#i', $url)) return [null, 'آدرس نامعتبر'];
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => $timeout,
+        CURLOPT_CONNECTTIMEOUT => 5,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_MAXREDIRS      => 3,
+        CURLOPT_SSL_VERIFYPEER => true,
+        CURLOPT_USERAGENT      => 'Mozilla/5.0 (compatible; ShopBot/1.0)',
+    ]);
+    $res  = curl_exec($ch);
+    $err  = curl_error($ch);
+    $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    if ($res === false) return [null, 'اتصال برقرار نشد: ' . $err];
+    if ($code < 200 || $code >= 300) return [null, 'کد پاسخ ' . $code];
+    return [(string)$res, ''];
+}
+
 // ---------- کش ----------
 
 function maCacheGet($key, $ttl) {
@@ -2722,24 +2745,91 @@ function maSpecKeywords() {
     ];
 }
 
-function maAdmSpecRead($chatId) {
-    $url  = maSpecUrlGuess();
-    $back = inlineKb([[btnCb('🤖 تحویل خودکار', 'maadm_fulfill', 'admin')]]);
+/**
+ * پیدا کردن آدرس openapi.json.
+ *
+ * مسیر پیش‌فرض همیشه درست نیست (اگر برنامه زیر یک پیشوند سوار شده باشد).
+ * پس اول مسیرهای رایج را امتحان می‌کنیم، و اگر نشد، HTML صفحه Swagger را
+ * می‌خوانیم — آدرس واقعی spec همیشه داخل خود آن صفحه نوشته شده است.
+ *
+ * برگشت: [آدرس, داده, گزارش تلاش‌ها]
+ */
+function maSpecDiscover($explicit = '') {
+    $f    = maCfg()['fulfill'] ?? [];
+    $base = rtrim((string)($f['base'] ?? ''), '/');
+    $log  = [];
 
-    if ($url === '') {
+    $tries = [];
+    if ($explicit !== '') $tries[] = $explicit;
+    if ($base !== '') {
+        foreach (['/openapi.json', '/v1/openapi.json', '/api/openapi.json',
+                  '/docs/openapi.json', '/openapi', '/swagger.json',
+                  '/v1/swagger.json', '/api/v1/openapi.json'] as $p) {
+            $tries[] = $base . $p;
+        }
+    }
+
+    foreach ($tries as $u) {
+        [$j, $err] = maHttp($u, 'GET', '', '', 12);
+        if (is_array($j) && !empty($j['paths'])) return [$u, $j, $log];
+        $log[] = substr($u, strlen($base)) . ' → ' . ($err ?: 'بدون paths');
+    }
+
+    // آخرین راه: آدرس spec را از داخل صفحه مستندات بیرون بکش
+    foreach ([$base, $base . '/docs', $base . '/redoc'] as $page) {
+        if ($base === '') break;
+        [$html, $err] = maHttpRaw($page, 12);
+        if (!$html) { $log[] = 'صفحه ' . ($page === $base ? '/' : substr($page, strlen($base))) . ' → ' . $err; continue; }
+
+        $found = [];
+        // url: "…openapi.json"  یا  "url":"…/openapi.json"  یا  spec-url="…"
+        if (preg_match_all('#["\']([^"\'\s]*(?:openapi|swagger)[^"\'\s]*\.json)["\']#i', $html, $m)) {
+            foreach ($m[1] as $cand) $found[] = $cand;
+        }
+        if (preg_match_all('#(?:url|spec-url|data-url)\s*[:=]\s*["\']([^"\']+)["\']#i', $html, $m2)) {
+            foreach ($m2[1] as $cand) if (str_contains(strtolower($cand), 'openapi') || str_contains(strtolower($cand), 'swagger')) $found[] = $cand;
+        }
+
+        foreach (array_unique($found) as $cand) {
+            $u = $cand;
+            if (str_starts_with($u, '//'))      $u = 'https:' . $u;
+            elseif (str_starts_with($u, '/'))   $u = $base . $u;
+            elseif (!preg_match('#^https?://#i', $u)) $u = $base . '/' . ltrim($u, '/');
+
+            [$j, $e2] = maHttp($u, 'GET', '', '', 12);
+            if (is_array($j) && !empty($j['paths'])) return [$u, $j, $log];
+            $log[] = 'از صفحه: ' . $cand . ' → ' . ($e2 ?: 'بدون paths');
+        }
+        if (!$found) $log[] = 'صفحه ' . ($page === $base ? '/' : substr($page, strlen($base))) . ' → آدرس spec داخلش نبود';
+    }
+
+    return ['', null, $log];
+}
+
+function maAdmSpecRead($chatId) {
+    $back = inlineKb([[btnCb('🤖 تحویل خودکار', 'maadm_fulfill', 'admin')]]);
+    $f    = maCfg()['fulfill'] ?? [];
+    if (trim((string)($f['base'] ?? '')) === '') {
         sendMsg(BOT_TOKEN, $chatId, "⚠️ اول «🔗 آدرس پنل» را ثبت کنید.", $back);
         return;
     }
 
-    [$j, $err] = maHttp($url, 'GET', '', '', 20);
+    [$url, $j, $log] = maSpecDiscover(trim((string)($f['spec_url'] ?? '')));
+
     if (!$j) {
-        sendMsg(BOT_TOKEN, $chatId,
-            "❌ <b>مستندات خوانده نشد</b>\n\n<code>" . h($url) . "</code>\n" . h($err) . "\n\n" .
-            "اگر آدرس فرق دارد، «📄 آدرس مستندات» را دستی ثبت کنید. " .
-            "معمولا یکی از اینهاست:\n<code>/openapi.json</code> · <code>/v1/openapi.json</code> · <code>/docs/openapi.json</code>",
-            $back);
+        $t  = "❌ <b>مستندات پیدا نشد</b>\n\n";
+        $t .= "این آدرس‌ها امتحان شد:\n";
+        foreach (array_slice($log, 0, 14) as $l) $t .= "• <code>" . h(mb_substr($l, 0, 76)) . "</code>\n";
+        $t .= "\nصفحه مستندات را در مرورگر باز کنید و آدرسی که با <code>.json</code> " .
+              "تمام می‌شود پیدا کنید، بعد آن را در «📄 آدرس مستندات» ثبت کنید.\n\n" .
+              "راه ساده‌تر: در مرورگر روی صفحه مستندات، <b>View Source</b> بزنید و " .
+              "کلمه <code>openapi</code> را جستجو کنید.";
+        sendMsg(BOT_TOKEN, $chatId, $t, $back);
         return;
     }
+
+    // آدرسی که جواب داد را ذخیره کن تا دفعه بعد مستقیم برود
+    maSetRoot(function (&$m) use ($url) { $m['fulfill']['spec_url'] = $url; });
 
     $paths = $j['paths'] ?? null;
     if (!is_array($paths)) {
@@ -2779,6 +2869,7 @@ function maAdmSpecRead($chatId) {
     }
 
     $t  = "📖 <b>مستندات پنل خوانده شد</b>\n\n";
+    $t .= "<code>" . h(mb_substr($url, 0, 70)) . "</code>\n";
     $t .= "مجموع مسیرها: <b>" . count($all) . "</b>\n\n";
 
     $labels = ['balance' => '💰 موجودی / اعتبار', 'stars' => '⭐️ استارز',
