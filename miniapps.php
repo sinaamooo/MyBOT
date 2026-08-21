@@ -2952,6 +2952,13 @@ function maAdmSpecPick($chatId, $msgId, $op) {
         inlineKb($rows));
 }
 
+/** همان صفحه انتخاب مسیر، ولی به‌صورت پیام تازه */
+function maAdmSpecPickSend($chatId, $op) {
+    $r = sendMsg(BOT_TOKEN, $chatId, '⏳');
+    $mid = $r['result']['message_id'] ?? null;
+    if ($mid) maAdmSpecPick($chatId, $mid, $op);
+}
+
 /** 🔌 تست اتصال به پنل */
 function maAdmFulfillTest($chatId) {
     $f = maCfg()['fulfill'] ?? [];
@@ -2963,8 +2970,26 @@ function maAdmFulfillTest($chatId) {
     $back = inlineKb([[btnCb('🤖 تحویل خودکار', 'maadm_fulfill', 'admin')]]);
 
     if (!$resp) {
-        sendMsg(BOT_TOKEN, $chatId, "❌ <b>اتصال ناموفق</b>\n\n" . h($err) . "\n\n" .
-            "اگر «کد پاسخ ۴۰۱» یا «۴۰۳» است، کلید API یا نوع احراز هویت درست نیست.", $back);
+        $is404 = str_contains($err, '404');
+        $path  = trim((string)($f['ops']['balance']['path'] ?? ''));
+
+        $t  = "❌ <b>اتصال ناموفق</b>\n\n" . h($err) . "\n\n";
+        if ($is404) {
+            $t .= "مسیر فعلی: <code>" . h(($f['ops']['balance']['method'] ?? 'GET') . ' ' . $path) . "</code>\n\n";
+            $t .= "۴۰۴ یعنی این مسیر روی پنل وجود ندارد — کلید API مشکلی ندارد.\n" .
+                  "مسیر درست را از مستندات انتخاب کنید 👇";
+        } else {
+            $t .= "اگر «۴۰۱» یا «۴۰۳» است، کلید API یا نوع احراز هویت درست نیست.";
+        }
+
+        $rows = [];
+        if ($is404) {
+            $spec = load('ma_spec');
+            if (is_array($spec) && $spec) $rows[] = [btnCb('🎯 انتخاب مسیر موجودی از مستندات', 'maadm_spick_balance', 'confirm')];
+            else                          $rows[] = [btnCb('📖 اول مستندات را بخوان', 'maadm_spec', 'confirm')];
+        }
+        $rows[] = [btnCb('🤖 تحویل خودکار', 'maadm_fulfill', 'nav')];
+        sendMsg(BOT_TOKEN, $chatId, $t, inlineKb($rows));
         return;
     }
 
@@ -3164,7 +3189,10 @@ function maAdminCallback($data, $uid, $chatId, $msgId, $cbId) {
         answerCb(BOT_TOKEN, $cbId); maAdmSpecAll($chatId, $msgId, (int)$sm[1]); return true;
     }
     if (preg_match('/^maadm_spick_([a-z]+)$/', $data, $sm)) {
-        answerCb(BOT_TOKEN, $cbId); maAdmSpecPick($chatId, $msgId, $sm[1]); return true;
+        answerCb(BOT_TOKEN, $cbId);
+        if ($msgId) maAdmSpecPick($chatId, $msgId, $sm[1]);
+        else        maAdmSpecPickSend($chatId, $sm[1]);
+        return true;
     }
     if (preg_match('/^maadm_sset_([a-z]+)\|(\d+)$/', $data, $sm)) {
         [$all2, $op2, $idx] = [load('ma_spec'), $sm[1], (int)$sm[2]];
@@ -3698,8 +3726,18 @@ function maAdminState($action, $sd, $msg, $uid, $chatId, $plain, $ids) {
         }
         maSetRoot(function (&$m) use ($v) { $m['row_layout'] = $v; });
         clearState($uid);
-        sendMsg(BOT_TOKEN, $chatId, '✅ چیدمان ذخیره شد.',
-            inlineKb([[btnCb('🚀 مینی اپ‌ها', 'maadm_home', 'admin')]]));
+        $preview = [];
+        foreach (maRows() as $r) {
+            $line = [];
+            foreach ($r as $btn) $line[] = trim((string)($btn['text'] ?? ''));
+            $preview[] = implode('  |  ', $line);
+        }
+        sendMsg(BOT_TOKEN, $chatId,
+            "✅ چیدمان ذخیره شد.\n\n<b>پیش‌نمایش:</b>\n" . h(implode("\n", $preview)),
+            inlineKb([
+                [btnCb('💠 دکمه‌های شیشه‌ای', 'sb_buy', 'admin')],
+                [btnCb('🚀 مینی اپ‌ها', 'maadm_home', 'nav')],
+            ]));
         return true;
     }
 

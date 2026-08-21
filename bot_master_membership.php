@@ -3660,6 +3660,18 @@ function edSubs($chatId, $msgId, $bid) {
         ? "این دکمه‌ها زیر همان بخش نمایش داده می‌شوند.\nچیدمان: <code>" . h($b['sub_layout'] ?? '1') . "</code>"
         : "هنوز دکمه‌ای اضافه نکرده‌اید.";
 
+    // 🚀 دکمه‌های مینی‌اپ هم دقیقا زیر همین‌ها می‌نشینند — پس چیدمانشان هم از همین‌جا
+    if ($bid === 'buy' && function_exists('maRows')) {
+        $maRows = maRows();
+        if ($maRows) {
+            $names = [];
+            foreach ($maRows as $r) foreach ($r as $btn) $names[] = trim((string)($btn['text'] ?? ''));
+            $text .= "\n\n🚀 <b>و زیرشان، دکمه‌های مینی‌اپ:</b>\n";
+            $text .= h(implode(' · ', $names)) . "\n";
+            $text .= "چیدمان مینی‌اپ: <code>" . h(maCfg()['row_layout'] ?: '1,1') . "</code>";
+        }
+    }
+
     $rows = [];
     foreach ($subs as $sub) {
         $col = styleMap()[$sub['color'] ?? 'none'] ?? '';
@@ -3669,6 +3681,9 @@ function edSubs($chatId, $msgId, $bid) {
     }
     $rows[] = [btnCb('➕ افزودن دکمه شیشه‌ای', 'sbnew_' . $bid, 'confirm'),
                btnCb('📐 چیدمان', 'sblay_' . $bid, 'admin')];
+    if ($bid === 'buy' && function_exists('maRows') && maRows()) {
+        $rows[] = [btnCb('🚀 چیدمان دکمه‌های مینی‌اپ', 'maadm_rowlay', 'admin')];
+    }
     if (count($subs) > 1) $rows[] = [btnCb('🔄 هماهنگ کردن همه با هم', 'sbsync_' . $bid, 'buy')];
     $rows[] = [btnUI('back', 'eb_' . $bid, 'nav')];
     editMsg(BOT_TOKEN, $chatId, $msgId, $text, inlineKb($rows));
