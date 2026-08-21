@@ -57,6 +57,13 @@ function maDefaultConfig() {
         // آدرس عمومی همین فایل — بدون این، دکمه مینی‌اپ ساخته نمی‌شود
         'base_url' => '',
 
+        // 📐 چیدمان دکمه‌های مینی‌اپ زیر دکمه‌های ثبت سفارش
+        // «1,1» هرکدام یک ردیف · «2» هر دو کنار هم
+        'row_layout' => '1,1',
+
+        // ⏰ سقف عمر داده ورود تلگرام (ثانیه) — پیش‌فرض ۲۴ ساعت
+        'init_max_age' => 86400,
+
         // 🔌 قیمت‌گیری زنده از مارکت گیفت (Tonnel / Portals / هر API دیگر)
         // چون هر مارکت ساختار پاسخ خودش را دارد، آدرس و مسیر فیلدها اینجا تنظیم می‌شود
         // و با دکمه «تست اتصال» در پنل بررسی می‌شود.
@@ -412,7 +419,9 @@ function maDefaultCfg() {
 function maMergeConfig($def, $saved) {
     if (!is_array($saved)) return $def;
     $out = $def;
-    if (isset($saved['base_url'])) $out['base_url'] = (string)$saved['base_url'];
+    if (isset($saved['base_url']))     $out['base_url']     = (string)$saved['base_url'];
+    if (isset($saved['row_layout']))   $out['row_layout']   = (string)$saved['row_layout'];
+    if (isset($saved['init_max_age'])) $out['init_max_age'] = (int)$saved['init_max_age'];
     foreach (['market', 'rates', 'stars', 'fulfill'] as $sec) {
         if (isset($saved[$sec]) && is_array($saved[$sec]))
             $out[$sec] = array_replace($def[$sec] ?? [], $saved[$sec]);
@@ -588,10 +597,19 @@ function maRate($which, $fresh = false) {
     }
 
     [$j, $err] = maHttp($url, 'GET', '', '', 8);
-    if (!$j) return (float)(maCacheGet($ck, 0) ?? 0);   // کش قدیمی بهتر از هیچ
+    if (!$j) {
+        maCachePut('rateerr_' . $which, $err ?: 'پاسخی نیامد');
+        return (float)(maCacheGet($ck, 0) ?? 0);   // کش قدیمی بهتر از هیچ
+    }
 
     $raw = maNum(maJsonPath($j, $path));
-    if ($raw <= 0) return (float)(maCacheGet($ck, 0) ?? 0);
+    if ($raw <= 0) {
+        maCachePut('rateerr_' . $which,
+            'مسیر «' . $path . '» در پاسخ پیدا نشد یا صفر بود. کلیدهای پاسخ: ' .
+            implode(', ', array_slice(array_keys($j), 0, 8)));
+        return (float)(maCacheGet($ck, 0) ?? 0);
+    }
+    maCachePut('rateerr_' . $which, '');
 
     $div = max(1, (float)($r['div'] ?? 1));
     $val = ($raw / $div) * (1 + ((float)($r['margin'] ?? 0) / 100));
@@ -795,6 +813,7 @@ function maRows() {
     }
     usort($list, fn($x, $y) => $x['order'] <=> $y['order']);
 
+    $items = [];
     foreach ($list as $x) {
         $a = $x['app'];
         $label = trim((string)($a['btn']['emoji'] ?? '') . ' ' . (string)($a['btn']['text'] ?? ''));
@@ -803,9 +822,13 @@ function maRows() {
         $b = ['text' => $label, 'web_app' => ['url' => maUrl($x['key'])]];
         if (isStyle($a['btn']['color'] ?? '')) $b['style'] = $a['btn']['color'];
         if (!empty($a['btn']['icon'])) $b['icon_custom_emoji_id'] = (string)$a['btn']['icon'];
-        $rows[] = [$b];
+        $items[] = $b;
     }
-    return $rows;
+    if (!$items) return [];
+
+    // چیدمان دلخواه ادمین — مثل چیدمان زیردکمه‌های ثبت سفارش
+    $layout = trim((string)(maCfg()['row_layout'] ?? ''));
+    return $layout !== '' ? layoutRows($items, $layout) : array_map(fn($b) => [$b], $items);
 }
 
 // ============================================================
@@ -888,14 +911,19 @@ class MaOrder
  * امضای initData را با توکن ربات بررسی می‌کند.
  * برگشت: آرایه کاربر یا null. بدون این، هرکسی می‌توانست به جای دیگری سفارش بدهد.
  */
-function maVerifyInitData($initData, $maxAge = 3600) {
+function maVerifyInitData($initData, &$reason = null, $maxAge = 0) {
+    $reason = '';
     $initData = (string)$initData;
-    if ($initData === '' || strlen($initData) > 4096) return null;
+
+    if ($initData === '')            { $reason = 'empty';    return null; }
+    if (strlen($initData) > 8192)    { $reason = 'too_big';  return null; }
 
     parse_str($initData, $q);
-    if (empty($q['hash']) || empty($q['user'])) return null;
+    if (empty($q['hash']))           { $reason = 'no_hash';  return null; }
+    if (empty($q['user']))           { $reason = 'no_user';  return null; }
 
     $hash = (string)$q['hash'];
+    // hash و signature در رشته بررسی نمی‌آیند (طبق مستندات تلگرام)
     unset($q['hash'], $q['signature']);
     ksort($q);
 
@@ -905,12 +933,44 @@ function maVerifyInitData($initData, $maxAge = 3600) {
 
     $secret = hash_hmac('sha256', BOT_TOKEN, 'WebAppData', true);
     $calc   = hash_hmac('sha256', $check, $secret);
-    if (!hash_equals($calc, $hash)) return null;
+    if (!hash_equals($calc, $hash)) { $reason = 'bad_hash'; return null; }
 
-    if ($maxAge > 0 && !empty($q['auth_date']) && (time() - (int)$q['auth_date']) > $maxAge) return null;
+    // ⏰ عمر داده — با تحمل اختلاف ساعت سرور.
+    // سقف کوتاه (یک ساعت) روی هاست‌هایی که ساعتشان تنظیم نیست همه را بیرون می‌انداخت،
+    // در حالی که محدودیت نرخ و سقف سفارش هر نشست کار امنیتی را انجام می‌دهند.
+    if ($maxAge <= 0) $maxAge = (int)(maCfg()['init_max_age'] ?? 86400);
+    if ($maxAge > 0 && !empty($q['auth_date'])) {
+        $age = time() - (int)$q['auth_date'];
+        if ($age > $maxAge)   { $reason = 'expired:' . $age;  return null; }
+        if ($age < -86400)    { $reason = 'clock_skew:' . $age; return null; }   // ساعت سرور خیلی عقب است
+    }
 
     $user = json_decode((string)$q['user'], true);
-    return (is_array($user) && !empty($user['id'])) ? $user : null;
+    if (!is_array($user) || empty($user['id'])) { $reason = 'bad_user'; return null; }
+
+    return $user;
+}
+
+/** پیام فارسی برای هر دلیل شکست — به ادمین کمک می‌کند بفهمد مشکل کجاست */
+function maAuthReasonText($reason) {
+    $r = (string)$reason;
+    if (str_starts_with($r, 'expired:')) {
+        $sec = (int)substr($r, 8);
+        return 'داده ورود منقضی شده (' . round($sec / 60) . ' دقیقه قدیمی‌تر). ' .
+               'اگر تازه باز کردید، یعنی ساعت سرور جلو است.';
+    }
+    if (str_starts_with($r, 'clock_skew:')) {
+        $sec = (int)substr($r, 11);
+        return 'ساعت سرور ' . round(abs($sec) / 60) . ' دقیقه عقب است — آن را درست کنید.';
+    }
+    return [
+        'empty'    => 'مینی‌اپ بدون اطلاعات ورود باز شده. آن را از دکمه داخل ربات باز کنید، نه از مرورگر.',
+        'no_hash'  => 'امضای تلگرام در داده ورود نبود.',
+        'no_user'  => 'اطلاعات کاربر در داده ورود نبود. مینی‌اپ را از چت خصوصی ربات باز کنید.',
+        'bad_hash' => 'امضا نخواند — توکن ربات در فایل با رباتی که دکمه را ساخته یکی نیست.',
+        'bad_user' => 'اطلاعات کاربر خوانده نشد.',
+        'too_big'  => 'داده ورود بیش از حد بزرگ بود.',
+    ][$r] ?? 'اعتبارسنجی ناموفق بود.';
 }
 
 // ============================================================
@@ -1442,8 +1502,13 @@ function maApi() {
     if (!in_array($key, maKeys(), true)) maApiOut(['ok' => false, 'error' => 'bad_app'], 400);
 
     $initData = (string)($body['initData'] ?? '');
-    $user = maVerifyInitData($initData);
-    if (!$user) maApiOut(['ok' => false, 'error' => 'unauthorized', 'message' => 'اعتبارسنجی تلگرام ناموفق بود.'], 401);
+    $reason = '';
+    $user = maVerifyInitData($initData, $reason);
+    if (!$user) {
+        error_log('[miniapp-auth] ' . $reason . ' · len=' . strlen($initData));
+        maApiOut(['ok' => false, 'error' => 'unauthorized', 'reason' => $reason,
+                  'message' => maAuthReasonText($reason)], 401);
+    }
 
     $uid   = (int)$user['id'];
 
@@ -1960,7 +2025,8 @@ function maAdmHome($chatId, $msgId = null) {
                  ' فعال از ' . count($a['items'] ?? []) . "\n";
     }
 
-    $text .= "\n🔗 آدرس عمومی: " . ($base !== '' ? '<code>' . h($base) . '</code>' : '<b>ثبت نشده</b>') . "\n";
+    $text .= "\n📐 چیدمان دکمه‌ها زیر محصولات: <code>" . h(maCfg()['row_layout'] ?: '۱ در هر ردیف') . "</code>\n";
+    $text .= "🔗 آدرس عمومی: " . ($base !== '' ? '<code>' . h($base) . '</code>' : '<b>ثبت نشده</b>') . "\n";
     if ($base === '') {
         $text .= "\n⚠️ تا وقتی آدرس ثبت نشود دکمه مینی‌اپ نمایش داده نمی‌شود.\n" .
                  "آدرس باید <b>https</b> و دقیقا آدرس عمومی همین فایل ربات باشد.";
@@ -1974,7 +2040,8 @@ function maAdmHome($chatId, $msgId = null) {
     $rows = [
         [btnCb('🌟 مینی‌اپ خدمات تلگرام', 'maadm_app_tg', 'info')],
         [btnCb('🛡 مینی‌اپ فروش کانفیگ',  'maadm_app_cfg', 'info')],
-        [btnCb('🔗 آدرس عمومی', 'maadm_base', 'admin')],
+        [btnCb('🔗 آدرس عمومی', 'maadm_base', 'admin'),
+         btnCb('📐 چیدمان دکمه‌ها', 'maadm_rowlay', 'admin')],
         [btnCb('🔌 قیمت‌گذاری زنده', 'maadm_pricing', 'confirm')],
         [btnCb('🤖 تحویل خودکار', 'maadm_fulfill', 'confirm')],
         [btnCb("🧾 سفارش‌ها ({$pend} منتظر · {$paid} آماده تحویل)", 'maadm_orders', 'admin')],
@@ -2471,8 +2538,9 @@ function maAdmRates($chatId, $msgId) {
     $text .= "منبع: <b>" . h($srcName) . "</b>\n\n";
     foreach (['ton' => 'TON', 'trx' => 'TRX', 'usdt' => 'USDT'] as $k => $lbl) {
         $v = maRate($k);
-        $text .= "<b>{$lbl}</b>: " . ($v > 0 ? fmtNum($v) . ' تومان' : '—') . "\n";
-        $text .= "   <code>" . h(mb_substr((string)($r[$k . '_url'] ?? ''), 0, 54)) . "</code>\n";
+        $text .= "<b>{$lbl}</b>: " . ($v > 0 ? '<b>' . fmtNum($v) . '</b> تومان' : '❌ خوانده نشد') . "\n";
+        $err = (string)(maCacheGet('rateerr_' . $k, 0) ?? '');
+        if ($err !== '') $text .= "   ⚠️ " . h(mb_substr($err, 0, 110)) . "\n";
     }
     $text .= "\nتقسیم بر: <b>" . (float)$r['div'] . "</b> (ریال→تومان)\n";
     $text .= "سود: <b>" . (float)$r['margin'] . "%</b> · گرد کردن: " . fmtNum($r['round']) . "\n";
@@ -2485,11 +2553,46 @@ function maAdmRates($chatId, $msgId) {
         [btnCb('🔗 آدرس TON', 'maadm_rt_ton_url', 'admin'), btnCb('📂 مسیر TON', 'maadm_rt_ton_path', 'admin')],
         [btnCb('🔗 آدرس TRX', 'maadm_rt_trx_url', 'admin'), btnCb('📂 مسیر TRX', 'maadm_rt_trx_path', 'admin')],
         [btnCb('🔗 آدرس USDT', 'maadm_rt_usdt_url', 'admin'), btnCb('📂 مسیر USDT', 'maadm_rt_usdt_path', 'admin')],
+        [btnCb('🔌 تست نرخ‌ها', 'maadm_rttest', 'confirm')],
         [btnCb('➗ تقسیم بر', 'maadm_rt_div', 'admin'), btnCb('📈 سود %', 'maadm_rt_margin', 'admin')],
         [btnCb('🔢 گرد کردن', 'maadm_rt_round', 'admin'), btnCb('⏱ کش', 'maadm_rt_ttl', 'admin')],
         [btnCb(UT('back'), 'maadm_pricing', 'nav')],
     ];
     editMsg(BOT_TOKEN, $chatId, $msgId, $text, inlineKb($rows));
+}
+
+/** 🔌 تست نرخ ارز — پاسخ خام هر صرافی را نشان می‌دهد */
+function maAdmRateTest($chatId) {
+    $r = maCfg()['rates'] ?? [];
+    $back = inlineKb([[btnCb('💱 نرخ ارز', 'maadm_rates', 'admin')]]);
+    $out = "🔌 <b>تست نرخ ارز</b>\n\n";
+
+    foreach (['ton' => 'TON', 'trx' => 'TRX', 'usdt' => 'USDT'] as $k => $lbl) {
+        $url  = (string)($r[$k . '_url'] ?? '');
+        $path = (string)($r[$k . '_path'] ?? '');
+        $out .= "<b>{$lbl}</b>\n";
+        if ($url === '') { $out .= "   آدرس ندارد\n\n"; continue; }
+
+        [$j, $err] = maHttp($url, 'GET', '', '', 10);
+        if (!$j) { $out .= "   ❌ " . h($err) . "\n\n"; continue; }
+
+        $raw = maJsonPath($j, $path);
+        if (is_scalar($raw)) {
+            $num  = maNum($raw);
+            $div  = max(1, (float)($r['div'] ?? 1));
+            $fin  = maRound(($num / $div) * (1 + ((float)($r['margin'] ?? 0) / 100)), (float)($r['round'] ?? 0));
+            $out .= "   خام: <code>" . h((string)$raw) . "</code>\n";
+            $out .= "   ÷ " . (float)$div . " و +" . (float)($r['margin'] ?? 0) . "% → <b>" . fmtNum($fin) . "</b> تومان\n\n";
+        } else {
+            $out .= "   ⚠️ مسیر <code>" . h($path) . "</code> پیدا نشد\n";
+            $out .= "   کلیدها: <code>" . h(implode(', ', array_slice(array_keys($j), 0, 8))) . "</code>\n";
+            $out .= "   نمونه: <code>" . h(mb_substr(json_encode($j, JSON_UNESCAPED_UNICODE), 0, 260)) . "</code>\n\n";
+        }
+    }
+    $out .= "💡 اگر عدد نهایی با قیمت واقعی بازار نمی‌خواند، «➗ تقسیم بر» را چک کنید — " .
+            "نوبیتکس <b>ریال</b> می‌دهد (÷۱۰) ولی والکس <b>تومان</b> (÷۱).";
+
+    sendMsg(BOT_TOKEN, $chatId, $out, $back);
 }
 
 /** ⭐️ نرخ استارز */
@@ -2752,6 +2855,8 @@ function maAdminCallback($data, $uid, $chatId, $msgId, $cbId) {
         return true;
     }
 
+    if ($data === 'maadm_rttest') { answerCb(BOT_TOKEN, $cbId, '⏳ تست…'); maAdmRateTest($chatId); return true; }
+
     if ($data === 'maadm_refresh') {
         save('ma_cache', []);
         maMarketMap(true);
@@ -2845,6 +2950,17 @@ function maAdminCallback($data, $uid, $chatId, $msgId, $cbId) {
         ];
         maAskState($uid, $chatId, 'ma_ffop', ['op' => $op2, 'f' => $field], '✏️ مقدار جدید:',
             ($hints[$field] ?? '') . "\n\nالان: <code>" . h(mb_substr((string)$cur, 0, 200)) . '</code>');
+        return true;
+    }
+
+    if ($data === 'maadm_rowlay') {
+        answerCb(BOT_TOKEN, $cbId);
+        maAskState($uid, $chatId, 'ma_rowlay', [],
+            '📐 <b>چیدمان دکمه‌های مینی‌اپ</b>',
+            "این دکمه‌ها زیر دکمه‌های ثبت سفارش می‌نشینند. با کاما بگویید هر ردیف چند تا:\n\n" .
+            "<code>1,1</code> هرکدام در یک ردیف کامل\n" .
+            "<code>2</code> هر دو کنار هم در یک ردیف\n\n" .
+            'الان: <code>' . h(maCfg()['row_layout'] ?: '1,1') . '</code>');
         return true;
     }
 
@@ -3289,6 +3405,19 @@ function maAdminState($action, $sd, $msg, $uid, $chatId, $plain, $ids) {
         }
         sendMsg(BOT_TOKEN, $chatId, '✅ ذخیره شد.' . $extra,
             inlineKb([[btnCb('🔌 قیمت‌گذاری', $back, 'admin')]]));
+        return true;
+    }
+
+    if ($action === 'ma_rowlay') {
+        $v = trim(norm_fa_digits($plain));
+        if (!parseLayout($v)) {
+            sendMsg(BOT_TOKEN, $chatId, "⚠️ چیدمان معتبر نیست. مثال: <code>2</code> یا <code>1,1</code>");
+            return true;
+        }
+        maSetRoot(function (&$m) use ($v) { $m['row_layout'] = $v; });
+        clearState($uid);
+        sendMsg(BOT_TOKEN, $chatId, '✅ چیدمان ذخیره شد.',
+            inlineKb([[btnCb('🚀 مینی اپ‌ها', 'maadm_home', 'admin')]]));
         return true;
     }
 

@@ -85,7 +85,7 @@ body.fx1 .purse,body.fx0 .purse{backdrop-filter:none;-webkit-backdrop-filter:non
 body.fx0 #stars{display:none}
 @media (prefers-reduced-motion:reduce){ #stars{display:none} }
 
-.wrap{position:relative;z-index:5;max-width:560px;margin:0 auto;padding:0 16px calc(28px + var(--safe))}
+.wrap{position:relative;z-index:5;max-width:560px;margin:0 auto;padding:0 16px calc(104px + var(--safe))}
 
 /* ═══ سربرگ ═══ */
 .top{padding:18px 2px 12px;display:flex;align-items:center;gap:12px}
@@ -121,13 +121,44 @@ body.fx0 #stars{display:none}
 .find input:focus{border-color:var(--c1);box-shadow:0 0 0 3px color-mix(in srgb,var(--c1) 18%,transparent)}
 .find span{position:absolute;top:50%;right:14px;transform:translateY(-50%);opacity:.5;font-size:15px}
 
-/* ═══ تب دسته‌ها ═══ */
-.tabs{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 14px;scrollbar-width:none}
-.tabs::-webkit-scrollbar{display:none}
-.tab{flex:0 0 auto;padding:9px 15px;border-radius:13px;font-size:13px;font-weight:700;cursor:pointer;
-  border:1px solid var(--line);background:var(--card);color:var(--dim);transition:.22s;white-space:nowrap}
-.tab.on{color:#0B0616;border-color:transparent;background:linear-gradient(135deg,var(--c1),var(--c2));
-  box-shadow:0 8px 22px -10px var(--c1);transform:translateY(-1px)}
+/* ═══ کارت خوش‌آمد + لوگوی زنده ═══ */
+.welcome{margin:0 0 16px;padding:22px 18px;border-radius:24px;text-align:center;position:relative;overflow:hidden;
+  border:1px solid var(--line);
+  background:linear-gradient(165deg,rgba(255,255,255,.075),rgba(255,255,255,.02))}
+.welcome:before{content:"";position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(118deg,rgba(255,255,255,.13) 0%,transparent 38%)}
+.logo{width:88px;height:88px;margin:0 auto 14px;position:relative}
+.logo svg{width:100%;height:100%;display:block;position:relative;z-index:2}
+/* حلقه‌های چرخان دور لوگو */
+.logo i{position:absolute;inset:-6px;border-radius:50%;border:1.5px dashed color-mix(in srgb,var(--c2) 55%,transparent)}
+.logo i:nth-child(2){inset:2px;border-style:solid;border-color:color-mix(in srgb,var(--c1) 40%,transparent)}
+body.fx2 .logo i{animation:spin 14s linear infinite}
+body.fx2 .logo i:nth-child(2){animation:spin 9s linear infinite reverse}
+@keyframes spin{to{transform:rotate(360deg)}}
+body.fx2 .logo svg{animation:float 4.5s ease-in-out infinite}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+.logo .halo{position:absolute;inset:-18px;border-radius:50%;z-index:0;
+  background:radial-gradient(circle,color-mix(in srgb,var(--c1) 45%,transparent),transparent 68%)}
+body.fx2 .logo .halo{animation:glow 3.6s ease-in-out infinite}
+@keyframes glow{0%,100%{opacity:.5;transform:scale(.94)}50%{opacity:1;transform:scale(1.08)}}
+@media (prefers-reduced-motion:reduce){
+  body .logo i,body .logo svg,body .logo .halo{animation:none!important}
+}
+.welcome h2{position:relative;margin:0 0 8px;font-size:19px;font-weight:900;letter-spacing:-.3px;
+  background:linear-gradient(92deg,#fff,var(--c2));-webkit-background-clip:text;background-clip:text;color:transparent}
+.welcome p{position:relative;margin:0;font-size:12.5px;line-height:1.95;color:#D2CBEE}
+
+/* ═══ نوار دسته‌ها — پایین صفحه ═══ */
+.nav{position:fixed;left:0;right:0;bottom:0;z-index:30;display:flex;gap:5px;
+  padding:8px 9px calc(8px + var(--safe));
+  background:rgba(12,8,26,.94);border-top:1px solid var(--line)}
+.nav b{flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center;gap:4px;
+  padding:9px 3px;border-radius:15px;cursor:pointer;color:var(--dim);
+  font-size:10px;font-weight:700;transition:color .16s,background .16s}
+.nav b em{font-size:21px;font-style:normal;line-height:1;transition:transform .18s}
+.nav b span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nav b.on{color:#0B0616;background:linear-gradient(135deg,var(--c1),var(--c2))}
+.nav b.on em{transform:scale(1.14)}
 
 /* ═══ کارت سرویس ═══ */
 .grid{display:grid;gap:12px}
@@ -270,14 +301,31 @@ body.glow-on .go{box-shadow:0 14px 34px -14px var(--c1)}
     <div class="val"><span id="bal">…</span><span class="cur" id="cur"></span></div>
   </div>
 
-  <div class="hero" id="hero"></div>
+  <div class="welcome">
+    <div class="logo">
+      <span class="halo"></span><i></i><i></i>
+      <svg viewBox="0 0 100 100" fill="none" aria-hidden="true">
+        <defs>
+          <linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="var(--c1)"/><stop offset="1" stop-color="var(--c2)"/>
+          </linearGradient>
+        </defs>
+        <path d="M50 12 L61 38 L89 41 L68 60 L74 88 L50 74 L26 88 L32 60 L11 41 L39 38 Z"
+              fill="url(#lg)" stroke="rgba(255,255,255,.35)" stroke-width="1.5" stroke-linejoin="round"/>
+        <circle cx="50" cy="50" r="8" fill="rgba(255,255,255,.9)"/>
+      </svg>
+    </div>
+    <h2 id="wcTtl">—</h2>
+    <p id="hero"></p>
+  </div>
 
   <div class="find"><input id="q" placeholder="جستجو…"><span>🔎</span></div>
-  <div class="tabs" id="tabs"></div>
   <div class="grid" id="grid">
     <div class="skel"></div><div class="skel"></div><div class="skel"></div>
   </div>
 </div>
+
+<nav class="nav" id="nav"></nav>
 
 <div class="scrim" id="scrim"></div>
 <div class="sheet" id="sheet">
@@ -366,6 +414,7 @@ function fa(n){
 $('ttl').textContent  = B.title;
 $('sub').textContent  = B.sub || '';
 $('hero').textContent = B.hero || '';
+$('wcTtl').textContent = B.title;
 $('cur').textContent  = B.currency;
 $('balLbl').textContent = B.ui.balance;
 $('q').placeholder    = B.ui.search;
@@ -378,7 +427,7 @@ $('ava').textContent  = (B.title || '★').trim().charAt(0);
 document.title = B.title;
 
 /* ── وضعیت ── */
-var S = { cat:'', q:'', item:null, qty:1, busy:false, bal:0, nodes:[] };
+var S = { cat:(B.cats[0] ? B.cats[0].id : ''), q:'', item:null, qty:1, busy:false, bal:0, nodes:[] };
 
 /* ── ارتباط با سرور ── */
 function api(action, extra, ok, bad){
@@ -411,25 +460,25 @@ function setBal(v){
 }
 
 api('me', {}, function(j){ setBal(j.balance); }, function(j){
-  $('bal').textContent = '—';
+  setBal(0);                        // «—» گیج‌کننده بود؛ صفر یعنی صفر
   if (j && j.message) toast(j.message);
 });
 
-/* ── تب‌ها ── */
-function drawTabs(){
-  var box = $('tabs'), html = '';
-  html += '<div class="tab' + (S.cat===''?' on':'') + '" data-c="">' + B.ui.all + '</div>';
+/* ── نوار دسته‌ها، پایین صفحه ── */
+function drawNav(){
+  var box = $('nav'), html = '';
   B.cats.forEach(function(c){
-    html += '<div class="tab' + (S.cat===c.id?' on':'') + '" data-c="' + c.id + '">' +
-            (c.emoji ? c.emoji + ' ' : '') + esc(c.name) + '</div>';
+    html += '<b class="' + (S.cat===c.id?'on':'') + '" data-c="' + esc(c.id) + '">' +
+            '<em>' + esc(c.emoji || '💠') + '</em><span>' + esc(c.name) + '</span></b>';
   });
   box.innerHTML = html;
 }
-$('tabs').addEventListener('click', function(ev){
-  var el = ev.target.closest ? ev.target.closest('.tab') : null;
+$('nav').addEventListener('click', function(ev){
+  var el = ev.target.closest ? ev.target.closest('b') : null;
   if (!el) return;
   S.cat = el.getAttribute('data-c');
-  tap(); drawTabs(); applyFilter();
+  tap(); drawNav(); applyFilter();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 });
 
 function esc(s){
@@ -476,8 +525,10 @@ function applyFilter(){
   var q = S.q.trim().toLowerCase(), shown = 0;
   for (var n = 0; n < S.nodes.length; n++){
     var el = S.nodes[n], it = B.items[n];
-    var ok = (!S.cat || it.cat === S.cat) &&
-             (!q || (it.name + ' ' + it.desc + ' ' + it.badge).toLowerCase().indexOf(q) >= 0);
+    // موقع جستجو، دسته نادیده گرفته می‌شود تا کاربر مجبور نباشد
+    // اول دسته درست را پیدا کند
+    var inCat = q ? true : (!S.cat || it.cat === S.cat);
+    var ok = inCat && (!q || (it.name + ' ' + it.desc + ' ' + it.badge).toLowerCase().indexOf(q) >= 0);
     el.classList.toggle('hide', !ok);
     if (ok) shown++;
   }
@@ -670,7 +721,7 @@ $('sGo').onclick  = function(){ send('',       this); };
 
 $('wGo').onclick = function(){ if (TG) { try{ TG.close(); }catch(e){} } else location.reload(); };
 
-drawTabs();
+drawNav();
 buildGrid();
 applyFilter();
 })();

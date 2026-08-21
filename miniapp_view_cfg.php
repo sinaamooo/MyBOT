@@ -83,7 +83,7 @@ body.fx2 .bg:after{animation:breathe 10s ease-in-out infinite}
   background:radial-gradient(130% 78% at 50% 0%,transparent 34%,var(--bg) 96%)}
 @media (prefers-reduced-motion:reduce){ .bg:after{animation:none!important} }
 
-.wrap{position:relative;z-index:5;max-width:600px;margin:0 auto;padding:0 15px calc(30px + var(--safe))}
+.wrap{position:relative;z-index:5;max-width:600px;margin:0 auto;padding:0 15px calc(106px + var(--safe))}
 
 /* ═══ سطح شیشه — پایه همه کارت‌ها ═══
    لبه نورانی با border-image ساخته می‌شود که برخلاف backdrop-filter
@@ -141,15 +141,42 @@ body.fx2 .head h1{text-shadow:0 2px 26px color-mix(in srgb,var(--c1) 26%,transpa
 .seek input:focus{border-color:color-mix(in srgb,var(--c1) 60%,transparent)}
 .seek span{position:absolute;top:50%;right:14px;transform:translateY(-50%);color:var(--c1);font-size:14px}
 
-/* ═══ تب‌ها ═══ */
-.tabs{display:flex;gap:8px;overflow-x:auto;padding-bottom:14px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
-.tabs::-webkit-scrollbar{display:none}
-.tab{flex:0 0 auto;padding:9px 15px;border-radius:13px;font-size:12.5px;font-weight:700;cursor:pointer;
-  border:1px solid var(--edge);background:rgba(255,255,255,.045);color:var(--dim);white-space:nowrap;
-  transition:color .16s,background .16s,border-color .16s}
-.tab.on{color:#04120D;border-color:transparent;
-  background:linear-gradient(135deg,var(--c1),var(--c2))}
-body.fx2 .tab.on{box-shadow:0 8px 20px -10px var(--c1)}
+/* ═══ کارت خوش‌آمد + لوگوی زنده ═══ */
+.welcome{padding:24px 18px;margin-bottom:15px;text-align:center;overflow:hidden}
+.logo{width:92px;height:92px;margin:0 auto 15px;position:relative}
+.logo svg{width:100%;height:100%;display:block;position:relative;z-index:2}
+.logo i{position:absolute;inset:-7px;border-radius:22px;
+  border:1.5px dashed color-mix(in srgb,var(--c2) 50%,transparent)}
+.logo i:nth-child(2){inset:3px;border-radius:18px;border-style:solid;
+  border-color:color-mix(in srgb,var(--c1) 38%,transparent)}
+body.fx2 .logo i{animation:spin 16s linear infinite}
+body.fx2 .logo i:nth-child(2){animation:spin 10s linear infinite reverse}
+@keyframes spin{to{transform:rotate(360deg)}}
+body.fx2 .logo svg{animation:float 5s ease-in-out infinite}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+.logo .halo{position:absolute;inset:-20px;border-radius:50%;z-index:0;
+  background:radial-gradient(circle,color-mix(in srgb,var(--c1) 40%,transparent),transparent 68%)}
+body.fx2 .logo .halo{animation:glow 3.8s ease-in-out infinite}
+@keyframes glow{0%,100%{opacity:.45;transform:scale(.93)}50%{opacity:1;transform:scale(1.09)}}
+@media (prefers-reduced-motion:reduce){
+  body .logo i,body .logo svg,body .logo .halo{animation:none!important}
+}
+.welcome h2{position:relative;margin:0 0 9px;font-size:20px;font-weight:900;letter-spacing:-.4px;
+  background:linear-gradient(92deg,var(--c1),#fff 82%);
+  -webkit-background-clip:text;background-clip:text;color:transparent}
+.welcome p{position:relative;margin:0;font-size:12.5px;line-height:1.95;color:#B6D8CD}
+
+/* ═══ نوار دسته‌ها — پایین صفحه ═══ */
+.nav{position:fixed;left:0;right:0;bottom:0;z-index:30;display:flex;gap:5px;
+  padding:8px 9px calc(8px + var(--safe));
+  background:rgba(5,13,11,.95);border-top:1px solid var(--edge)}
+.nav b{flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center;gap:4px;
+  padding:9px 3px;border-radius:15px;cursor:pointer;color:var(--dim);
+  font-size:10px;font-weight:700;transition:color .16s,background .16s}
+.nav b em{font-size:21px;font-style:normal;line-height:1;transition:transform .18s}
+.nav b span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nav b.on{color:#04120D;background:linear-gradient(135deg,var(--c1),var(--c2))}
+.nav b.on em{transform:scale(1.14)}
 
 /* ═══ کارت محصول — شیشه واقعی ═══ */
 .list{display:grid;gap:13px}
@@ -300,14 +327,32 @@ body.fx2 .box{box-shadow:0 20px 50px -18px var(--c1);animation:zoom .45s cubic-b
     <div class="bar"><i></i></div>
   </div>
 
-  <div class="brief" id="hero"></div>
+  <div class="welcome pane">
+    <div class="logo">
+      <span class="halo"></span><i></i><i></i>
+      <svg viewBox="0 0 100 100" fill="none" aria-hidden="true">
+        <defs>
+          <linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="var(--c1)"/><stop offset="1" stop-color="var(--c2)"/>
+          </linearGradient>
+        </defs>
+        <path d="M50 10 L84 24 V52 C84 71 69 84 50 91 C31 84 16 71 16 52 V24 Z"
+              fill="url(#lg)" stroke="rgba(255,255,255,.35)" stroke-width="1.5" stroke-linejoin="round"/>
+        <path d="M35 51 L46 62 L67 40" stroke="rgba(255,255,255,.95)" stroke-width="6"
+              stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    <h2 id="wcTtl">—</h2>
+    <p id="hero"></p>
+  </div>
 
   <div class="seek"><input id="q" placeholder="جستجو…" autocomplete="off" spellcheck="false"><span>⌕</span></div>
-  <div class="tabs" id="tabs"></div>
   <div class="list" id="list">
     <div class="load"></div><div class="load"></div><div class="load"></div>
   </div>
 </div>
+
+<nav class="nav" id="nav"></nav>
 
 <div class="mask" id="mask"></div>
 <div class="term" id="term">
@@ -383,6 +428,7 @@ function esc(s){
 $('ttl').innerHTML     = esc(B.title).replace(/\s(\S+)$/, ' <em>$1</em>');
 $('sub').textContent   = B.sub || '';
 $('hero').textContent  = B.hero || '';
+$('wcTtl').textContent = B.title;
 $('cur').textContent   = B.currency;
 $('balLbl').textContent= B.ui.balance;
 $('q').placeholder     = B.ui.search;
@@ -393,7 +439,7 @@ $('oTtl').textContent  = B.ui.done;
 $('oSub').textContent  = B.ui.done_sub;
 document.title = B.title;
 
-var S = { cat:'', q:'', item:null, qty:1, busy:false, bal:0, nodes:[] };
+var S = { cat:(B.cats[0] ? B.cats[0].id : ''), q:'', item:null, qty:1, busy:false, bal:0, nodes:[] };
 
 function api(action, extra, ok, bad){
   var body = Object.assign({ action:action, app:B.app,
@@ -432,17 +478,16 @@ function setBal(v){
 }
 
 api('me', {}, function(j){ setBal(j.balance); }, function(j){
-  $('bal').textContent = '—';
+  setBal(0);                        // «—» گیج‌کننده بود؛ صفر یعنی صفر
   if (j && j.message) warn(j.message);
 });
 
-/* ── تب‌ها ── */
-function drawTabs(){
-  var box = $('tabs'), html = '';
-  html += '<div class="tab' + (S.cat===''?' on':'') + '" data-c="">' + esc(B.ui.all) + '</div>';
+/* ── نوار دسته‌ها، پایین صفحه ── */
+function drawNav(){
+  var box = $('nav'), html = '';
   B.cats.forEach(function(c){
-    html += '<div class="tab' + (S.cat===c.id?' on':'') + '" data-c="' + esc(c.id) + '">' +
-            (c.emoji ? esc(c.emoji) + ' ' : '') + esc(c.name) + '</div>';
+    html += '<b class="' + (S.cat===c.id?'on':'') + '" data-c="' + esc(c.id) + '">' +
+            '<em>' + esc(c.emoji || '💠') + '</em><span>' + esc(c.name) + '</span></b>';
   });
   box.innerHTML = html;
 }
@@ -489,8 +534,10 @@ function applyFilter(){
   var q = S.q.trim().toLowerCase(), shown = 0;
   for (var n = 0; n < S.nodes.length; n++){
     var el = S.nodes[n], it = B.items[n];
-    var ok = (!S.cat || it.cat === S.cat) &&
-             (!q || (it.name + ' ' + it.desc + ' ' + it.badge).toLowerCase().indexOf(q) >= 0);
+    // موقع جستجو، دسته نادیده گرفته می‌شود تا کاربر مجبور نباشد
+    // اول دسته درست را پیدا کند
+    var inCat = q ? true : (!S.cat || it.cat === S.cat);
+    var ok = inCat && (!q || (it.name + ' ' + it.desc + ' ' + it.badge).toLowerCase().indexOf(q) >= 0);
     if (ok) { el.classList.remove('hide'); shown++; } else { el.classList.add('hide'); }
   }
   var none = document.getElementById('noneBox');
@@ -502,11 +549,12 @@ function applyFilter(){
   } else if (shown && none){ none.remove(); }
 }
 
-$('tabs').addEventListener('click', function(ev){
-  var el = ev.target.closest ? ev.target.closest('.tab') : null;
+$('nav').addEventListener('click', function(ev){
+  var el = ev.target.closest ? ev.target.closest('b') : null;
   if (!el) return;
   S.cat = el.getAttribute('data-c');
-  tap(); drawTabs(); applyFilter();
+  tap(); drawNav(); applyFilter();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 });
 
 var qT;
@@ -689,7 +737,7 @@ $('tGo').onclick  = function(){ send('',       this, B.ui.sending); };
 
 $('oGo').onclick = function(){ if (TG) { try{ TG.close(); }catch(e){} } else location.reload(); };
 
-drawTabs();
+drawNav();
 buildList();
 applyFilter();
 })();
