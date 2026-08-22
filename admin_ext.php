@@ -107,6 +107,24 @@ function axDefaults() {
                             "👇 روش پرداخت را انتخاب کنید:",
         ],
 
+        // ---------- 👛 خودکارسازی ولت TON ----------
+        // پنل فروش تراکنش امضانشده برمی‌گرداند؛ اینجا امضایش می‌کنیم و می‌فرستیم.
+        'wallet' => [
+            'on'        => false,       // تا وقتی خودتان روشن نکنید، هیچ تراکنشی امضا نمی‌شود
+            'dry'       => true,        // فقط بساز و نشان بده، نفرست
+            'mnemonic'  => '',          // ۲۴ کلمه — ولت جداگانه، نه ولت اصلی
+            'address'   => '',          // آدرس همان ولت
+            'version'   => 'v4r2',      // v4r2 یا v3r2
+            'api'       => 'https://toncenter.com/api/v2',
+            'api_key'   => '',
+            'max_ton'   => '1',         // سقف هر تراکنش
+            'day_ton'   => '5',         // سقف مجموع یک روز
+            'verified'  => 0,           // آخرین باری که با زنجیره سنجیده شد
+            'day'       => '',          // تاریخ سقف روزانه
+            'day_spent' => '0',         // خرج امروز به nanoton
+            'msg_path'  => '',          // اگر پاسخ پنل شکل غیرمعمول دارد
+        ],
+
         // ---------- ⚙️ عمومی ----------
         'rates_auto' => true,
         'log'        => [],        // ۵۰ رویداد آخر
@@ -726,7 +744,9 @@ function axHome($chatId, $msgId = null) {
     $t .= "🎁 سفارش دستی: " . (!empty($c['manual']['on']) && trim((string)$c['manual']['chat_id']) !== '' ? '✅ فعال' : '⚪️ خاموش') . "\n";
     $t .= "📊 گزارش تلگرام: " . (!empty($c['report']['tg']['on']) ? '✅' : '⚪️') .
           " · کانفیگ: " . (!empty($c['report']['cfg']['on']) ? '✅' : '⚪️') . "\n";
-    $t .= "💵 سود و قیمت: " . (!empty($c['pricing']['on']) ? '✅ فعال' : '⚪️ خاموش') . "\n\n";
+    $t .= "💵 سود و قیمت: " . (!empty($c['pricing']['on']) ? '✅ فعال' : '⚪️ خاموش') . "\n";
+    $t .= "👛 ولت خودکار: " . (axWalletReady()
+          ? (!empty($c['wallet']['dry']) ? '🧪 آزمایشی' : '🚀 فعال') : '⚪️ خاموش') . "\n\n";
     $t .= "💱 <b>نرخ زنده</b>\n" . axRatesText() . "\n";
 
     axShow($chatId, $msgId, $t, [
@@ -735,6 +755,7 @@ function axHome($chatId, $msgId = null) {
         [btnCb('📊 گزارش خدمات تلگرام', 'ax_rep_tg', 'admin'),
          btnCb('📊 گزارش کانفیگ', 'ax_rep_cfg', 'admin')],
         [btnCb('💵 سود و قیمت', 'ax_price', 'admin')],
+        [btnCb('👛 خودکارسازی ولت TON', 'ax_wallet', 'admin')],
         [btnCb('💱 نرخ ارز', 'ax_rates', 'admin'),
          btnCb('✍️ متن‌ها', 'ax_texts', 'admin')],
         [btnCb('📜 رویدادها', 'ax_log', 'admin')],
@@ -982,6 +1003,68 @@ function axCallback($data, $uid, $chatId, $msgId, $cbId, $isAdmin) {
     if ($data === 'ax_rep_tg') { $ack(); axReportHome($chatId, $msgId, 'tg');  return true; }
     if ($data === 'ax_rep_cfg'){ $ack(); axReportHome($chatId, $msgId, 'cfg'); return true; }
 
+    if ($data === 'ax_wallet') { $ack(); axWalletHome($chatId, $msgId); return true; }
+
+    if ($data === 'axwtog') {
+        $now = axSet(function (&$c) { $c['wallet']['on'] = empty($c['wallet']['on']); return !empty($c['wallet']['on']); });
+        if ($now && (int)axVal('wallet.verified', 0) === 0) {
+            [$vok, $verr] = axWalletVerify();
+            if (!$vok) {
+                axSet(function (&$c) { $c['wallet']['on'] = false; });
+                $ack('⚠️ اول مالکیت تایید شود');
+                sendMsg(BOT_TOKEN, $chatId, "❌ روشن نشد — عبارت بازیابی با آدرس نمی‌خواند:\n<code>" . h($verr) . "</code>");
+                axWalletHome($chatId, $msgId);
+                return true;
+            }
+        }
+        $ack($now ? '🟢 روشن شد' : '🔴 خاموش شد');
+        axWalletHome($chatId, $msgId);
+        return true;
+    }
+
+    if ($data === 'axwdry') {
+        $now = axSet(function (&$c) { $c['wallet']['dry'] = empty($c['wallet']['dry']); return !empty($c['wallet']['dry']); });
+        $ack($now ? '🧪 آزمایشی' : '🚀 واقعی — تراکنش واقعا فرستاده می‌شود');
+        axWalletHome($chatId, $msgId);
+        return true;
+    }
+
+    if ($data === 'axwver') {
+        $now = axSet(function (&$c) {
+            $c['wallet']['version'] = ((string)($c['wallet']['version'] ?? 'v4r2') === 'v4r2') ? 'v3r2' : 'v4r2';
+            $c['wallet']['verified'] = 0;
+            return $c['wallet']['version'];
+        });
+        $ack('🔢 ' . $now);
+        axWalletHome($chatId, $msgId);
+        return true;
+    }
+
+    if ($data === 'axwclr') {
+        axSet(function (&$c) { $c['wallet']['mnemonic'] = ''; $c['wallet']['on'] = false; $c['wallet']['verified'] = 0; });
+        $ack('🗑 پاک شد و ولت خاموش شد');
+        axWalletHome($chatId, $msgId);
+        return true;
+    }
+
+    if ($data === 'axwtest') {
+        $ack('⏳ در حال بررسی…');
+        [$vok, $verr] = axWalletVerify();
+        $bal = axWalletBalance();
+        $t = "🧪 <b>بررسی ولت</b>\n\n";
+        $t .= 'مالکیت: ' . ($vok ? '✅ عبارت بازیابی با همین آدرس می‌خواند'
+                                 : "❌ <code>" . h($verr) . '</code>') . "\n";
+        $t .= 'موجودی: ' . ($bal !== null ? '<b>' . h($bal) . '</b> TON' : '⚠️ از شبکه نیامد') . "\n\n";
+        $t .= $vok
+            ? "حالا می‌توانید روشنش کنید. اول در <b>حالت آزمایشی</b> یک خرید کوچک بزنید،\nبعد آزمایشی را خاموش کنید."
+            : "تا وقتی این تیک سبز نشود، هیچ تراکنشی امضا نمی‌شود.";
+        axShow($chatId, $msgId, $t, [
+            [btnCb('🔄 دوباره', 'axwtest', 'admin')],
+            [btnCb('🔙 بازگشت', 'ax_wallet', 'nav')],
+        ]);
+        return true;
+    }
+
     if ($data === 'ax_rates') {
         $ack('⏳ در حال گرفتن نرخ…');
         axRatesRefresh();
@@ -1094,6 +1177,13 @@ function axCallback($data, $uid, $chatId, $msgId, $cbId, $isAdmin) {
         'axmdone' => ['ax_manual_done',"✍️ متن «سفارش انجام شد» را بفرستید.\n\nکلیدها: <code>{item} {qty} {field} {code} {amount} {date}</code>"],
         'axmbtn'  => ['ax_manual_btn', "🔘 متن دکمه‌ی زیر فرم را بفرستید.\n\nالان: <code>" . h((string)axVal('manual.btn')) . "</code>"],
         'axpall'  => ['ax_price_all',  "📈 درصد سود عمومی را بفرستید (فقط عدد).\n\nمثلا <code>12</code> یعنی ۱۲٪ روی قیمت پایه.\n<code>0</code> یعنی بدون سود."],
+        'axwmn'   => ['ax_w_mn',  "🔑 <b>عبارت بازیابی ۲۴ کلمه‌ای</b> را بفرستید.\n\n" .
+                                  "⚠️ حتما ولت <b>جداگانه</b>، نه ولت اصلی‌تان.\n" .
+                                  "پیام شما بلافاصله پس از ذخیره پاک می‌شود."],
+        'axwad'   => ['ax_w_ad',  "📍 آدرس همان ولت را بفرستید.\n\nنمونه: <code>UQ…</code> یا <code>EQ…</code>"],
+        'axwapi'  => ['ax_w_api', "🌐 آدرس API شبکه را بفرستید.\n\nپیش‌فرض: <code>https://toncenter.com/api/v2</code>\n\nاگر کلید API دارید، بعد از آدرس یک فاصله و کلید را بگذارید."],
+        'axwmax'  => ['ax_w_max', "🚧 سقف <b>هر تراکنش</b> به TON (فقط عدد).\n\nالان: <code>" . h((string)axVal('wallet.max_ton')) . "</code>"],
+        'axwday'  => ['ax_w_day', "🚧 سقف <b>مجموع یک روز</b> به TON (فقط عدد).\n\nالان: <code>" . h((string)axVal('wallet.day_ton')) . "</code>"],
         'axinv'   => ['ax_invoice',    "🧾 متن تایید سفارش مینی‌اپ‌ها را بفرستید.\n\nهمین‌جا می‌توانید ایموجی پریمیوم بگذارید و بخش‌ها را نقل‌قول (quote) کنید — عینا حفظ می‌شود.\n\nکلیدها: <code>{item} {qty} {unit} {field} {unit_price} {amount} {currency} {balance} {code} {app} {date}</code>"],
     ];
     if (isset($asks[$data])) {
@@ -1279,6 +1369,65 @@ function axStateHandle($action, $sd, $msg, $uid, $chatId) {
             return true;
         }
 
+        case 'ax_w_mn': {
+            $words = preg_split('/\s+/u', trim($plain));
+            $words = array_values(array_filter($words, fn($x) => $x !== ''));
+            if (count($words) !== 24) {
+                sendMsg(BOT_TOKEN, $chatId, "❌ باید دقیقا ۲۴ کلمه باشد — الان " . count($words) . " کلمه فرستادید.");
+                return true;
+            }
+            try { tonKeyFromMnemonic($words); }
+            catch (Throwable $e) { sendMsg(BOT_TOKEN, $chatId, "❌ " . h($e->getMessage())); return true; }
+
+            axSet(function (&$c) use ($words) {
+                $c['wallet']['mnemonic'] = implode(' ', array_map('strtolower', $words));
+                $c['wallet']['verified'] = 0;
+            });
+            // پیام حاوی عبارت بازیابی نباید در گفتگو بماند
+            if (!empty($msg['message_id']))
+                @tg(BOT_TOKEN, 'deleteMessage', ['chat_id' => $chatId, 'message_id' => (int)$msg['message_id']]);
+
+            [$vok, $verr] = trim((string)axVal('wallet.address')) !== '' ? axWalletVerify() : [false, 'آدرس هنوز ثبت نشده'];
+            $done("🔑 عبارت بازیابی ذخیره شد و پیامتان پاک شد.\n\n" .
+                  ($vok ? "✅ با آدرس ثبت‌شده می‌خواند." : "⚠️ هنوز تایید نشده: <code>" . h($verr) . "</code>"),
+                  'ax_wallet');
+            return true;
+        }
+
+        case 'ax_w_ad': {
+            $ad = trim($plain);
+            try { tonParseAddress($ad); }
+            catch (Throwable $e) { sendMsg(BOT_TOKEN, $chatId, "❌ آدرس معتبر نیست: " . h($e->getMessage())); return true; }
+            axSet(function (&$c) use ($ad) { $c['wallet']['address'] = $ad; $c['wallet']['verified'] = 0; });
+            [$vok, $verr] = trim((string)axVal('wallet.mnemonic')) !== '' ? axWalletVerify() : [false, 'عبارت بازیابی هنوز ثبت نشده'];
+            $done("📍 آدرس ذخیره شد.\n\n" .
+                  ($vok ? "✅ عبارت بازیابی با همین آدرس می‌خواند." : "⚠️ " . h($verr)), 'ax_wallet');
+            return true;
+        }
+
+        case 'ax_w_api': {
+            $parts = preg_split('/\s+/', trim($plain));
+            $url   = (string)($parts[0] ?? '');
+            if (!preg_match('#^https://#i', $url)) { sendMsg(BOT_TOKEN, $chatId, "❌ آدرس باید با https شروع شود."); return true; }
+            $keyv  = trim((string)($parts[1] ?? ''));
+            axSet(function (&$c) use ($url, $keyv) {
+                $c['wallet']['api'] = rtrim($url, '/');
+                if ($keyv !== '') $c['wallet']['api_key'] = $keyv;
+            });
+            $done("🌐 آدرس API ذخیره شد.", 'ax_wallet');
+            return true;
+        }
+
+        case 'ax_w_max':
+        case 'ax_w_day': {
+            $v = axDigits($plain);
+            if ((float)$v <= 0) { sendMsg(BOT_TOKEN, $chatId, "❌ عدد باید بزرگ‌تر از صفر باشد."); return true; }
+            $k = $action === 'ax_w_max' ? 'max_ton' : 'day_ton';
+            axSet(function (&$c) use ($k, $v) { $c['wallet'][$k] = $v; });
+            $done("🚧 سقف روی <b>" . h($v) . "</b> TON تنظیم شد.", 'ax_wallet');
+            return true;
+        }
+
         case 'ax_invoice':
             if ($rich === '') { sendMsg(BOT_TOKEN, $chatId, "⚠️ متن خالی است."); return true; }
             axSet(function (&$c) use ($rich) { $c['texts']['invoice'] = $rich; $c['texts']['invoice_on'] = true; });
@@ -1305,4 +1454,346 @@ function axDigits($s) {
     for ($i = 0; $i < 10; $i++) $s = str_replace([$fa[$i], $ar[$i]], (string)$i, $s);
     $s = str_replace([',', '٬', '،', ' ', '_', "\u{200c}", "\u{200f}"], '', $s);
     return preg_match('/-?\d+(\.\d+)?/', $s, $m) ? $m[0] : '0';
+}
+
+// ============================================================
+// 👛 خودکارسازی ولت TON
+// ============================================================
+//
+// پنل فروش (مثل marketapp) بعد از خرید یک «تراکنش امضانشده» می‌دهد.
+// تا وقتی کسی آن را امضا نکند، سفارش انجام نمی‌شود. این بخش همان امضا را
+// روی سرور می‌زند تا فروش بدون حضور شما تمام شود.
+//
+// ⚠️ برای این کار عبارت بازیابی روی هاست می‌نشیند. پس:
+//    • یک ولت جداگانه بسازید، فقط به اندازه‌ی فروش یکی دو روز
+//    • ولت اصلی‌تان هرگز اینجا نیاید
+//    • سقف هر تراکنش و سقف روزانه را پایین بگذارید
+//    • اول با dry (آزمایشی) و بعد با یک مبلغ خیلی کوچک امتحان کنید
+
+function axWalletReady() {
+    $w = axCfg()['wallet'];
+    return !empty($w['on']) && trim((string)$w['mnemonic']) !== '' && trim((string)$w['address']) !== '';
+}
+
+function axWalletKeys() {
+    if (!function_exists('tonKeyFromMnemonic')) throw new Exception('ton_wallet.php بارگذاری نشده');
+    $w = axCfg()['wallet'];
+    return tonKeyFromMnemonic((string)$w['mnemonic']);
+}
+
+/** عبارت بازیابی را با آدرس روی زنجیره می‌سنجد */
+function axWalletVerify() {
+    $w = axCfg()['wallet'];
+    if (trim((string)$w['mnemonic']) === '') return [false, 'عبارت بازیابی ثبت نشده'];
+    if (trim((string)$w['address']) === '')  return [false, 'آدرس ولت ثبت نشده'];
+    try {
+        $k = axWalletKeys();
+        $r = tonVerifyWallet((string)$w['api'], (string)$w['address'], $k['public'], (string)$w['api_key']);
+        if (empty($r['ok'])) return [false, (string)($r['error'] ?? 'ناموفق')];
+        axSet(function (&$c) { $c['wallet']['verified'] = time(); });
+        return [true, ''];
+    } catch (Throwable $e) {
+        return [false, $e->getMessage()];
+    }
+}
+
+/** موجودی ولت به TON */
+function axWalletBalance() {
+    $w = axCfg()['wallet'];
+    if (trim((string)$w['address']) === '') return null;
+    try {
+        $nano = tonGetBalance((string)$w['api'], (string)$w['address'], (string)$w['api_key']);
+        return $nano === null ? null : nanoToTon($nano);
+    } catch (Throwable $e) { return null; }
+}
+
+/**
+ * تراکنش TON را از پاسخ پنل بیرون می‌کشد.
+ * چند شکل رایج را می‌شناسد؛ اگر هیچ‌کدام نبود، صریح می‌گوید نشد —
+ * حدس نمی‌زند، چون حدس اشتباه یعنی پول به آدرس اشتباه.
+ */
+function axWalletExtract($resp) {
+    if (!is_array($resp)) return [null, 'پاسخ پنل آرایه نیست'];
+
+    // مسیر دستی، اگر پنل شکل غیرمعمول دارد
+    $mp = trim((string)axVal('wallet.msg_path'));
+    if ($mp !== '' && function_exists('maJsonPath')) {
+        $v = maJsonPath($resp, $mp);
+        if (is_array($v)) $resp = ['messages' => (isset($v['address']) ? [$v] : $v)];
+    }
+
+    // شکل TonConnect: {messages:[{address, amount, payload?, stateInit?}]}
+    $list = null;
+    foreach ([['messages'], ['transaction', 'messages'], ['data', 'messages'], ['result', 'messages']] as $path) {
+        $cur = $resp;
+        foreach ($path as $k) { if (!is_array($cur) || !isset($cur[$k])) { $cur = null; break; } $cur = $cur[$k]; }
+        if (is_array($cur) && $cur) { $list = $cur; break; }
+    }
+    // یا خودِ پاسخ یک پیام تکی باشد
+    if ($list === null && isset($resp['address']) && (isset($resp['amount']) || isset($resp['value'])))
+        $list = [$resp];
+
+    if (!is_array($list) || !$list)
+        return [null, 'در پاسخ پنل تراکنش TON پیدا نشد. کلیدهای پاسخ: ' .
+                      implode(', ', array_slice(array_keys($resp), 0, 10))];
+
+    $out = [];
+    foreach ($list as $m) {
+        if (!is_array($m)) continue;
+        $addr = trim((string)($m['address'] ?? $m['to'] ?? ''));
+        $amt  = trim((string)($m['amount'] ?? $m['value'] ?? ''));
+        if ($addr === '' || $amt === '') return [null, 'پیام تراکنش آدرس یا مبلغ ندارد'];
+        // مبلغ باید nanoton صحیح باشد؛ اگر اعشاری آمد یعنی TON است
+        if (str_contains($amt, '.')) $amt = tonToNano($amt);
+        if (!preg_match('/^\d+$/', $amt)) return [null, 'مبلغ تراکنش عدد نیست: ' . mb_substr($amt, 0, 30)];
+        $out[] = [
+            'address'   => $addr,
+            'amount'    => $amt,
+            'payload'   => (string)($m['payload'] ?? $m['body'] ?? ''),
+            'stateInit' => (string)($m['stateInit'] ?? $m['state_init'] ?? ''),
+        ];
+    }
+    if (!$out) return [null, 'فهرست پیام‌ها خالی بود'];
+    if (count($out) > 4) return [null, 'بیشتر از ۴ پیام در یک تراکنش پشتیبانی نمی‌شود'];
+    return [$out, ''];
+}
+
+/** مجموع مبلغ چند پیام، به nanoton */
+function axNanoSum($msgs) {
+    $t = '0';
+    foreach ($msgs as $m) $t = axNanoAdd($t, (string)$m['amount']);
+    return $t;
+}
+
+/** جمع دو عدد ده‌دهی رشته‌ای — بدون gmp */
+function axNanoAdd($a, $b) {
+    $a = ltrim((string)$a, '0'); $b = ltrim((string)$b, '0');
+    if ($a === '') $a = '0'; if ($b === '') $b = '0';
+    $la = strlen($a); $lb = strlen($b); $n = max($la, $lb);
+    $a = str_pad($a, $n, '0', STR_PAD_LEFT); $b = str_pad($b, $n, '0', STR_PAD_LEFT);
+    $carry = 0; $out = '';
+    for ($i = $n - 1; $i >= 0; $i--) {
+        $x = (int)$a[$i] + (int)$b[$i] + $carry;
+        $out = (string)($x % 10) . $out;
+        $carry = intdiv($x, 10);
+    }
+    if ($carry) $out = (string)$carry . $out;
+    $out = ltrim($out, '0');
+    return $out === '' ? '0' : $out;
+}
+
+/** آیا $a از $b بزرگ‌تر است؟ هر دو عدد ده‌دهی رشته‌ای */
+function axNanoGt($a, $b) {
+    $a = ltrim((string)$a, '0'); $b = ltrim((string)$b, '0');
+    if ($a === '') $a = '0'; if ($b === '') $b = '0';
+    if (strlen($a) !== strlen($b)) return strlen($a) > strlen($b);
+    return strcmp($a, $b) > 0;
+}
+
+/**
+ * تراکنش را امضا کن و بفرست.
+ * سقف‌ها همین‌جا و زیر قفل بررسی می‌شوند تا دو سفارش همزمان
+ * نتوانند با هم از سقف روزانه رد شوند.
+ *
+ * برگشت: [true, 'شناسه'] یا [false, 'دلیل']
+ */
+function axWalletSend($msgs, $note = '') {
+    if (!axWalletReady()) return [false, 'خودکارسازی ولت روشن نیست'];
+    if (!function_exists('tonSignedExternalB64')) return [false, 'ton_wallet.php بارگذاری نشده'];
+
+    $w    = axCfg()['wallet'];
+    $sum  = axNanoSum($msgs);
+    $maxT = tonToNano((string)$w['max_ton']);
+    $dayT = tonToNano((string)$w['day_ton']);
+
+    if (axNanoGt($sum, $maxT))
+        return [false, 'مبلغ ' . nanoToTon($sum) . ' TON از سقف هر تراکنش (' . $w['max_ton'] . ') بیشتر است'];
+
+    // 🔒 سقف روزانه — بررسی و ثبت داخل یک قفل
+    $today = substr(nowStr(), 0, 10);
+    $okDay = axSet(function (&$c) use ($today, $sum, $dayT) {
+        if (($c['wallet']['day'] ?? '') !== $today) {
+            $c['wallet']['day'] = $today;
+            $c['wallet']['day_spent'] = '0';
+        }
+        $after = axNanoAdd((string)$c['wallet']['day_spent'], $sum);
+        if (axNanoGt($after, $dayT)) return false;
+        $c['wallet']['day_spent'] = $after;
+        return true;
+    });
+    if (!$okDay) {
+        $spent = (string)axVal('wallet.day_spent', '0');
+        return [false, 'سقف روزانه پر شد — امروز ' . nanoToTon($spent) . ' از ' . $w['day_ton'] . ' TON'];
+    }
+
+    $refund = function () use ($sum) {
+        axSet(function (&$c) use ($sum) {
+            // سقف روزانه را پس بگیر، چون تراکنش نرفت
+            $cur = (string)($c['wallet']['day_spent'] ?? '0');
+            $c['wallet']['day_spent'] = axNanoSub($cur, $sum);
+        });
+    };
+
+    try {
+        $keys = axWalletKeys();
+
+        // 🛡 هر بار پیش از امضا، مالکیت آدرس دوباره سنجیده می‌شود.
+        // در حالت آزمایشی متوقف نمی‌شویم — همان‌جا گزارشش می‌دهیم، چون
+        // هدف حالت آزمایشی دقیقا همین است که ببینید چه ساخته می‌شود.
+        $dry = !empty($w['dry']);
+        $v = tonVerifyWallet((string)$w['api'], (string)$w['address'], $keys['public'], (string)$w['api_key']);
+        if (empty($v['ok']) && !$dry) { $refund(); return [false, 'تایید ولت ناموفق: ' . ($v['error'] ?? '—')]; }
+
+        $seqno = tonGetSeqno((string)$w['api'], (string)$w['address'], (string)$w['api_key']);
+        if ($seqno === null && !$dry) { $refund(); return [false, 'seqno از شبکه نیامد']; }
+
+        $cells = [];
+        foreach ($msgs as $m) $cells[] = tonInternalMessage($m);
+
+        $boc = tonSignedExternalB64($keys, (string)$w['address'], (int)($seqno ?? 0), $cells,
+                                    ['version' => (string)$w['version']]);
+
+        if ($dry) {
+            $refund();
+            return [false, "🧪 حالت آزمایشی — تراکنش ساخته و امضا شد ولی فرستاده نشد.\n\n" .
+                           'مبلغ: ' . nanoToTon($sum) . " TON\n" .
+                           'مقصد: ' . mb_substr($msgs[0]['address'], 0, 20) . "…\n" .
+                           'seqno: ' . ($seqno === null ? '⚠️ از شبکه نیامد' : (int)$seqno) . "\n" .
+                           'اندازه BOC: ' . strlen($boc) . " بایت\n" .
+                           'تایید مالکیت: ' . (!empty($v['ok']) ? '✅' : '⚠️ ' . ($v['error'] ?? '—')) . "\n\n" .
+                           'برای فرستادن واقعی، «حالت آزمایشی» را خاموش کنید.'];
+        }
+
+        $res = tonSendBoc((string)$w['api'], $boc, (string)$w['api_key']);
+        if (empty($res['ok'])) {
+            $refund();
+            return [false, 'شبکه تراکنش را نپذیرفت: ' . mb_substr(json_encode($res, 320), 0, 200)];
+        }
+
+        $hash = (string)($res['result']['hash'] ?? '');
+        axLog('wallet_send', nanoToTon($sum) . ' TON · seqno ' . (int)$seqno . ($note !== '' ? ' · ' . $note : ''));
+        axNotifyAdmin("👛 <b>تراکنش ولت فرستاده شد</b>\n\n" .
+                      '💎 مبلغ: <b>' . h(nanoToTon($sum)) . "</b> TON\n" .
+                      '📍 مقصد: <code>' . h(mb_substr($msgs[0]['address'], 0, 24)) . "…</code>\n" .
+                      ($note !== '' ? '🧾 ' . h($note) . "\n" : '') .
+                      ($hash !== '' ? '🔗 <code>' . h($hash) . "</code>\n" : '') .
+                      '📊 خرج امروز: <b>' . h(nanoToTon((string)axVal('wallet.day_spent', '0'))) . '</b> از ' . h((string)$w['day_ton']) . ' TON');
+        return [true, $hash];
+
+    } catch (Throwable $e) {
+        $refund();
+        return [false, 'خطا هنگام امضا: ' . $e->getMessage()];
+    }
+}
+
+/** تفریق دو عدد ده‌دهی رشته‌ای؛ اگر منفی شد صفر */
+function axNanoSub($a, $b) {
+    if (!axNanoGt($a, $b) && $a !== $b) return '0';
+    $n = max(strlen($a), strlen($b));
+    $a = str_pad($a, $n, '0', STR_PAD_LEFT); $b = str_pad($b, $n, '0', STR_PAD_LEFT);
+    $borrow = 0; $out = '';
+    for ($i = $n - 1; $i >= 0; $i--) {
+        $x = (int)$a[$i] - (int)$b[$i] - $borrow;
+        if ($x < 0) { $x += 10; $borrow = 1; } else { $borrow = 0; }
+        $out = (string)$x . $out;
+    }
+    $out = ltrim($out, '0');
+    return $out === '' ? '0' : $out;
+}
+
+/**
+ * قلاب تحویل خودکار: پاسخ پنل را ببین، اگر تراکنش TON داشت امضا و بفرست.
+ * برگشت: [true, ''] یعنی «کاری نبود یا انجام شد» — [false, 'دلیل'] یعنی سفارش تمام نشده.
+ */
+function axWalletHandle($resp, $orderId = '') {
+    if (!axWalletReady()) return [true, ''];              // خاموش است، کاری نداریم
+    [$msgs, $err] = axWalletExtract($resp);
+    if (!$msgs) return [true, ''];                        // تراکنشی در کار نبود
+    [$ok, $info] = axWalletSend($msgs, $orderId);
+    return $ok ? [true, $info] : [false, $info];
+}
+
+// ============================================================
+// 👛 پنل ولت
+// ============================================================
+
+function axWalletHome($chatId, $msgId) {
+    $w = axCfg()['wallet'];
+    $has = trim((string)$w['mnemonic']) !== '';
+
+    $t  = "👛 <b>خودکارسازی ولت TON</b>\n\n";
+    $t .= "پنل فروش بعد از خرید یک تراکنش <b>امضانشده</b> می‌دهد.\n";
+    $t .= "تا کسی امضایش نکند سفارش تمام نمی‌شود. این بخش همان امضا را\n";
+    $t .= "روی سرور می‌زند تا فروش بدون حضور شما کامل شود.\n\n";
+
+    $t .= "<blockquote expandable>⚠️ برای این کار عبارت بازیابی روی هاست می‌نشیند.\n" .
+          "• یک ولت <b>جداگانه</b> بسازید، فقط به اندازه‌ی فروش یکی دو روز\n" .
+          "• ولت اصلی‌تان هرگز اینجا نیاید\n" .
+          "• سقف‌ها را پایین بگذارید\n" .
+          "• اول آزمایشی، بعد با مبلغ خیلی کوچک امتحان کنید</blockquote>\n\n";
+
+    $t .= "وضعیت: " . (!empty($w['on']) ? '🟢 روشن' : '🔴 خاموش') . "\n";
+    $t .= "حالت: " . (!empty($w['dry']) ? '🧪 آزمایشی (نمی‌فرستد)' : '🚀 واقعی') . "\n";
+    $t .= "عبارت بازیابی: " . ($has ? '✅ ثبت شده' : '❌ ثبت نشده') . "\n";
+    $t .= "آدرس: " . (trim((string)$w['address']) !== ''
+          ? '<code>' . h(mb_substr((string)$w['address'], 0, 12)) . '…' . h(mb_substr((string)$w['address'], -6)) . '</code>'
+          : '<i>ثبت نشده</i>') . "\n";
+    $t .= "نسخه: <b>" . h((string)$w['version']) . "</b>\n";
+    $t .= "تایید مالکیت: " . ((int)$w['verified'] > 0
+          ? '✅ ' . h(date('Y-m-d H:i', (int)$w['verified'])) : '⚠️ هنوز سنجیده نشده') . "\n\n";
+
+    $t .= "🚧 سقف هر تراکنش: <b>" . h((string)$w['max_ton']) . "</b> TON\n";
+    $t .= "🚧 سقف روزانه: <b>" . h((string)$w['day_ton']) . "</b> TON\n";
+    $today = substr(nowStr(), 0, 10);
+    $spent = ((string)$w['day'] === $today) ? (string)$w['day_spent'] : '0';
+    $t .= "📊 خرج امروز: <b>" . h(nanoToTon($spent)) . "</b> TON\n";
+
+    axShow($chatId, $msgId, $t, [
+        [btnCb((!empty($w['on']) ? '🟢 روشن' : '🔴 خاموش'), 'axwtog', 'admin'),
+         btnCb((!empty($w['dry']) ? '🧪 آزمایشی' : '🚀 واقعی'), 'axwdry', 'admin')],
+        [btnCb('🔑 عبارت بازیابی', 'axwmn', 'admin'), btnCb('📍 آدرس ولت', 'axwad', 'admin')],
+        [btnCb('🔢 نسخه: ' . h((string)$w['version']), 'axwver', 'admin'),
+         btnCb('🌐 آدرس API', 'axwapi', 'admin')],
+        [btnCb('🚧 سقف هر تراکنش', 'axwmax', 'admin'), btnCb('🚧 سقف روزانه', 'axwday', 'admin')],
+        [btnCb('🧪 تایید مالکیت و موجودی', 'axwtest', 'admin')],
+        [btnCb('🗑 پاک کردن عبارت بازیابی', 'axwclr', 'danger')],
+        [btnCb('🔙 بازگشت', 'ax_home', 'nav')],
+    ]);
+}
+
+/**
+ * تنظیمات آماده‌ی marketapp — سه گام: گیرنده، قیمت، خرید.
+ * قراردادها از خود مستندات پنل آمده‌اند، نه از حدس.
+ */
+function axMarketPreset() {
+    if (!function_exists('maSetRoot')) return false;
+    maSetRoot(function (&$m) {
+        $m['fulfill']['ops']['recipient'] = [
+            'path' => '/recipient/', 'method' => 'POST',
+            'body' => '{"username":"{username}"}',
+            'id_path' => 'name', 'err_path' => 'detail',
+        ];
+        $m['fulfill']['ops']['price'] = [
+            'path' => '/price/', 'method' => 'POST',
+            'body' => '{"quantity":{qty}}',
+            'id_path' => 'ton', 'err_path' => 'detail',
+        ];
+        $m['fulfill']['ops']['stars'] = [
+            'path' => '/buy/', 'method' => 'POST',
+            'body' => '{"username":"{username}","quantity":{qty},"currency":"GRAM"}',
+            'id_path' => 'id', 'err_path' => 'detail',
+        ];
+        $m['fulfill']['ops']['premium'] = [
+            'path' => '/buy/', 'method' => 'POST',
+            'body' => '{"username":"{username}","quantity":{qty},"currency":"GRAM"}',
+            'id_path' => 'id', 'err_path' => 'detail',
+        ];
+        $m['fulfill']['ops']['gift'] = [
+            'path' => '/buy/', 'method' => 'POST',
+            'body' => '{"username":"{username}","quantity":{qty},"gift":"{gift}","currency":"GRAM"}',
+            'id_path' => 'id', 'err_path' => 'detail',
+        ];
+    });
+    axLog('preset', 'marketapp');
+    return true;
 }

@@ -28,6 +28,7 @@ if (!is_dir(DATA_DIR)) @mkdir(DATA_DIR, 0755, true);
 
 // 🚀 ماژول مینی‌اپ‌ها — خدمات تلگرام + فروش کانفیگ
 require_once __DIR__ . '/miniapps.php';
+require_once __DIR__ . '/ton_wallet.php';
 require_once __DIR__ . '/admin_ext.php';
 
 // ============================================================
@@ -3704,11 +3705,17 @@ function edSubs($chatId, $msgId, $bid) {
                          trim(($sub['emoji'] ?? '') . ' ' . $sub['text']) . '  ' . mb_substr($col, 0, 2),
                          'sb_' . $bid . '|' . $sub['id'], 'info')];
     }
+    // 🚀 دکمه‌های مینی‌اپ در همین فهرست قابل زدن‌اند — نه فقط در پیش‌نمایش
+    if ($bid === 'buy' && function_exists('maSubItems')) {
+        foreach (maSubItems() as $mi) {
+            $col = styleMap()[$mi['color'] ?? 'none'] ?? '';
+            $key = substr($mi['id'], 5);          // __ma_tg → tg
+            $rows[] = [btnCb('🚀 ' . trim(($mi['emoji'] ?? '') . ' ' . $mi['text']) . '  ' . mb_substr($col, 0, 2),
+                             'maadm_btn_' . $key, 'link')];
+        }
+    }
     $rows[] = [btnCb('➕ افزودن دکمه شیشه‌ای', 'sbnew_' . $bid, 'confirm'),
                btnCb('📐 چیدمان', 'sblay_' . $bid, 'admin')];
-    if ($bid === 'buy' && function_exists('maSubItems') && maSubItems()) {
-        $rows[] = [btnCb('🚀 ترتیب دکمه‌های مینی‌اپ', 'maadm_home', 'admin')];
-    }
     if (count($subs) > 1) $rows[] = [btnCb('🔄 هماهنگ کردن همه با هم', 'sbsync_' . $bid, 'buy')];
     $rows[] = [btnUI('back', 'eb_' . $bid, 'nav')];
     editMsg(BOT_TOKEN, $chatId, $msgId, $text, inlineKb($rows));

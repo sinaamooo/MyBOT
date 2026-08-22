@@ -1193,6 +1193,19 @@ function maAutoFulfill($orderId, $manual = false) {
         return [false, $msg];
     }
 
+    // 👛 اگر پنل تراکنش امضانشده داده، همین‌جا امضا و ارسالش می‌کنیم
+    if (function_exists('axWalletHandle')) {
+        [$wok, $winfo] = axWalletHandle($resp, $orderId);
+        if (!$wok) {
+            MaOrder::set($orderId, function (&$x) use ($winfo) {
+                $x['sending'] = 0; $x['last_error'] = $winfo;
+            });
+            maAutoFailNotice($orderId, 'تراکنش ولت انجام نشد: ' . $winfo);
+            return [false, $winfo];
+        }
+        if ($winfo !== '') MaOrder::set($orderId, function (&$x) use ($winfo) { $x['ton_tx'] = $winfo; });
+    }
+
     $ref = '';
     if (!empty($cfgOp['id_path'])) {
         $v = maJsonPath($resp, (string)$cfgOp['id_path']);
@@ -2397,8 +2410,10 @@ function maAdmBtn($chatId, $msgId, $key) {
         [btnCb('🎨 رنگ: ' . (styleMap()[$b['color'] ?? 'none'] ?? ''), 'maadm_bc_' . $key, 'admin')],
         [btnCb('✨ ایموجی پریمیوم', 'maadm_bi_' . $key, 'admin'), btnCb('🔢 ترتیب', 'maadm_bo_' . $key, 'admin')],
         [btnCb('📍 شماره ردیف', 'maadm_br_' . $key, 'admin')],
-        [btnCb(UT('back'), 'maadm_app_' . $key, 'nav')],
     ];
+    // اگر ادغام روشن است، راه برگشت طبیعی همان صفحه‌ی چیدمان است
+    if (maMergeOn()) $rows[] = [btnCb('📐 چیدمان دکمه‌های ثبت سفارش', 'sbs_buy', 'nav')];
+    $rows[] = [btnCb(UT('back'), 'maadm_app_' . $key, 'nav')];
     editMsg(BOT_TOKEN, $chatId, $msgId, $text, inlineKb($rows));
 }
 
