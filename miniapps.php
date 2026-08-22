@@ -1204,6 +1204,7 @@ function maAutoFulfill($orderId, $manual = false) {
     });
 
     $o = MaOrder::get($orderId);
+    if (function_exists('axReportOrder')) axReportOrder($o, 'done');
     sendMsg(BOT_TOKEN, $o['user_id'],
         "✅ <b>سفارش شما انجام شد</b>\n\n" .
         '📦 ' . h(maOrderTitle($o)) . "\n" .
@@ -1738,6 +1739,19 @@ function maInvoiceText($o) {
     $a = maGet($o['app']);
     $bal = (float)(getUser($o['user_id'])['balance'] ?? 0);
 
+    // 🧾 متن سفارشی ادمین — با ایموجی پریمیوم و نقل‌قول، عینا مثل ربات مادر
+    if (function_exists('axVal') && !empty(axVal('texts.invoice_on'))) {
+        $tpl = (string)axVal('texts.invoice');
+        if (trim($tpl) !== '') {
+            return axFill($tpl, $o, [
+                '{unit_price}' => fmtNum($o['unit_price']),
+                '{balance}'    => fmtNum($bal),
+                '{title}'      => h($a['title']),
+                '{note}'       => h((string)($a['note'] ?? '')),
+            ]);
+        }
+    }
+
     $t  = '🧾 <b>فاکتور ' . h($a['title']) . "</b>\n\n";
     $t .= '📦 ' . h(maOrderTitle($o)) . "\n";
     if ((float)$o['qty'] > 1 || trim((string)$o['unit']) !== '') {
@@ -1821,15 +1835,66 @@ function maMarkPaid($id, $payMethod) {
         '🔑 <code>' . h($o['id']) . "</code>\n\n" .
         (trim((string)$a['note']) !== '' ? '💡 ' . h($a['note']) : '⏳ سفارش شما در حال انجام است.'));
 
-    // 🤖 اگر این سرویس تحویل خودکار دارد، همین حالا اقدام کن
+    // 📊 گزارش این مینی‌اپ در کانال مدیر
+    if (function_exists('axReportOrder')) axReportOrder($o, 'paid');
+
+    // 🚚 زنجیره‌ی تحویل: مخزن → دستی → پنل خودکار → دست ادمین
+    return maDeliver($o);
+}
+
+/**
+ * تصمیم می‌گیرد این سفارش چطور تحویل شود.
+ * ترتیب عمدی است: مخزن سریع‌ترین است، دستی صریح‌ترین،
+ * و پنل خودکار آخرین گزینه‌ی ماشینی. هیچ‌کدام دو بار اجرا نمی‌شود.
+ */
+function maDeliver($o) {
+    $id = $o['id'];
+
+    // 1️⃣ مخزن کانفیگ — اگر برای این محصول موجودی گذاشته‌ایم
+    if (function_exists('axStockCount') && axStockCount($o['item_id']) > 0
+        && !empty(axVal('stock.on'))) {
+        $claimed = MaOrder::set($id, function (&$x) {
+            if (!empty($x['sending']) || ($x['status'] ?? '') === MaOrder::DONE) return false;
+            $x['sending'] = time();
+            return true;
+        });
+        if ($claimed) {
+            [$ok, $err] = axStockDeliver($o);
+            MaOrder::set($id, function (&$x) use ($ok, $err) {
+                $x['sending'] = 0;
+                if ($ok) {
+                    $x['status'] = MaOrder::DONE;
+                    $x['delivered_at'] = nowStr();
+                    $x['delivered_by'] = 'stock';
+                } else {
+                    $x['last_error'] = $err;
+                }
+            });
+            if ($ok) {
+                $o = MaOrder::get($id);
+                if (function_exists('axReportOrder')) axReportOrder($o, 'done');
+                return $o;
+            }
+        }
+    }
+
+    // 2️⃣ سفارش دستی — گیفت‌هایی مثل تدی، یا خرید تون
+    if (function_exists('axIsManual') && axIsManual($o['item_id'])) {
+        [$ok, $err] = axManualPost($o);
+        if (!$ok) maNotifyAdmin($o, '🎁 <b>سفارش دستی — فرم به کانال نرفت</b>' .
+                                    ($err !== '' ? "\n<code>" . h($err) . '</code>' : ''));
+        return MaOrder::get($id);
+    }
+
+    // 3️⃣ پنل فروش خودکار
     [$op] = maAutoOp($o);
     $f = maCfg()['fulfill'] ?? [];
     if ($op && !empty($f['on']) && !empty($f['auto_pay'])) {
-        [$ok] = maAutoFulfill($id);
-        if ($ok) return MaOrder::get($id);      // تحویل شد، دیگر لازم نیست ادمین کاری کند
-        return MaOrder::get($id);               // ناموفق — ادمین از maAutoFailNotice خبردار شد
+        maAutoFulfill($id);                     // موفق یا ناموفق، ادمین خبردار می‌شود
+        return MaOrder::get($id);
     }
 
+    // 4️⃣ هیچ‌کدام — دست ادمین
     maNotifyAdmin($o, '💸 <b>سفارش پرداخت‌شده — آماده تحویل</b>');
     return $o;
 }

@@ -28,6 +28,7 @@ if (!is_dir(DATA_DIR)) @mkdir(DATA_DIR, 0755, true);
 
 // 🚀 ماژول مینی‌اپ‌ها — خدمات تلگرام + فروش کانفیگ
 require_once __DIR__ . '/miniapps.php';
+require_once __DIR__ . '/admin_ext.php';
 
 // ============================================================
 // 📚 ذخیره‌سازی اتمیک
@@ -2106,6 +2107,11 @@ function showOrderStatus($uid, $chatId, $code, $replyTo = null) {
 
     $rows = [];
     if ($stage === 'pending')  $rows[] = [btnCb(UT('receipt'), 'rcpt_' . $o['id'], 'confirm')];
+    // 👥 منابع عضوگیری — پیوی‌ها و گروه‌ها
+    if (in_array($stage, ['running', 'paused', 'done'], true) && function_exists('axMembersButton')
+        && Campaign::forOrder($o['id'])) {
+        if ($b = axMembersButton($o['id'])) $rows[] = [$b];
+    }
     if ($stage === 'rejected' || $stage === 'paused') $rows[] = [btnUI('support', 'menu_support', 'info')];
 
     panelShow($uid, $chatId, 'menu', $text, inlineKb($rows), $replyTo);
@@ -2139,7 +2145,12 @@ function supMainBtn($which, $cb) {
 
 /** پشتیبانی — فقط دو دکمه: مستقیم و غیر مستقیم */
 function showSupport($uid, $chatId, $extra = [], $replyTo = null) {
-    $rows = [[supMainBtn('direct', 'sup_direct')], [supMainBtn('indirect', 'sup_list')]];
+    $d = supMainBtn('direct', 'sup_direct');
+    $i = supMainBtn('indirect', 'sup_list');
+    // چیدمان دکمه‌های شیشه‌ای پشتیبانی — از پنل ← 🧩 افزونه ← ✍️ متن‌ها
+    $rows = (function_exists('axVal') && empty(axVal('labels.sup_stack')))
+        ? [[$d, $i]]                       // کنار هم
+        : [[$d], [$i]];                    // زیر هم
     foreach ($extra as $r) $rows[] = $r;
     panelShow($uid, $chatId, 'menu', T('support'), inlineKb($rows), $replyTo);
 }
@@ -3222,6 +3233,7 @@ function admHome($chatId, $msgId = null) {
         [btnCb('🛒 محصولات', 'eprods', 'admin'),
          btnCb('🤖 ربات‌های زیرمجموعه', 'eupload', 'admin')],
         [btnCb('📢 گزارش خرید در گروه', 'adm_reports', 'admin')],
+        [btnCb('🧩 افزونه — مخزن، سفارش دستی، سود', 'ax_home', 'admin')],
         [btnCb('💠 درگاه پرداخت', 'adm_gw', 'admin')],
         [btnCb('🔒 عضویت اجباری ربات مادر', 'adm_join', 'admin')],
         [btnCb('🔒 قفل‌های عضویت اجباری', 'adm_locks', 'admin')],
@@ -4378,6 +4390,7 @@ function masterHandle($update) {
 
         // --- 🚀 مینی‌اپ‌ها (سفارش، پرداخت، پنل مدیریتشان) ---
         if (maCallback($data, $uid, $chatId, $msgId, $cbId, $isAdmin)) return;
+        if (axCallback($data, $uid, $chatId, $msgId, $cbId, $isAdmin)) return;
 
         // --- دکمه‌های منو در حالت شیشه‌ای ---
         if ($data === 'tariff') { answerCb(BOT_TOKEN, $cbId); showTariff($uid, $chatId); return; }
@@ -5681,6 +5694,7 @@ function masterHandle($update) {
 
     // 🚀 گفتگوهای مینی‌اپ — رسید کاربر، تحویل ادمین، ویرایش‌های پنل
     if (maStateHandle($action, $sd, $msg, $uid, $chatId)) return;
+    if (axStateHandle($action, $sd, $msg, $uid, $chatId)) return;
 
     if ($action === 'sb_code') {
         $pid = $sd['pid'] ?? '';
@@ -7307,7 +7321,8 @@ if (isset($_GET['cron'])) {
     if (!hash_equals(CRON_KEY, (string)$_GET['cron'])) { echo 'forbidden'; exit; }
     echo 'deleted: ' . processDeleteQueue(200) . ' · gw: ' . gwPoll(50) .
          ' · campaigns: ' . campaignCleanup() .
-         ' · miniapp: ' . maAutoQueue(10);
+         ' · miniapp: ' . maAutoQueue(10) .
+         ' · rates: ' . count(axRatesRefresh());
     exit;
 }
 
