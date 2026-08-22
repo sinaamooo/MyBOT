@@ -2374,8 +2374,13 @@ def join_gate(user_id):
       <div class="grid2" style="margin-top:13px">
         <div><label>آدرس API شبکه</label>
           <input name="w_api" dir="ltr" value="<?= h((string)$W['api']) ?>"></div>
-        <div><label>کلید API شبکه <span class="muted">(اختیاری)</span></label>
-          <input name="w_apikey" dir="ltr" placeholder="<?= trim((string)$W['api_key']) !== '' ? 'ثبت شده' : 'toncenter بدون کلید هم کار می‌کند ولی کند' ?>"></div>
+        <div><label>کلید API شبکه
+            <?= trim((string)$W['api_key']) !== '' ? '<span class="badge green">ثبت شده</span>'
+                                                   : '<span class="badge amber">توصیه می‌شود</span>' ?></label>
+          <input name="w_apikey" dir="ltr" placeholder="<?= trim((string)$W['api_key']) !== '' ? 'ثبت شده — برای تغییر، کلید تازه بگذارید' : 'از @tonapibot در تلگرام، رایگان' ?>">
+          <p class="muted">بدون کلید، toncenter فقط حدود <b>یک درخواست در ثانیه</b> می‌دهد و
+          خطای ۴۲۹ می‌گیرید. از <code>@tonapibot</code> در تلگرام یک کلید mainnet
+          رایگان بگیرید — یک دقیقه طول می‌کشد و همه‌چیز روان می‌شود.</p></div>
       </div>
 
       <div class="grid2" style="margin-top:13px">

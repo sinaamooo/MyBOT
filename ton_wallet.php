@@ -498,11 +498,15 @@ function tonVerifyWallet($base, $address, $publicKey, $apiKey) {
     };
 
     // مسیر runGetMethod نسبت به همان base داده می‌شود، نه با پیشوند ثابت
-    [$r, $err] = tonApiCall($base, '/runGetMethod', 'POST', [
+    [$r, $err] = tonApiCallRetry($base, '/runGetMethod', 'POST', [
         'address' => $address, 'method' => 'get_public_key', 'stack' => [],
     ], $apiKey);
-    if (!$r) return $withState(['ok' => false, 'error' => 'پاسخ شبکه نامعتبر: ' . mb_substr((string)$err, 0, 200),
-                       'raw' => (string)$err]);
+    if (!$r) {
+        if (tonIsRateLimited($err))
+            return ['ok' => false, 'rate' => true, 'raw' => (string)$err, 'error' => tonRateText()];
+        return $withState(['ok' => false, 'error' => 'پاسخ شبکه نامعتبر: ' . mb_substr((string)$err, 0, 200),
+                           'raw' => (string)$err]);
+    }
     if (isset($r['ok']) && !$r['ok']) return $withState(['ok' => false, 'error' => 'شبکه خطا داد: ' . mb_substr(json_encode($r, 320), 0, 160)]);
     // خروج غیرصفر یعنی قرارداد چنین متدی ندارد یا اصلا اجرا نشد
     $exit  = $r['result']['exit_code'] ?? null;
@@ -573,7 +577,7 @@ function tonVerifyWallet($base, $address, $publicKey, $apiKey) {
  * بدون این، «چرا تایید نشد» حدس می‌ماند: آدرس فعال است یا اصلا قراردادی ندارد؟
  */
 function tonAccountState($base, $address, $apiKey) {
-    [$r, $err] = tonApiCall($base, '/getAddressInformation?address=' . rawurlencode($address), 'GET', null, $apiKey);
+    [$r, $err] = tonApiCallRetry($base, '/getAddressInformation?address=' . rawurlencode($address), 'GET', null, $apiKey);
     if (!$r) return ['state' => '?', 'error' => (string)$err];
     $res = $r['result'] ?? [];
     $code = (string)($res['code'] ?? '');
@@ -644,6 +648,19 @@ function tonStateText($st) {
     else                          $line .= "• نامشخص" . (isset($st['error']) ? ' — ' . mb_substr((string)$st['error'], 0, 80) : '') . "\n";
     if (!empty($st['code'])) $line .= "• اثر قرارداد: <code>" . $st['code'] . "</code>\n";
     return $line;
+}
+
+/** پیام محدودیت نرخ — مشکل از تنظیمات شما نیست */
+function tonRateText() {
+    return "🚦 <b>شبکه TON محدودیت درخواست گذاشت (کد ۴۲۹).</b>\n\n" .
+           "این یعنی سرویس toncenter رایگان است و بیش از حدش پرسیدیم — " .
+           "<b>هیچ ربطی به درست یا غلط بودن آدرس و عبارت بازیابی شما ندارد.</b>\n\n" .
+           "<b>راه حل (یک دقیقه):</b>\n" .
+           "۱. در تلگرام به <code>@tonapibot</code> پیام بدهید\n" .
+           "۲. یک کلید API رایگان بگیرید (mainnet)\n" .
+           "۳. همان کلید را در فیلد «کلید API شبکه» بگذارید\n\n" .
+           "با کلید، محدودیت برداشته می‌شود و همه‌چیز روان کار می‌کند.\n" .
+           "بدون کلید هم می‌شود، ولی باید بین هر تلاش چند ثانیه صبر کنید.";
 }
 
 /** پیام «ولت هنوز روی زنجیره ننشسته» — رایج‌ترین علت شکست تایید */
@@ -845,9 +862,34 @@ function tonApiCall($base, $path, $method, $body, $apiKey, $timeout = 20) {
     if (!is_array($j)) return [null, 'پاسخ نامعتبر (کد ' . $code . '): ' . mb_substr((string)$res, 0, 160)];
     if ($code < 200 || $code >= 300) {
         $m = $j['error'] ?? ($j['detail'] ?? ('کد ' . $code));
-        return [null, is_string($m) ? $m : json_encode($m, JSON_UNESCAPED_UNICODE)];
+        $m = is_string($m) ? $m : json_encode($m, JSON_UNESCAPED_UNICODE);
+        // 429 یعنی «زیاد پرسیدی»، نه «جواب منفی» — این دو را نباید یکی گرفت
+        if ($code === 429) $m = TON_RATE_LIMITED . $m;
+        return [null, $m];
     }
     return [$j, ''];
+}
+
+/** نشانه‌ی «شبکه محدودیت گذاشت» تا از «جواب منفی» تشخیص داده شود */
+const TON_RATE_LIMITED = '[rate] ';
+
+function tonIsRateLimited($err) { return str_starts_with((string)$err, TON_RATE_LIMITED); }
+
+/**
+ * همان tonApiCall، ولی اگر شبکه محدودیت گذاشت خودش صبر می‌کند و دوباره
+ * می‌پرسد. سرویس رایگان toncenter حدود یک درخواست در ثانیه می‌دهد و
+ * تایید ولت چند درخواست پشت سر هم دارد.
+ */
+function tonApiCallRetry($base, $path, $method, $body, $apiKey, $timeout = 20, $tries = 3) {
+    $lastErr = '';
+    for ($i = 0; $i < max(1, $tries); $i++) {
+        if ($i > 0) usleep(1200000 * $i);       // ۱.۲ ثانیه، بعد ۲.۴ ثانیه
+        [$j, $err] = tonApiCall($base, $path, $method, $body, $apiKey, $timeout);
+        if ($j) return [$j, ''];
+        $lastErr = $err;
+        if (!tonIsRateLimited($err)) break;      // خطای دیگری بود، تکرار فایده ندارد
+    }
+    return [null, $lastErr];
 }
 
 /** seqno فعلی ولت — بدون آن نمی‌شود تراکنش ساخت */

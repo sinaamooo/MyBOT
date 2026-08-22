@@ -1659,12 +1659,15 @@ function axWalletAutoFix() {
     try {
         $k  = axWalletKeys();
         $st = tonAccountState($api, (string)$w['address'], $key);
+        if (tonIsRateLimited($st['error'] ?? '')) return [false, tonRateText()];
         if (($st['state'] ?? '') !== 'active' || empty($st['code_b64']))
             return [false, 'آدرسی که دادید روی زنجیره فعال نیست، پس نوع ولت از آن درنمی‌آید'];
 
         // کلید عمومیِ همان آدرس، برای پیدا کردن جای کلید داخل داده
-        [$r] = tonApiCall($api, '/runGetMethod', 'POST',
+        usleep(1200000);
+        [$r, $rErr] = tonApiCallRetry($api, '/runGetMethod', 'POST',
             ['address' => (string)$w['address'], 'method' => 'get_public_key', 'stack' => []], $key);
+        if (!$r && tonIsRateLimited($rErr)) return [false, tonRateText()];
         $stack = $r['result']['stack'] ?? [];
         $their = isset($stack[0]) ? tonStackHex($stack[0]) : null;
         if ($their === null || strlen($their) < 48)
@@ -1676,11 +1679,20 @@ function axWalletAutoFix() {
         $cand = tonDeriveSameVersion($st['code_b64'], $st['data_b64'], $their, $k['public'], $wc);
         if ($cand === null) return [false, 'آدرس از روی این عبارت ساخته نشد'];
 
-        // 🛡 حرف خودمان را باور نمی‌کنیم — از زنجیره می‌پرسیم
+        // 🛡 حرف خودمان را باور نمی‌کنیم — از زنجیره می‌پرسیم.
+        // یک نفس هم می‌گیریم: سرویس رایگان toncenter یک درخواست در ثانیه می‌دهد.
+        usleep(1200000);
         $v = tonVerifyWallet($api, $cand, $k['public'], $key);
-        if (empty($v['ok']))
+
+        if (empty($v['ok'])) {
+            // 🚦 محدودیت نرخ «جواب منفی» نیست — نباید به حساب اشتباه بودن آدرس گذاشت
+            if (!empty($v['rate']))
+                return [false, "آدرس ساخته شد:\n<code>" . h($cand) . "</code>\n\n" .
+                               "ولی نتوانستیم از زنجیره تاییدش بگیریم:\n\n" . tonRateText()];
+
             return [false, "آدرسی که ساختیم (<code>" . h(mb_substr($cand, 0, 20)) . "…</code>) را زنجیره تایید نکرد.\n" .
                            "یعنی این عبارت بازیابی هنوز روی این نوع ولت فعال نشده."];
+        }
 
         axSet(function (&$c) use ($cand) { $c['wallet']['address'] = $cand; $c['wallet']['verified'] = time(); });
         axLog('wallet_autofix', $cand);
