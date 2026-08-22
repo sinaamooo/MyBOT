@@ -479,21 +479,40 @@ function tonVerifyWallet($base, $address, $publicKey, $apiKey) {
     if (!$r) return ['ok' => false, 'error' => 'پاسخ شبکه نامعتبر: ' . mb_substr((string)$err, 0, 200),
                      'raw' => (string)$err];
     if (isset($r['ok']) && !$r['ok']) return ['ok' => false, 'error' => 'شبکه خطا داد: ' . mb_substr(json_encode($r, 320), 0, 160)];
-    // خروج غیرصفر یعنی قرارداد چنین متدی ندارد یا اجرا نشد
-    $exit = $r['result']['exit_code'] ?? ($r['result']['@extra'] ?? null);
+    // خروج غیرصفر یعنی قرارداد چنین متدی ندارد یا اصلا اجرا نشد
+    $exit  = $r['result']['exit_code'] ?? null;
     $stack = $r['result']['stack'] ?? [];
+
+    if (is_numeric($exit) && (int)$exit !== 0) {
+        return ['ok' => false, 'raw' => mb_substr(json_encode($r, JSON_UNESCAPED_UNICODE), 0, 600),
+                'error' => tonNotDeployedText((int)$exit)];
+    }
+
     if (!isset($stack[0])) {
-        return ['ok' => false, 'raw' => mb_substr(json_encode($r, JSON_UNESCAPED_UNICODE), 0, 600), 'error' =>
-            'ولت متد get_public_key را جواب نداد' .
-            (is_numeric($exit) && (int)$exit !== 0 ? ' (کد خروج ' . (int)$exit . ')' : '') . ".\n" .
-            'معمولا یعنی این آدرس هنوز روی شبکه فعال نشده — از ولتی که تازه ساخته‌اید ' .
-            'یک تراکنش کوچک بفرستید تا قراردادش روی زنجیره بنشیند، بعد دوباره امتحان کنید.'];
+        return ['ok' => false, 'raw' => mb_substr(json_encode($r, JSON_UNESCAPED_UNICODE), 0, 600),
+                'error' => tonNotDeployedText(is_numeric($exit) ? (int)$exit : null)];
     }
 
     $onchain = tonStackHex($stack[0]);
     if ($onchain === null)
         return ['ok' => false, 'raw' => json_encode($stack, JSON_UNESCAPED_UNICODE),
                 'error' => 'پاسخ زنجیره خوانده نشد: ' . mb_substr(json_encode($stack[0], JSON_UNESCAPED_UNICODE), 0, 200)];
+
+    // 🛑 شبکه گاهی به‌جای نتیجه، «شناسه‌ی خود متد» را پس می‌دهد — یعنی
+    // متد اجرا نشده چون قراردادی روی این آدرس نیست. بدون این بررسی،
+    // آن عدد کوچک با کلید مقایسه می‌شد و پیام گمراه‌کننده‌ی
+    // «عبارت بازیابی نمی‌خواند» می‌آمد.
+    $methodId = (tonCrc16('get_public_key') & 0xffff) | 0x10000;
+    if (hexdec($onchain) === $methodId && strlen($onchain) <= 8)
+        return ['ok' => false, 'raw' => json_encode($stack, JSON_UNESCAPED_UNICODE),
+                'error' => tonNotDeployedText(null)];
+
+    // کلید عمومی ۳۲ بایت است؛ بعد از حذف صفرهای ابتدایی هم نباید
+    // خیلی کوتاه‌تر از ۶۴ نویسه باشد. عدد کوتاه یعنی این کلید نیست.
+    if (strlen($onchain) < 48)
+        return ['ok' => false, 'raw' => json_encode($stack, JSON_UNESCAPED_UNICODE),
+                'error' => "چیزی که از این آدرس برگشت کلید عمومی نیست — فقط " . strlen($onchain) .
+                           " نویسه است، در حالی که کلید ۶۴ نویسه دارد.\n\n" . tonNotDeployedText(null)];
 
     $mine = ltrim(bin2hex($publicKey), '0');
     if ($onchain !== $mine) {
@@ -509,6 +528,20 @@ function tonVerifyWallet($base, $address, $publicKey, $apiKey) {
             "یک ولت تازه <b>بدون رمز</b> بسازید و از آن استفاده کنید."];
     }
     return ['ok' => true];
+}
+
+/** پیام «ولت هنوز روی زنجیره ننشسته» — رایج‌ترین علت شکست تایید */
+function tonNotDeployedText($exitCode = null) {
+    return "این آدرس هنوز روی شبکه <b>فعال (deploy) نشده</b>" .
+           ($exitCode !== null ? ' (کد خروج ' . (int)$exitCode . ')' : '') . ".\n\n" .
+           "ولت تازه‌ای که فقط ساخته‌اید، تا وقتی یک تراکنش <b>از آن</b> بیرون نرود\n" .
+           "روی زنجیره وجود ندارد — پس کلید عمومی‌اش هم خوانده نمی‌شود.\n" .
+           "<i>فقط واریز کردن به آن کافی نیست.</i>\n\n" .
+           "<b>راه حل:</b>\n" .
+           "۱. کمی TON به این ولت بفرستید (اگر خالی است)\n" .
+           "۲. از داخل همان کیف پول، یک مبلغ خیلی کوچک به هر آدرسی <b>بفرستید</b>\n" .
+           "۳. چند ثانیه صبر کنید و دوباره «تایید مالکیت» را بزنید\n\n" .
+           "بعد از آن تراکنش، قرارداد ولت روی زنجیره می‌نشیند و تایید انجام می‌شود.";
 }
 
 /**
