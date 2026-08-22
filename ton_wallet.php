@@ -453,8 +453,14 @@ function tonKeyFromMnemonic($words, $password = '') {
     if (count($words) !== 24) throw new Exception('عبارت بازیابی باید ۲۴ کلمه باشد (الان ' . count($words) . ')');
 
     $phrase = implode(' ', $words);
-    $seed   = hash_pbkdf2('sha512', $phrase, 'TON default seed' . $password, 100000, 64, true);
-    $kp     = sodium_crypto_sign_seed_keypair(substr($seed, 0, 32));
+
+    // روش رسمی TON دو مرحله دارد و ترتیبش مهم است:
+    //   ۱. entropy = HMAC-SHA512 با کلیدِ «عبارت ۲۴ کلمه‌ای» روی داده‌ی «رمز»
+    //   ۲. seed    = PBKDF2-HMAC-SHA512 روی همان entropy با نمک "TON default seed"
+    // (نسخه‌ی قبلی مستقیم PBKDF2 می‌زد و رمز را به نمک می‌چسباند — کلید غلط درمی‌آمد.)
+    $entropy = hash_hmac('sha512', (string)$password, $phrase, true);
+    $seed    = hash_pbkdf2('sha512', $entropy, 'TON default seed', 100000, 64, true);
+    $kp      = sodium_crypto_sign_seed_keypair(substr($seed, 0, 32));
 
     return [
         'public'  => sodium_crypto_sign_publickey($kp),
@@ -617,15 +623,27 @@ function tonDeriveSameVersion($codeB64, $dataB64, $onchainPubHex, $myPublicKey, 
     $needle = '';
     foreach (str_split($pubHex) as $c) $needle .= str_pad(decbin(hexdec($c)), 4, '0', STR_PAD_LEFT);
 
-    $pos = strpos($data->bits, $needle);
-    if ($pos === false) return null;          // کلید داخل داده پیدا نشد
-
     $mine = '';
     foreach (str_split(bin2hex($myPublicKey)) as $c) $mine .= str_pad(decbin(hexdec($c)), 4, '0', STR_PAD_LEFT);
 
-    $newData = new TonCell();
-    $newData->bits = substr($data->bits, 0, $pos) . $mine . substr($data->bits, $pos + 256);
-    $newData->refs = $data->refs;
+    // بعضی ولت‌ها کلید را داخل سلول فرزند می‌گذارند، نه در خودِ داده.
+    // پس همه‌ی درخت را می‌گردیم — نه فقط ریشه را.
+    $replace = function (TonCell $c) use (&$replace, $needle, $mine) {
+        $pos = strpos($c->bits, $needle);
+        $new = new TonCell();
+        $new->bits = $pos === false ? $c->bits
+                   : substr($c->bits, 0, $pos) . $mine . substr($c->bits, $pos + 256);
+        $found = $pos !== false;
+        foreach ($c->refs as $r) {
+            [$child, $f] = $replace($r);
+            $new->refs[] = $child;
+            $found = $found || $f;
+        }
+        return [$new, $found];
+    };
+
+    [$newData, $found] = $replace($data);
+    if (!$found) return null;                 // کلید در هیچ سلولی پیدا نشد
 
     // StateInit: split_depth(0) special(0) code(1) data(1) library(0)
     $si = new TonBits();

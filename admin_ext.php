@@ -1608,14 +1608,49 @@ function axWalletKeys() {
     return tonKeyFromMnemonic((string)$w['mnemonic'], (string)($w['passphrase'] ?? ''));
 }
 
+/**
+ * همه‌ی کلیدهایی که این عبارت بازیابی می‌تواند بسازد.
+ *
+ * رمزِ جامانده در فیلد، کلید را بی‌سروصدا عوض می‌کند و کاربر ساعت‌ها
+ * دنبال آدرس اشتباه می‌گردد. پس هر دو حالت را امتحان می‌کنیم و هرکدام
+ * که با زنجیره خواند را نگه می‌داریم.
+ *
+ * برگشت: [ ['pw'=>رمز, 'keys'=>جفت کلید, 'label'=>توضیح], … ]
+ */
+function axWalletKeyCandidates() {
+    $w  = axCfg()['wallet'];
+    $mn = (string)$w['mnemonic'];
+    $pw = trim((string)($w['passphrase'] ?? ''));
+
+    $out = [['pw' => $pw, 'keys' => tonKeyFromMnemonic($mn, $pw),
+             'label' => $pw === '' ? 'بدون رمز' : 'با رمزی که دادید']];
+    if ($pw !== '')
+        $out[] = ['pw' => '', 'keys' => tonKeyFromMnemonic($mn, ''), 'label' => 'بدون رمز'];
+    return $out;
+}
+
 /** عبارت بازیابی را با آدرس روی زنجیره می‌سنجد */
 function axWalletVerify($withRaw = false) {
     $w = axCfg()['wallet'];
     if (trim((string)$w['mnemonic']) === '') return [false, 'عبارت بازیابی ثبت نشده'];
     if (trim((string)$w['address']) === '')  return [false, 'آدرس ولت ثبت نشده'];
     try {
-        $k = axWalletKeys();
-        $r = tonVerifyWallet((string)$w['api'], (string)$w['address'], $k['public'], (string)$w['api_key']);
+        // اگر رمز جامانده باشد، بدون رمز هم امتحان می‌شود
+        $cands = axWalletKeyCandidates();
+        $r = null; $k = $cands[0]['keys'];
+        foreach ($cands as $i => $c) {
+            if ($i > 0) usleep(1200000);
+            $try = tonVerifyWallet((string)$w['api'], (string)$w['address'], $c['keys']['public'], (string)$w['api_key']);
+            if (!empty($try['ok'])) {
+                // این حالت خواند — همان را ذخیره کن تا دفعه‌ی بعد هم درست باشد
+                if ($c['pw'] !== (string)($w['passphrase'] ?? ''))
+                    axSet(function (&$cc) use ($c) { $cc['wallet']['passphrase'] = $c['pw']; });
+                axSet(function (&$cc) { $cc['wallet']['verified'] = time(); });
+                return [true, count($cands) > 1 ? '(' . $c['label'] . ')' : ''];
+            }
+            if ($r === null || !empty($try['derived'])) { $r = $try; $k = $c['keys']; }
+            if (!empty($try['rate'])) { $r = $try; break; }
+        }
 
         // 🎯 نخواند؟ به‌جای گله کردن، خودمان آدرس درست را پیدا می‌کنیم
         if (empty($r['ok']) && !empty($r['derived'])) {
