@@ -38,6 +38,32 @@ row($rows, function_exists('curl_init'), 'افزونه curl',
     'افزونه curl را از کنترل‌پنل هاست فعال کنید.');
 row($rows, function_exists('json_encode'), 'افزونه json',
     function_exists('json_encode') ? 'فعال' : 'غیرفعال', 'افزونه json را فعال کنید.');
+// ───────── تشخیص دقیق رمزنگاری ─────────
+// «افزونه در cPanel تیک دارد ولی تابع نیست» چند علت دارد؛ اینجا
+// همه‌شان را جدا جدا نشان می‌دهیم تا معلوم شود کدام است.
+$cryptoLines = [];
+$cryptoLines[] = 'نسخه PHP: ' . PHP_VERSION . '  (' . PHP_INT_SIZE * 8 . ' بیتی)';
+$cryptoLines[] = 'php.ini اصلی: ' . (php_ini_loaded_file() ?: 'پیدا نشد');
+$scanned = php_ini_scanned_files();
+$cryptoLines[] = 'ini های اضافه: ' . ($scanned ? trim(str_replace(",\n", ' ', $scanned)) : '—');
+$cryptoLines[] = 'extension_loaded("sodium"): ' . (extension_loaded('sodium') ? 'بله' : 'خیر');
+$cryptoLines[] = 'extension_loaded("libsodium"): ' . (extension_loaded('libsodium') ? 'بله' : 'خیر');
+foreach (['sodium_crypto_sign_seed_keypair', 'sodium_crypto_sign_detached',
+          'sodium_crypto_sign_publickey', 'sodium_crypto_sign_secretkey'] as $fn) {
+    $cryptoLines[] = $fn . '(): ' . (function_exists($fn) ? '✅ هست' : '❌ نیست');
+}
+$cryptoLines[] = '\Sodium\crypto_sign_seed_keypair(): ' .
+    (function_exists('\Sodium\crypto_sign_seed_keypair') ? '✅ هست (نسخه قدیمی PECL)' : '❌ نیست');
+$df = trim((string)ini_get('disable_functions'));
+$cryptoLines[] = 'disable_functions: ' . ($df !== '' ? $df : '(خالی)');
+if ($df !== '' && stripos($df, 'sodium') !== false)
+    $cryptoLines[] = '🔴 توابع sodium در disable_functions بسته شده‌اند — از پشتیبانی هاست بخواهید بازشان کند.';
+$cryptoLines[] = 'gmp: ' . (extension_loaded('gmp') ? '✅' : '❌') .
+                 '   bcmath: ' . (extension_loaded('bcmath') ? '✅' : '❌') .
+                 '   openssl: ' . (extension_loaded('openssl') ? '✅' : '❌');
+$cryptoLines[] = 'sha512 در hash: ' . (in_array('sha512', hash_algos(), true) ? '✅' : '❌') .
+                 '   hash_pbkdf2: ' . (function_exists('hash_pbkdf2') ? '✅' : '❌');
+
 $hasSodium = function_exists('sodium_crypto_sign_seed_keypair');
 $hasCompat = is_file(__DIR__ . '/sodium_compat/autoload.php') || is_file(__DIR__ . '/vendor/autoload.php');
 row($rows, $hasSodium || $hasCompat, 'افزونه sodium (فقط برای امضای TON)',
@@ -186,6 +212,13 @@ code{background:#0A0D14;padding:2px 6px;border-radius:6px;font-size:12px;word-br
     <?php if (!$r['ok'] && $r['fix']): ?><div class="f">🔧 <?= $r['fix'] ?></div><?php endif; ?>
   </div>
 <?php endforeach; ?>
+
+<div class="item">
+  <div class="t">🔐 جزئیات رمزنگاری (برای امضای TON)</div>
+  <?php foreach ($cryptoLines as $cl): ?>
+    <div class="d<?= preg_match('/[\x{0600}-\x{06FF}]/u', $cl) ? ' fa' : '' ?>"><?= htmlspecialchars($cl) ?></div>
+  <?php endforeach; ?>
+</div>
 
 <div class="item">
   <div class="t">📍 مسیر روی سرور</div>
