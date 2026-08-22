@@ -218,12 +218,20 @@ function axVolumeChoices($maxGb = 100) {
 }
 
 /** شناسه‌ی مخزن یک محصول */
-function axSku($itemId) { return preg_replace('/[^a-zA-Z0-9_.-]/', '_', (string)$itemId); }
+// نقطه عمدا حذف می‌شود: axVal() مسیرها را با نقطه می‌شکند، پس شناسه‌ی
+// نقطه‌دار به‌جای یک کلید، دو سطح تو در تو خوانده می‌شد.
+function axSku($itemId) { return preg_replace('/[^a-zA-Z0-9_-]/', '_', (string)$itemId); }
 
 /** چند تا در مخزن مانده */
 function axStockCount($itemId) {
-    $it = axVal('stock.items.' . axSku($itemId));
+    $it = axCfg()['stock']['items'][axSku($itemId)] ?? null;
     return is_array($it['lines'] ?? null) ? count($it['lines']) : 0;
+}
+
+/** یک محصول مخزن، بدون عبور از مسیر نقطه‌ای */
+function axStockItemOf($sku) {
+    $it = axCfg()['stock']['items'][$sku] ?? null;
+    return is_array($it) ? $it : null;
 }
 
 /** موجودی همه‌ی محصول‌ها: sku => تعداد */
@@ -580,12 +588,13 @@ function axPrice($itemId, $basePrice, $category = '') {
     if (empty(axVal('pricing.on'))) return $base;
 
     if (!axIsAutoPriced($itemId, $category)) {
-        $fixed = axVal('pricing.fixed.' . axSku($itemId));
+        $fixed = axCfg()['pricing']['fixed'][axSku($itemId)] ?? null;
         if ($fixed !== null && (float)$fixed > 0) return (float)$fixed;
     }
 
-    $m = axVal('pricing.margin.' . axSku($category));
-    if ($m === null) $m = axVal('pricing.margin._all');
+    $marg = axCfg()['pricing']['margin'] ?? [];
+    $m = $marg[axSku($category)] ?? null;
+    if ($m === null) $m = $marg['_all'] ?? null;
     if ($m !== null && (float)$m != 0.0) $base = $base * (1 + ((float)$m / 100));
 
     return $base;
@@ -759,8 +768,8 @@ function axStockHome($chatId, $msgId) {
 }
 
 function axStockItem($chatId, $msgId, $sku) {
-    $it = axVal('stock.items.' . $sku);
-    if (!is_array($it)) { axStockHome($chatId, $msgId); return; }
+    $it = axStockItemOf($sku);
+    if (!$it) { axStockHome($chatId, $msgId); return; }
     $lines = (array)($it['lines'] ?? []);
 
     $t  = "🗂 <b>" . h((string)($it['name'] ?? $sku)) . "</b>\n\n";
@@ -949,8 +958,10 @@ function axCallback($data, $uid, $chatId, $msgId, $cbId, $isAdmin) {
     if (str_starts_with($data, 'axsrc_')) {
         answerCb(BOT_TOKEN, $cbId);
         $oid = substr($data, 6);
-        $o   = function_exists('Order::get') || class_exists('Order') ? Order::get($oid) : null;
-        if ($o && (int)$o['user_id'] !== (int)$uid && !$isAdmin) return true;   // سفارش دیگران نه
+        $o   = class_exists('Order') ? Order::get($oid) : null;
+        // سفارش باید باشد و مال خود همین کاربر — نبودنش هم یعنی نه
+        if (!$o) return true;
+        if ((int)$o['user_id'] !== (int)$uid && !$isAdmin) return true;
         sendMsg(BOT_TOKEN, $chatId, axMembersText($oid));
         return true;
     }
@@ -1171,7 +1182,7 @@ function axStateHandle($action, $sd, $msg, $uid, $chatId) {
                 $sku = axSku($name);
                 $raw = implode("\n", $lines);
             } else {
-                $name = (string)(axVal('stock.items.' . $sku . '.name') ?? $sku);
+                $name = (string)((axStockItemOf($sku)['name'] ?? null) ?? $sku);
             }
 
             [$add, $dup] = axStockAdd($sku, $name, $raw);

@@ -1293,6 +1293,54 @@ function maAutoQueue($limit = 5) {
     return $done;
 }
 
+/**
+ * سفارش‌هایی که موقع خرید مخزنشان خالی بود.
+ * قولی که به مشتری داده‌ایم همین است: «به‌محض شارژ مخزن خودکار می‌آید» —
+ * پس هر بار که ربات بیدار می‌شود، صف را دوباره نگاه می‌کند.
+ */
+function maStockQueue($limit = 5) {
+    if (!function_exists('axStockCount') || empty(axVal('stock.on'))) return 0;
+
+    $done = 0;
+    $now  = time();
+    foreach (MaOrder::all() as $o) {
+        if ($done >= $limit) break;
+        if (($o['status'] ?? '') !== MaOrder::PAID) continue;
+        if (!empty($o['manual_msg'])) continue;                 // دست ادمین است
+        if (function_exists('axIsManual') && axIsManual($o['item_id'])) continue;
+
+        // قفل رهاشده (اجرای قبلی وسط کار مرد) بعد از ۵ دقیقه آزاد می‌شود
+        $sending = (int)($o['sending'] ?? 0);
+        if ($sending > 0 && ($now - $sending) < 300) continue;
+
+        if (axStockCount($o['item_id']) < max(1, (int)$o['qty'])) continue;
+
+        $claimed = MaOrder::set($o['id'], function (&$x) {
+            if (($x['status'] ?? '') !== MaOrder::PAID) return false;
+            $x['sending'] = time();
+            return true;
+        });
+        if (!$claimed) continue;
+
+        [$ok, $err] = axStockDeliver($o);
+        MaOrder::set($o['id'], function (&$x) use ($ok, $err) {
+            $x['sending'] = 0;
+            if ($ok) {
+                $x['status'] = MaOrder::DONE;
+                $x['delivered_at'] = nowStr();
+                $x['delivered_by'] = 'stock';
+            } else {
+                $x['last_error'] = $err;
+            }
+        });
+        if ($ok) {
+            if (function_exists('axReportOrder')) axReportOrder(MaOrder::get($o['id']), 'done');
+            $done++;
+        }
+    }
+    return $done;
+}
+
 // ============================================================
 // 👛 کیف پول — کسر اتمیک
 // ============================================================
@@ -1661,7 +1709,7 @@ function maApi() {
                 'cat'   => (string)($i['cat'] ?? ''),
                 'base'  => (float)($i['price'] ?? 0),
                 'final' => (float)axPrice((string)$i['id'], (float)($i['price'] ?? 0), (string)($i['cat'] ?? '')),
-                'fixed' => (float)(axVal('pricing.fixed.' . axSku((string)$i['id'])) ?? 0),
+                'fixed' => (float)((axCfg()['pricing']['fixed'][axSku((string)$i['id'])] ?? 0)),
                 'auto'  => $auto,
             ];
         }
