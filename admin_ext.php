@@ -17,7 +17,16 @@
  * وابستگی: توابع پایه‌ی bot_master_membership.php (load/mutate/sendMsg/…)
  */
 
-if (!defined('AX_VERSION')) define('AX_VERSION', '1.0.0');
+if (!defined('AX_VERSION')) define('AX_VERSION', '1.0.1');
+
+// array_is_list از PHP 8.1 آمده؛ روی 8.0 خودمان می‌سازیمش تا ربات نخوابد
+if (!function_exists('array_is_list')) {
+    function array_is_list(array $a) {
+        $i = 0;
+        foreach ($a as $k => $_) if ($k !== $i++) return false;
+        return true;
+    }
+}
 
 // ============================================================
 // ⚙️ پیکربندی

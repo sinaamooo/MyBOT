@@ -26,13 +26,18 @@ function row(&$rows, $ok, $title, $detail = '', $fix = '') {
     $rows[] = ['ok' => $ok, 'title' => $title, 'detail' => $detail, 'fix' => $fix];
 }
 
-// ───────── ۱) نسخه PHP ─────────
-$php = PHP_VERSION;
-row($rows, version_compare($php, '8.0.0', '>='),
-    'نسخه PHP', $php,
-    'کد به PHP 8.0 یا بالاتر نیاز دارد. از کنترل‌پنل هاست (cPanel ← Select PHP Version یا MultiPHP Manager) نسخه را روی 8.1 یا 8.2 بگذارید.');
+// ───────── ۱) نسخه PHP — اولین چیزی که باید دید ─────────
+// اگر این غلط باشد بقیه‌ی فایل‌ها اصلا خوانده نمی‌شوند و در لاگ
+// «syntax error» می‌بینید، نه خطای منطقی. این فایل عمدا با ساختار
+// قدیمی نوشته شده تا روی هر نسخه‌ای باز شود و بتواند همین را بگوید.
+$phpOk = version_compare(PHP_VERSION, '8.0', '>=');
+row($rows, $phpOk, 'نسخه PHP', PHP_VERSION . ($phpOk ? ' — مناسب' : ' — خیلی قدیمی'),
+    'ربات به PHP 8.0 یا بالاتر نیاز دارد (8.1 یا 8.2 بهتر). ' .
+    'در cPanel: «Select PHP Version» ← نسخه را روی 8.1 بگذارید و Set as current را بزنید. ' .
+    '⚠️ افزونه‌ها برای هر نسخه جداگانه‌اند — بعد از عوض کردن نسخه، دوباره تیک sodium و curl و mbstring را بزنید.');
 
 // ───────── ۲) افزونه‌های لازم ─────────
+
 row($rows, function_exists('curl_init'), 'افزونه curl',
     function_exists('curl_init') ? 'فعال' : 'غیرفعال',
     'افزونه curl را از کنترل‌پنل هاست فعال کنید.');
@@ -146,7 +151,7 @@ row($rows, $whUrl !== '', 'آدرس وبهوک',
     'وبهوک ست نشده. این آدرس را یک بار در مرورگر باز کنید:<br><code>https://api.telegram.org/bot' .
     H_TOKEN . '/setWebhook?url=' . rawurlencode($guess) . '</code>');
 
-$sameFile = $whUrl !== '' && str_contains($whUrl, 'bot_master_membership.php');
+$sameFile = $whUrl !== '' && strpos($whUrl, 'bot_master_membership.php') !== false;
 if ($whUrl !== '') {
     row($rows, $sameFile, 'وبهوک به فایل درست وصل است؟',
         $sameFile ? 'بله' : 'وبهوک به فایل دیگری وصل است',
@@ -176,7 +181,7 @@ row($rows, $base !== '', 'آدرس عمومی مینی‌اپ‌ها',
     $base !== '' ? $base : 'هنوز ثبت نشده',
     'داخل ربات: /panel ← 🚀 مینی اپ‌ها ← 🔗 آدرس عمومی ← <code>' . htmlspecialchars($guess) . '</code>');
 
-$bad  = array_values(array_filter($rows, fn($r) => !$r['ok']));
+$bad  = array_values(array_filter($rows, function ($r) { return !$r['ok']; }));
 $good = count($rows) - count($bad);
 ?>
 <!doctype html>
