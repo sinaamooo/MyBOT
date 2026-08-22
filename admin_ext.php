@@ -1117,6 +1117,17 @@ function axCallback($data, $uid, $chatId, $msgId, $cbId, $isAdmin) {
         return true;
     }
 
+    if ($data === 'axwfix') {
+        $ack('⏳ در حال جستجو…');
+        [$fixed, $info] = axWalletAutoFix();
+        sendMsg(BOT_TOKEN, $chatId, $fixed
+            ? "🎯 <b>آدرس درست پیدا و ذخیره شد</b>\n\n<code>" . h($info) . "</code>\n\n" .
+              "زنجیره تایید کرد که این آدرس همان کلید عبارت بازیابی شماست."
+            : "❌ پیدا نشد:\n\n" . $info,
+            inlineKb([[btnCb('🔙 بازگشت', 'ax_wallet', 'nav')]]));
+        return true;
+    }
+
     if ($data === 'axwtest') {
         $ack('⏳ در حال بررسی…');
         [$vok, $verr] = axWalletVerify(true);
@@ -1605,6 +1616,13 @@ function axWalletVerify($withRaw = false) {
     try {
         $k = axWalletKeys();
         $r = tonVerifyWallet((string)$w['api'], (string)$w['address'], $k['public'], (string)$w['api_key']);
+
+        // 🎯 نخواند؟ به‌جای گله کردن، خودمان آدرس درست را پیدا می‌کنیم
+        if (empty($r['ok']) && !empty($r['derived'])) {
+            [$fixed, $newAddr] = axWalletAutoFix();
+            if ($fixed) return [true, "🎯 آدرس درست خودکار پیدا و ذخیره شد:\n<code>" . h($newAddr) . '</code>'];
+        }
+
         if (empty($r['ok'])) {
             $msg = (string)($r['error'] ?? 'ناموفق');
             // پاسخ خام فقط وقتی خواسته شده — برای وقتی که پیام کافی نیست
@@ -1615,6 +1633,59 @@ function axWalletVerify($withRaw = false) {
         }
         axSet(function (&$c) { $c['wallet']['verified'] = time(); });
         return [true, ''];
+    } catch (Throwable $e) {
+        return [false, $e->getMessage()];
+    }
+}
+
+/**
+ * 🎯 آدرس درست را خودش پیدا می‌کند.
+ *
+ * کاربر هر آدرسی از کیف پولش بدهد کافی است — حتی آدرسِ «اشتباه».
+ * از روی آن، نوع قرارداد ولت را از زنجیره می‌گیریم، آدرسی که عبارت
+ * بازیابی کاربر به آن می‌رسد را می‌سازیم، و بعد <b>از خود زنجیره
+ * می‌پرسیم</b> که آیا آن آدرس واقعا همین کلید را دارد یا نه.
+ *
+ * هیچ‌چیز حدس زده نمی‌شود: آدرسی ذخیره می‌شود که زنجیره تاییدش کرده.
+ *
+ * برگشت: [true, 'آدرس تازه'] یا [false, 'دلیل']
+ */
+function axWalletAutoFix() {
+    $w = axCfg()['wallet'];
+    $api = (string)$w['api']; $key = (string)$w['api_key'];
+    if (trim((string)$w['mnemonic']) === '') return [false, 'اول عبارت بازیابی را ثبت کنید'];
+    if (trim((string)$w['address'])  === '') return [false, 'یک آدرس از کیف پولتان بدهید تا نوع ولت را بفهمیم'];
+
+    try {
+        $k  = axWalletKeys();
+        $st = tonAccountState($api, (string)$w['address'], $key);
+        if (($st['state'] ?? '') !== 'active' || empty($st['code_b64']))
+            return [false, 'آدرسی که دادید روی زنجیره فعال نیست، پس نوع ولت از آن درنمی‌آید'];
+
+        // کلید عمومیِ همان آدرس، برای پیدا کردن جای کلید داخل داده
+        [$r] = tonApiCall($api, '/runGetMethod', 'POST',
+            ['address' => (string)$w['address'], 'method' => 'get_public_key', 'stack' => []], $key);
+        $stack = $r['result']['stack'] ?? [];
+        $their = isset($stack[0]) ? tonStackHex($stack[0]) : null;
+        if ($their === null || strlen($their) < 48)
+            return [false, 'کلید عمومی آن آدرس خوانده نشد'];
+
+        $wc = 0;
+        try { $wc = tonParseAddress((string)$w['address'])['wc']; } catch (Throwable $e) {}
+
+        $cand = tonDeriveSameVersion($st['code_b64'], $st['data_b64'], $their, $k['public'], $wc);
+        if ($cand === null) return [false, 'آدرس از روی این عبارت ساخته نشد'];
+
+        // 🛡 حرف خودمان را باور نمی‌کنیم — از زنجیره می‌پرسیم
+        $v = tonVerifyWallet($api, $cand, $k['public'], $key);
+        if (empty($v['ok']))
+            return [false, "آدرسی که ساختیم (<code>" . h(mb_substr($cand, 0, 20)) . "…</code>) را زنجیره تایید نکرد.\n" .
+                           "یعنی این عبارت بازیابی هنوز روی این نوع ولت فعال نشده."];
+
+        axSet(function (&$c) use ($cand) { $c['wallet']['address'] = $cand; $c['wallet']['verified'] = time(); });
+        axLog('wallet_autofix', $cand);
+        return [true, $cand];
+
     } catch (Throwable $e) {
         return [false, $e->getMessage()];
     }
@@ -1891,6 +1962,7 @@ function axWalletHome($chatId, $msgId) {
         [btnCb('🔢 نسخه: ' . h((string)$w['version']), 'axwver', 'admin'),
          btnCb('🌐 آدرس API', 'axwapi', 'admin')],
         [btnCb('🚧 سقف هر تراکنش', 'axwmax', 'admin'), btnCb('🚧 سقف روزانه', 'axwday', 'admin')],
+        [btnCb('🎯 آدرس درست را خودت پیدا کن', 'axwfix', 'buy')],
         [btnCb('🧪 تایید مالکیت و موجودی', 'axwtest', 'admin')],
         [btnCb('🗑 پاک کردن عبارت بازیابی', 'axwclr', 'danger')],
         [btnCb('🔙 بازگشت', 'ax_home', 'nav')],

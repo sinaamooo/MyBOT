@@ -169,8 +169,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         [$vok, $verr] = axWalletVerify(true);
         $bal = axWalletBalance();
         go($vok
-            ? '✅ عبارت بازیابی با همین آدرس می‌خواند.' . ($bal !== null ? ' موجودی: ' . $bal . ' TON' : '')
+            ? "✅ <b>تایید شد.</b>" . ($verr !== '' ? "\n" . $verr : '') .
+              ($bal !== null ? "\nموجودی: " . $bal . ' TON' : '')
             : '❌ ' . $verr, $vok ? 'ok' : 'err');
+    }
+
+    if ($a === 'auto_fix') {
+        [$cOk, $cWhy] = tonCryptoReady();
+        if (!$cOk) go($cWhy, 'err');
+        [$fixed, $info] = axWalletAutoFix();
+        go($fixed
+            ? "🎯 <b>آدرس درست پیدا و ذخیره شد:</b>\n<code>" . $info . "</code>\n\n" .
+              "زنجیره تایید کرد که این آدرس همان کلید عبارت بازیابی شماست.\n" .
+              "حالا می‌توانید تیک «روشن» را بزنید."
+            : "پیدا نشد:\n" . $info, $fixed ? 'ok' : 'err');
     }
 
     if ($a === 'auto_wipe') {
@@ -2329,8 +2341,11 @@ def join_gate(user_id):
       <input type="hidden" name="action" value="auto_wallet">
 
       <div class="grid2">
-        <div><label>آدرس ولت</label>
-          <input name="w_addr" dir="ltr" placeholder="UQ… یا EQ…" value="<?= h((string)$W['address']) ?>"></div>
+        <div><label>آدرس ولت <span class="muted">(هر آدرسی از همان کیف پول)</span></label>
+          <input name="w_addr" dir="ltr" placeholder="UQ… یا EQ…" value="<?= h((string)$W['address']) ?>">
+          <p class="muted">لازم نیست دقیقا آدرسِ همان ۲۴ کلمه باشد — هر آدرس فعالی از
+          کیف پولتان کافی است. ربات از روی آن نوع ولت را می‌فهمد و
+          <b>آدرس درست را خودش پیدا و ذخیره می‌کند</b>.</p></div>
         <div><label>نسخه قرارداد ولت</label>
           <select name="w_ver">
             <option value="v4r2" <?= (string)$W['version'] === 'v4r2' ? 'selected' : '' ?>>v4R2 (رایج‌ترین)</option>
@@ -2387,6 +2402,11 @@ def join_gate(user_id):
     </form>
 
     <div style="margin-top:15px;padding-top:15px;border-top:1px solid #edf2f7;display:flex;gap:9px;flex-wrap:wrap;align-items:center">
+      <form method="post" class="inline">
+        <input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="tab" value="auto">
+        <input type="hidden" name="action" value="auto_fix">
+        <button class="btn g">🎯 آدرس درست را خودت پیدا کن</button>
+      </form>
       <form method="post" class="inline">
         <input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="tab" value="auto">
         <input type="hidden" name="action" value="auto_verify">
