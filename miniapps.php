@@ -998,22 +998,44 @@ function maVerifyInitData($initData, &$reason = null, $maxAge = 0) {
     if ($initData === '')            { $reason = 'empty';    return null; }
     if (strlen($initData) > 8192)    { $reason = 'too_big';  return null; }
 
-    parse_str($initData, $q);
+    // parse_str نام کلیدها را دستکاری می‌کند (نقطه و فاصله را زیرخط می‌کند و
+    // براکت را آرایه می‌خواند). برای رشته‌ای که قرار است بایت‌به‌بایت هش شود
+    // این خطرناک است، پس خودمان می‌شکافیم.
+    $q = [];
+    foreach (explode('&', $initData) as $part) {
+        if ($part === '') continue;
+        $eq = strpos($part, '=');
+        if ($eq === false) continue;
+        $q[urldecode(substr($part, 0, $eq))] = urldecode(substr($part, $eq + 1));
+    }
+
     if (empty($q['hash']))           { $reason = 'no_hash';  return null; }
     if (empty($q['user']))           { $reason = 'no_user';  return null; }
 
     $hash = (string)$q['hash'];
-    // hash و signature در رشته بررسی نمی‌آیند (طبق مستندات تلگرام)
-    unset($q['hash'], $q['signature']);
-    ksort($q);
+    unset($q['hash']);
 
-    $pairs = [];
-    foreach ($q as $k => $v) $pairs[] = $k . '=' . $v;
-    $check = implode("\n", $pairs);
-
+    // فیلد signature را تلگرام برای اعتبارسنجی شخص ثالث اضافه کرده و
+    // مستنداتش روشن نمی‌گوید داخل رشته‌ی هش می‌آید یا نه. به‌جای حدس زدن،
+    // هر دو حالت را می‌سنجیم — یکی‌شان حتما درست است، و اگر تلگرام روزی
+    // قاعده را عوض کند باز هم کار می‌کند.
     $secret = hash_hmac('sha256', BOT_TOKEN, 'WebAppData', true);
-    $calc   = hash_hmac('sha256', $check, $secret);
-    if (!hash_equals($calc, $hash)) { $reason = 'bad_hash'; return null; }
+    $mkCheck = function ($fields) {
+        ksort($fields);
+        $pairs = [];
+        foreach ($fields as $k => $v) $pairs[] = $k . '=' . $v;
+        return implode("\n", $pairs);
+    };
+
+    $withSig = $q;
+    $noSig   = $q; unset($noSig['signature']);
+
+    $matched = '';
+    foreach (['بدون signature' => $noSig, 'با signature' => $withSig] as $how => $fields) {
+        if (hash_equals(hash_hmac('sha256', $mkCheck($fields), $secret), $hash)) { $matched = $how; break; }
+        if ($noSig === $withSig) break;      // signature اصلا نبود، دو بار سنجیدن بی‌معنی است
+    }
+    if ($matched === '') { $reason = 'bad_hash'; return null; }
 
     // ⏰ عمر داده — با تحمل اختلاف ساعت سرور.
     // سقف کوتاه (یک ساعت) روی هاست‌هایی که ساعتشان تنظیم نیست همه را بیرون می‌انداخت،
