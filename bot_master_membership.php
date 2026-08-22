@@ -2131,7 +2131,14 @@ function showReferral($uid, $chatId, $extra = [], $replyTo = null) {
         'referrals'  => countReferrals($uid),
         'ref_earned' => fmtNum($u['ref_earned'] ?? 0),
     ]);
-    panelShow($uid, $chatId, 'menu', $refText, $extra ? inlineKb($extra) : null, $replyTo);
+    // 📤 دکمه شیشه‌ای «ارسال به دوستان و گروه‌ها» — تلگرام فهرست چت‌ها را باز می‌کند
+    $rows = [];
+    if ($un !== '' && function_exists('axShareButton')) {
+        if ($sb = axShareButton($link)) $rows[] = [$sb];
+    }
+    foreach ($extra as $r) $rows[] = $r;
+
+    panelShow($uid, $chatId, 'menu', $refText, $rows ? inlineKb($rows) : null, $replyTo);
 }
 
 function supMainBtn($which, $cb) {

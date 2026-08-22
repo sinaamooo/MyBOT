@@ -631,22 +631,35 @@ function maRate($which, $fresh = false) {
         if ($hit !== null) return (float)$hit;
     }
 
-    [$j, $err] = maHttp($url, 'GET', '', '', 8);
-    if (!$j) {
-        maCachePut('rateerr_' . $which, $err ?: 'پاسخی نیامد');
+    // صرافی انتخاب‌شده اول، بعد بقیه — یک صرافی که از هاست شما در دسترس
+    // نباشد نباید کل قیمت‌ها را بخواباند.
+    $tries = [[$url, $path, (float)($r['div'] ?? 1), (string)($r['source'] ?? 'custom')]];
+    foreach (maRateSources() as $sid => $src) {
+        if ($sid === (string)($r['source'] ?? '')) continue;
+        if (empty($src[$which . '_url'])) continue;
+        $tries[] = [$src[$which . '_url'], $src[$which . '_path'], (float)$src['div'], $sid];
+    }
+
+    $j = null; $raw = 0; $div = 1; $errs = [];
+    foreach ($tries as [$u, $pth, $dv, $sid]) {
+        [$jj, $err] = maHttp($u, 'GET', '', '', 8);
+        if (!$jj) { $errs[] = $sid . ': ' . ($err ?: 'پاسخی نیامد'); continue; }
+        $v = maNum(maJsonPath($jj, $pth));
+        if ($v <= 0) {
+            $errs[] = $sid . ': مسیر «' . $pth . '» پیدا نشد یا صفر بود (کلیدها: ' .
+                      implode(', ', array_slice(array_keys($jj), 0, 6)) . ')';
+            continue;
+        }
+        $j = $jj; $raw = $v; $div = max(1, $dv);
+        if ($sid !== (string)($r['source'] ?? '')) maCachePut('ratesrc_' . $which, $sid);
+        break;
+    }
+
+    if ($raw <= 0) {
+        maCachePut('rateerr_' . $which, implode(' | ', $errs) ?: 'هیچ صرافی‌ای جواب نداد');
         return (float)(maCacheGet($ck, 0) ?? 0);   // کش قدیمی بهتر از هیچ
     }
-
-    $raw = maNum(maJsonPath($j, $path));
-    if ($raw <= 0) {
-        maCachePut('rateerr_' . $which,
-            'مسیر «' . $path . '» در پاسخ پیدا نشد یا صفر بود. کلیدهای پاسخ: ' .
-            implode(', ', array_slice(array_keys($j), 0, 8)));
-        return (float)(maCacheGet($ck, 0) ?? 0);
-    }
     maCachePut('rateerr_' . $which, '');
-
-    $div = max(1, (float)($r['div'] ?? 1));
     $val = ($raw / $div) * (1 + ((float)($r['margin'] ?? 0) / 100));
     $val = maRound($val, (float)($r['round'] ?? 0));
 
@@ -1034,10 +1047,32 @@ function maAuthReasonText($reason) {
         'empty'    => 'مینی‌اپ بدون اطلاعات ورود باز شده. آن را از دکمه داخل ربات باز کنید، نه از مرورگر.',
         'no_hash'  => 'امضای تلگرام در داده ورود نبود.',
         'no_user'  => 'اطلاعات کاربر در داده ورود نبود. مینی‌اپ را از چت خصوصی ربات باز کنید.',
-        'bad_hash' => 'امضا نخواند — توکن ربات در فایل با رباتی که دکمه را ساخته یکی نیست.',
+        'bad_hash' => maBadHashText(),
         'bad_user' => 'اطلاعات کاربر خوانده نشد.',
         'too_big'  => 'داده ورود بیش از حد بزرگ بود.',
     ][$r] ?? 'اعتبارسنجی ناموفق بود.';
+}
+
+/**
+ * وقتی امضا نمی‌خواند، مفیدترین چیزی که می‌شود گفت این است که
+ * توکنِ داخل فایل مال کدام ربات است — کاربر همان‌جا با ربات خودش می‌سنجد.
+ */
+function maBadHashText() {
+    $un = maCacheGet('selfbot', 3600);
+    if ($un === null) {
+        $me = tg(BOT_TOKEN, 'getMe', []);
+        $un = !empty($me['result']['username']) ? '@' . $me['result']['username'] : '';
+        maCachePut('selfbot', $un);
+    }
+    $t = 'امضای تلگرام نخواند.' . "\n\n" .
+         'یعنی توکنی که در فایل ربات گذاشته‌اید، مال رباتی نیست که این دکمه را ساخته.';
+    if ($un !== '') {
+        $t .= "\n\n" . 'توکن داخل فایل مال ربات ' . $un . ' است.' . "\n" .
+              'اگر این همان رباتی نیست که الان داخلش هستید، توکن را عوض کنید:' . "\n" .
+              'خط ۲۰ فایل bot_master_membership.php';
+    }
+    $t .= "\n\n" . 'اگر تازه از @BotFather توکن را Revoke کرده‌اید، توکن تازه را در فایل بگذارید و وبهوک را دوباره ست کنید.';
+    return $t;
 }
 
 // ============================================================

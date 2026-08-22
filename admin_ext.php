@@ -88,6 +88,13 @@ function axDefaults() {
             'members_gp'   => '👥 گروه‌ها و کانال‌ها',
             'members_none' => 'هنوز منبعی برای این سفارش ثبت نشده است.',
             'sup_stack'    => true,      // دکمه‌های پشتیبانی زیر هم
+
+            // 📤 دکمه‌ی اشتراک‌گذاری زیر متن دعوت دوستان.
+            // switch_inline_query یعنی تلگرام خودش فهرست چت‌ها را باز می‌کند
+            // و کاربر با یک ضربه، متن را به هر پیوی یا گروهی می‌فرستد.
+            'share_on'     => true,
+            'share_btn'    => '📤 ارسال به دوستان و گروه‌ها',
+            'share_text'   => "🎁 با این لینک وارد ربات شو و از خریدهات تخفیف بگیر:\n{link}",
         ],
 
         // ---------- 🧾 متن تایید سفارش مینی‌اپ‌ها ----------
@@ -656,20 +663,64 @@ function axRatesRefresh() {
     return $out;
 }
 
-/** خط خوانا برای نمایش نرخ‌ها */
-function axRatesText() {
+/** خط خوانا برای نمایش نرخ‌ها — با دلیل شکست، نه فقط یک خط تیره */
+function axRatesText($withErrors = false) {
     $n = ['usdt' => '💵 تتر', 'ton' => '💎 تون', 'trx' => '🔺 ترون'];
     $out = [];
     foreach ($n as $k => $label) {
         $v = axRate($k);
-        $out[] = $label . ': ' . ($v > 0 ? '<b>' . fmtNum($v) . '</b> تومان' : '—');
+        if ($v > 0) {
+            $src = function_exists('maCacheGet') ? (string)(maCacheGet('ratesrc_' . $k, 0) ?? '') : '';
+            $out[] = $label . ': <b>' . fmtNum($v) . '</b> تومان' .
+                     ($src !== '' ? ' <i>(' . h($src) . ')</i>' : '');
+            continue;
+        }
+        $err = function_exists('maCacheGet') ? trim((string)(maCacheGet('rateerr_' . $k, 0) ?? '')) : '';
+        $out[] = $label . ': —' . ($withErrors && $err !== '' ? "\n   <code>" . h(mb_substr($err, 0, 160)) . '</code>' : '');
     }
     return implode("\n", $out);
+}
+
+/** آیا هیچ نرخی نمی‌آید؟ */
+function axRatesDown() {
+    foreach (['usdt', 'ton', 'trx'] as $k) if (axRate($k) > 0) return false;
+    return true;
 }
 
 // ============================================================
 // 👥 دکمه‌ی «پیوی‌ها و گروه‌ها» روی متن عضوگیری
 // ============================================================
+
+/**
+ * 📤 دکمه‌ی اشتراک‌گذاری زیر متن دعوت دوستان.
+ *
+ * switch_inline_query کاری می‌کند که تلگرام خودش فهرست چت‌ها را باز کند —
+ * پیوی‌ها، گروه‌ها، کانال‌ها — و کاربر با یک ضربه متن را همان‌جا بفرستد.
+ * این تنها راهی است که تلگرام برای «بفرست به همه» می‌دهد؛ ربات اجازه ندارد
+ * از طرف کاربر به چت‌هایش پیام بدهد.
+ */
+function axShareButton($link) {
+    if (empty(axVal('labels.share_on'))) return null;
+    $t = trim((string)axVal('labels.share_btn'));
+    if ($t === '') return null;
+
+    $q = strtr((string)axVal('labels.share_text'), ['{link}' => (string)$link]);
+
+    // تلگرام سقف ۲۵۶ بایت دارد و فارسی هر حرف دو بایت است — پس با بایت
+    // می‌سنجیم، نه با تعداد حرف. لینک جایش محفوظ می‌ماند چون بی‌لینک
+    // این دکمه اصلا فایده‌ای ندارد.
+    if (strlen($q) > 256) {
+        $link = (string)$link;
+        $room = 256 - strlen($link) - 1;                 // ۱ بایت برای خط تازه
+        $head = $room > 0 ? mb_strcut($q, 0, $room) : '';
+        // مبادا وسط لینکِ داخل متن بریده باشیم
+        $head = rtrim(preg_replace('#https?://\S*$#', '', $head));
+        $q    = $head === '' ? $link : $head . "\n" . $link;
+        if (strlen($q) > 256) $q = mb_strcut($link, 0, 256);
+    }
+
+    return ['text' => $t, 'switch_inline_query' => $q];
+}
 
 /** دکمه‌ای که زیر متن عضوگیری می‌نشیند */
 function axMembersButton($orderId) {
@@ -947,7 +998,11 @@ function axTextsHome($chatId, $msgId) {
     $t .= "دکمه‌ی عضوگیری: <b>" . h((string)$l['members_btn']) . "</b>\n";
     $t .= "برچسب پیوی: <b>" . h((string)$l['members_pv']) . "</b>\n";
     $t .= "برچسب گروه: <b>" . h((string)$l['members_gp']) . "</b>\n";
-    $t .= "دکمه‌های پشتیبانی: <b>" . (!empty($l['sup_stack']) ? 'زیر هم' : 'کنار هم') . "</b>\n";
+    $t .= "دکمه‌های پشتیبانی: <b>" . (!empty($l['sup_stack']) ? 'زیر هم' : 'کنار هم') . "</b>\n\n";
+    $t .= "📤 <b>دکمه اشتراک‌گذاری دعوت</b>: " . (!empty($l['share_on']) ? '🟢 روشن' : '🔴 خاموش') . "\n";
+    $t .= "متن دکمه: <b>" . h((string)$l['share_btn']) . "</b>\n";
+    $t .= "<i>با زدنش، تلگرام فهرست پیوی‌ها و گروه‌ها را باز می‌کند و کاربر\n" .
+          "با یک ضربه لینک دعوتش را همان‌جا می‌فرستد.</i>\n";
 
     axShow($chatId, $msgId, $t, [
         [btnCb('🧾 متن تایید سفارش مینی‌اپ', 'axinv', 'admin')],
@@ -957,6 +1012,9 @@ function axTextsHome($chatId, $msgId) {
         [btnCb('💬 برچسب پیوی', 'axtx_members_pv', 'admin'),
          btnCb('👥 برچسب گروه', 'axtx_members_gp', 'admin')],
         [btnCb((!empty($l['sup_stack']) ? '⬇️ پشتیبانی: زیر هم' : '↔️ پشتیبانی: کنار هم'), 'axsup', 'admin')],
+        [btnCb((!empty($l['share_on']) ? '🟢 دکمه اشتراک‌گذاری' : '🔴 دکمه اشتراک‌گذاری'), 'axshtog', 'admin')],
+        [btnCb('🔘 متن دکمه اشتراک', 'axtx_share_btn', 'admin'),
+         btnCb('✍️ متن ارسالی', 'axtx_share_text', 'admin')],
         [btnCb('🔙 بازگشت', 'ax_home', 'nav')],
     ]);
 }
@@ -1070,9 +1128,21 @@ function axCallback($data, $uid, $chatId, $msgId, $cbId, $isAdmin) {
     if ($data === 'ax_rates') {
         $ack('⏳ در حال گرفتن نرخ…');
         axRatesRefresh();
-        $t = "💱 <b>نرخ ارز</b>\n\n" . axRatesText() . "\n\n" .
-             "منبع و تنظیمات دقیق در: پنل ← 🚀 مینی‌اپ‌ها ← 💱 نرخ ارز\n" .
-             "نرخ‌ها هر چند دقیقه یک‌بار خودکار تازه می‌شوند.";
+        $t = "💱 <b>نرخ ارز</b>\n\n" . axRatesText(true) . "\n\n";
+        if (axRatesDown()) {
+            $t .= "🔴 <b>هیچ صرافی‌ای از این هاست جواب نداد.</b>\n\n" .
+                  "ربات خودش نوبیتکس و والکس هر دو را امتحان می‌کند؛ وقتی هر دو رد می‌شوند\n" .
+                  "یعنی مشکل از هاست است، نه از تنظیمات. معمولا یکی از این‌هاست:\n\n" .
+                  "• هاست ایران‌خارج است و به صرافی ایرانی دسترسی ندارد\n" .
+                  "• فایروال هاست درخواست بیرونی را می‌بندد\n" .
+                  "• <code>allow_url_fopen</code> یا افزونه‌ی curl خاموش است\n\n" .
+                  "متن خطای بالا را برای پشتیبانی هاست بفرستید، یا از پنل ← 🚀 مینی‌اپ‌ها ←\n" .
+                  "💱 نرخ ارز یک آدرس API دیگر بگذارید.";
+        } else {
+            $t .= "منبع و تنظیمات دقیق در: پنل ← 🚀 مینی‌اپ‌ها ← 💱 نرخ ارز\n" .
+                  "نرخ‌ها هر چند دقیقه یک‌بار خودکار تازه می‌شوند.\n" .
+                  "اگر صرافی اصلی جواب ندهد، خودکار سراغ دیگری می‌رود.";
+        }
         axShow($chatId, $msgId, $t, [
             [btnCb('🔄 تازه‌سازی', 'ax_rates', 'admin')],
             [btnCb('🔙 بازگشت', 'ax_home', 'nav')],
@@ -1112,6 +1182,13 @@ function axCallback($data, $uid, $chatId, $msgId, $cbId, $isAdmin) {
     if ($data === 'axinvtog') {
         $now = axSet(function (&$c) { $c['texts']['invoice_on'] = empty($c['texts']['invoice_on']); return !empty($c['texts']['invoice_on']); });
         $ack($now ? '🟢 متن سفارشی' : '⚪️ متن پیش‌فرض');
+        axTextsHome($chatId, $msgId);
+        return true;
+    }
+
+    if ($data === 'axshtog') {
+        $now = axSet(function (&$c) { $c['labels']['share_on'] = empty($c['labels']['share_on']); return !empty($c['labels']['share_on']); });
+        $ack($now ? '🟢 روشن شد' : '🔴 خاموش شد');
         axTextsHome($chatId, $msgId);
         return true;
     }
