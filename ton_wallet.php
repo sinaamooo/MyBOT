@@ -422,13 +422,17 @@ function tonKeyFromMnemonic($words, $password = '') {
  * واقعاً صاحب همین آدرس است و امضای ما را ولت می‌پذیرد.
  */
 function tonVerifyWallet($base, $address, $publicKey, $apiKey) {
-    $r = tonApiCall($base, '/api/v2/runGetMethod', 'POST', [
+    // مسیر runGetMethod نسبت به همان base داده می‌شود، نه با پیشوند ثابت
+    [$r, $err] = tonApiCall($base, '/runGetMethod', 'POST', [
         'address' => $address, 'method' => 'get_public_key', 'stack' => [],
     ], $apiKey);
-    if (empty($r['ok'])) return ['ok' => false, 'error' => 'پاسخ شبکه نامعتبر: ' . substr(json_encode($r, 320), 0, 200)];
+    if (!$r) return ['ok' => false, 'error' => 'پاسخ شبکه نامعتبر: ' . mb_substr((string)$err, 0, 200)];
+    if (isset($r['ok']) && !$r['ok']) return ['ok' => false, 'error' => 'شبکه خطا داد: ' . mb_substr(json_encode($r, 320), 0, 160)];
     $stack = $r['result']['stack'] ?? [];
     if (!isset($stack[0][1])) return ['ok' => false, 'error' => 'ولت متد get_public_key ندارد — آدرس یا نسخه ولت را بررسی کنید'];
-    $onchain = ltrim(strtolower((string)$stack[0][1]), 'x');
+    // پاسخ می‌تواند «0x…» یا هگز خالی باشد؛ صفرهای ابتدایی هم معنی ندارند
+    $onchain = strtolower(trim((string)$stack[0][1]));
+    if (str_starts_with($onchain, '0x')) $onchain = substr($onchain, 2);
     $onchain = ltrim($onchain, '0');
     $mine    = ltrim(bin2hex($publicKey), '0');
     if ($onchain !== $mine) return ['ok' => false, 'error' => 'عبارت بازیابی با این آدرس نمی‌خواند'];

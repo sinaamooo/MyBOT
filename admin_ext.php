@@ -1504,8 +1504,8 @@ function axWalletBalance() {
     $w = axCfg()['wallet'];
     if (trim((string)$w['address']) === '') return null;
     try {
-        $nano = tonGetBalance((string)$w['api'], (string)$w['address'], (string)$w['api_key']);
-        return $nano === null ? null : nanoToTon($nano);
+        [$nano, $err] = tonGetBalance((string)$w['api'], (string)$w['address'], (string)$w['api_key']);
+        return ($nano === null || !is_scalar($nano)) ? null : nanoToTon((string)$nano);
     } catch (Throwable $e) { return null; }
 }
 
@@ -1646,8 +1646,8 @@ function axWalletSend($msgs, $note = '') {
         $v = tonVerifyWallet((string)$w['api'], (string)$w['address'], $keys['public'], (string)$w['api_key']);
         if (empty($v['ok']) && !$dry) { $refund(); return [false, 'تایید ولت ناموفق: ' . ($v['error'] ?? '—')]; }
 
-        $seqno = tonGetSeqno((string)$w['api'], (string)$w['address'], (string)$w['api_key']);
-        if ($seqno === null && !$dry) { $refund(); return [false, 'seqno از شبکه نیامد']; }
+        [$seqno, $sErr] = tonGetSeqno((string)$w['api'], (string)$w['address'], (string)$w['api_key']);
+        if ($seqno === null && !$dry) { $refund(); return [false, 'seqno از شبکه نیامد: ' . $sErr]; }
 
         $cells = [];
         foreach ($msgs as $m) $cells[] = tonInternalMessage($m);
@@ -1660,19 +1660,19 @@ function axWalletSend($msgs, $note = '') {
             return [false, "🧪 حالت آزمایشی — تراکنش ساخته و امضا شد ولی فرستاده نشد.\n\n" .
                            'مبلغ: ' . nanoToTon($sum) . " TON\n" .
                            'مقصد: ' . mb_substr($msgs[0]['address'], 0, 20) . "…\n" .
-                           'seqno: ' . ($seqno === null ? '⚠️ از شبکه نیامد' : (int)$seqno) . "\n" .
+                           'seqno: ' . ($seqno === null ? '⚠️ از شبکه نیامد — ' . $sErr : (int)$seqno) . "\n" .
                            'اندازه BOC: ' . strlen($boc) . " بایت\n" .
                            'تایید مالکیت: ' . (!empty($v['ok']) ? '✅' : '⚠️ ' . ($v['error'] ?? '—')) . "\n\n" .
                            'برای فرستادن واقعی، «حالت آزمایشی» را خاموش کنید.'];
         }
 
-        $res = tonSendBoc((string)$w['api'], $boc, (string)$w['api_key']);
-        if (empty($res['ok'])) {
+        [$sent, $sendErr] = tonSendBoc((string)$w['api'], $boc, (string)$w['api_key']);
+        if (!$sent) {
             $refund();
-            return [false, 'شبکه تراکنش را نپذیرفت: ' . mb_substr(json_encode($res, 320), 0, 200)];
+            return [false, 'شبکه تراکنش را نپذیرفت: ' . mb_substr((string)$sendErr, 0, 200)];
         }
 
-        $hash = (string)($res['result']['hash'] ?? '');
+        $hash = '';
         axLog('wallet_send', nanoToTon($sum) . ' TON · seqno ' . (int)$seqno . ($note !== '' ? ' · ' . $note : ''));
         axNotifyAdmin("👛 <b>تراکنش ولت فرستاده شد</b>\n\n" .
                       '💎 مبلغ: <b>' . h(nanoToTon($sum)) . "</b> TON\n" .
