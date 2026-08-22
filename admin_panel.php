@@ -185,6 +185,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             : "پیدا نشد:\n" . $info, $fixed ? 'ok' : 'err');
     }
 
+    if ($a === 'auto_diag') {
+        $rows = axWalletDiagnose();
+        $t = "🩻 <b>تشخیص لایه‌به‌لایه</b>\n\n";
+        foreach ($rows as $r) {
+            $t .= ($r['ok'] ? '✅ ' : '⚠️ ') . '<b>' . $r['step'] . "</b>\n";
+            if (trim((string)$r['info']) !== '') $t .= '   ' . $r['info'] . "\n";
+        }
+        go($t, 'ok');
+    }
+
     if ($a === 'auto_wipe') {
         axSet(function (&$c) { $c['wallet']['mnemonic'] = ''; $c['wallet']['on'] = false; $c['wallet']['verified'] = 0; });
         go('عبارت بازیابی پاک شد و ولت خاموش شد.', 'warn');
@@ -2411,6 +2421,11 @@ def join_gate(user_id):
         <input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="tab" value="auto">
         <input type="hidden" name="action" value="auto_fix">
         <button class="btn g">🎯 آدرس درست را خودت پیدا کن</button>
+      </form>
+      <form method="post" class="inline">
+        <input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="tab" value="auto">
+        <input type="hidden" name="action" value="auto_diag">
+        <button class="btn ghost">🩻 تشخیص لایه‌به‌لایه</button>
       </form>
       <form method="post" class="inline">
         <input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="tab" value="auto">

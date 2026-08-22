@@ -472,12 +472,178 @@ function tonKeyFromMnemonic($words, $password = '') {
 // 👛 قرارداد ولت v4R2
 // ============================================================
 
+// ============================================================
+// 👛 قراردادهای ولت — کد رسمی، نه حدسی
+// ============================================================
+//
+// این سه رشته کد قرارداد ولت‌اند و مستقیم از کتابخانه‌ی رسمی
+// @ton/ton برداشته شده‌اند (src/wallets/…). درستی‌شان حدس زده نشده:
+// تست‌ها آدرس ساخته‌شده را با آدرس‌های معلومِ همان کتابخانه می‌سنجند.
+//
+//   v3R2  →  EQA0D_5WdusaCB-SpnoE6l5TzdBmgOkzTcXrdh0px6g3zJSk
+//   v4R2  →  EQDnBF4JTFKHTYjulEJyNd4dstLGH1m51UrLdu01_tw4z2Au
+//   (هر دو با کلیدِ ed25519 از seed = sha256("v4-treasure"))
+
+function tonWalletCodes() {
+    return [
+        'v3r2' => ['enc' => 'b64', 'code' => 'te6cckEBAQEAcQAA3v8AIN0gggFMl7ohggEznLqxn3Gw7UTQ0x/THzHXC//jBOCk8mCDCNcYINMf0x/TH/gjE7vyY+1E0NMf0x/T/9FRMrryoVFEuvKiBPkBVBBV+RDyo/gAkyDXSpbTB9QC+wDo0QGkyMsfyx/L/8ntVBC9ba0=', 'name' => 'v3R2'],
+        'v4r2' => ['enc' => 'b64', 'code' => 'te6ccgECFAEAAtQAART/APSkE/S88sgLAQIBIAIDAgFIBAUE+PKDCNcYINMf0x/THwL4I7vyZO1E0NMf0x/T//QE0VFDuvKhUVG68qIF+QFUEGT5EPKj+AAkpMjLH1JAyx9SMMv/UhD0AMntVPgPAdMHIcAAn2xRkyDXSpbTB9QC+wDoMOAhwAHjACHAAuMAAcADkTDjDQOkyMsfEssfy/8QERITAubQAdDTAyFxsJJfBOAi10nBIJJfBOAC0x8hghBwbHVnvSKCEGRzdHK9sJJfBeAD+kAwIPpEAcjKB8v/ydDtRNCBAUDXIfQEMFyBAQj0Cm+hMbOSXwfgBdM/yCWCEHBsdWe6kjgw4w0DghBkc3RyupJfBuMNBgcCASAICQB4AfoA9AQw+CdvIjBQCqEhvvLgUIIQcGx1Z4MesXCAGFAEywUmzxZY+gIZ9ADLaRfLH1Jgyz8gyYBA+wAGAIpQBIEBCPRZMO1E0IEBQNcgyAHPFvQAye1UAXKwjiOCEGRzdHKDHrFwgBhQBcsFUAPPFiP6AhPLassfyz/JgED7AJJfA+ICASAKCwBZvSQrb2omhAgKBrkPoCGEcNQICEekk30pkQzmkD6f+YN4EoAbeBAUiYcVnzGEAgFYDA0AEbjJftRNDXCx+AA9sp37UTQgQFA1yH0BDACyMoHy//J0AGBAQj0Cm+hMYAIBIA4PABmtznaiaEAga5Drhf/AABmvHfaiaEAQa5DrhY/AAG7SB/oA1NQi+QAFyMoHFcv/ydB3dIAYyMsFywIizxZQBfoCFMtrEszMyXP7AMhAFIEBCPRR8qcCAHCBAQjXGPoA0z/IVCBHgQEI9FHyp4IQbm90ZXB0gBjIywXLAlAGzxZQBPoCFMtqEssfyz/Jc/sAAgBsgQEI1xj6ANM/MFIkgQEI9Fnyp4IQZHN0cnB0gBjIywXLAlAFzxZQA/oCE8tqyx8Syz/Jc/sAAAr0AMntVA==', 'name' => 'v4R2'],
+        'v5r1' => ['enc' => 'hex', 'code' => 'b5ee9c7241021401000281000114ff00f4a413f4bcf2c80b01020120020d020148030402dcd020d749c120915b8f6320d70b1f2082106578746ebd21821073696e74bdb0925f03e082106578746eba8eb48020d72101d074d721fa4030fa44f828fa443058bd915be0ed44d0810141d721f4058307f40e6fa1319130e18040d721707fdb3ce03120d749810280b99130e070e2100f020120050c020120060902016e07080019adce76a2684020eb90eb85ffc00019af1df6a2684010eb90eb858fc00201480a0b0017b325fb51341c75c875c2c7e00011b262fb513435c280200019be5f0f6a2684080a0eb90fa02c0102f20e011e20d70b1f82107369676ebaf2e08a7f0f01e68ef0eda2edfb218308d722028308d723208020d721d31fd31fd31fed44d0d200d31f20d31fd3ffd70a000af90140ccf9109a28945f0adb31e1f2c087df02b35007b0f2d0845125baf2e0855036baf2e086f823bbf2d0882292f800de01a47fc8ca00cb1f01cf16c9ed542092f80fde70db3cd81003f6eda2edfb02f404216e926c218e4c0221d73930709421c700b38e2d01d72820761e436c20d749c008f2e09320d74ac002f2e09320d71d06c712c2005230b0f2d089d74cd7393001a4e86c128407bbf2e093d74ac000f2e093ed55e2d20001c000915be0ebd72c08142091709601d72c081c12e25210b1e30f20d74a111213009601fa4001fa44f828fa443058baf2e091ed44d0810141d718f405049d7fc8ca0040048307f453f2e08b8e14038307f45bf2e08c22d70a00216e01b3b0f2d090e2c85003cf1612f400c9ed54007230d72c08248e2d21f2e092d200ed44d0d2005113baf2d08f54503091319c01810140d721d70a00f2e08ee2c8ca0058cf16c9ed5493f2c08de20010935bdb31e1d74cd0b4d6c35e', 'name' => 'W5 (v5R1)'],
+    ];
+}
+
+/** فهرست نسخه‌های پشتیبانی‌شده — برای منوی پنل */
+function tonWalletVersionList() {
+    $out = [];
+    foreach (tonWalletCodes() as $k => $v) $out[$k] = $v['name'];
+    return $out;
+}
+
+/** کد قرارداد یک نسخه، به شکل سلول */
+function tonWalletCode($version) {
+    $all = tonWalletCodes();
+    $version = strtolower(trim((string)$version));
+    if (!isset($all[$version])) throw new Exception('نسخه ولت ناشناخته: ' . $version);
+    $c = $all[$version];
+    return $c['enc'] === 'hex'
+        ? tonBocParse(hex2bin($c['code']))
+        : tonBocFromBase64($c['code']);
+}
+
+/**
+ * شناسه‌ی ولت (subwallet_id در v3/v4، wallet_id در v5).
+ *
+ *  v3/v4 : 698983191 + workchain
+ *  v5r1  : networkGlobalId XOR int32(1 | wc(8) | version(8) | subwallet(15))
+ *          که برای mainnet/workchain 0 برابر 2147483409 می‌شود.
+ */
+function tonWalletId($version, $wc = 0, $subwallet = 0, $networkGlobalId = -239) {
+    $version = strtolower(trim((string)$version));
+    if ($version !== 'v5r1') return 698983191 + (int)$wc;
+
+    $bits = '1'
+          . str_pad(decbin(((int)$wc) & 0xFF), 8, '0', STR_PAD_LEFT)
+          . str_pad(decbin(0), 8, '0', STR_PAD_LEFT)          // walletVersion v5r1 = 0
+          . str_pad(decbin(((int)$subwallet) & 0x7FFF), 15, '0', STR_PAD_LEFT);
+    $ctx = bindec($bits) & 0xFFFFFFFF;                        // به‌شکل uint32
+    $net = ((int)$networkGlobalId) & 0xFFFFFFFF;
+    return ($net ^ $ctx) & 0xFFFFFFFF;
+}
+
+/** سلول داده‌ی اولیه‌ی ولت — چیدمانش برای هر نسخه فرق دارد */
+function tonWalletData($publicKey, $version, $wc = 0, $subwallet = 0, $networkGlobalId = -239) {
+    if (strlen((string)$publicKey) !== 32) throw new Exception('کلید عمومی باید ۳۲ بایت باشد');
+    $version = strtolower(trim((string)$version));
+    $wid = tonWalletId($version, $wc, $subwallet, $networkGlobalId);
+
+    $b = new TonBits();
+    if ($version === 'v5r1') {
+        $b->writeBit(1);                 // امضا مجاز است
+        $b->writeUint(0, 32);            // seqno
+        $b->writeUint($wid, 32);         // wallet_id
+        $b->writeBytes($publicKey);
+        $b->writeBit(0);                 // دیکشنری افزونه‌ها، خالی
+    } else {
+        $b->writeUint(0, 32);            // seqno
+        $b->writeUint($wid, 32);         // subwallet_id
+        $b->writeBytes($publicKey);
+        if ($version === 'v4r2') $b->writeBit(0);   // v4 یک بیت افزونه دارد، v3 ندارد
+    }
+    return TonCell::fromBits($b);
+}
+
+/** StateInit = split_depth(0) special(0) code(1) data(1) library(0) + دو رفرنس */
+function tonWalletStateInit($publicKey, $version, $wc = 0, $subwallet = 0, $networkGlobalId = -239) {
+    $si = new TonBits();
+    $si->writeBit(0)->writeBit(0)->writeBit(1)->writeBit(1)->writeBit(0);
+    $state = TonCell::fromBits($si);
+    $state->addRef(tonWalletCode($version));
+    $state->addRef(tonWalletData($publicKey, $version, $wc, $subwallet, $networkGlobalId));
+    return $state;
+}
+
+/** آدرس ولت از روی کلید عمومی و نسخه */
+function tonWalletAddress($publicKey, $version = 'v4r2', $wc = 0, $subwallet = 0,
+                          $bounceable = true, $networkGlobalId = -239) {
+    $state = tonWalletStateInit($publicKey, $version, $wc, $subwallet, $networkGlobalId);
+    return tonAddressToString($wc, $state->hash(), $bounceable, false);
+}
+
+/**
+ * همه‌ی آدرس‌هایی که یک کلید می‌تواند داشته باشد — سه نسخه × دو ورک‌چین.
+ * برگشت: [ ['version'=>..,'name'=>..,'wc'=>..,'wallet_id'=>..,'address'=>..], … ]
+ */
+function tonWalletAllAddresses($publicKey, $wcList = [0], $subwallet = 0) {
+    $out = [];
+    foreach (tonWalletCodes() as $ver => $meta) {
+        foreach ($wcList as $wc) {
+            try {
+                $out[] = [
+                    'version'   => $ver,
+                    'name'      => $meta['name'],
+                    'wc'        => (int)$wc,
+                    'wallet_id' => tonWalletId($ver, $wc, $subwallet),
+                    'address'   => tonWalletAddress($publicKey, $ver, $wc, $subwallet),
+                ];
+            } catch (Throwable $e) { /* نسخه‌ای که ساخته نشد را رد می‌کنیم */ }
+        }
+    }
+    return $out;
+}
+
+/** هش کد هر نسخه — برای شناختن نسخه از روی قرارداد روی زنجیره */
+function tonCodeHashes() {
+    static $m = null;
+    if ($m === null) {
+        $m = [];
+        foreach (tonWalletCodes() as $k => $v) {
+            try { $m[bin2hex(tonWalletCode($k)->hash())] = $k; } catch (Throwable $e) {}
+        }
+    }
+    return $m;
+}
+
+/**
+ * 🔑 تایید آفلاین — بدون هیچ تماس با شبکه.
+ *
+ * آدرسی که کاربر داده را با آدرس‌هایی که خودِ عبارت بازیابی می‌سازد
+ * می‌سنجیم. اگر یکی بود، مالکیت ثابت است: فقط دارنده‌ی آن عبارت
+ * می‌تواند آدرسی بسازد که hash قرارداد و کلیدش با آن بخواند.
+ *
+ * برگشت: ['ok'=>bool, 'version'=>.., 'wc'=>.., 'name'=>.., 'candidates'=>[…]]
+ */
+function tonMatchAddressOffline($publicKey, $address, $subwallet = 0) {
+    $target = null;
+    try { $target = tonParseAddress($address); } catch (Throwable $e) {
+        return ['ok' => false, 'error' => 'آدرس خوانده نشد: ' . $e->getMessage(), 'candidates' => []];
+    }
+
+    $cands = tonWalletAllAddresses($publicKey, [0, -1], $subwallet);
+    foreach ($cands as $c) {
+        $p = tonParseAddress($c['address']);
+        // مقایسه روی خودِ hash و workchain — نه روی رشته، چون یک آدرس
+        // چند نوشتار دارد (EQ/UQ، bounceable یا نه، base64 یا خام).
+        if ($p['hash'] === $target['hash'] && (int)$p['wc'] === (int)$target['wc'])
+            return ['ok' => true, 'version' => $c['version'], 'name' => $c['name'],
+                    'wc' => $c['wc'], 'wallet_id' => $c['wallet_id'], 'candidates' => $cands];
+    }
+    return ['ok' => false, 'candidates' => $cands];
+}
+
 /**
  * تأیید ولت — به‌جای حدس زدن کد قرارداد، کلید عمومی روی زنجیره را می‌خوانیم
  * و با کلیدی که از عبارت بازیابی ساخته‌ایم می‌سنجیم. اگر یکی بود، این عبارت
  * واقعاً صاحب همین آدرس است و امضای ما را ولت می‌پذیرد.
  */
 function tonVerifyWallet($base, $address, $publicKey, $apiKey) {
+    // 🔑 اول آفلاین: اگر آدرس دقیقا یکی از آدرس‌های همین عبارت باشد،
+    // مالکیت همان‌جا ثابت است و اصلا سراغ شبکه نمی‌رویم — نه محدودیت
+    // نرخ، نه قطعی، نه انتظار.
+    $off = tonMatchAddressOffline($publicKey, $address);
+    if (!empty($off['ok']))
+        return ['ok' => true, 'offline' => true, 'version' => $off['version'],
+                'name' => $off['name'], 'wc' => $off['wc'], 'wallet_id' => $off['wallet_id']];
+
     // هر پیام شکست با وضعیت واقعی آدرس همراه می‌شود تا حدس نزنیم
     $withState = function ($res) use ($base, $address, $apiKey) {
         if (!empty($res['ok'])) return $res;

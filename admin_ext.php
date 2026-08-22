@@ -1117,6 +1117,17 @@ function axCallback($data, $uid, $chatId, $msgId, $cbId, $isAdmin) {
         return true;
     }
 
+    if ($data === 'axwdiag') {
+        $ack('⏳');
+        $t = "🩻 <b>تشخیص لایه‌به‌لایه</b>\n\n";
+        foreach (axWalletDiagnose() as $r) {
+            $t .= ($r['ok'] ? '✅ ' : '⚠️ ') . '<b>' . h($r['step']) . "</b>\n";
+            if (trim((string)$r['info']) !== '') $t .= '   ' . $r['info'] . "\n";
+        }
+        axShow($chatId, $msgId, $t, [[btnCb('🔙 بازگشت', 'ax_wallet', 'nav')]]);
+        return true;
+    }
+
     if ($data === 'axwfix') {
         $ack('⏳ در حال جستجو…');
         [$fixed, $info] = axWalletAutoFix();
@@ -1593,7 +1604,21 @@ function axWalletReady() {
     if (empty($w['on']) || trim((string)$w['mnemonic']) === '' || trim((string)$w['address']) === '') return false;
     // بدون Ed25519 هیچ امضایی ممکن نیست — پس «آماده» هم نیست
     if (function_exists('tonCryptoReady')) { [$ok] = tonCryptoReady(); if (!$ok) return false; }
+    // 🔒 تا مالکیت ثابت نشده، امضا ممنوع. این نرده عمدی است:
+    // امضا روی ولتی که مطمئن نیستیم مال کاربر است یعنی فرستادن پول به ناکجا.
+    if ((int)($w['verified'] ?? 0) <= 0) return false;
     return true;
+}
+
+/** چرا ولت آماده نیست — برای پیام دقیق به مدیر */
+function axWalletWhyNotReady() {
+    $w = axCfg()['wallet'];
+    if (function_exists('tonCryptoReady')) { [$ok, $why] = tonCryptoReady(); if (!$ok) return $why; }
+    if (trim((string)$w['mnemonic']) === '')      return 'عبارت بازیابی ثبت نشده';
+    if (trim((string)$w['address'])  === '')      return 'آدرس ولت ثبت نشده';
+    if ((int)($w['verified'] ?? 0) <= 0)          return 'مالکیت هنوز تایید نشده — دکمه «تایید مالکیت» را بزنید';
+    if (empty($w['on']))                          return 'خودکارسازی ولت خاموش است';
+    return 'آماده است';
 }
 
 /** [آماده؟, دلیل] — برای نمایش در پنل */
@@ -1671,6 +1696,91 @@ function axWalletVerify($withRaw = false) {
     } catch (Throwable $e) {
         return [false, $e->getMessage()];
     }
+}
+
+/**
+ * 🩻 تشخیص لایه‌به‌لایه — دقیقا کدام مرحله مشکل دارد.
+ *
+ * هیچ‌جا mnemonic یا کلید خصوصی برنمی‌گردد؛ فقط چند نویسه‌ی اول
+ * کلید عمومی که عمومی است و افشا نیست.
+ *
+ * برگشت: [ ['step'=>.., 'ok'=>bool, 'info'=>..], … ]
+ */
+function axWalletDiagnose() {
+    $w    = axCfg()['wallet'];
+    $rows = [];
+    $add  = function ($step, $ok, $info = '') use (&$rows) { $rows[] = ['step' => $step, 'ok' => (bool)$ok, 'info' => $info]; };
+
+    // ۱) رمزنگاری
+    [$cOk, $cWhy] = axCryptoCheck();
+    $add('افزونه رمزنگاری (sodium)', $cOk, $cOk ? 'در دسترس' : 'نیست — بدون آن امضا ممکن نیست');
+    if (!$cOk) return $rows;
+
+    // ۲) عبارت بازیابی
+    $words = array_values(array_filter(preg_split('/\s+/u', trim((string)$w['mnemonic'])), fn($x) => $x !== ''));
+    $nW = count($words);
+    $add('عبارت بازیابی', $nW === 24, $nW === 0 ? 'ثبت نشده' : $nW . ' کلمه' . ($nW === 24 ? '' : ' — باید ۲۴ باشد'));
+    if ($nW !== 24) return $rows;
+
+    // ۳) رمز اختیاری
+    $pw = trim((string)($w['passphrase'] ?? ''));
+    $add('رمز عبارت', true, $pw === '' ? 'ندارد (رایج‌ترین حالت)' : 'ثبت شده — روی کلید اثر می‌گذارد');
+
+    // ۴) ساخت کلید
+    $keys = null;
+    try { $keys = axWalletKeys(); } catch (Throwable $e) { $add('ساخت کلید', false, $e->getMessage()); return $rows; }
+    $add('ساخت کلید (HMAC-SHA512 → PBKDF2 → Ed25519)', true,
+         'کلید عمومی: ' . substr(bin2hex($keys['public']), 0, 16) . '…');
+
+    // ۵) آدرس واردشده
+    $addr = trim((string)$w['address']);
+    if ($addr === '') { $add('آدرس واردشده', false, 'ثبت نشده'); return $rows; }
+    try {
+        $pa = tonParseAddress($addr);
+        $add('خوانش آدرس (workchain و encoding)', true,
+             'workchain ' . $pa['wc'] . ' · ' . (str_starts_with($addr, 'UQ') || str_starts_with($addr, 'EQ')
+                 ? 'base64url' : 'خام') . ' · چک‌سام درست');
+    } catch (Throwable $e) {
+        $add('خوانش آدرس', false, $e->getMessage());
+        return $rows;
+    }
+
+    // ۶) تطبیق آفلاین با همه‌ی نسخه‌ها
+    $off = tonMatchAddressOffline($keys['public'], $addr);
+    if (!empty($off['ok'])) {
+        $add('تطبیق نسخه ولت', true,
+             $off['name'] . ' · workchain ' . $off['wc'] . ' · wallet_id ' . $off['wallet_id']);
+        $add('نتیجه', true, 'این آدرس دقیقا از همین عبارت بازیابی ساخته می‌شود ✅');
+        return $rows;
+    }
+
+    $lines = [];
+    foreach ($off['candidates'] as $c)
+        $lines[] = $c['name'] . ' wc' . $c['wc'] . ': ' . $c['address'];
+    $add('تطبیق نسخه ولت', false,
+         "آدرس واردشده با هیچ‌کدام از نسخه‌های شناخته‌شده نمی‌خواند.\n" .
+         "آدرس‌هایی که این عبارت می‌سازد:\n• " . implode("\n• ", $lines));
+
+    // ۷) اگر آفلاین نخواند، از زنجیره بپرس
+    $api = (string)$w['api']; $key = (string)$w['api_key'];
+    $st  = tonAccountState($api, $addr, $key);
+    if (tonIsRateLimited($st['error'] ?? '')) {
+        $add('پرسش از زنجیره', false, 'محدودیت نرخ (۴۲۹) — کلید API از @tonapibot بگیرید');
+        return $rows;
+    }
+    $add('وضعیت آدرس روی زنجیره', ($st['state'] ?? '') === 'active',
+         ($st['state'] ?? '?') . (isset($st['balance']) ? ' · موجودی ' . nanoToTon((string)$st['balance']) . ' TON' : ''));
+
+    if (!empty($st['code_b64'])) {
+        try {
+            $ch = bin2hex(tonBocFromBase64($st['code_b64'])->hash());
+            $known = tonCodeHashes()[$ch] ?? null;
+            $add('نسخه قرارداد روی زنجیره', $known !== null,
+                 $known !== null ? tonWalletCodes()[$known]['name'] : 'ناشناخته (' . substr($ch, 0, 16) . '…)');
+        } catch (Throwable $e) { $add('نسخه قرارداد روی زنجیره', false, 'کد قرارداد خوانده نشد'); }
+    }
+
+    return $rows;
 }
 
 /**
@@ -1839,7 +1949,7 @@ function axNanoGt($a, $b) {
  * برگشت: [true, 'شناسه'] یا [false, 'دلیل']
  */
 function axWalletSend($msgs, $note = '') {
-    if (!axWalletReady()) return [false, 'خودکارسازی ولت روشن نیست'];
+    if (!axWalletReady()) return [false, 'امضا انجام نشد — ' . axWalletWhyNotReady()];
     if (!function_exists('tonSignedExternalB64')) return [false, 'ton_wallet.php بارگذاری نشده'];
 
     $w    = axCfg()['wallet'];
@@ -2010,6 +2120,7 @@ function axWalletHome($chatId, $msgId) {
          btnCb('🌐 آدرس API', 'axwapi', 'admin')],
         [btnCb('🚧 سقف هر تراکنش', 'axwmax', 'admin'), btnCb('🚧 سقف روزانه', 'axwday', 'admin')],
         [btnCb('🎯 آدرس درست را خودت پیدا کن', 'axwfix', 'buy')],
+        [btnCb('🩻 تشخیص لایه‌به‌لایه', 'axwdiag', 'admin')],
         [btnCb('🧪 تایید مالکیت و موجودی', 'axwtest', 'admin')],
         [btnCb('🗑 پاک کردن عبارت بازیابی', 'axwclr', 'danger')],
         [btnCb('🔙 بازگشت', 'ax_home', 'nav')],
