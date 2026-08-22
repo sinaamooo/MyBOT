@@ -1118,7 +1118,7 @@ function axCallback($data, $uid, $chatId, $msgId, $cbId, $isAdmin) {
 
     if ($data === 'axwtest') {
         $ack('⏳ در حال بررسی…');
-        [$vok, $verr] = axWalletVerify();
+        [$vok, $verr] = axWalletVerify(true);
         $bal = axWalletBalance();
         $t = "🧪 <b>بررسی ولت</b>\n\n";
         $t .= 'مالکیت: ' . ($vok ? '✅ عبارت بازیابی با همین آدرس می‌خواند'
@@ -1581,14 +1581,21 @@ function axWalletKeys() {
 }
 
 /** عبارت بازیابی را با آدرس روی زنجیره می‌سنجد */
-function axWalletVerify() {
+function axWalletVerify($withRaw = false) {
     $w = axCfg()['wallet'];
     if (trim((string)$w['mnemonic']) === '') return [false, 'عبارت بازیابی ثبت نشده'];
     if (trim((string)$w['address']) === '')  return [false, 'آدرس ولت ثبت نشده'];
     try {
         $k = axWalletKeys();
         $r = tonVerifyWallet((string)$w['api'], (string)$w['address'], $k['public'], (string)$w['api_key']);
-        if (empty($r['ok'])) return [false, (string)($r['error'] ?? 'ناموفق')];
+        if (empty($r['ok'])) {
+            $msg = (string)($r['error'] ?? 'ناموفق');
+            // پاسخ خام فقط وقتی خواسته شده — برای وقتی که پیام کافی نیست
+            if ($withRaw && trim((string)($r['raw'] ?? '')) !== '')
+                $msg .= "\n\n<b>پاسخ خام شبکه:</b>\n<code>" .
+                        h(mb_substr((string)$r['raw'], 0, 500)) . '</code>';
+            return [false, $msg];
+        }
         axSet(function (&$c) { $c['wallet']['verified'] = time(); });
         return [true, ''];
     } catch (Throwable $e) {

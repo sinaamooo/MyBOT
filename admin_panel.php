@@ -126,7 +126,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         if ($mn !== '') {
             [$cOk, $cWhy] = tonCryptoReady();
-            if (!$cOk) go(strip_tags(str_replace("\n", ' ', $cWhy)), 'err');
+            if (!$cOk) go($cWhy, 'err');
             $words = array_values(array_filter(preg_split('/\s+/u', $mn), fn($x) => $x !== ''));
             if (count($words) !== 24) go('عبارت بازیابی باید دقیقا ۲۴ کلمه باشد — الان ' . count($words) . ' کلمه.', 'err');
             try { tonKeyFromMnemonic($words); }
@@ -151,7 +151,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             [$vok, $verr] = axWalletVerify();
             if (!$vok) {
                 axSet(function (&$c) { $c['wallet']['on'] = false; });
-                go('ذخیره شد ولی روشن نشد — تایید مالکیت ناموفق: ' . $verr, 'err');
+                go("<b>ذخیره شد، ولی روشن نشد.</b>\nتایید مالکیت ناموفق بود:\n\n" . $verr .
+                   "\n\nتا وقتی این تیک سبز نشود ربات هیچ تراکنشی امضا نمی‌کند — " .
+                   "امضای کور روی ولتی که مطمئن نیستیم مال شماست، خطرناک است.", 'err');
             }
         }
         go('تنظیمات ولت ذخیره شد.');
@@ -159,8 +161,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($a === 'auto_verify') {
         [$cOk, $cWhy] = tonCryptoReady();
-        if (!$cOk) go(strip_tags(str_replace("\n", ' ', $cWhy)), 'err');
-        [$vok, $verr] = axWalletVerify();
+        if (!$cOk) go($cWhy, 'err');
+        [$vok, $verr] = axWalletVerify(true);
         $bal = axWalletBalance();
         go($vok
             ? '✅ عبارت بازیابی با همین آدرس می‌خواند.' . ($bal !== null ? ' موجودی: ' . $bal . ' TON' : '')
@@ -951,7 +953,11 @@ foreach ($tabs as $k => $l): ?>
 </div></nav>
 
 <div class="wrap">
-<?php if ($flash): ?><div class="flash <?= h($flash['type']) ?>"><?= h($flash['msg']) ?></div><?php endif; ?>
+<?php if ($flash): ?>
+  <div class="flash <?= h($flash['type']) ?>" style="line-height:2">
+    <?= nl2br(strip_tags((string)$flash['msg'], '<code><b>')) ?>
+  </div>
+<?php endif; ?>
 <?php if (ADMIN_PASSWORD === 'admin123456'): ?>
   <div class="flash err">🔴 <b>رمز پنل هنوز پیش‌فرض است.</b>
   هرکس آدرس این صفحه را بداند وارد می‌شود — و از تب ⚡ خودکارسازی به ولت شما هم می‌رسد.

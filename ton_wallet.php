@@ -476,13 +476,14 @@ function tonVerifyWallet($base, $address, $publicKey, $apiKey) {
     [$r, $err] = tonApiCall($base, '/runGetMethod', 'POST', [
         'address' => $address, 'method' => 'get_public_key', 'stack' => [],
     ], $apiKey);
-    if (!$r) return ['ok' => false, 'error' => 'پاسخ شبکه نامعتبر: ' . mb_substr((string)$err, 0, 200)];
+    if (!$r) return ['ok' => false, 'error' => 'پاسخ شبکه نامعتبر: ' . mb_substr((string)$err, 0, 200),
+                     'raw' => (string)$err];
     if (isset($r['ok']) && !$r['ok']) return ['ok' => false, 'error' => 'شبکه خطا داد: ' . mb_substr(json_encode($r, 320), 0, 160)];
     // خروج غیرصفر یعنی قرارداد چنین متدی ندارد یا اجرا نشد
     $exit = $r['result']['exit_code'] ?? ($r['result']['@extra'] ?? null);
     $stack = $r['result']['stack'] ?? [];
     if (!isset($stack[0])) {
-        return ['ok' => false, 'error' =>
+        return ['ok' => false, 'raw' => mb_substr(json_encode($r, JSON_UNESCAPED_UNICODE), 0, 600), 'error' =>
             'ولت متد get_public_key را جواب نداد' .
             (is_numeric($exit) && (int)$exit !== 0 ? ' (کد خروج ' . (int)$exit . ')' : '') . ".\n" .
             'معمولا یعنی این آدرس هنوز روی شبکه فعال نشده — از ولتی که تازه ساخته‌اید ' .
@@ -491,17 +492,21 @@ function tonVerifyWallet($base, $address, $publicKey, $apiKey) {
 
     $onchain = tonStackHex($stack[0]);
     if ($onchain === null)
-        return ['ok' => false, 'error' => 'پاسخ زنجیره خوانده نشد: ' . mb_substr(json_encode($stack[0], 320), 0, 160)];
+        return ['ok' => false, 'raw' => json_encode($stack, JSON_UNESCAPED_UNICODE),
+                'error' => 'پاسخ زنجیره خوانده نشد: ' . mb_substr(json_encode($stack[0], JSON_UNESCAPED_UNICODE), 0, 200)];
 
     $mine = ltrim(bin2hex($publicKey), '0');
     if ($onchain !== $mine) {
-        return ['ok' => false, 'error' =>
+        return ['ok' => false, 'raw' => json_encode($stack, JSON_UNESCAPED_UNICODE), 'error' =>
             "عبارت بازیابی با این آدرس نمی‌خواند.\n\n" .
             'کلید این آدرس روی زنجیره: <code>' . mb_substr($onchain, 0, 16) . "…</code>\n" .
             'کلید عبارت بازیابی شما: <code>' . mb_substr($mine, 0, 16) . "…</code>\n\n" .
-            "یعنی آدرس و ۲۴ کلمه مال دو ولت متفاوت‌اند.\n" .
-            'آدرس را از <b>همان</b> ولتی بردارید که این ۲۴ کلمه را از آن گرفته‌اید — ' .
-            'در کیف پول، بخش دریافت (Receive) آدرس را کپی کنید.'];
+            "یعنی آدرس و ۲۴ کلمه مال دو ولت متفاوت‌اند. دو علت رایج دارد:\n\n" .
+            "۱. آدرس از ولت دیگری کپی شده. آدرس را از <b>همان</b> کیف پولی بردارید که\n" .
+            "این ۲۴ کلمه را از آن گرفته‌اید — دکمه‌ی دریافت (Receive) و کپی آدرس.\n\n" .
+            "۲. آن ولت هنگام ساخت <b>رمز عبور</b> داشته (بعضی کیف پول‌ها می‌پرسند).\n" .
+            "با رمز، همان ۲۴ کلمه کلید دیگری می‌سازد. اگر رمز گذاشته‌اید،\n" .
+            "یک ولت تازه <b>بدون رمز</b> بسازید و از آن استفاده کنید."];
     }
     return ['ok' => true];
 }
