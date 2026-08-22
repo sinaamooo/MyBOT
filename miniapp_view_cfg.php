@@ -173,10 +173,75 @@ body.fx2 .logo .halo{animation:glow 3.8s ease-in-out infinite}
 .nav b{flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center;gap:4px;
   padding:9px 3px;border-radius:15px;cursor:pointer;color:var(--dim);
   font-size:10px;font-weight:700;transition:color .16s,background .16s}
-.nav b em{font-size:21px;font-style:normal;line-height:1;transition:transform .18s}
+.nav b .ico-em{font-size:19px;font-style:normal;line-height:1}
 .nav b span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .nav b.on{color:#04120D;background:linear-gradient(135deg,var(--c1),var(--c2))}
-.nav b.on em{transform:scale(1.14)}
+.nav b.on .ico-em{transform:scale(1.1)}
+
+/* ═══ آیکون شیشه‌ای متحرک دسته‌ها ═══
+   یک قاب شیشه با برقی که رد می‌شود، و آیکون SVG که خودش جان دارد.
+   همه‌ی حرکت‌ها با transform/opacity است تا روی موبایل هم روان بماند. */
+.ico{position:relative;width:36px;height:36px;border-radius:13px;display:grid;place-items:center;
+  background:linear-gradient(158deg,rgba(255,255,255,.15),rgba(255,255,255,.03));
+  border:1px solid rgba(255,255,255,.16);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.26),inset 0 -6px 12px rgba(0,0,0,.18),0 4px 12px rgba(0,0,0,.28);
+  overflow:hidden;will-change:transform;
+  transition:transform .26s cubic-bezier(.34,1.56,.64,1),box-shadow .26s,border-color .26s}
+/* برقِ شیشه — فقط روی دسته‌ی فعال می‌دود */
+.ico:before{content:"";position:absolute;inset:-45%;pointer-events:none;
+  background:linear-gradient(115deg,transparent 41%,rgba(255,255,255,.55) 50%,transparent 59%);
+  transform:translateX(-130%)}
+.ico:after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+  background:radial-gradient(120% 70% at 50% -10%,rgba(255,255,255,.3),transparent 60%)}
+.ico svg{position:relative;width:20px;height:20px;display:block;overflow:visible;
+  fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.ico svg .fl{fill:currentColor;stroke:none}
+
+.nav b.on .ico{transform:translateY(-4px) scale(1.08);
+  border-color:rgba(255,255,255,.42);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.5),0 8px 20px rgba(0,0,0,.4)}
+.nav b.on .ico:before{animation:icoSheen 2.8s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes icoSheen{0%{transform:translateX(-130%)}55%,100%{transform:translateX(130%)}}
+
+/* جانِ خودِ آیکون‌ها */
+.i-spin  {transform-box:fill-box;transform-origin:50% 50%}
+.nav b.on .i-spin  {animation:icoSpin 5.5s linear infinite}
+.nav b.on .i-pulse {animation:icoPulse 1.9s ease-in-out infinite;transform-box:fill-box;transform-origin:50% 50%}
+.nav b.on .i-float {animation:icoFloat 2.4s ease-in-out infinite;transform-box:fill-box;transform-origin:50% 50%}
+.nav b.on .i-lid   {animation:icoLid 2.2s ease-in-out infinite;transform-box:fill-box;transform-origin:50% 100%}
+.nav b.on .i-draw  {stroke-dasharray:64;animation:icoDraw 2.6s ease-in-out infinite}
+.nav b.on .i-tick  {animation:icoTick 4s steps(12) infinite;transform-box:fill-box;transform-origin:50% 100%}
+@keyframes icoSpin {to{transform:rotate(360deg)}}
+@keyframes icoPulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.16);opacity:.75}}
+@keyframes icoFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-2px)}}
+@keyframes icoLid  {0%,72%,100%{transform:translateY(0) rotate(0)}82%{transform:translateY(-2.5px) rotate(-8deg)}}
+@keyframes icoDraw {0%{stroke-dashoffset:64}45%,100%{stroke-dashoffset:0}}
+@keyframes icoTick {to{transform:rotate(360deg)}}
+
+@media (prefers-reduced-motion:reduce){
+  .ico,.ico:before,.nav b.on .ico:before,
+  .nav b.on .i-spin,.nav b.on .i-pulse,.nav b.on .i-float,
+  .nav b.on .i-lid,.nav b.on .i-draw,.nav b.on .i-tick{animation:none!important;transition:none!important}
+}
+
+
+/* ═══ انتخاب حجم — چیپ‌های شیشه‌ای ═══ */
+.vols{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px;margin-top:6px}
+.vols i{position:relative;display:flex;flex-direction:column;align-items:center;gap:2px;
+  padding:10px 6px;border-radius:14px;cursor:pointer;font-style:normal;overflow:hidden;
+  border:1px solid var(--edge);
+  background:linear-gradient(158deg,rgba(255,255,255,.09),rgba(255,255,255,.02));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.16);
+  transition:transform .18s cubic-bezier(.34,1.56,.64,1),border-color .18s,background .18s}
+.vols i:active{transform:scale(.96)}
+.vols i b{font-size:12.5px;font-weight:800;color:var(--ink)}
+.vols i u{font-size:11px;text-decoration:none;color:var(--c1);font-weight:700}
+.vols i s{font-size:9.5px;text-decoration:none;color:var(--dim)}
+.vols i.on{border-color:color-mix(in srgb,var(--c1) 65%,transparent);
+  background:linear-gradient(158deg,color-mix(in srgb,var(--c1) 26%,transparent),rgba(255,255,255,.04));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.3),0 6px 16px rgba(0,0,0,.32)}
+.vols i.on b{color:#fff}
+.vols i.on u{color:#fff}
 
 /* ═══ کارت محصول — شیشه واقعی ═══ */
 .list{display:grid;gap:13px}
@@ -482,12 +547,64 @@ api('me', {}, function(j){ setBal(j.balance); }, function(j){
   if (j && j.message) warn(j.message);
 });
 
+
+/* ── آیکون شیشه‌ای هر دسته ──
+   با کلیدواژه‌ی داخل شناسه/نام دسته تشخیص داده می‌شود؛ اگر هیچ‌کدام
+   نخواند، همان ایموجی خود دسته می‌نشیند. پس دسته‌ی تازه هم بی‌آیکون نمی‌ماند. */
+var ICONS = {
+  star:  '<svg viewBox="0 0 24 24"><path class="fl i-pulse" d="M12 2.6l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.5 6.1 20.6l1.2-6.5L2.5 9.5l6.6-.9z"/></svg>',
+  crown: '<svg viewBox="0 0 24 24"><path class="fl i-float" d="M3 8.4l4.2 3.2L12 4.6l4.8 7 4.2-3.2-1.7 9.6H4.7z"/><rect class="fl" x="4.4" y="19" width="15.2" height="2.1" rx="1"/></svg>',
+  gift:  '<svg viewBox="0 0 24 24"><rect x="3.4" y="9.8" width="17.2" height="10.8" rx="2"/><path class="i-lid" d="M2.4 6.4h19.2v3.6H2.4z"/><path d="M12 6.4v14.2"/><path class="i-lid" d="M12 6.4C10.6 3 6.6 3.4 7.2 6.4M12 6.4c1.4-3.4 5.4-3 4.8 0"/></svg>',
+  gem:   '<svg viewBox="0 0 24 24"><g class="i-spin"><path d="M4 9.2L12 21l8-11.8L16.6 3H7.4z"/><path d="M4 9.2h16M9.2 9.2L12 21l2.8-11.8M7.4 3l1.8 6.2M16.6 3l-1.8 6.2"/></g></svg>',
+  tri:   '<svg viewBox="0 0 24 24"><path class="fl i-pulse" d="M12 3.2l9 17.6H3z" opacity=".9"/><path d="M12 3.2l9 17.6H3z" stroke="rgba(0,0,0,.35)"/></svg>',
+  bolt:  '<svg viewBox="0 0 24 24"><path class="fl i-pulse" d="M13.4 2.2L4.6 13.6h5.4l-.8 8.2 9-11.6h-5.4z"/></svg>',
+  shield:'<svg viewBox="0 0 24 24"><path class="i-draw" d="M12 2.6l8 3v6.2c0 5-3.4 8.7-8 9.8-4.6-1.1-8-4.8-8-9.8V5.6z"/><path class="i-draw" d="M8.6 12.2l2.4 2.4 4.6-4.8"/></svg>',
+  globe: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><ellipse class="i-pulse" cx="12" cy="12" rx="4" ry="9"/></svg>',
+  box:   '<svg viewBox="0 0 24 24"><path class="i-float" d="M12 2.8l8.4 4.4v9.6L12 21.2 3.6 16.8V7.2z"/><path class="i-float" d="M3.6 7.2L12 11.6l8.4-4.4M12 11.6v9.6"/></svg>',
+  clock: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.8"/><path class="i-tick" d="M12 12V6.6"/><path d="M12 12l3.6 2.2"/></svg>',
+  inf:   '<svg viewBox="0 0 24 24"><path class="i-draw" d="M8.4 8.2a3.8 3.8 0 100 7.6c3 0 4.2-7.6 7.2-7.6a3.8 3.8 0 110 7.6c-3 0-4.2-7.6-7.2-7.6z"/></svg>',
+  bag:   '<svg viewBox="0 0 24 24"><path class="i-float" d="M4.4 8h15.2l-1.2 12.4H5.6z"/><path class="i-lid" d="M8.6 8V6.2a3.4 3.4 0 016.8 0V8"/></svg>',
+  wallet:'<svg viewBox="0 0 24 24"><rect x="3" y="6.2" width="18" height="13" rx="2.6"/><path d="M3 10.4h18"/><circle class="fl i-pulse" cx="17" cy="14.6" r="1.5"/></svg>',
+  fire:  '<svg viewBox="0 0 24 24"><path class="fl i-pulse" d="M13.2 2.4c2.6 3.4 1 5.2 2.6 6.6 1.4 1.2 3.4.4 3.4.4 1.6 4.6-1.4 12.2-7.2 12.2S3.2 15.6 5.6 11c.8 1.6 2.4 2 2.4 2C6.6 8.8 9.6 5 13.2 2.4z"/></svg>',
+  tag:   '<svg viewBox="0 0 24 24"><path class="i-float" d="M11.4 2.8h9.8v9.8L11.6 22.2 1.8 12.4z"/><circle class="fl i-pulse" cx="17" cy="7" r="1.7"/></svg>',
+  coin:  '<svg viewBox="0 0 24 24"><ellipse class="i-pulse" cx="12" cy="12" rx="8.6" ry="8.6"/><path d="M14.6 8.6c-.7-.8-1.7-1.2-2.8-1.2-1.7 0-2.9.9-2.9 2.2 0 3 5.9 1.3 5.9 4.3 0 1.4-1.3 2.3-3 2.3-1.2 0-2.3-.5-3-1.3M12 5.6v12.8"/></svg>',
+  swap:  '<svg viewBox="0 0 24 24"><path class="i-float" d="M4 8.6h13.4l-3.2-3.4M20 15.4H6.6l3.2 3.4"/></svg>',
+  lock:  '<svg viewBox="0 0 24 24"><rect x="4.4" y="10.2" width="15.2" height="10.6" rx="2.4"/><path class="i-lid" d="M8 10.2V7.6a4 4 0 018 0v2.6"/><circle class="fl i-pulse" cx="12" cy="15.4" r="1.6"/></svg>',
+  user:  '<svg viewBox="0 0 24 24"><circle class="i-float" cx="12" cy="8" r="4.2"/><path d="M3.8 21c.6-4.6 4-7 8.2-7s7.6 2.4 8.2 7"/></svg>'
+};
+var ICO_MAP = [
+  [/star|استار|ستار/i,                'star'],
+  [/prem|پریم|پرمی/i,                 'crown'],
+  [/gift|گیفت|هدیه|teddy|تدی/i,       'gift'],
+  [/\bton\b|تون|tonco/i,              'gem'],
+  [/trx|tron|ترون|ترکس/i,             'tri'],
+  [/usdt|تتر|tether/i,                'wallet'],
+  [/vol|حجم|گیگ|گیگا|مگ|giga|\bgb\b/i,'box'],
+  [/time|زمان|روز|ماه|month|day/i,    'clock'],
+  [/unlim|نامحدود|بی.?نهایت/i,        'inf'],
+  [/loc|کشور|لوکیشن|country|سرور/i,   'globe'],
+  [/vpn|کانفیگ|config|امن|secure/i,   'shield'],
+  [/fast|سریع|توربو|turbo|speed/i,    'bolt'],
+  [/off|تخفیف|حراج|discount/i,        'tag'],
+  [/hot|داغ|ویژه|vip|special/i,       'fire'],
+  [/ارز|currency|exchange|صراف|coin|نرخ/i,  'coin'],
+  [/swap|تبدیل|مبادله/i,                    'swap'],
+  [/اختصاص|dedicat|private|خصوص|قفل|lock/i, 'lock'],
+  [/acc|اکانت|account|عضو|member/i,   'user'],
+  [/pack|بسته|فروش|shop|buy/i,        'bag']
+];
+function icoFor(c){
+  var key = String(c.id || '') + ' ' + String(c.name || '');
+  for (var i = 0; i < ICO_MAP.length; i++) if (ICO_MAP[i][0].test(key)) return ICONS[ICO_MAP[i][1]];
+  return '<span class="ico-em">' + esc(c.emoji || '💠') + '</span>';
+}
+
 /* ── نوار دسته‌ها، پایین صفحه ── */
 function drawNav(){
   var box = $('nav'), html = '';
   B.cats.forEach(function(c){
     html += '<b class="' + (S.cat===c.id?'on':'') + '" data-c="' + esc(c.id) + '">' +
-            '<em>' + esc(c.emoji || '💠') + '</em><span>' + esc(c.name) + '</span></b>';
+            '<i class="ico">' + icoFor(c) + '</i><span>' + esc(c.name) + '</span></b>';
   });
   box.innerHTML = html;
 }
@@ -573,6 +690,7 @@ function open(id){
 
   S.item = it;
   S.qty  = it.ask === 'qty' ? Math.max(1, it.min || 1) : 1;
+  S.vol  = (it.ask === 'volume' && it.vols && it.vols.length) ? it.vols[0].mb : 0;
 
   $('tIco').textContent  = it.emoji || '💠';
   $('tName').textContent = it.name;
@@ -594,6 +712,22 @@ function open(id){
             '<div class="tip">حداقل ' + fa(it.min || 1) +
               (it.max > 0 ? ' · حداکثر ' + fa(it.max) : '') + '</div></div>';
   }
+  if (it.ask === 'volume'){
+    var vs = it.vols || [];
+    if (!vs.length){
+      html += '<div class="in"><label>📦 حجم</label>' +
+              '<div class="tip">الان هیچ حجمی در مخزن موجود نیست. کمی بعد دوباره سر بزنید.</div></div>';
+    } else {
+      html += '<div class="in"><label>📦 حجم سرویس</label><div class="vols">' +
+              vs.map(function(v){
+                return '<i class="' + (v.mb === S.vol ? 'on' : '') + '" data-v="' + v.mb + '">' +
+                       '<b>' + esc(v.label) + '</b>' +
+                       '<u>' + fa(v.price) + '</u>' +
+                       '<s>' + fa(v.n) + ' موجود</s></i>';
+              }).join('') + '</div>' +
+              '<div class="tip">فقط حجم‌های رند: ۵۰۰ مگابایت، یا گیگابایت کامل.</div></div>';
+    }
+  }
   if (it.ask === 'username'){
     html += '<div class="in"><label>📎 آیدی تلگرام گیرنده</label>' +
             '<input id="fTxt" type="text" placeholder="@username" dir="ltr" style="text-align:left" ' +
@@ -612,6 +746,17 @@ function open(id){
   }
   f.innerHTML = html;
 
+  if (it.ask === 'volume'){
+    f.addEventListener('click', function(ev){
+      var el = ev.target.closest ? ev.target.closest('i[data-v]') : null;
+      if (!el) return;
+      S.vol = Number(el.getAttribute('data-v')) || 0;
+      var all = f.querySelectorAll('i[data-v]');
+      for (var k = 0; k < all.length; k++)
+        all[k].classList.toggle('on', Number(all[k].getAttribute('data-v')) === S.vol);
+      tap(); total();
+    });
+  }
   if (it.ask === 'qty'){
     f.addEventListener('click', function(ev){
       var b = ev.target;
@@ -645,7 +790,13 @@ function setQty(v, typing){
 
 function sum(){
   var it = S.item; if (!it) return 0;
-  return it.ask === 'qty' ? it.price * Math.max(0, S.qty) : it.price;
+  if (it.ask === 'qty') return it.price * Math.max(0, S.qty);
+  if (it.ask === 'volume'){
+    var vs = it.vols || [];
+    for (var i = 0; i < vs.length; i++) if (vs[i].mb === S.vol) return vs[i].price;
+    return 0;
+  }
+  return it.price;
 }
 
 function total(){
@@ -684,6 +835,10 @@ function validate(){
     if (!S.qty || S.qty < (it.min || 1)) { warn('حداقل تعداد ' + fa(it.min || 1) + ' است.'); return null; }
     if (it.max > 0 && S.qty > it.max)    { warn('حداکثر تعداد ' + fa(it.max) + ' است.'); return null; }
   }
+  if (it.ask === 'volume'){
+    if (!S.vol){ warn('یک حجم انتخاب کنید.'); return null; }
+    if (S.vol !== 500 && S.vol % 1024 !== 0){ warn('حجم باید رند باشد: ۵۰۰ مگابایت یا گیگابایت کامل.'); return null; }
+  }
   if ((it.ask === 'username' || it.ask === 'wallet' || it.ask === 'text') && !fv){
     warn('لطفا فیلد بالا را پر کنید.'); return null;
   }
@@ -702,7 +857,7 @@ function send(payMode, btn, busyText){
   btn.textContent = busyText;
   tap('medium');
 
-  api('order', { item: it.id, qty: S.qty, field: fv, seen_price: it.price, pay: payMode },
+  api('order', { item: it.id, qty: S.qty, volume: S.vol, field: fv, seen_price: it.price, pay: payMode },
     function(j){
       S.busy = false;
       if (typeof j.balance === 'number') setBal(j.balance);

@@ -393,6 +393,11 @@ function maDefaultCfg() {
         ],
 
         'items' => [
+            // 📦 حجم دلخواه — کاربر خودش حجم رند انتخاب می‌کند، قیمت به‌ازای هر گیگ
+            ['id' => 'k_vfree', 'cat' => 'k_vol', 'emoji' => '🎚', 'name' => 'حجم دلخواه',
+             'desc' => 'هر حجمی که بخواهید — فقط عددهای رند: ۵۰۰ مگ یا گیگ کامل',
+             'price' => 5500, 'unit' => 'گیگابایت', 'badge' => 'دلخواه',
+             'ask' => 'volume', 'min' => 500, 'max' => 102400, 'on' => true, 'order' => 0],
             ['id' => 'k_v30', 'cat' => 'k_vol', 'emoji' => '📦', 'name' => '۳۰ گیگ — ۳۰ روزه',
              'desc' => 'مولتی‌یوزر ۲ کاربره — مناسب موبایل', 'price' => 145000, 'unit' => '',
              'badge' => 'پرفروش', 'ask' => 'none', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 1],
@@ -1512,6 +1517,22 @@ function maItemsPublic($a) {
             'order' => (int)($i['order'] ?? 99),
             'cpos'  => $catPos[(string)($i['cat'] ?? '')] ?? 999,
         ];
+        // 📦 حجم دلخواه: فقط حجم‌هایی که واقعا در مخزن هستند به کاربر نشان داده شود
+        if ((string)($i['ask'] ?? '') === 'volume') {
+            $vols = [];
+            $min = (int)($i['min'] ?? 500);
+            $max = (int)($i['max'] ?? 102400);
+            if (function_exists('axVolumeChoices')) {
+                foreach (axVolumeChoices((int)floor($max / 1024)) as $mb) {
+                    if ($mb < $min || $mb > $max) continue;
+                    $have = function_exists('axStockCount') ? axStockCount($i['id'] . '_' . $mb) : 0;
+                    if ($have < 1) continue;
+                    $vols[] = ['mb' => $mb, 'label' => axVolumeLabel($mb), 'n' => $have,
+                               'price' => round(maItemPrice($i) * ($mb / 1024), 0)];
+                }
+            }
+            $items[count($items) - 1]['vols'] = $vols;
+        }
     }
     usort($items, fn($x, $y) => [$x['cpos'], $x['order']] <=> [$y['cpos'], $y['order']]);
     return $items;
@@ -1602,6 +1623,57 @@ function maApi() {
         ]);
     }
 
+    // ---- 👑 بخش مدیر: سود و قیمت — فقط برای ادمین ----
+    if ($action === 'adm_get' || $action === 'adm_set') {
+        // سد سخت: هرکس جز ادمین، انگار این مسیر اصلا وجود ندارد
+        if ($uid !== ADMIN_ID) maApiOut(['ok' => false, 'error' => 'not_found'], 404);
+        if (!function_exists('axPrice')) maApiOut(['ok' => false, 'error' => 'ext_missing'], 500);
+
+        if ($action === 'adm_set') {
+            if (!maRateOk('admset', $uid, 30, 60))
+                maApiOut(['ok' => false, 'error' => 'rate_limited', 'message' => 'کمی آرام‌تر.'], 429);
+            $what = (string)($body['what'] ?? '');
+            $id   = (string)($body['id'] ?? '');
+            $val  = maNum($body['value'] ?? 0);
+            if ($what === 'fixed') {
+                if ($id === '' || axIsAutoPriced($id)) maApiOut(['ok' => false, 'error' => 'bad_item',
+                    'message' => 'قیمت تون، ترون و تتر از صرافی می‌آید و دستی نمی‌شود.'], 400);
+                if ($val < 0 || $val > 1e12) maApiOut(['ok' => false, 'error' => 'bad_value'], 400);
+                axSetFixed($id, $val);
+            } elseif ($what === 'margin') {
+                if ($val < -90 || $val > 900) maApiOut(['ok' => false, 'error' => 'bad_value',
+                    'message' => 'درصد سود باید بین ۹۰- تا ۹۰۰ باشد.'], 400);
+                axSetMargin($id !== '' ? $id : '_all', $val);
+            } else {
+                maApiOut(['ok' => false, 'error' => 'bad_what'], 400);
+            }
+            axLog('adm_price', $what . ' ' . $id . ' = ' . $val);
+        }
+
+        $items = [];
+        foreach ((array)($a['items'] ?? []) as $i) {
+            if (!is_array($i) || empty($i['id'])) continue;
+            $auto = axIsAutoPriced((string)$i['id'], (string)($i['cat'] ?? ''));
+            $items[] = [
+                'id'    => (string)$i['id'],
+                'name'  => (string)($i['name'] ?? $i['id']),
+                'emoji' => (string)($i['emoji'] ?? ''),
+                'cat'   => (string)($i['cat'] ?? ''),
+                'base'  => (float)($i['price'] ?? 0),
+                'final' => (float)axPrice((string)$i['id'], (float)($i['price'] ?? 0), (string)($i['cat'] ?? '')),
+                'fixed' => (float)(axVal('pricing.fixed.' . axSku((string)$i['id'])) ?? 0),
+                'auto'  => $auto,
+            ];
+        }
+        maApiOut([
+            'ok'     => true,
+            'margin' => (float)(axVal('pricing.margin._all') ?? 0),
+            'on'     => !empty(axVal('pricing.on')),
+            'rates'  => ['usdt' => axRate('usdt'), 'ton' => axRate('ton'), 'trx' => axRate('trx')],
+            'items'  => $items,
+        ]);
+    }
+
     // ---- ثبت سفارش ----
     if ($action === 'order') {
         // 🛡 سقف تعداد سفارش در دقیقه
@@ -1645,6 +1717,32 @@ function maApi() {
             if ($max > 0 && $qty > $max) maApiOut(['ok' => false, 'error' => 'max', 'message' => 'حداکثر تعداد ' . fmtNum($max) . ' است.'], 400);
         }
 
+        // 📦 حجم دلخواه — فقط عددهای رند: ۵۰۰ مگ، یا گیگ کامل
+        $volMb = 0;
+        if ($ask === 'volume') {
+            $volMb = (int)maNum($body['volume'] ?? 0);
+            if (!function_exists('axVolumeOk') || !axVolumeOk($volMb)) {
+                maApiOut(['ok' => false, 'error' => 'bad_volume',
+                          'message' => 'حجم باید رند باشد: ۵۰۰ مگابایت، یا گیگابایت کامل (۱، ۲، ۳ …).'], 400);
+            }
+            $max = (int)($item['max'] ?? 0);
+            if ($max > 0 && $volMb > $max)
+                maApiOut(['ok' => false, 'error' => 'max',
+                          'message' => 'حداکثر حجم ' . axVolumeLabel($max) . ' است.'], 400);
+            $min = (int)($item['min'] ?? 0);
+            if ($min > 0 && $volMb < $min)
+                maApiOut(['ok' => false, 'error' => 'min',
+                          'message' => 'حداقل حجم ' . axVolumeLabel($min) . ' است.'], 400);
+
+            // مخزن جدا برای هر حجم — «۱ گیگ» و «۳ گیگ» موجودی خودشان را دارند
+            $volSku = $itemId . '_' . $volMb;
+            if (function_exists('axStockCount') && axStockCount($volSku) < 1) {
+                maApiOut(['ok' => false, 'error' => 'out_of_stock',
+                          'message' => axVolumeLabel($volMb) . ' الان در مخزن موجود نیست. حجم دیگری را امتحان کنید.'], 409);
+            }
+            $qty = 1.0;
+        }
+
         $field = trim((string)($body['field'] ?? ''));
         if (in_array($ask, ['username', 'wallet', 'text'], true) && $field === '') {
             maApiOut(['ok' => false, 'error' => 'need_field', 'message' => 'لطفا فیلد خواسته‌شده را پر کنید.'], 400);
@@ -1664,6 +1762,16 @@ function maApi() {
 
         // 🔒 قیمت همیشه اینجا و از نو حساب می‌شود — هرچه کاربر بفرستد نادیده گرفته می‌شود
         $unitPrice = maItemPrice($item);
+
+        if ($ask === 'volume') {
+            // قیمت پایه به‌ازای هر گیگابایت است
+            $unitPrice = round($unitPrice * ($volMb / 1024), 0);
+            $item['unit'] = '';
+            $item['name'] = $item['name'] . ' — ' . axVolumeLabel($volMb);
+            $item['id']   = $itemId . '_' . $volMb;      // مخزن همین حجم
+            $field = $field !== '' ? $field : axVolumeLabel($volMb);
+        }
+
         $item['price'] = $unitPrice;
         $total = round($unitPrice * ($ask === 'qty' ? $qty : 1), 2);
 
