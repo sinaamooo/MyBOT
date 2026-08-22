@@ -758,6 +758,7 @@ function axHome($chatId, $msgId = null) {
         [btnCb('👛 خودکارسازی ولت TON', 'ax_wallet', 'admin')],
         [btnCb('💱 نرخ ارز', 'ax_rates', 'admin'),
          btnCb('✍️ متن‌ها', 'ax_texts', 'admin')],
+        [btnCb('🩺 بررسی خودکار بودن', 'ax_audit', 'admin')],
         [btnCb('📜 رویدادها', 'ax_log', 'admin')],
         [btnCb('🔙 بازگشت', 'admin', 'nav')],
     ]);
@@ -1004,6 +1005,7 @@ function axCallback($data, $uid, $chatId, $msgId, $cbId, $isAdmin) {
     if ($data === 'ax_rep_cfg'){ $ack(); axReportHome($chatId, $msgId, 'cfg'); return true; }
 
     if ($data === 'ax_wallet') { $ack(); axWalletHome($chatId, $msgId); return true; }
+    if ($data === 'ax_audit')  { $ack('⏳ در حال بررسی…'); axAuditShow($chatId, $msgId); return true; }
 
     if ($data === 'axwtog') {
         $now = axSet(function (&$c) { $c['wallet']['on'] = empty($c['wallet']['on']); return !empty($c['wallet']['on']); });
@@ -1796,4 +1798,132 @@ function axMarketPreset() {
     });
     axLog('preset', 'marketapp');
     return true;
+}
+
+// ============================================================
+// 💱 نمایش معادل تومانی در کل ربات
+// ============================================================
+
+/**
+ * اگر مبلغ به تتر/تون/ترون باشد، معادل تومانی‌اش را برمی‌گرداند.
+ * نرخ زنده از همان صرافی‌ای می‌آید که در پنل انتخاب کرده‌اید.
+ * اگر نرخ در دسترس نباشد، رشته‌ی خالی — یعنی چیزی اضافه نمی‌کنیم،
+ * چون نشان دادن عدد اشتباه بدتر از نشان ندادن است.
+ */
+function axTomanLine($amount, $currency, $prefix = "\n") {
+    $c = strtolower(trim((string)$currency));
+    $map = ['usdt' => 'usdt', 'تتر' => 'usdt', 'tether' => 'usdt',
+            'trx' => 'trx', 'ترون' => 'trx', 'tron' => 'trx',
+            'ton' => 'ton', 'تون' => 'ton'];
+    if (!isset($map[$c])) return '';
+
+    $rate = axRate($map[$c]);
+    if ($rate <= 0) return '';
+
+    $toman = (float)$amount * $rate;
+    return $prefix . '≈ <b>' . fmtNum(round($toman)) . '</b> تومان' .
+           '  <i>(نرخ ' . fmtNum(round($rate)) . ')</i>';
+}
+
+/** آیا این ارز نرخ زنده دارد؟ */
+function axHasRate($currency) { return axTomanLine(1, $currency, '') !== ''; }
+
+// ============================================================
+// 🩺 بررسی خودکار بودن — چه چیزی واقعا خودش انجام می‌شود؟
+// ============================================================
+
+/**
+ * هر قابلیت را نگاه می‌کند و می‌گوید الان خودکار است یا نه، و اگر
+ * نیست دقیقا چه چیزی کم است. هدف این است که هیچ‌وقت خیال نکنید
+ * چیزی خودکار است در حالی که منتظر شماست.
+ *
+ * برگشت: [['name'=>.., 'ok'=>bool، 'why'=>..], …]
+ */
+function axAudit() {
+    $out = [];
+    $add = function ($name, $ok, $why = '') use (&$out) { $out[] = ['name' => $name, 'ok' => (bool)$ok, 'why' => $why]; };
+
+    // ── وبهوک و آدرس عمومی ──
+    $pub = function_exists('maCfg') ? trim((string)(maCfg()['public_url'] ?? '')) : '';
+    $add('آدرس عمومی مینی‌اپ', $pub !== '' && str_starts_with($pub, 'https://'),
+         $pub === '' ? 'ثبت نشده — دکمه مینی‌اپ‌ها اصلا نمایش داده نمی‌شود'
+                     : (str_starts_with($pub, 'https://') ? '' : 'باید https باشد'));
+
+    // ── عضوگیری ──
+    $bots = count((array)load('bots'));
+    $add('عضوگیری (ممبر)', $bots > 0, $bots > 0 ? $bots . ' ربات ثبت شده' : 'هیچ رباتی ثبت نشده — تحویل ممبر انجام نمی‌شود');
+
+    // ── درگاه پرداخت ──
+    $add('شارژ خودکار کیف پول', function_exists('gwOn') && gwOn(),
+         (function_exists('gwOn') && gwOn()) ? '' : 'درگاه خاموش یا کلید ندارد — رسیدها را دستی تایید می‌کنید');
+
+    // ── نرخ ارز ──
+    $r = [];
+    foreach (['usdt', 'ton', 'trx'] as $c) if (axRate($c) > 0) $r[] = strtoupper($c);
+    $add('نرخ زنده ارز', count($r) === 3,
+         count($r) === 3 ? 'هر سه ارز' : (count($r) ? 'فقط ' . implode('، ', $r) : 'هیچ نرخی نمی‌آید — پنل ← مینی‌اپ‌ها ← نرخ ارز'));
+
+    // ── پنل فروش بیرونی ──
+    $f = function_exists('maCfg') ? (maCfg()['fulfill'] ?? []) : [];
+    $fOn = !empty($f['on']) && trim((string)($f['base'] ?? '')) !== '';
+    $add('تحویل خودکار از پنل فروش', $fOn && !empty($f['auto_pay']),
+         !$fOn ? 'آدرس پنل ثبت نشده یا خاموش است'
+               : (empty($f['auto_pay']) ? 'روشن است ولی «بعد از پرداخت خودکار» خاموش است' : ''));
+
+    // ── ولت ──
+    $w = axCfg()['wallet'];
+    $add('امضای خودکار تراکنش TON', axWalletReady() && empty($w['dry']),
+         !axWalletReady() ? 'خاموش یا عبارت بازیابی/آدرس ندارد'
+                          : (!empty($w['dry']) ? 'در حالت آزمایشی — تراکنش ساخته می‌شود ولی نمی‌رود' : ''));
+
+    // ── مخزن کانفیگ ──
+    $st = axStockAll(); $tot = 0; foreach ($st as $x) $tot += $x['n'];
+    $add('فروش خودکار کانفیگ از مخزن', !empty(axVal('stock.on')) && $tot > 0,
+         empty(axVal('stock.on')) ? 'مخزن خاموش است' : ($tot > 0 ? $tot . ' کانفیگ موجود' : 'مخزن خالی است'));
+
+    // ── سفارش دستی ──
+    $m = axCfg()['manual'];
+    $nMan = count((array)$m['items']);
+    $add('فرم سفارش دستی در کانال', !$nMan || (!empty($m['on']) && trim((string)$m['chat_id']) !== ''),
+         $nMan === 0 ? 'محصول دستی ندارید — همه خودکارند'
+                     : (trim((string)$m['chat_id']) === '' ? $nMan . ' محصول دستی دارید ولی کانال تنظیم نشده!' : $nMan . ' محصول دستی'));
+
+    // ── گزارش‌ها ──
+    foreach (['tg' => 'خدمات تلگرام', 'cfg' => 'فروش کانفیگ'] as $k => $lbl) {
+        $rp = axVal('report.' . $k);
+        $add('گزارش ' . $lbl, !empty($rp['on']) && trim((string)$rp['chat_id']) !== '',
+             trim((string)$rp['chat_id']) === '' ? 'مقصد تنظیم نشده' : (empty($rp['on']) ? 'خاموش است' : ''));
+    }
+
+    // ── سفارش‌های معطل‌مانده ──
+    if (class_exists('MaOrder')) {
+        $stuck = 0; $now = time();
+        foreach (MaOrder::all() as $o) {
+            if (($o['status'] ?? '') !== MaOrder::PAID) continue;
+            $t = strtotime((string)($o['decided_at'] ?? $o['created_at'])) ?: $now;
+            if ($now - $t > 3600) $stuck++;
+        }
+        $add('سفارش‌های بیش از یک ساعت معطل', $stuck === 0,
+             $stuck === 0 ? 'هیچ سفارشی معطل نمانده' : $stuck . ' سفارش پرداخت‌شده بیش از یک ساعت منتظر است');
+    }
+
+    return $out;
+}
+
+function axAuditShow($chatId, $msgId) {
+    $rows = axAudit();
+    $okN = 0; foreach ($rows as $r) if ($r['ok']) $okN++;
+
+    $t  = "🩺 <b>بررسی خودکار بودن ربات</b>\n\n";
+    $t .= "<b>" . $okN . "</b> از <b>" . count($rows) . "</b> مورد سرِ جایش است.\n\n";
+    foreach ($rows as $r) {
+        $t .= ($r['ok'] ? '✅ ' : '⚠️ ') . '<b>' . h($r['name']) . "</b>\n";
+        if (trim((string)$r['why']) !== '') $t .= '   <i>' . h($r['why']) . "</i>\n";
+    }
+    $t .= "\n💡 هر ⚠️ یعنی آن بخش منتظر شماست، نه اینکه خراب باشد.";
+
+    axShow($chatId, $msgId, $t, [
+        [btnCb('🔄 دوباره بررسی کن', 'ax_audit', 'admin')],
+        [btnCb('🔙 بازگشت', 'ax_home', 'nav')],
+    ]);
 }

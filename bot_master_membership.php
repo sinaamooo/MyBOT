@@ -2208,8 +2208,10 @@ function askDirectPay($uid, $chatId, $p, $amount, $meta = []) {
     $t .= "🛒 " . h($p['name']) . "\n";
     if (!empty($meta['qty']))   $t .= "👥 " . number_format((int)$meta['qty']) . " نفر" .
                                       (!empty($meta['speed']) ? ' · ' . h($meta['speed']) : '') . "\n";
-    $t .= "💰 مبلغ: <b>" . fmtNum($amount) . ' ' . h($p['currency']) . "</b>\n";
-    $t .= "🏦 روش: " . h($method) . "\n\n";
+    $t .= "💰 مبلغ: <b>" . fmtNum($amount) . ' ' . h($p['currency']) . "</b>";
+    // 💱 معادل تومانی با نرخ زنده صرافی — فقط وقتی نرخ واقعا در دست است
+    if (function_exists('axTomanLine')) $t .= axTomanLine($amount, $p['currency']);
+    $t .= "\n🏦 روش: " . h($method) . "\n\n";
     $t .= "💠 مقصد پرداخت:\n<code>" . h($wallet) . "</code>\n\n";
     $t .= "⚠️ <b>سفارش شما هنوز ثبت نشده.</b>\n";
     $t .= "بعد از واریز، دکمه «ارسال رسید» را بزنید تا سفارش ثبت شود.";
