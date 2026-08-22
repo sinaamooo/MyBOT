@@ -57,9 +57,14 @@ function maDefaultConfig() {
         // آدرس عمومی همین فایل — بدون این، دکمه مینی‌اپ ساخته نمی‌شود
         'base_url' => '',
 
-        // 📐 چیدمان دکمه‌های مینی‌اپ زیر دکمه‌های ثبت سفارش
-        // «1,1» هرکدام یک ردیف · «2» هر دو کنار هم
+        // 📐 چیدمان دکمه‌های مینی‌اپ وقتی جدا نمایش داده می‌شوند
         'row_layout' => '1,1',
+
+        // 🔗 ادغام با دکمه‌های ثبت سفارش: وقتی روشن باشد، دکمه‌های مینی‌اپ
+        // عضو همان لیست زیردکمه‌ها می‌شوند و با همان «ترتیب» و همان «چیدمان»
+        // بین بقیه جا می‌گیرند — یعنی می‌شود کانفیگ را بالا و خدمات تلگرام
+        // را بین ممبرها گذاشت.
+        'merge' => true,
 
         // ⏰ سقف عمر داده ورود تلگرام (ثانیه) — پیش‌فرض ۲۴ ساعت
         'init_max_age' => 86400,
@@ -157,7 +162,7 @@ function maDefaultTg() {
         // دکمه‌ای که زیر محصولات نشان داده می‌شود
         'btn' => [
             'emoji' => '🌟', 'text' => 'خدمات تلگرام',
-            'color' => 'primary', 'icon' => '', 'order' => 1,
+            'color' => 'primary', 'icon' => '', 'order' => 1, 'row' => 0,
         ],
 
         // 🎨 تم گرافیکی
@@ -340,7 +345,7 @@ function maDefaultCfg() {
 
         'btn' => [
             'emoji' => '🛡', 'text' => 'خرید کانفیگ',
-            'color' => 'success', 'icon' => '', 'order' => 2,
+            'color' => 'success', 'icon' => '', 'order' => 2, 'row' => 0,
         ],
 
         'theme' => [
@@ -422,6 +427,7 @@ function maMergeConfig($def, $saved) {
     $out = $def;
     if (isset($saved['base_url']))     $out['base_url']     = (string)$saved['base_url'];
     if (isset($saved['row_layout']))   $out['row_layout']   = (string)$saved['row_layout'];
+    if (isset($saved['merge']))        $out['merge']        = (bool)$saved['merge'];
     if (isset($saved['init_max_age'])) $out['init_max_age'] = (int)$saved['init_max_age'];
     foreach (['market', 'rates', 'stars', 'fulfill'] as $sec) {
         if (isset($saved[$sec]) && is_array($saved[$sec]))
@@ -822,6 +828,38 @@ function maReady($key) {
 // ============================================================
 // 🎛 دکمه‌های مینی‌اپ زیر محصولات
 // ============================================================
+
+/** آیا دکمه‌های مینی‌اپ داخل لیست زیردکمه‌های «ثبت سفارش» ادغام شوند؟ */
+function maMergeOn() {
+    $c = maCfg();
+    return !isset($c['merge']) || !empty($c['merge']);
+}
+
+/**
+ * دکمه‌های مینی‌اپ به شکل «زیردکمه» — تا در همان لیست ثبت سفارش،
+ * با همان ترتیب و چیدمان، کنار بقیه بنشینند.
+ */
+function maSubItems() {
+    $out = [];
+    foreach (maKeys() as $k) {
+        if (!maReady($k)) continue;
+        $a = maGet($k);
+        $b = $a['btn'] ?? [];
+        $out[] = [
+            'id'      => '__ma_' . $k,
+            'emoji'   => (string)($b['emoji'] ?? ''),
+            'text'    => (string)($b['text'] ?? (maAppLabels()[$k] ?? $k)),
+            'color'   => (string)($b['color'] ?? 'none'),
+            'icon'    => (string)($b['icon'] ?? ''),
+            'order'   => (int)($b['order'] ?? 99),
+            'row'     => (int)($b['row'] ?? 0),
+            'on'      => true,
+            'action'  => '',
+            '_webapp' => maUrl($k),
+        ];
+    }
+    return $out;
+}
 
 /**
  * ردیف‌های دکمه مینی‌اپ — دقیقا زیر دکمه‌های ثبت سفارش محصولات می‌نشیند.
@@ -2124,13 +2162,20 @@ function maAdmBtn($chatId, $msgId, $key) {
     $text .= 'ایموجی: ' . h($b['emoji'] ?: '—') . "\n";
     $text .= 'رنگ: ' . (styleMap()[$b['color'] ?? 'none'] ?? '—') . "\n";
     $text .= '✨ پریمیوم: ' . (!empty($b['icon']) ? '<code>' . h($b['icon']) . '</code>' : '—') . "\n";
-    $text .= 'ترتیب: ' . (int)($b['order'] ?? 1) . "\n\n";
+    $text .= 'ترتیب: ' . (int)($b['order'] ?? 1) . "\n";
+    $text .= 'شماره ردیف: ' . ((int)($b['row'] ?? 0) > 0 ? (int)$b['row'] : 'خودکار') . "\n\n";
+    $text .= maMergeOn()
+        ? "🔗 <b>این دکمه با لیست «ثبت سفارش» ادغام شده.</b>\n" .
+          "یعنی با همین «ترتیب»، جایش را بین ممبر اخلاقی و فیک و … عوض می‌کنید، " .
+          "و چیدمانش هم همان چیدمان همان لیست است.\n\n"
+        : "این دکمه جدا از لیست ثبت سفارش، زیر همه نمایش داده می‌شود.\n\n";
     $text .= '💡 رنگ دکمه با Bot API 9.4 روی خود دکمه اعمال می‌شود.';
 
     $rows = [
         [btnCb('✏️ متن', 'maadm_bt_' . $key, 'admin'), btnCb('😀 ایموجی', 'maadm_be_' . $key, 'admin')],
         [btnCb('🎨 رنگ: ' . (styleMap()[$b['color'] ?? 'none'] ?? ''), 'maadm_bc_' . $key, 'admin')],
         [btnCb('✨ ایموجی پریمیوم', 'maadm_bi_' . $key, 'admin'), btnCb('🔢 ترتیب', 'maadm_bo_' . $key, 'admin')],
+        [btnCb('📍 شماره ردیف', 'maadm_br_' . $key, 'admin')],
         [btnCb(UT('back'), 'maadm_app_' . $key, 'nav')],
     ];
     editMsg(BOT_TOKEN, $chatId, $msgId, $text, inlineKb($rows));
@@ -3348,7 +3393,16 @@ function maAdminCallback($data, $uid, $chatId, $msgId, $cbId) {
             return true;
         case 'bo':
             answerCb(BOT_TOKEN, $cbId);
-            maAskState($uid, $chatId, 'ma_btn_order', ['k' => $key], '🔢 ترتیب نمایش (عدد):');
+            maAskState($uid, $chatId, 'ma_btn_order', ['k' => $key],
+                '🔢 ترتیب نمایش (عدد):',
+                "عدد کوچک‌تر یعنی بالاتر. زیردکمه‌های ثبت سفارش هم همین «ترتیب» را دارند، " .
+                "پس با عدد می‌توانید این دکمه را بین آن‌ها جابه‌جا کنید.");
+            return true;
+        case 'br':
+            answerCb(BOT_TOKEN, $cbId);
+            maAskState($uid, $chatId, 'ma_btn_row', ['k' => $key],
+                '📍 شماره ردیف (عدد):',
+                "اگر عدد بدهید، این دکمه حتما در همان ردیف می‌نشیند.\n۰ یعنی خودکار (طبق چیدمان).");
             return true;
 
         // ---------- تم ----------
@@ -3765,6 +3819,13 @@ function maAdminState($action, $sd, $msg, $uid, $chatId, $plain, $ids) {
         maSet($key, function (&$x) use ($v) { $x['btn']['icon'] = $v; });
         clearState($uid);
         sendMsg(BOT_TOKEN, $chatId, $v === '' ? '✅ حذف شد.' : "✅ ثبت شد: <code>" . h($v) . '</code>', $backApp);
+        return true;
+    }
+    if ($action === 'ma_btn_row') {
+        $n = (int)preg_replace('/\D/', '', norm_fa_digits($plain));
+        maSet($key, function (&$x) use ($n) { $x['btn']['row'] = max(0, $n); });
+        clearState($uid);
+        sendMsg(BOT_TOKEN, $chatId, '✅ ذخیره شد.', $backApp);
         return true;
     }
     if ($action === 'ma_btn_order') {

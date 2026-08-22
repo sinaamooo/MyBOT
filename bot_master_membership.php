@@ -1863,7 +1863,8 @@ function activeProducts($excludeBtn = null) {
 function showProducts($uid, $chatId, $extra = [], $replyTo = null) {
     $prods = activeProducts('buy');
     if (!$prods && !$extra) {
-        // محصولی نیست، ولی مینی‌اپ‌ها باید همچنان در دسترس باشند
+        // اینجا $extra خالی است، یعنی چیزی ادغام نشده — پس مینی‌اپ‌ها
+        // باید مستقیم اضافه شوند وگرنه اصلا دیده نمی‌شوند.
         $only = maRows();
         panelShow($uid, $chatId, 'shop', T('buy_empty'), $only ? inlineKb($only) : null, $replyTo);
         return;
@@ -1898,8 +1899,16 @@ function showProducts($uid, $chatId, $extra = [], $replyTo = null) {
     }
     foreach ($extra as $r) $rows[] = $r;   // دکمه‌های شیشه‌ای دلخواه، زیر محصولات
 
-    // 🚀 دکمه‌های مینی‌اپ — دقیقا زیر دکمه‌های ثبت سفارش محصولات
-    foreach (maRows() as $r) $rows[] = $r;
+    // 🚀 دکمه‌های مینی‌اپ.
+    // اگر ادغام انجام شده باشد، همین حالا داخل $extra هستند. ولی ادغام فقط
+    // وقتی رخ می‌دهد که subRows('buy') صدا زده شده باشد — پس به‌جای تکیه بر
+    // تنظیمات، خودِ $extra را نگاه می‌کنیم: اگر دکمه مینی‌اپی در آن نیست،
+    // اضافه‌شان می‌کنیم تا هیچ‌وقت گم نشوند.
+    $mergedIn = false;
+    foreach ($extra as $r) {
+        foreach ($r as $b) if (isset($b['web_app'])) { $mergedIn = true; break 2; }
+    }
+    if (!$mergedIn) foreach (maRows() as $r) $rows[] = $r;
 
     // 📋 دکمه لیست تعرفه‌ها — همیشه آخرین ردیف
     $tf = cfg()['tariff'] ?? [];
@@ -3660,16 +3669,20 @@ function edSubs($chatId, $msgId, $bid) {
         ? "این دکمه‌ها زیر همان بخش نمایش داده می‌شوند.\nچیدمان: <code>" . h($b['sub_layout'] ?? '1') . "</code>"
         : "هنوز دکمه‌ای اضافه نکرده‌اید.";
 
-    // 🚀 دکمه‌های مینی‌اپ هم دقیقا زیر همین‌ها می‌نشینند — پس چیدمانشان هم از همین‌جا
-    if ($bid === 'buy' && function_exists('maRows')) {
-        $maRows = maRows();
-        if ($maRows) {
-            $names = [];
-            foreach ($maRows as $r) foreach ($r as $btn) $names[] = trim((string)($btn['text'] ?? ''));
-            $text .= "\n\n🚀 <b>و زیرشان، دکمه‌های مینی‌اپ:</b>\n";
-            $text .= h(implode(' · ', $names)) . "\n";
-            $text .= "چیدمان مینی‌اپ: <code>" . h(maCfg()['row_layout'] ?: '1,1') . "</code>";
+    // 🚀 دکمه‌های مینی‌اپ عضو همین لیست‌اند — پیش‌نمایش واقعی ردیف‌ها
+    if ($bid === 'buy' && function_exists('maSubItems') && maSubItems()) {
+        $lines = [];
+        foreach (subRows('buy') as $r) {
+            $cells = [];
+            foreach ($r as $btn) {
+                $t = trim((string)($btn['text'] ?? ''));
+                $cells[] = isset($btn['web_app']) ? '🚀 ' . $t : $t;
+            }
+            $lines[] = implode('  |  ', $cells);
         }
+        $text .= "\n\n🚀 <b>دکمه‌های مینی‌اپ هم داخل همین لیست‌اند</b> (با 🚀 مشخص شده‌اند).\n";
+        $text .= "با «🔢 ترتیب» هر کدام، جایشان را بین بقیه عوض کنید.\n\n";
+        $text .= "<b>الان این‌طوری دیده می‌شود:</b>\n<code>" . h(implode("\n", $lines)) . "</code>";
     }
 
     $rows = [];
@@ -3681,8 +3694,8 @@ function edSubs($chatId, $msgId, $bid) {
     }
     $rows[] = [btnCb('➕ افزودن دکمه شیشه‌ای', 'sbnew_' . $bid, 'confirm'),
                btnCb('📐 چیدمان', 'sblay_' . $bid, 'admin')];
-    if ($bid === 'buy' && function_exists('maRows') && maRows()) {
-        $rows[] = [btnCb('🚀 چیدمان دکمه‌های مینی‌اپ', 'maadm_rowlay', 'admin')];
+    if ($bid === 'buy' && function_exists('maSubItems') && maSubItems()) {
+        $rows[] = [btnCb('🚀 ترتیب دکمه‌های مینی‌اپ', 'maadm_home', 'admin')];
     }
     if (count($subs) > 1) $rows[] = [btnCb('🔄 هماهنگ کردن همه با هم', 'sbsync_' . $bid, 'buy')];
     $rows[] = [btnUI('back', 'eb_' . $bid, 'nav')];
@@ -6664,13 +6677,20 @@ function handleMasterChatMember($ev) {
  */
 function subRows($btnId) {
     $b = cfg()['buttons'][$btnId] ?? null;
-    if (!$b || empty($b['subs'])) return [];
+    if (!$b) return [];
 
     $items = [];
-    foreach ($b['subs'] as $sub) {
+    foreach ($b['subs'] ?? [] as $sub) {
         if (empty($sub['on'])) continue;
         $items[] = $sub;
     }
+
+    // 🚀 دکمه‌های مینی‌اپ عضو همین لیست‌اند تا با همان «ترتیب» و همان
+    // «چیدمان» بین زیردکمه‌ها جا بگیرند — نه یک بخش جدا زیر همه.
+    if ($btnId === 'buy' && function_exists('maMergeOn') && maMergeOn()) {
+        foreach (maSubItems() as $mi) $items[] = $mi;
+    }
+
     if (!$items) return [];
     usort($items, fn($x, $y) => ((int)($x['order'] ?? 99)) <=> ((int)($y['order'] ?? 99)));
 
@@ -6690,7 +6710,8 @@ function subRows($btnId) {
         $out = [];
         foreach ($line as $sub) {
             $btn = ['text' => trim(($sub['emoji'] ?? '') . ' ' . ($sub['text'] ?? ''))];
-            if (($sub['action'] ?? '') === 'url' && !empty($sub['value'])) $btn['url'] = $sub['value'];
+            if (!empty($sub['_webapp']))                                    $btn['web_app'] = ['url' => $sub['_webapp']];
+            elseif (($sub['action'] ?? '') === 'url' && !empty($sub['value'])) $btn['url'] = $sub['value'];
             else $btn['callback_data'] = 'sub_' . $btnId . '|' . $sub['id'];
             if (isStyle($sub['color'] ?? '')) $btn['style'] = $sub['color'];
             if (!empty($sub['icon'])) $btn['icon_custom_emoji_id'] = (string)$sub['icon'];
