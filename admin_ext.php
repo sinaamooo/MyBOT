@@ -129,6 +129,7 @@ function axDefaults() {
             'on'        => false,       // تا وقتی خودتان روشن نکنید، هیچ تراکنشی امضا نمی‌شود
             'dry'       => true,        // فقط بساز و نشان بده، نفرست
             'mnemonic'  => '',          // ۲۴ کلمه — ولت جداگانه، نه ولت اصلی
+            'passphrase'=> '',          // رمز عبارت بازیابی، اگر کیف پول موقع ساخت پرسیده باشد
             'address'   => '',          // آدرس همان ولت
             'version'   => 'v4r2',      // v4r2 یا v3r2
             'api'       => 'https://toncenter.com/api/v2',
@@ -1269,6 +1270,9 @@ function axCallback($data, $uid, $chatId, $msgId, $cbId, $isAdmin) {
                                   "⚠️ حتما ولت <b>جداگانه</b>، نه ولت اصلی‌تان.\n" .
                                   "پیام شما بلافاصله پس از ذخیره پاک می‌شود."],
         'axwad'   => ['ax_w_ad',  "📍 آدرس همان ولت را بفرستید.\n\nنمونه: <code>UQ…</code> یا <code>EQ…</code>"],
+        'axwpw'   => ['ax_w_pw',  "🔒 اگر کیف پول هنگام ساختِ عبارت بازیابی یک <b>رمز</b> هم گرفته، همان را بفرستید.\n\n" .
+                                  "⚠️ این با رمز/پین باز کردن اپ فرق دارد — آن رمز فقط قفل خود برنامه است و کلید را عوض نمی‌کند.\n" .
+                                  "اگر رمزی در کار نبوده، یک خط تیره <code>-</code> بفرستید تا پاک شود."],
         'axwapi'  => ['ax_w_api', "🌐 آدرس API شبکه را بفرستید.\n\nپیش‌فرض: <code>https://toncenter.com/api/v2</code>\n\nاگر کلید API دارید، بعد از آدرس یک فاصله و کلید را بگذارید."],
         'axwmax'  => ['ax_w_max', "🚧 سقف <b>هر تراکنش</b> به TON (فقط عدد).\n\nالان: <code>" . h((string)axVal('wallet.max_ton')) . "</code>"],
         'axwday'  => ['ax_w_day', "🚧 سقف <b>مجموع یک روز</b> به TON (فقط عدد).\n\nالان: <code>" . h((string)axVal('wallet.day_ton')) . "</code>"],
@@ -1495,6 +1499,19 @@ function axStateHandle($action, $sd, $msg, $uid, $chatId) {
             return true;
         }
 
+        case 'ax_w_pw': {
+            $pw = trim($plain);
+            if ($pw === '-') $pw = '';
+            axSet(function (&$c) use ($pw) { $c['wallet']['passphrase'] = $pw; $c['wallet']['verified'] = 0; });
+            if (!empty($msg['message_id']))
+                @tg(BOT_TOKEN, 'deleteMessage', ['chat_id' => $chatId, 'message_id' => (int)$msg['message_id']]);
+            [$vok, $verr] = (trim((string)axVal('wallet.mnemonic')) !== '' && trim((string)axVal('wallet.address')) !== '')
+                ? axWalletVerify() : [false, 'اول آدرس و عبارت بازیابی را ثبت کنید'];
+            $done(($pw === '' ? "🔓 رمز پاک شد." : "🔒 رمز ذخیره شد و پیامتان پاک شد.") . "\n\n" .
+                  ($vok ? "✅ حالا با آدرس می‌خواند." : "⚠️ " . $verr), 'ax_wallet');
+            return true;
+        }
+
         case 'ax_w_api': {
             $parts = preg_split('/\s+/', trim($plain));
             $url   = (string)($parts[0] ?? '');
@@ -1577,7 +1594,7 @@ function axCryptoCheck() {
 function axWalletKeys() {
     if (!function_exists('tonKeyFromMnemonic')) throw new Exception('ton_wallet.php بارگذاری نشده');
     $w = axCfg()['wallet'];
-    return tonKeyFromMnemonic((string)$w['mnemonic']);
+    return tonKeyFromMnemonic((string)$w['mnemonic'], (string)($w['passphrase'] ?? ''));
 }
 
 /** عبارت بازیابی را با آدرس روی زنجیره می‌سنجد */
@@ -1852,6 +1869,7 @@ function axWalletHome($chatId, $msgId) {
     $t .= "وضعیت: " . (!empty($w['on']) ? '🟢 روشن' : '🔴 خاموش') . "\n";
     $t .= "حالت: " . (!empty($w['dry']) ? '🧪 آزمایشی (نمی‌فرستد)' : '🚀 واقعی') . "\n";
     $t .= "عبارت بازیابی: " . ($has ? '✅ ثبت شده' : '❌ ثبت نشده') . "\n";
+    $t .= "رمز عبارت: " . (trim((string)($w['passphrase'] ?? '')) !== '' ? '🔒 ثبت شده' : '— ندارد') . "\n";
     $t .= "آدرس: " . (trim((string)$w['address']) !== ''
           ? '<code>' . h(mb_substr((string)$w['address'], 0, 12)) . '…' . h(mb_substr((string)$w['address'], -6)) . '</code>'
           : '<i>ثبت نشده</i>') . "\n";
@@ -1869,6 +1887,7 @@ function axWalletHome($chatId, $msgId) {
         [btnCb((!empty($w['on']) ? '🟢 روشن' : '🔴 خاموش'), 'axwtog', 'admin'),
          btnCb((!empty($w['dry']) ? '🧪 آزمایشی' : '🚀 واقعی'), 'axwdry', 'admin')],
         [btnCb('🔑 عبارت بازیابی', 'axwmn', 'admin'), btnCb('📍 آدرس ولت', 'axwad', 'admin')],
+        [btnCb('🔒 رمز عبارت (اگر دارد)', 'axwpw', 'admin')],
         [btnCb('🔢 نسخه: ' . h((string)$w['version']), 'axwver', 'admin'),
          btnCb('🌐 آدرس API', 'axwapi', 'admin')],
         [btnCb('🚧 سقف هر تراکنش', 'axwmax', 'admin'), btnCb('🚧 سقف روزانه', 'axwday', 'admin')],

@@ -472,31 +472,56 @@ function tonKeyFromMnemonic($words, $password = '') {
  * واقعاً صاحب همین آدرس است و امضای ما را ولت می‌پذیرد.
  */
 function tonVerifyWallet($base, $address, $publicKey, $apiKey) {
+    // هر پیام شکست با وضعیت واقعی آدرس همراه می‌شود تا حدس نزنیم
+    $withState = function ($res) use ($base, $address, $apiKey) {
+        if (!empty($res['ok'])) return $res;
+        $st  = tonAccountState($base, $address, $apiKey);
+        $err = (string)($res['error'] ?? '');
+        $res['state'] = $st;
+
+        // اگر آدرس واقعا فعال است، حرف «deploy نشده» غلط و گمراه‌کننده است —
+        // پس به‌جای اضافه کردن، جایش را می‌گیریم.
+        if (($st['state'] ?? '') === 'active' && !empty($st['has_code'])
+            && str_contains($err, 'فعال (deploy) نشده')) {
+            $err = "این آدرس روی شبکه <b>فعال است و قرارداد دارد</b>، ولی متد " .
+                   "<code>get_public_key</code> را جواب نداد.\n\n" .
+                   "یعنی قرارداد این آدرس یک <b>ولت استاندارد نیست</b> — مثلا multisig، " .
+                   "قرارداد سفارشی، یا نسخه‌ای که این متد را ندارد.\n\n" .
+                   "<b>راه حل:</b> در کیف پول‌تان اگر چند ولت دارید (v4R2 و W5)، " .
+                   "آدرسِ همانی را بردارید که این ۲۴ کلمه مال اوست — معمولا در " .
+                   "تنظیمات کیف پول زیر «Wallet version» می‌شود بینشان جابه‌جا شد و " .
+                   "آدرس هرکدام را دید.";
+        }
+
+        $res['error'] = $err . tonStateText($st);
+        return $res;
+    };
+
     // مسیر runGetMethod نسبت به همان base داده می‌شود، نه با پیشوند ثابت
     [$r, $err] = tonApiCall($base, '/runGetMethod', 'POST', [
         'address' => $address, 'method' => 'get_public_key', 'stack' => [],
     ], $apiKey);
-    if (!$r) return ['ok' => false, 'error' => 'پاسخ شبکه نامعتبر: ' . mb_substr((string)$err, 0, 200),
-                     'raw' => (string)$err];
-    if (isset($r['ok']) && !$r['ok']) return ['ok' => false, 'error' => 'شبکه خطا داد: ' . mb_substr(json_encode($r, 320), 0, 160)];
+    if (!$r) return $withState(['ok' => false, 'error' => 'پاسخ شبکه نامعتبر: ' . mb_substr((string)$err, 0, 200),
+                       'raw' => (string)$err]);
+    if (isset($r['ok']) && !$r['ok']) return $withState(['ok' => false, 'error' => 'شبکه خطا داد: ' . mb_substr(json_encode($r, 320), 0, 160)]);
     // خروج غیرصفر یعنی قرارداد چنین متدی ندارد یا اصلا اجرا نشد
     $exit  = $r['result']['exit_code'] ?? null;
     $stack = $r['result']['stack'] ?? [];
 
     if (is_numeric($exit) && (int)$exit !== 0) {
-        return ['ok' => false, 'raw' => mb_substr(json_encode($r, JSON_UNESCAPED_UNICODE), 0, 600),
-                'error' => tonNotDeployedText((int)$exit)];
+        return $withState(['ok' => false, 'raw' => mb_substr(json_encode($r, JSON_UNESCAPED_UNICODE), 0, 600),
+                'error' => tonNotDeployedText((int)$exit)]);
     }
 
     if (!isset($stack[0])) {
-        return ['ok' => false, 'raw' => mb_substr(json_encode($r, JSON_UNESCAPED_UNICODE), 0, 600),
-                'error' => tonNotDeployedText(is_numeric($exit) ? (int)$exit : null)];
+        return $withState(['ok' => false, 'raw' => mb_substr(json_encode($r, JSON_UNESCAPED_UNICODE), 0, 600),
+                'error' => tonNotDeployedText(is_numeric($exit) ? (int)$exit : null)]);
     }
 
     $onchain = tonStackHex($stack[0]);
     if ($onchain === null)
-        return ['ok' => false, 'raw' => json_encode($stack, JSON_UNESCAPED_UNICODE),
-                'error' => 'پاسخ زنجیره خوانده نشد: ' . mb_substr(json_encode($stack[0], JSON_UNESCAPED_UNICODE), 0, 200)];
+        return $withState(['ok' => false, 'raw' => json_encode($stack, JSON_UNESCAPED_UNICODE),
+                'error' => 'پاسخ زنجیره خوانده نشد: ' . mb_substr(json_encode($stack[0], JSON_UNESCAPED_UNICODE), 0, 200)]);
 
     // 🛑 شبکه گاهی به‌جای نتیجه، «شناسه‌ی خود متد» را پس می‌دهد — یعنی
     // متد اجرا نشده چون قراردادی روی این آدرس نیست. بدون این بررسی،
@@ -504,19 +529,19 @@ function tonVerifyWallet($base, $address, $publicKey, $apiKey) {
     // «عبارت بازیابی نمی‌خواند» می‌آمد.
     $methodId = (tonCrc16('get_public_key') & 0xffff) | 0x10000;
     if (hexdec($onchain) === $methodId && strlen($onchain) <= 8)
-        return ['ok' => false, 'raw' => json_encode($stack, JSON_UNESCAPED_UNICODE),
-                'error' => tonNotDeployedText(null)];
+        return $withState(['ok' => false, 'raw' => json_encode($stack, JSON_UNESCAPED_UNICODE),
+                'error' => tonNotDeployedText(null)]);
 
     // کلید عمومی ۳۲ بایت است؛ بعد از حذف صفرهای ابتدایی هم نباید
     // خیلی کوتاه‌تر از ۶۴ نویسه باشد. عدد کوتاه یعنی این کلید نیست.
     if (strlen($onchain) < 48)
-        return ['ok' => false, 'raw' => json_encode($stack, JSON_UNESCAPED_UNICODE),
+        return $withState(['ok' => false, 'raw' => json_encode($stack, JSON_UNESCAPED_UNICODE),
                 'error' => "چیزی که از این آدرس برگشت کلید عمومی نیست — فقط " . strlen($onchain) .
-                           " نویسه است، در حالی که کلید ۶۴ نویسه دارد.\n\n" . tonNotDeployedText(null)];
+                           " نویسه است، در حالی که کلید ۶۴ نویسه دارد.\n\n" . tonNotDeployedText(null)]);
 
     $mine = ltrim(bin2hex($publicKey), '0');
     if ($onchain !== $mine) {
-        return ['ok' => false, 'raw' => json_encode($stack, JSON_UNESCAPED_UNICODE), 'error' =>
+        return $withState(['ok' => false, 'raw' => json_encode($stack, JSON_UNESCAPED_UNICODE), 'error' =>
             "عبارت بازیابی با این آدرس نمی‌خواند.\n\n" .
             'کلید این آدرس روی زنجیره: <code>' . mb_substr($onchain, 0, 16) . "…</code>\n" .
             'کلید عبارت بازیابی شما: <code>' . mb_substr($mine, 0, 16) . "…</code>\n\n" .
@@ -524,10 +549,42 @@ function tonVerifyWallet($base, $address, $publicKey, $apiKey) {
             "۱. آدرس از ولت دیگری کپی شده. آدرس را از <b>همان</b> کیف پولی بردارید که\n" .
             "این ۲۴ کلمه را از آن گرفته‌اید — دکمه‌ی دریافت (Receive) و کپی آدرس.\n\n" .
             "۲. آن ولت هنگام ساخت <b>رمز عبور</b> داشته (بعضی کیف پول‌ها می‌پرسند).\n" .
-            "با رمز، همان ۲۴ کلمه کلید دیگری می‌سازد. اگر رمز گذاشته‌اید،\n" .
-            "یک ولت تازه <b>بدون رمز</b> بسازید و از آن استفاده کنید."];
+            "با رمز، همان ۲۴ کلمه کلید دیگری می‌سازد.\n" .
+            "اگر رمز دارید، همان را در پنل کنار ۲۴ کلمه وارد کنید."]);
     }
     return ['ok' => true];
+}
+
+/**
+ * وضعیت واقعی یک آدرس روی زنجیره.
+ * برگشت: ['state'=>'active|uninitialized|frozen|?', 'balance'=>nanoton, 'code'=>hash کوتاه]
+ * بدون این، «چرا تایید نشد» حدس می‌ماند: آدرس فعال است یا اصلا قراردادی ندارد؟
+ */
+function tonAccountState($base, $address, $apiKey) {
+    [$r, $err] = tonApiCall($base, '/getAddressInformation?address=' . rawurlencode($address), 'GET', null, $apiKey);
+    if (!$r) return ['state' => '?', 'error' => (string)$err];
+    $res = $r['result'] ?? [];
+    $code = (string)($res['code'] ?? '');
+    return [
+        'state'   => (string)($res['state'] ?? '?'),
+        'balance' => (string)($res['balance'] ?? '0'),
+        'code'    => $code === '' ? '' : substr(hash('sha256', $code), 0, 16),
+        'has_code'=> $code !== '',
+    ];
+}
+
+/** توضیح وضعیت آدرس، به زبان آدمیزاد */
+function tonStateText($st) {
+    if (!is_array($st)) return '';
+    $s = (string)($st['state'] ?? '?');
+    $bal = isset($st['balance']) ? nanoToTon((string)$st['balance']) : '?';
+    $line = "\n\n<b>وضعیت این آدرس روی زنجیره:</b>\n";
+    if ($s === 'active')          $line .= "• فعال ✅ · موجودی " . $bal . " TON\n";
+    elseif ($s === 'uninitialized') $line .= "• هنوز فعال نشده (uninitialized) · موجودی " . $bal . " TON\n";
+    elseif ($s === 'frozen')      $line .= "• منجمد (frozen) · موجودی " . $bal . " TON\n";
+    else                          $line .= "• نامشخص" . (isset($st['error']) ? ' — ' . mb_substr((string)$st['error'], 0, 80) : '') . "\n";
+    if (!empty($st['code'])) $line .= "• اثر قرارداد: <code>" . $st['code'] . "</code>\n";
+    return $line;
 }
 
 /** پیام «ولت هنوز روی زنجیره ننشسته» — رایج‌ترین علت شکست تایید */

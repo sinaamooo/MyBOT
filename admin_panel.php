@@ -117,6 +117,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($a === 'auto_wallet') {
         $addr = trim($_POST['w_addr'] ?? '');
         $mn   = trim($_POST['w_mn'] ?? '');
+        $pw   = trim($_POST['w_pw'] ?? '');
         $api  = rtrim(trim($_POST['w_api'] ?? ''), '/');
         $akey = trim($_POST['w_apikey'] ?? '');
 
@@ -134,9 +135,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $mn = strtolower(implode(' ', $words));
         }
 
-        axSet(function (&$c) use ($addr, $mn, $api, $akey) {
+        axSet(function (&$c) use ($addr, $mn, $pw, $api, $akey) {
             if ($addr !== '') { $c['wallet']['address'] = $addr;  $c['wallet']['verified'] = 0; }
             if ($mn   !== '') { $c['wallet']['mnemonic'] = $mn;   $c['wallet']['verified'] = 0; }
+            // «-» یعنی پاکش کن؛ خالی یعنی دست نزن
+            if ($pw === '-')  { $c['wallet']['passphrase'] = '';  $c['wallet']['verified'] = 0; }
+            elseif ($pw !== ''){ $c['wallet']['passphrase'] = $pw; $c['wallet']['verified'] = 0; }
             if ($api  !== '') $c['wallet']['api'] = $api;
             if ($akey !== '') $c['wallet']['api_key'] = $akey;
             $c['wallet']['version'] = in_array($_POST['w_ver'] ?? '', ['v4r2','v3r2'], true) ? $_POST['w_ver'] : 'v4r2';
@@ -2340,6 +2344,16 @@ def join_gate(user_id):
         <textarea name="w_mn" dir="ltr" style="min-height:70px"
           placeholder="<?= $hasMn ? 'ثبت شده — برای تعویض، ۲۴ کلمه‌ی تازه را اینجا بگذارید' : 'word1 word2 word3 … word24' ?>"></textarea>
         <p class="muted">برای امنیت، عبارت ذخیره‌شده هرگز اینجا نمایش داده نمی‌شود.</p>
+      </div>
+
+      <div style="margin-top:13px">
+        <label>🔒 رمز عبارت بازیابی <span class="muted">(اگر کیف پول موقع ساخت گرفته)</span>
+          <?= trim((string)($W['passphrase'] ?? '')) !== '' ? '<span class="badge amber">ثبت شده</span>' : '' ?></label>
+        <input name="w_pw" dir="ltr" autocomplete="off"
+               placeholder="<?= trim((string)($W['passphrase'] ?? '')) !== '' ? 'ثبت شده — برای پاک کردن یک خط تیره - بگذارید' : 'اگر رمزی نبوده، خالی بگذارید' ?>">
+        <p class="muted">⚠️ این با رمز یا پینِ باز کردن برنامه <b>فرق دارد</b>. آن پین فقط قفل خود اپ است
+        و کلید ولت را عوض نمی‌کند. این فیلد فقط برای کیف پول‌هایی است که هنگام ساختِ
+        عبارت بازیابی یک رمز اضافه می‌گیرند.</p>
       </div>
 
       <div class="grid2" style="margin-top:13px">
