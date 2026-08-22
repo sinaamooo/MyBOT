@@ -38,12 +38,22 @@ row($rows, function_exists('curl_init'), 'افزونه curl',
     'افزونه curl را از کنترل‌پنل هاست فعال کنید.');
 row($rows, function_exists('json_encode'), 'افزونه json',
     function_exists('json_encode') ? 'فعال' : 'غیرفعال', 'افزونه json را فعال کنید.');
+$hasSodium = function_exists('sodium_crypto_sign_seed_keypair');
+$hasCompat = is_file(__DIR__ . '/sodium_compat/autoload.php') || is_file(__DIR__ . '/vendor/autoload.php');
+row($rows, $hasSodium || $hasCompat, 'افزونه sodium (فقط برای امضای TON)',
+    $hasSodium ? 'فعال' : ($hasCompat ? 'جایگزین PHP پیدا شد' : 'غیرفعال'),
+    'فقط برای «امضای خودکار تراکنش TON» لازم است؛ بقیه ربات بدون آن کار می‌کند. ' .
+    'در پنل هاست ← Select PHP Version ← Extensions تیک sodium را بزنید. ' .
+    'اگر نشد، پوشه sodium_compat را از github.com/paragonie/sodium_compat کنار فایل‌ها بگذارید.');
+row($rows, in_array('sha512', hash_algos(), true) && function_exists('hash_pbkdf2'),
+    'hash با sha512', in_array('sha512', hash_algos(), true) ? 'فعال' : 'غیرفعال',
+    'افزونه hash را فعال کنید.');
 row($rows, function_exists('mb_substr'), 'افزونه mbstring',
     function_exists('mb_substr') ? 'فعال' : 'غیرفعال',
     'افزونه mbstring را فعال کنید — بدون آن متن فارسی درست بریده نمی‌شود.');
 
 // ───────── ۳) فایل‌ها ─────────
-$need = ['bot_master_membership.php', 'miniapps.php', 'miniapp_view_tg.php', 'miniapp_view_cfg.php'];
+$need = ['bot_master_membership.php', 'miniapps.php', 'miniapp_view_tg.php', 'miniapp_view_cfg.php', 'admin_ext.php', 'ton_wallet.php'];
 $missing = [];
 foreach ($need as $f) if (!is_file(__DIR__ . '/' . $f)) $missing[] = $f;
 row($rows, !$missing, 'فایل‌های ربات',

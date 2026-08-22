@@ -125,6 +125,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             catch (Throwable $e) { go('آدرس ولت معتبر نیست: ' . $e->getMessage(), 'err'); }
         }
         if ($mn !== '') {
+            [$cOk, $cWhy] = tonCryptoReady();
+            if (!$cOk) go(strip_tags(str_replace("\n", ' ', $cWhy)), 'err');
             $words = array_values(array_filter(preg_split('/\s+/u', $mn), fn($x) => $x !== ''));
             if (count($words) !== 24) go('عبارت بازیابی باید دقیقا ۲۴ کلمه باشد — الان ' . count($words) . ' کلمه.', 'err');
             try { tonKeyFromMnemonic($words); }
@@ -156,6 +158,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($a === 'auto_verify') {
+        [$cOk, $cWhy] = tonCryptoReady();
+        if (!$cOk) go(strip_tags(str_replace("\n", ' ', $cWhy)), 'err');
         [$vok, $verr] = axWalletVerify();
         $bal = axWalletBalance();
         go($vok
@@ -2293,6 +2297,17 @@ def join_gate(user_id):
   </div></div>
 
   <div class="card"><h2>گام ۲ — ولت TON، امضای خودکار تراکنش</h2><div class="body">
+    <?php [$cOk, $cWhy] = tonCryptoReady(); if (!$cOk): ?>
+      <div class="flash err" style="margin-top:0">
+        🔴 <b>این هاست هنوز نمی‌تواند تراکنش امضا کند</b><br><br>
+        <?= nl2br($cWhy) ?>
+      </div>
+      <p class="muted" style="margin-bottom:14px">
+        بقیه‌ی ربات — فروش ممبر، مخزن کانفیگ، سفارش دستی، گزارش‌ها — بدون این هم کار می‌کند.
+        فقط امضای خودکار تراکنش TON به این افزونه نیاز دارد.
+      </p>
+    <?php endif; ?>
+
     <div class="flash warn" style="margin-top:0">
       ⚠️ <b>عبارت بازیابی روی همین هاست ذخیره می‌شود.</b>
       یک ولت <b>جداگانه</b> بسازید و فقط به اندازه‌ی فروش یکی دو روز داخلش پول بگذارید.

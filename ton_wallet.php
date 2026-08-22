@@ -397,7 +397,57 @@ function tonWriteAddress(TonBits $b, $addr) {
  * ۲۴ کلمه TON → جفت کلید Ed25519.
  * روش استاندارد TON: PBKDF2-HMAC-SHA512 با نمک "TON default seed".
  */
+/**
+ * Ed25519 لازم است و روی همه‌ی هاست‌ها روشن نیست.
+ * اگر افزونه‌ی sodium نبود، دنبال polyfill خالص PHP می‌گردیم
+ * (کتابخانه‌ی sodium_compat که همین نام توابع را تعریف می‌کند).
+ *
+ * برگشت: [true, ''] یا [false, 'دلیل و راه حل']
+ */
+function tonCryptoReady() {
+    static $done = false;
+    if (!$done) {
+        $done = true;
+        if (!function_exists('sodium_crypto_sign_seed_keypair')) {
+            foreach ([
+                __DIR__ . '/sodium_compat/autoload.php',
+                __DIR__ . '/vendor/autoload.php',
+                __DIR__ . '/lib/sodium_compat/autoload.php',
+            ] as $f) {
+                if (is_file($f)) { @require_once $f; break; }
+            }
+        }
+    }
+
+    foreach (['sodium_crypto_sign_seed_keypair', 'sodium_crypto_sign_detached',
+              'sodium_crypto_sign_publickey', 'sodium_crypto_sign_secretkey'] as $fn) {
+        if (!function_exists($fn)) return [false, tonCryptoHelp()];
+    }
+    if (!function_exists('hash_pbkdf2') || !in_array('sha512', hash_algos(), true))
+        return [false, 'افزونه‌ی hash با sha512 روی این هاست نیست — بدون آن کلید ولت ساخته نمی‌شود.'];
+
+    return [true, ''];
+}
+
+function tonCryptoHelp() {
+    return "افزونه‌ی <b>sodium</b> روی این هاست روشن نیست.\n" .
+           "بدون آن امضای تراکنش TON ممکن نیست (بقیه‌ی ربات کار می‌کند).\n\n" .
+           "<b>راه اول — روشن کردنش (ساده‌تر):</b>\n" .
+           "در پنل هاست (cPanel یا DirectAdmin) دنبال «Select PHP Version» یا\n" .
+           "«PHP Extensions» بگردید، تیک <code>sodium</code> را بزنید و ذخیره کنید.\n" .
+           "این افزونه از PHP 7.2 همراه خود PHP می‌آید، فقط خاموش است.\n" .
+           "اگر پیدایش نکردید، از پشتیبانی هاست بخواهید <code>ext-sodium</code> را فعال کند.\n\n" .
+           "<b>راه دوم — بدون دخالت هاست:</b>\n" .
+           "کتابخانه‌ی <code>sodium_compat</code> را از\n" .
+           "<code>github.com/paragonie/sodium_compat</code> دانلود کنید و پوشه‌اش را\n" .
+           "کنار فایل‌های ربات با نام <code>sodium_compat</code> بگذارید.\n" .
+           "ربات خودش پیدایش می‌کند و از همان استفاده می‌کند.";
+}
+
 function tonKeyFromMnemonic($words, $password = '') {
+    [$ok, $why] = tonCryptoReady();
+    if (!$ok) throw new Exception($why);
+
     if (is_string($words)) $words = preg_split('/\s+/u', trim($words));
     $words = array_values(array_filter(array_map(fn($w) => strtolower(trim($w)), $words), fn($w) => $w !== ''));
     if (count($words) !== 24) throw new Exception('عبارت بازیابی باید ۲۴ کلمه باشد (الان ' . count($words) . ')');
@@ -515,6 +565,8 @@ function tonSignedExternal($keys, $walletAddr, $seqno, $messages, $opts = []) {
     $innerCell = TonCell::fromBits($inner);
     foreach ($messages as $m) $innerCell->addRef($m);
 
+    [$cOk, $cWhy] = tonCryptoReady();
+    if (!$cOk) throw new Exception($cWhy);
     $sig = sodium_crypto_sign_detached($innerCell->hash(), $keys['secret']);
 
     // بدنه نهایی = امضا + همان بیت‌ها و رفرنس‌ها

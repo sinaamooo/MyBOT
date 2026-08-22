@@ -1449,6 +1449,8 @@ function axStateHandle($action, $sd, $msg, $uid, $chatId) {
         }
 
         case 'ax_w_mn': {
+            [$cOk, $cWhy] = axCryptoCheck();
+            if (!$cOk) { $done("🔴 <b>ذخیره نشد</b>\n\n" . $cWhy, 'ax_wallet'); return true; }
             $words = preg_split('/\s+/u', trim($plain));
             $words = array_values(array_filter($words, fn($x) => $x !== ''));
             if (count($words) !== 24) {
@@ -1551,7 +1553,16 @@ function axDigits($s) {
 
 function axWalletReady() {
     $w = axCfg()['wallet'];
-    return !empty($w['on']) && trim((string)$w['mnemonic']) !== '' && trim((string)$w['address']) !== '';
+    if (empty($w['on']) || trim((string)$w['mnemonic']) === '' || trim((string)$w['address']) === '') return false;
+    // بدون Ed25519 هیچ امضایی ممکن نیست — پس «آماده» هم نیست
+    if (function_exists('tonCryptoReady')) { [$ok] = tonCryptoReady(); if (!$ok) return false; }
+    return true;
+}
+
+/** [آماده؟, دلیل] — برای نمایش در پنل */
+function axCryptoCheck() {
+    if (!function_exists('tonCryptoReady')) return [false, 'فایل ton_wallet.php کنار بقیه نیست.'];
+    return tonCryptoReady();
 }
 
 function axWalletKeys() {
@@ -1801,6 +1812,17 @@ function axWalletHome($chatId, $msgId) {
     $has = trim((string)$w['mnemonic']) !== '';
 
     $t  = "👛 <b>خودکارسازی ولت TON</b>\n\n";
+    [$cOk, $cWhy] = axCryptoCheck();
+    if (!$cOk) {
+        $t .= "🔴 <b>این هاست هنوز نمی‌تواند تراکنش امضا کند</b>\n\n" . $cWhy . "\n\n" .
+              "<i>بقیه‌ی ربات بدون این هم کار می‌کند — فقط امضای خودکار TON به آن نیاز دارد.</i>";
+        axShow($chatId, $msgId, $t, [
+            [btnCb('🔄 دوباره بررسی کن', 'ax_wallet', 'admin')],
+            [btnCb('🔙 بازگشت', 'ax_home', 'nav')],
+        ]);
+        return;
+    }
+
     $t .= "پنل فروش بعد از خرید یک تراکنش <b>امضانشده</b> می‌دهد.\n";
     $t .= "تا کسی امضایش نکند سفارش تمام نمی‌شود. این بخش همان امضا را\n";
     $t .= "روی سرور می‌زند تا فروش بدون حضور شما کامل شود.\n\n";
@@ -1949,9 +1971,12 @@ function axAudit() {
 
     // ── ولت ──
     $w = axCfg()['wallet'];
+    [$cOk, $cWhy] = axCryptoCheck();
+    $add('افزونه رمزنگاری (sodium)', $cOk, $cOk ? '' : 'روی این هاست روشن نیست — بدون آن امضای TON ممکن نیست');
     $add('امضای خودکار تراکنش TON', axWalletReady() && empty($w['dry']),
-         !axWalletReady() ? 'خاموش یا عبارت بازیابی/آدرس ندارد'
-                          : (!empty($w['dry']) ? 'در حالت آزمایشی — تراکنش ساخته می‌شود ولی نمی‌رود' : ''));
+         !$cOk ? 'منتظر افزونه sodium'
+               : (!axWalletReady() ? 'خاموش یا عبارت بازیابی/آدرس ندارد'
+                  : (!empty($w['dry']) ? 'در حالت آزمایشی — تراکنش ساخته می‌شود ولی نمی‌رود' : '')));
 
     // ── مخزن کانفیگ ──
     $st = axStockAll(); $tot = 0; foreach ($st as $x) $tot += $x['n'];
