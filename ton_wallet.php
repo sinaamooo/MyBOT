@@ -541,7 +541,19 @@ function tonVerifyWallet($base, $address, $publicKey, $apiKey) {
 
     $mine = ltrim(bin2hex($publicKey), '0');
     if ($onchain !== $mine) {
-        return $withState(['ok' => false, 'raw' => json_encode($stack, JSON_UNESCAPED_UNICODE), 'error' =>
+        // 🎯 مفیدترین کاری که می‌شود کرد: بگوییم این ۲۴ کلمه به کدام آدرس می‌رسند.
+        // کد و داده‌ی همین آدرس را از زنجیره می‌گیریم، پس هیچ نسخه‌ای حدس زده نمی‌شود.
+        $st  = tonAccountState($base, $address, $apiKey);
+        $wc  = 0;
+        try { $wc = tonParseAddress($address)['wc']; } catch (Throwable $e) {}
+        $derived = tonDeriveSameVersion($st['code_b64'] ?? '', $st['data_b64'] ?? '', $onchain, $publicKey, $wc);
+        $hint = $derived === null ? '' :
+            "\n\n🎯 <b>این ۲۴ کلمه به این آدرس می‌رسند:</b>\n<code>" . $derived . "</code>\n" .
+            "<i>(با همان نسخه‌ی ولتی که آدرس بالا دارد)</i>\n" .
+            "اگر این آدرس را می‌شناسید، همین را در فیلد آدرس بگذارید.";
+
+        return $withState(['ok' => false, 'raw' => json_encode($stack, JSON_UNESCAPED_UNICODE),
+            'derived' => $derived, 'error' =>
             "عبارت بازیابی با این آدرس نمی‌خواند.\n\n" .
             'کلید این آدرس روی زنجیره: <code>' . mb_substr($onchain, 0, 16) . "…</code>\n" .
             'کلید عبارت بازیابی شما: <code>' . mb_substr($mine, 0, 16) . "…</code>\n\n" .
@@ -550,7 +562,7 @@ function tonVerifyWallet($base, $address, $publicKey, $apiKey) {
             "این ۲۴ کلمه را از آن گرفته‌اید — دکمه‌ی دریافت (Receive) و کپی آدرس.\n\n" .
             "۲. آن ولت هنگام ساخت <b>رمز عبور</b> داشته (بعضی کیف پول‌ها می‌پرسند).\n" .
             "با رمز، همان ۲۴ کلمه کلید دیگری می‌سازد.\n" .
-            "اگر رمز دارید، همان را در پنل کنار ۲۴ کلمه وارد کنید."]);
+            "اگر رمز دارید، همان را در پنل کنار ۲۴ کلمه وارد کنید." . $hint]);
     }
     return ['ok' => true];
 }
@@ -566,11 +578,58 @@ function tonAccountState($base, $address, $apiKey) {
     $res = $r['result'] ?? [];
     $code = (string)($res['code'] ?? '');
     return [
-        'state'   => (string)($res['state'] ?? '?'),
-        'balance' => (string)($res['balance'] ?? '0'),
-        'code'    => $code === '' ? '' : substr(hash('sha256', $code), 0, 16),
-        'has_code'=> $code !== '',
+        'state'    => (string)($res['state'] ?? '?'),
+        'balance'  => (string)($res['balance'] ?? '0'),
+        'code'     => $code === '' ? '' : substr(hash('sha256', $code), 0, 16),
+        'has_code' => $code !== '',
+        'code_b64' => $code,
+        'data_b64' => (string)($res['data'] ?? ''),
     ];
+}
+
+/**
+ * آدرسی که یک کلید عمومی، با «همان نوع ولتِ» یک آدرس موجود، به آن می‌رسد.
+ *
+ * هیچ کد قراردادی حدس زده نمی‌شود: کد و داده‌ی همان آدرس را از زنجیره
+ * می‌گیریم، جای کلید عمومی را داخل داده پیدا می‌کنیم (همان‌جا که کلیدِ
+ * روی زنجیره نشسته)، کلید خودمان را می‌گذاریم، و آدرس را می‌سازیم.
+ * پس نتیجه برای هر نسخه‌ی ولتی درست است، حتی نسخه‌ای که نمی‌شناسیم.
+ *
+ * برگشت: آدرس رشته‌ای، یا null اگر نشد.
+ */
+function tonDeriveSameVersion($codeB64, $dataB64, $onchainPubHex, $myPublicKey, $wc = 0) {
+    $codeB64 = trim((string)$codeB64);
+    $dataB64 = trim((string)$dataB64);
+    if ($codeB64 === '' || $dataB64 === '') return null;
+
+    try {
+        $code = tonBocFromBase64($codeB64);
+        $data = tonBocFromBase64($dataB64);
+    } catch (Throwable $e) { return null; }
+
+    // کلید روی زنجیره را به بیت تبدیل کن تا جایش را در داده پیدا کنیم
+    $pubHex = str_pad(ltrim((string)$onchainPubHex, '0'), 64, '0', STR_PAD_LEFT);
+    if (!preg_match('/^[0-9a-f]{64}$/', $pubHex)) return null;
+    $needle = '';
+    foreach (str_split($pubHex) as $c) $needle .= str_pad(decbin(hexdec($c)), 4, '0', STR_PAD_LEFT);
+
+    $pos = strpos($data->bits, $needle);
+    if ($pos === false) return null;          // کلید داخل داده پیدا نشد
+
+    $mine = '';
+    foreach (str_split(bin2hex($myPublicKey)) as $c) $mine .= str_pad(decbin(hexdec($c)), 4, '0', STR_PAD_LEFT);
+
+    $newData = new TonCell();
+    $newData->bits = substr($data->bits, 0, $pos) . $mine . substr($data->bits, $pos + 256);
+    $newData->refs = $data->refs;
+
+    // StateInit: split_depth(0) special(0) code(1) data(1) library(0)
+    $si = new TonBits();
+    $si->writeBit(0)->writeBit(0)->writeBit(1)->writeBit(1)->writeBit(0);
+    $state = TonCell::fromBits($si);
+    $state->addRef($code)->addRef($newData);
+
+    return tonAddressToString($wc, $state->hash(), false, false);
 }
 
 /** توضیح وضعیت آدرس، به زبان آدمیزاد */
