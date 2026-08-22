@@ -7345,8 +7345,16 @@ if (isset($_GET['cron'])) {
 
 processDeleteQueue(20);
 gwPoll(10);
-maAutoQueue(2);   // تحویل خودکارِ معطل‌مانده — بدون نیاز به cron هم پیش می‌رود
-maStockQueue(2);  // سفارش‌هایی که منتظر شارژ مخزن مانده‌اند
+// 🐢 صف‌های پس‌زمینه فقط هر یک دقیقه یک‌بار، نه روی هر پیام.
+// روی هر درخواست اجرا کردنشان یعنی خواندن و پیمایش همه‌ی سفارش‌ها
+// پیش از جواب دادن به کاربر — که ربات را کند می‌کند.
+$qMark = DATA_DIR . '/.queue_at';
+$qLast = @filemtime($qMark) ?: 0;
+if (time() - $qLast >= 60) {
+    @touch($qMark);
+    maAutoQueue(2);   // تحویل خودکارِ معطل‌مانده — بدون نیاز به cron هم پیش می‌رود
+    maStockQueue(2);  // سفارش‌هایی که منتظر شارژ مخزن مانده‌اند
+}
 
 $raw = file_get_contents('php://input');
 $update = json_decode($raw, true);

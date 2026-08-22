@@ -478,15 +478,73 @@ function tonVerifyWallet($base, $address, $publicKey, $apiKey) {
     ], $apiKey);
     if (!$r) return ['ok' => false, 'error' => 'پاسخ شبکه نامعتبر: ' . mb_substr((string)$err, 0, 200)];
     if (isset($r['ok']) && !$r['ok']) return ['ok' => false, 'error' => 'شبکه خطا داد: ' . mb_substr(json_encode($r, 320), 0, 160)];
+    // خروج غیرصفر یعنی قرارداد چنین متدی ندارد یا اجرا نشد
+    $exit = $r['result']['exit_code'] ?? ($r['result']['@extra'] ?? null);
     $stack = $r['result']['stack'] ?? [];
-    if (!isset($stack[0][1])) return ['ok' => false, 'error' => 'ولت متد get_public_key ندارد — آدرس یا نسخه ولت را بررسی کنید'];
-    // پاسخ می‌تواند «0x…» یا هگز خالی باشد؛ صفرهای ابتدایی هم معنی ندارند
-    $onchain = strtolower(trim((string)$stack[0][1]));
-    if (str_starts_with($onchain, '0x')) $onchain = substr($onchain, 2);
-    $onchain = ltrim($onchain, '0');
-    $mine    = ltrim(bin2hex($publicKey), '0');
-    if ($onchain !== $mine) return ['ok' => false, 'error' => 'عبارت بازیابی با این آدرس نمی‌خواند'];
+    if (!isset($stack[0])) {
+        return ['ok' => false, 'error' =>
+            'ولت متد get_public_key را جواب نداد' .
+            (is_numeric($exit) && (int)$exit !== 0 ? ' (کد خروج ' . (int)$exit . ')' : '') . ".\n" .
+            'معمولا یعنی این آدرس هنوز روی شبکه فعال نشده — از ولتی که تازه ساخته‌اید ' .
+            'یک تراکنش کوچک بفرستید تا قراردادش روی زنجیره بنشیند، بعد دوباره امتحان کنید.'];
+    }
+
+    $onchain = tonStackHex($stack[0]);
+    if ($onchain === null)
+        return ['ok' => false, 'error' => 'پاسخ زنجیره خوانده نشد: ' . mb_substr(json_encode($stack[0], 320), 0, 160)];
+
+    $mine = ltrim(bin2hex($publicKey), '0');
+    if ($onchain !== $mine) {
+        return ['ok' => false, 'error' =>
+            "عبارت بازیابی با این آدرس نمی‌خواند.\n\n" .
+            'کلید این آدرس روی زنجیره: <code>' . mb_substr($onchain, 0, 16) . "…</code>\n" .
+            'کلید عبارت بازیابی شما: <code>' . mb_substr($mine, 0, 16) . "…</code>\n\n" .
+            "یعنی آدرس و ۲۴ کلمه مال دو ولت متفاوت‌اند.\n" .
+            'آدرس را از <b>همان</b> ولتی بردارید که این ۲۴ کلمه را از آن گرفته‌اید — ' .
+            'در کیف پول، بخش دریافت (Receive) آدرس را کپی کنید.'];
+    }
     return ['ok' => true];
+}
+
+/**
+ * یک خانه‌ی stack پاسخ toncenter → هگز بدون صفر ابتدایی، یا null.
+ * پیاده‌سازی‌های مختلف عدد را جور دیگری برمی‌گردانند: «0x…»، هگز خالی،
+ * عدد ده‌دهی، یا حتی یک شیء تو در تو. همه را می‌پذیریم چون نپذیرفتنشان
+ * یعنی کاربر بی‌دلیل پیام «نمی‌خواند» می‌گیرد.
+ */
+function tonStackHex($entry) {
+    $v = null;
+    if (is_array($entry)) {
+        // شکل ["num","0x…"]
+        if (isset($entry[1]) && is_scalar($entry[1])) $v = (string)$entry[1];
+        // شکل {"number":{"number":"…"}} یا {"value":"…"}
+        elseif (isset($entry['number']['number'])) $v = (string)$entry['number']['number'];
+        elseif (isset($entry['number']) && is_scalar($entry['number'])) $v = (string)$entry['number'];
+        elseif (isset($entry['value']) && is_scalar($entry['value'])) $v = (string)$entry['value'];
+    } elseif (is_scalar($entry)) {
+        $v = (string)$entry;
+    }
+    if ($v === null) return null;
+
+    $v = strtolower(trim($v));
+    if ($v === '') return null;
+
+    // فقط رقم بودن مبهم است: کلید ۳۲ بایتی به هگز ۶۴ نویسه و به ده‌دهی
+    // ۷۷ رقم می‌شود، و هر دو با [0-9a-f] می‌خوانند. چون toncenter هگز را
+    // همیشه با 0x می‌دهد، رشته‌ی تماما رقمی را ده‌دهی می‌خوانیم.
+    if (str_starts_with($v, '0x')) {
+        $hex = substr($v, 2);
+    } elseif (ctype_digit($v)) {
+        $hex = tonDecToHex($v);          // ده‌دهی
+    } elseif (preg_match('/^[0-9a-f]+$/', $v)) {
+        $hex = $v;                       // هگز خالی (حتما حرف a تا f دارد)
+    } else {
+        return null;
+    }
+
+    if (!preg_match('/^[0-9a-f]*$/', $hex)) return null;
+    $hex = ltrim($hex, '0');
+    return $hex === '' ? '0' : $hex;
 }
 
 /**

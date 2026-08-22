@@ -102,6 +102,8 @@ function maDefaultConfig() {
             'margin'   => 5,            // درصد سود روی نرخ ارز
             'round'    => 100,
             'ttl'      => 300,
+            'timeout'  => 4,       // ثانیه — بیشتر از این یعنی کاربر منتظر می‌ماند
+            'cooldown' => 600,     // بعد از شکست، تا این مدت سراغ شبکه نرو
         ],
 
         // 🤖 تحویل خودکار — به هر پنل/API فروشی وصل می‌شود
@@ -629,6 +631,12 @@ function maRate($which, $fresh = false) {
     if (!$fresh) {
         $hit = maCacheGet($ck, (int)($r['ttl'] ?? 300));
         if ($hit !== null) return (float)$hit;
+
+        // 🐢 اگر همین چند دقیقه پیش شکست خورده، دوباره امتحان نکن.
+        // بدون این، هر صفحه‌ای که نرخ می‌خواهد پشت تایم‌اوت شبکه گیر
+        // می‌کرد — سه ارز × دو صرافی × چند ثانیه = ربات کند.
+        if (maCacheGet('ratecool_' . $which, (int)($r['cooldown'] ?? 600)) !== null)
+            return (float)(maCacheGet($ck, 0) ?? 0);
     }
 
     // صرافی انتخاب‌شده اول، بعد بقیه — یک صرافی که از هاست شما در دسترس
@@ -642,7 +650,7 @@ function maRate($which, $fresh = false) {
 
     $j = null; $raw = 0; $div = 1; $errs = [];
     foreach ($tries as [$u, $pth, $dv, $sid]) {
-        [$jj, $err] = maHttp($u, 'GET', '', '', 8);
+        [$jj, $err] = maHttp($u, 'GET', '', '', (int)($r['timeout'] ?? 4));
         if (!$jj) { $errs[] = $sid . ': ' . ($err ?: 'پاسخی نیامد'); continue; }
         $v = maNum(maJsonPath($jj, $pth));
         if ($v <= 0) {
@@ -657,9 +665,11 @@ function maRate($which, $fresh = false) {
 
     if ($raw <= 0) {
         maCachePut('rateerr_' . $which, implode(' | ', $errs) ?: 'هیچ صرافی‌ای جواب نداد');
-        return (float)(maCacheGet($ck, 0) ?? 0);   // کش قدیمی بهتر از هیچ
+        maCachePut('ratecool_' . $which, time());   // تا مدتی دیگر سراغ شبکه نرو
+        return (float)(maCacheGet($ck, 0) ?? 0);    // کش قدیمی بهتر از هیچ
     }
     maCachePut('rateerr_' . $which, '');
+    maCachePut('ratecool_' . $which, 0);            // موفق شد، دوره‌ی استراحت لغو
     $val = ($raw / $div) * (1 + ((float)($r['margin'] ?? 0) / 100));
     $val = maRound($val, (float)($r['round'] ?? 0));
 
