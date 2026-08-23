@@ -58,6 +58,7 @@ function maAskLabels() {
         'qty'      => '🔢 تعداد (قیمت × تعداد)',
         'wallet'   => '💼 آدرس ولت',
         'qty_wallet' => '🔢 مقدار + 💼 آدرس ولت (برای ارز)',
+        'qty_username' => '🔢 تعداد + 📎 آیدی تلگرام',
         'text'     => '✍️ توضیح دلخواه',
     ];
 }
@@ -248,58 +249,59 @@ function maDefaultTg() {
             // ── ⭐️ استارز: بسته‌های آماده + مقدار دلخواه ──
             ['id' => 'i_star_free', 'cat' => 'c_star', 'emoji' => '⭐️', 'name' => 'استارز — مقدار دلخواه',
              'desc' => 'هر تعداد که بخواهید — قیمت هر ۱ استارز', 'price' => 1900, 'unit' => 'استارز',
-             'badge' => 'دلخواه', 'ask' => 'qty', 'min' => 50, 'max' => 1000000, 'on' => true, 'order' => 1],
+             'badge' => 'دلخواه', 'ask' => 'qty_username', 'min' => 50, 'max' => 1000000, 'on' => true, 'order' => 1,
+             'auto' => 'stars'],
 
             ['id' => 'i_star_50',    'cat' => 'c_star', 'emoji' => '⭐️', 'name' => '۵۰ استارز',
              'desc' => 'کمترین مقدار قابل خرید', 'price' => 95000, 'unit' => '', 'badge' => '',
-             'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 2, 'stars' => 50],
+             'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 2, 'stars' => 50, 'auto' => 'stars', 'auto_qty' => 50],
             ['id' => 'i_star_75',    'cat' => 'c_star', 'emoji' => '⭐️', 'name' => '۷۵ استارز',
              'desc' => '', 'price' => 142500, 'unit' => '', 'badge' => '',
-             'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 3, 'stars' => 75],
+             'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 3, 'stars' => 75, 'auto' => 'stars', 'auto_qty' => 75],
             ['id' => 'i_star_100',   'cat' => 'c_star', 'emoji' => '🌟', 'name' => '۱۰۰ استارز',
              'desc' => 'مناسب گیفت و ری‌اکشن', 'price' => 190000, 'unit' => '', 'badge' => 'پرفروش',
-             'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 4, 'stars' => 100],
+             'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 4, 'stars' => 100, 'auto' => 'stars', 'auto_qty' => 100],
             ['id' => 'i_star_150',   'cat' => 'c_star', 'emoji' => '🌟', 'name' => '۱۵۰ استارز',
              'desc' => '', 'price' => 285000, 'unit' => '', 'badge' => '',
-             'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 5, 'stars' => 150],
+             'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 5, 'stars' => 150, 'auto' => 'stars', 'auto_qty' => 150],
             ['id' => 'i_star_250',   'cat' => 'c_star', 'emoji' => '🌟', 'name' => '۲۵۰ استارز',
              'desc' => '', 'price' => 475000, 'unit' => '', 'badge' => '',
-             'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 6, 'stars' => 250],
+             'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 6, 'stars' => 250, 'auto' => 'stars', 'auto_qty' => 250],
             ['id' => 'i_star_350',   'cat' => 'c_star', 'emoji' => '✨', 'name' => '۳۵۰ استارز',
              'desc' => '', 'price' => 665000, 'unit' => '', 'badge' => '',
-             'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 7, 'stars' => 350],
+             'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 7, 'stars' => 350, 'auto' => 'stars', 'auto_qty' => 350],
             ['id' => 'i_star_500',   'cat' => 'c_star', 'emoji' => '✨', 'name' => '۵۰۰ استارز',
              'desc' => 'مناسب خرید پریمیوم با استارز', 'price' => 950000, 'unit' => '', 'badge' => 'اقتصادی',
-             'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 8, 'stars' => 500],
+             'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 8, 'stars' => 500, 'auto' => 'stars', 'auto_qty' => 500],
             ['id' => 'i_star_750',   'cat' => 'c_star', 'emoji' => '✨', 'name' => '۷۵۰ استارز',
              'desc' => '', 'price' => 1425000, 'unit' => '', 'badge' => '',
-             'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 9, 'stars' => 750],
+             'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 9, 'stars' => 750, 'auto' => 'stars', 'auto_qty' => 750],
             ['id' => 'i_star_1000',  'cat' => 'c_star', 'emoji' => '💫', 'name' => '۱۰۰۰ استارز',
              'desc' => 'بسته حرفه‌ای', 'price' => 1900000, 'unit' => '', 'badge' => 'ویژه',
-             'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 10, 'stars' => 1000],
+             'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 10, 'stars' => 1000, 'auto' => 'stars', 'auto_qty' => 1000],
             ['id' => 'i_star_1500',  'cat' => 'c_star', 'emoji' => '💫', 'name' => '۱۵۰۰ استارز',
              'desc' => '', 'price' => 2850000, 'unit' => '', 'badge' => '',
-             'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 11, 'stars' => 1500],
+             'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 11, 'stars' => 1500, 'auto' => 'stars', 'auto_qty' => 1500],
             ['id' => 'i_star_2500',  'cat' => 'c_star', 'emoji' => '💫', 'name' => '۲۵۰۰ استارز',
              'desc' => '', 'price' => 4750000, 'unit' => '', 'badge' => '',
-             'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 12, 'stars' => 2500],
+             'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 12, 'stars' => 2500, 'auto' => 'stars', 'auto_qty' => 2500],
             ['id' => 'i_star_5000',  'cat' => 'c_star', 'emoji' => '🌠', 'name' => '۵۰۰۰ استارز',
              'desc' => 'بسته عمده', 'price' => 9500000, 'unit' => '', 'badge' => 'عمده',
-             'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 13, 'stars' => 5000],
+             'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 13, 'stars' => 5000, 'auto' => 'stars', 'auto_qty' => 5000],
             ['id' => 'i_star_10000', 'cat' => 'c_star', 'emoji' => '🌠', 'name' => '۱۰۰۰۰ استارز',
              'desc' => 'بسته عمده — بهترین قیمت', 'price' => 19000000, 'unit' => '', 'badge' => 'عمده',
-             'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 14, 'stars' => 10000],
+             'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 14, 'stars' => 10000, 'auto' => 'stars', 'auto_qty' => 10000],
 
             // ── 💎 پریمیوم ──
             ['id' => 'i_prem3', 'cat' => 'c_prem', 'emoji' => '💎', 'name' => 'پریمیوم ۳ ماهه',
              'desc' => 'فعال‌سازی روی آیدی شما — بدون نیاز به رمز', 'price' => 690000, 'unit' => '',
-             'badge' => '', 'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 1],
+             'badge' => '', 'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 1, 'auto' => 'premium', 'auto_qty' => 3],
             ['id' => 'i_prem6', 'cat' => 'c_prem', 'emoji' => '💎', 'name' => 'پریمیوم ۶ ماهه',
              'desc' => 'فعال‌سازی روی آیدی شما — بدون نیاز به رمز', 'price' => 990000, 'unit' => '',
-             'badge' => 'اقتصادی', 'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 2],
+             'badge' => 'اقتصادی', 'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 2, 'auto' => 'premium', 'auto_qty' => 6],
             ['id' => 'i_prem12', 'cat' => 'c_prem', 'emoji' => '👑', 'name' => 'پریمیوم ۱۲ ماهه',
              'desc' => 'یک سال کامل — بهترین قیمت', 'price' => 1690000, 'unit' => '',
-             'badge' => 'ویژه', 'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 3],
+             'badge' => 'ویژه', 'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 3, 'auto' => 'premium', 'auto_qty' => 12],
 
             // ── 🎁 گیفت‌های استارزی (قیمت بر پایه استارز، قابل اتصال به مارکت) ──
             ['id' => 'g_teddy',     'cat' => 'c_gift', 'emoji' => '🧸', 'name' => 'گیفت تدی',
@@ -1954,7 +1956,7 @@ function maApi() {
         $qty = 1.0;
         // «qty» تعداد صحیح می‌خواهد (۵۰ استارز)، ولی «qty_wallet» برای ارز است
         // و مقدار اعشاری هم می‌گیرد (۲٫۵ تون) — چون کسی مجبور نیست عدد رند بخرد.
-        if ($ask === 'qty' || $ask === 'qty_wallet') {
+        if ($ask === 'qty' || $ask === 'qty_wallet' || $ask === 'qty_username') {
             $frac = ($ask === 'qty_wallet');
             $qty = maNum($body['qty'] ?? 0);
             if (!is_finite($qty) || $qty < 0) $qty = 0;
@@ -1993,10 +1995,10 @@ function maApi() {
         }
 
         $field = trim((string)($body['field'] ?? ''));
-        if (in_array($ask, ['username', 'wallet', 'qty_wallet', 'text'], true) && $field === '') {
+        if (in_array($ask, ['username', 'wallet', 'qty_wallet', 'qty_username', 'text'], true) && $field === '') {
             maApiOut(['ok' => false, 'error' => 'need_field', 'message' => 'لطفا فیلد خواسته‌شده را پر کنید.'], 400);
         }
-        if ($ask === 'username') {
+        if ($ask === 'username' || $ask === 'qty_username') {
             $field = ltrim($field, '@');
             if (!preg_match('/^[A-Za-z0-9_]{4,64}$/', $field))
                 maApiOut(['ok' => false, 'error' => 'bad_username', 'message' => 'آیدی تلگرام معتبر نیست.'], 400);
@@ -2022,7 +2024,7 @@ function maApi() {
         }
 
         $item['price'] = $unitPrice;
-        $total = round($unitPrice * (($ask === 'qty' || $ask === 'qty_wallet') ? $qty : 1), 2);
+        $total = round($unitPrice * (in_array($ask, ['qty', 'qty_wallet', 'qty_username'], true) ? $qty : 1), 2);
 
         // 🛑 نرخ زنده نیامده؟ نفروش. قیمت قدیمی یعنی ضرر.
         if (maPriceStale($item)) {
@@ -2094,8 +2096,8 @@ function maFieldLabel($o) {
     $a = maGet($o['app']);
     foreach ($a['items'] ?? [] as $i) {
         if ((string)$i['id'] !== (string)$o['item_id']) continue;
-        return ['username' => '📎 آیدی', 'wallet' => '💼 ولت',
-                'qty_wallet' => '💼 ولت', 'text' => '📝 توضیح'][$i['ask'] ?? ''] ?? '';
+        return ['username' => '📎 آیدی', 'wallet' => '💼 ولت', 'qty_wallet' => '💼 ولت',
+                'qty_username' => '📎 آیدی', 'text' => '📝 توضیح'][$i['ask'] ?? ''] ?? '';
     }
     return '';
 }
@@ -2838,7 +2840,7 @@ function maAdmItem($chatId, $msgId, $key, $iid) {
     $text .= '📝 توضیح: ' . h($i['desc'] ?: '—') . "\n";
     $text .= '🏷 برچسب: ' . h($i['badge'] ?: '—') . "\n";
     $text .= '❓ سوال از کاربر: ' . h(maAskLabels()[$i['ask'] ?? 'none'] ?? '—') . "\n";
-    if (in_array($i['ask'] ?? '', ['qty', 'qty_wallet'], true)) {
+    if (in_array($i['ask'] ?? '', ['qty', 'qty_wallet', 'qty_username'], true)) {
         $text .= '🔢 حداقل: ' . fmtNum($i['min'] ?? 1) . ' · حداکثر: ' . fmtNum($i['max'] ?? 0) . "\n";
         $text .= '📐 واحد: ' . h($i['unit'] ?: '—') . "\n";
     }

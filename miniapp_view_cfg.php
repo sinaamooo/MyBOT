@@ -307,12 +307,15 @@ body.fx2 .shieldwrap svg{animation:hover 4.2s ease-in-out infinite}
 .box{margin-top:12px;padding:15px;border:1px solid var(--edge);background:var(--pane);
   clip-path:polygon(0 0,100% 0,100% calc(100% - 16px),calc(100% - 16px) 100%,0 100%)}
 .box h3{margin:0 0 12px;font-size:12.5px;font-weight:900;display:flex;align-items:center;gap:7px}
-.pan{display:flex;align-items:center;gap:10px;padding:13px;
-  border:1px dashed color-mix(in srgb,var(--c1) 40%,transparent);background:rgba(0,255,156,.05)}
-.pan b{flex:1;font-family:var(--mono);font-size:15.5px;font-weight:800;letter-spacing:2px;direction:ltr;text-align:left;color:var(--c1)}
-.pan button{flex:0 0 auto;padding:9px 12px;border:0;cursor:pointer;font-family:inherit;font-size:10.5px;font-weight:800;
+/* شماره کارت خط خودش، دکمه زیرش — وگرنه روی گوشی باریک دو خط می‌شد */
+.pan{padding:13px;border:1px dashed color-mix(in srgb,var(--c1) 40%,transparent);background:rgba(0,255,156,.05)}
+.pan b{display:block;font-family:var(--mono);font-size:18px;font-weight:800;letter-spacing:1.5px;
+  direction:ltr;text-align:center;color:var(--c1);white-space:nowrap;overflow-x:auto;scrollbar-width:none}
+.pan b::-webkit-scrollbar{display:none}
+.pan button{width:100%;margin-top:10px;padding:10px;border:0;cursor:pointer;font-family:inherit;font-size:11.5px;font-weight:800;
   color:#04120C;background:var(--c1);
-  clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px)}
+  clip-path:polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px)}
+.pan button:active{transform:translateY(1px)}
 .holder{margin-top:9px;font-size:11px;color:var(--dim)}
 .holder b{color:var(--ink)}
 .money{margin-top:12px}
@@ -531,7 +534,7 @@ body.glow-on .act{box-shadow:0 12px 30px -16px var(--c1)}
     <div class="box" id="topBox">
       <h3>💳 <span id="topTtl">افزایش اعتبار</span></h3>
       <div id="panBox"></div>
-      <div class="money"><input id="amt" type="text" inputmode="numeric" placeholder="0"></div>
+      <div class="money"><input id="amt" type="text" inputmode="numeric" placeholder="مبلغ به تومان"></div>
       <div class="picks" id="amtPicks"></div>
       <button class="act" id="topGo" style="margin-top:12px">ثبت درخواست شارژ</button>
       <div class="hintbox" id="topNote"></div>
@@ -841,7 +844,7 @@ function planHtml(i, n){
            '<h3>' + esc(i.name) + '</h3>' +
            (i.desc ? '<p>' + esc(i.desc) + '</p>' : '') +
            '<div class="end"><div class="cost"><b>' + price + '</b><i>' + esc(B.currency) +
-             ((i.ask === 'qty' || i.ask === 'qty_wallet') && i.unit ? ' / ' + esc(i.unit) : '') + '</i></div>' +
+             (i.unit && ['qty','qty_wallet','qty_username'].indexOf(i.ask) >= 0 ? ' / ' + esc(i.unit) : '') + '</i></div>' +
              '<div class="arw">‹</div></div>' +
          '</div>';
 }
@@ -941,13 +944,20 @@ function drawOrders(){
   box.innerHTML = h;
 }
 
+/* «6037997512345678» → «6037 9975 1234 5678» — فقط برای خواندن */
+function prettyCard(v){
+  var d = String(v || '').replace(/\D/g, '');
+  if (d.length !== 16) return String(v || '');
+  return d.replace(/(\d{4})(?=\d)/g, '$1 ');
+}
+
 /* ── افزایش اعتبار ── */
 (function topup(){
   var t = B.topup || {};
   if (!t.on && !t.gw){ $('topBox').style.display = 'none'; return; }
   if (t.card){
     $('panBox').innerHTML =
-      '<div class="pan"><b>' + esc(t.card) + '</b><button id="panCp">' + esc(U.copy) + '</button></div>' +
+      '<div class="pan"><b>' + esc(prettyCard(t.card)) + '</b><button id="panCp">' + esc(U.copy) + '</button></div>' +
       (t.name ? '<div class="holder">به نام: <b>' + esc(t.name) + '</b></div>' : '');
     $('panCp').onclick = function(){
       var v = String(t.card);
@@ -1022,7 +1032,8 @@ function open(id){
   tap('medium');
 
   S.item = it;
-  S.qty  = it.ask === 'qty' ? Math.max(1, it.min || 1) : 1;
+  S.qty  = (it.ask === 'qty' || it.ask === 'qty_wallet' || it.ask === 'qty_username')
+             ? Math.max(1, it.min || 1) : 1;
   S.vol  = (it.ask === 'volume' && it.vols && it.vols.length) ? it.vols[0].mb : 0;
 
   $('tIco').textContent  = it.emoji || '⬢';
@@ -1036,7 +1047,8 @@ function open(id){
     html += '<div class="in"><div class="tip">⏸ نرخ لحظه‌ای این سرویس الان در دسترس نیست، ' +
             'برای همین فروشش موقتا بسته است.</div></div>';
   }
-  if (it.ask === 'qty' || it.ask === 'qty_wallet'){
+  var hasQty = it.ask === 'qty' || it.ask === 'qty_wallet' || it.ask === 'qty_username';
+  if (hasQty){
     var isCoin = it.ask === 'qty_wallet';
     html += '<div class="in"><label>' + (isCoin ? '🔢 مقدار' : '🔢 تعداد') +
               (it.unit ? ' (' + esc(it.unit) + ')' : '') + '</label>' +
@@ -1053,6 +1065,12 @@ function open(id){
               (it.max > 0 ? ' · حداکثر ' + fa(it.max) : '') +
               (isCoin ? ' · قیمت هر ' + esc(it.unit || 'واحد') + ': ' + fa(it.price) + ' ' + esc(B.currency) : '') +
             '</div></div>';
+  }
+  if (it.ask === 'qty_username'){
+    html += '<div class="in"><label>📎 آیدی تلگرام گیرنده</label>' +
+            '<input id="fTxt" type="text" placeholder="@username" dir="ltr" style="text-align:left" ' +
+            'autocomplete="off" spellcheck="false" maxlength="64">' +
+            '<div class="tip">آیدی عمومی حسابی که سرویس روی آن فعال می‌شود.</div></div>';
   }
   if (it.ask === 'qty_wallet'){
     html += '<div class="in"><label>💼 آدرس ولت مقصد</label>' +
@@ -1104,7 +1122,7 @@ function open(id){
       tap(); total();
     });
   }
-  if (it.ask === 'qty' || it.ask === 'qty_wallet'){
+  if (hasQty){
     f.addEventListener('click', function(ev){
       var b = ev.target;
       if (b.hasAttribute && b.hasAttribute('data-d')){ setQty(S.qty + Number(b.getAttribute('data-d'))); tap(); }
@@ -1142,7 +1160,8 @@ function setQty(v, typing){
 
 function sum(){
   var it = S.item; if (!it) return 0;
-  if (it.ask === 'qty' || it.ask === 'qty_wallet') return Math.round(it.price * Math.max(0, S.qty));
+  if (it.ask === 'qty' || it.ask === 'qty_wallet' || it.ask === 'qty_username')
+    return Math.round(it.price * Math.max(0, S.qty));
   if (it.ask === 'volume'){
     var vs = it.vols || [];
     for (var i = 0; i < vs.length; i++) if (vs[i].mb === S.vol) return vs[i].price;
@@ -1179,7 +1198,7 @@ function validate(){
   var it = S.item, fv = '';
   var fx = $('fTxt');
   if (fx) fv = fx.value.trim();
-  if (it.ask === 'qty' || it.ask === 'qty_wallet'){
+  if (it.ask === 'qty' || it.ask === 'qty_wallet' || it.ask === 'qty_username'){
     if (!S.qty || S.qty < (it.min || 1)) { warn('حداقل مقدار ' + fa(it.min || 1) + ' است.'); return null; }
     if (it.max > 0 && S.qty > it.max)    { warn('حداکثر مقدار ' + fa(it.max) + ' است.'); return null; }
   }
@@ -1187,7 +1206,7 @@ function validate(){
     if (!S.vol){ warn('یک حجم انتخاب کنید.'); return null; }
     if (S.vol !== 500 && S.vol % 1024 !== 0){ warn('حجم باید رند باشد: ۵۰۰ مگابایت یا گیگابایت کامل.'); return null; }
   }
-  if ((it.ask === 'username' || it.ask === 'wallet' || it.ask === 'qty_wallet' || it.ask === 'text') && !fv){
+  if (['username','wallet','qty_wallet','qty_username','text'].indexOf(it.ask) >= 0 && !fv){
     warn('لطفا فیلد بالا را پر کنید.'); return null;
   }
   return fv;

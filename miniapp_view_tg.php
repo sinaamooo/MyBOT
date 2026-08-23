@@ -306,13 +306,18 @@ body.glow-on .orb{box-shadow:0 10px 24px -13px var(--c1)}
 
 .pane{margin-top:13px;padding:16px;border-radius:22px;border:1px solid var(--line);background:var(--pane)}
 .pane h3{margin:0 0 12px;font-size:13px;font-weight:900;display:flex;align-items:center;gap:7px}
-.card-no{display:flex;align-items:center;gap:10px;padding:14px;border-radius:16px;
+/* شماره کارت روی خط خودش می‌نشیند و دکمه زیرش — چون ۱۶ رقم با فاصله
+   کنار یک دکمه، روی گوشی‌های باریک دو خط می‌شد و بد جا می‌افتاد. */
+.card-no{padding:14px;border-radius:16px;
   border:1px dashed color-mix(in srgb,var(--c2) 40%,transparent);background:rgba(255,255,255,.04)}
-.card-no b{flex:1;font-size:16px;font-weight:900;letter-spacing:2px;direction:ltr;text-align:left;
-  font-family:ui-monospace,monospace}
-.card-no button{flex:0 0 auto;padding:9px 12px;border:0;border-radius:12px;cursor:pointer;
-  font-family:inherit;font-size:11px;font-weight:800;color:#0B0616;
+.card-no b{display:block;font-size:19px;font-weight:900;letter-spacing:1.5px;direction:ltr;text-align:center;
+  font-family:ui-monospace,monospace;white-space:nowrap;overflow-x:auto;
+  scrollbar-width:none;color:var(--c2)}
+.card-no b::-webkit-scrollbar{display:none}
+.card-no button{width:100%;margin-top:11px;padding:11px;border:0;border-radius:12px;cursor:pointer;
+  font-family:inherit;font-size:12px;font-weight:800;color:#0B0616;
   background:linear-gradient(135deg,var(--c2),var(--c1))}
+.card-no button:active{transform:scale(.985)}
 .card-holder{margin-top:9px;font-size:11.5px;color:var(--dim)}
 .card-holder b{color:var(--ink)}
 .amt{display:flex;gap:9px;margin-top:13px}
@@ -516,7 +521,7 @@ body.glow-on .go{box-shadow:0 14px 34px -16px var(--c1)}
     <div class="pane" id="topPane">
       <h3>💳 <span id="topTtl">شارژ کیف پول</span></h3>
       <div id="cardBox"></div>
-      <div class="amt"><input id="amt" type="text" inputmode="numeric" placeholder="۰"></div>
+      <div class="amt"><input id="amt" type="text" inputmode="numeric" placeholder="مبلغ به تومان"></div>
       <div class="quick" id="amtQuick"></div>
       <button class="go" id="topGo" style="margin-top:13px">ثبت درخواست شارژ</button>
       <div class="walbox" id="topNote"></div>
@@ -872,7 +877,7 @@ function tileHtml(i, n){
            (i.desc ? '<p>' + esc(i.desc) + '</p>' : '') +
            '<div class="foot"><div class="cost"><b>' +
              (i.stale ? '—' : fa(i.price)) + '</b><i>' + esc(B.currency) +
-             ((i.ask === 'qty' || i.ask === 'qty_wallet') && i.unit ? ' / ' + esc(i.unit) : '') + '</i></div>' +
+             (i.unit && ['qty','qty_wallet','qty_username'].indexOf(i.ask) >= 0 ? ' / ' + esc(i.unit) : '') + '</i></div>' +
              '<div class="plus">+</div></div>' +
          '</div>';
 }
@@ -974,6 +979,14 @@ function drawOrders(){
   box.innerHTML = h;
 }
 
+/* «6037997512345678» → «6037 9975 1234 5678» — فقط برای خواندن؛
+   چیزی که کپی می‌شود همان مقدار اصلیِ تنظیم‌شده است. */
+function prettyCard(v){
+  var d = String(v || '').replace(/\D/g, '');
+  if (d.length !== 16) return String(v || '');
+  return d.replace(/(\d{4})(?=\d)/g, '$1 ');
+}
+
 /* ── شارژ کیف پول ── */
 (function topup(){
   var t = B.topup || {};
@@ -983,7 +996,7 @@ function drawOrders(){
   }
   if (t.card){
     $('cardBox').innerHTML =
-      '<div class="card-no"><b id="cardNo">' + esc(t.card) + '</b>' +
+      '<div class="card-no"><b id="cardNo">' + esc(prettyCard(t.card)) + '</b>' +
         '<button id="cardCp">' + esc(U.copy) + '</button></div>' +
       (t.name ? '<div class="card-holder">به نام: <b>' + esc(t.name) + '</b></div>' : '');
     $('cardCp').onclick = function(){
@@ -1060,7 +1073,8 @@ function open(id){
   tap('medium');
 
   S.item = it;
-  S.qty  = it.ask === 'qty' ? Math.max(1, it.min || 1) : 1;
+  S.qty  = (it.ask === 'qty' || it.ask === 'qty_wallet' || it.ask === 'qty_username')
+             ? Math.max(1, it.min || 1) : 1;
 
   $('sOrb').textContent  = it.emoji || '💠';
   $('sName').textContent = it.name;
@@ -1073,7 +1087,8 @@ function open(id){
     html += '<div class="field"><div class="hint">⏸ نرخ لحظه‌ای این سرویس الان در دسترس نیست، ' +
             'برای همین فروشش موقتا بسته است. چند دقیقه دیگر دوباره سر بزنید.</div></div>';
   }
-  if (it.ask === 'qty' || it.ask === 'qty_wallet'){
+  var hasQty = it.ask === 'qty' || it.ask === 'qty_wallet' || it.ask === 'qty_username';
+  if (hasQty){
     var isCoin = it.ask === 'qty_wallet';
     html += '<div class="field"><label>' + (isCoin ? '🔢 مقدار' : '🔢 تعداد') +
               (it.unit ? ' (' + esc(it.unit) + ')' : '') + '</label>' +
@@ -1090,6 +1105,13 @@ function open(id){
               (it.max > 0 ? ' · حداکثر ' + fa(it.max) : '') +
               (isCoin ? ' · قیمت هر ' + esc(it.unit || 'واحد') + ': ' + fa(it.price) + ' ' + esc(B.currency) : '') +
             '</div></div>';
+  }
+  // تعداد دلخواه استارز: هم تعداد می‌خواهد هم آیدی گیرنده
+  if (it.ask === 'qty_username'){
+    html += '<div class="field"><label>📎 آیدی تلگرام گیرنده</label>' +
+            '<input id="fTxt" type="text" placeholder="@username" dir="ltr" style="text-align:left" ' +
+            'autocomplete="off" spellcheck="false" maxlength="64">' +
+            '<div class="hint">آیدی عمومی حساب — بدون آن سفارش قابل انجام نیست.</div></div>';
   }
   // ارز: هم مقدار می‌خواهد هم آدرس ولت مقصد
   if (it.ask === 'qty_wallet'){
@@ -1117,7 +1139,7 @@ function open(id){
   }
   f.innerHTML = html;
 
-  if (it.ask === 'qty' || it.ask === 'qty_wallet'){
+  if (hasQty){
     f.addEventListener('click', function(ev){
       var b = ev.target;
       if (b.hasAttribute && b.hasAttribute('data-d')){ setQty(S.qty + Number(b.getAttribute('data-d'))); tap(); }
@@ -1156,7 +1178,8 @@ function setQty(v, typing){
 
 function sum(){
   var it = S.item; if (!it) return 0;
-  if (it.ask === 'qty' || it.ask === 'qty_wallet') return Math.round(it.price * Math.max(0, S.qty));
+  if (it.ask === 'qty' || it.ask === 'qty_wallet' || it.ask === 'qty_username')
+    return Math.round(it.price * Math.max(0, S.qty));
   return it.price;
 }
 function total(){
@@ -1187,11 +1210,11 @@ function validate(){
   var it = S.item, fv = '';
   var fx = $('fTxt');
   if (fx) fv = fx.value.trim();
-  if (it.ask === 'qty' || it.ask === 'qty_wallet'){
+  if (it.ask === 'qty' || it.ask === 'qty_wallet' || it.ask === 'qty_username'){
     if (!S.qty || S.qty < (it.min || 1)) { toast('حداقل مقدار ' + fa(it.min || 1) + ' است.'); return null; }
     if (it.max > 0 && S.qty > it.max)    { toast('حداکثر مقدار ' + fa(it.max) + ' است.'); return null; }
   }
-  if ((it.ask === 'username' || it.ask === 'wallet' || it.ask === 'qty_wallet' || it.ask === 'text') && !fv){
+  if (['username','wallet','qty_wallet','qty_username','text'].indexOf(it.ask) >= 0 && !fv){
     toast('لطفا فیلد بالا را پر کنید.'); return null;
   }
   return fv;
