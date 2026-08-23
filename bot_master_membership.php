@@ -2999,7 +2999,6 @@ function reportSale($order, $force = false) {
 
     $res = sendMsg(BOT_TOKEN, $r['chat_id'], $text, $rows ? inlineKb($rows) : null, $extra);
     if (empty($res['ok'])) {
-        error_log('[report] ' . ($res['description'] ?? 'unknown'));
         sendMsg(BOT_TOKEN, ADMIN_ID,
             "⚠️ <b>گزارش خرید ارسال نشد</b>\n\n" .
             "محصول: <b>" . h($p['name']) . "</b>\n" .
@@ -3046,8 +3045,31 @@ function announceSale($order) {
 
     $r = sendMsg(BOT_TOKEN, $s['chat_id'], $text);
     if (empty($r['ok'])) {
-        error_log('[sales-channel] ' . ($r['description'] ?? 'unknown'));
+        // قبلا فقط در لاگ سرور می‌نشست، یعنی عملا هیچ‌کس نمی‌فهمید کانال فروش
+        // خراب است. حالا به ادمین گفته می‌شود — ولی نه در هر فروش، تا سیل نشود.
+        adminAlertOnce('sales_channel', "⚠️ <b>اعلام فروش در کانال ارسال نشد</b>\n\n" .
+            "کانال: <code>" . h((string)$s['chat_id']) . "</code>\n" .
+            "خطا: <code>" . h($r['description'] ?? '—') . "</code>\n\n" .
+            "ربات را در کانال ادمین کنید، یا آیدی کانال را در پنل وب درست کنید.");
     }
+}
+
+/**
+ * هشدار به ادمین، ولی حداکثر یک بار در هر بازه.
+ * یک تنظیم خرابِ ثابت (کانالی که ربات از آن بیرون است) نباید با هر فروش
+ * یک پیام تازه بفرستد؛ یک بار در ساعت کافی است تا خبردار شود.
+ */
+function adminAlertOnce($key, $text, $everySeconds = 3600) {
+    $fresh = mutate('alerts', function (&$a) use ($key, $everySeconds) {
+        $last = (int)($a[$key] ?? 0);
+        if (time() - $last < $everySeconds) return false;
+        $a[$key] = time();
+        // فهرست کوچک بماند
+        foreach ($a as $k => $t) if (time() - (int)$t > 86400 * 7) unset($a[$k]);
+        return true;
+    });
+    if ($fresh) sendMsg(BOT_TOKEN, ADMIN_ID, $text);
+    return (bool)$fresh;
 }
 
 /** کارهای بعد از تایید سفارش — یک جا، تا پنل و ربات دقیقا یکسان رفتار کنند */
@@ -3245,6 +3267,7 @@ function admHome($chatId, $msgId = null) {
         [btnCb('📢 گزارش خرید در گروه', 'adm_reports', 'admin')],
         [btnCb('🧩 افزونه — مخزن، سفارش دستی، سود', 'ax_home', 'admin')],
         [btnCb('💠 درگاه پرداخت', 'adm_gw', 'admin')],
+        [btnCb('💳 مقصد پرداخت — شماره کارت', 'adm_pay', 'admin')],
         [btnCb('🔒 عضویت اجباری ربات مادر', 'adm_join', 'admin')],
         [btnCb('🔒 قفل‌های عضویت اجباری', 'adm_locks', 'admin')],
         [btnCb('📋 لیست تعرفه‌ها', 'adm_tariff', 'admin')],
@@ -3253,6 +3276,36 @@ function admHome($chatId, $msgId = null) {
         [btnCb('📢 کانال‌ها', 'adm_chans', 'admin'), btnCb('📢 پیام همگانی', 'adm_bc', 'admin')],
         [btnCb('🌐 پنل وب', 'adm_web', 'info')],
         [btnCb(UT('home'), 'home', 'nav')],
+    ];
+    if ($msgId) editMsg(BOT_TOKEN, $chatId, $msgId, $text, inlineKb($rows));
+    else sendMsg(BOT_TOKEN, $chatId, $text, inlineKb($rows));
+}
+
+/**
+ * 💳 مقصد پرداخت — شماره کارت و آدرس‌های ارز
+ *
+ * تا حالا فقط از پنل وب قابل تنظیم بود و پنل ربات آدم را می‌فرستاد آنجا.
+ * چون بیشتر کار مدیر داخل خود تلگرام انجام می‌شود، همین‌جا هم باید بشود
+ * شماره کارت را عوض کرد — مخصوصا وقتی کارت بانکی مسدود می‌شود و باید
+ * همان لحظه جایگزین شود.
+ */
+function admPay($chatId, $msgId = null) {
+    $w = cfg()['wallets'];
+    $card = trim((string)($w['card'] ?? ''));
+
+    $text  = "💳 <b>مقصد پرداخت</b>\n\n";
+    $text .= "این‌ها همان چیزی است که هنگام «کارت به کارت» به مشتری نشان داده می‌شود،\n";
+    $text .= "و در مینی‌اپ‌ها هم برای شارژ کیف پول همین شماره می‌آید.\n\n";
+    $text .= "💳 شماره کارت: " . ($card !== '' ? "<code>" . h($card) . "</code>" : "<b>خالی</b>") . "\n";
+    $text .= "👤 به نام: " . (trim((string)($w['card_name'] ?? '')) !== '' ? h($w['card_name']) : '—') . "\n";
+    $text .= "💠 USDT (TRC20): " . (trim((string)($w['usdt'] ?? '')) !== '' ? "<code>" . h($w['usdt']) . "</code>" : '—') . "\n";
+    $text .= "🚀 TRX: " . (trim((string)($w['trx'] ?? '')) !== '' ? "<code>" . h($w['trx']) . "</code>" : '—') . "\n";
+    if ($card === '') $text .= "\n⚠️ تا شماره کارت خالی است، هیچ فاکتور کارت‌به‌کارتی صادر نمی‌شود.";
+
+    $rows = [
+        [btnCb('💳 شماره کارت', 'payc', 'admin'), btnCb('👤 به نام', 'payn', 'admin')],
+        [btnCb('💠 آدرس USDT', 'payu', 'admin'), btnCb('🚀 آدرس TRX', 'payt', 'admin')],
+        [btnCb(UT('back'), 'adm_home', 'nav')],
     ];
     if ($msgId) editMsg(BOT_TOKEN, $chatId, $msgId, $text, inlineKb($rows));
     else sendMsg(BOT_TOKEN, $chatId, $text, inlineKb($rows));
@@ -4898,6 +4951,17 @@ function masterHandle($update) {
         if ($data === 'adm_locks')   { answerCb(BOT_TOKEN, $cbId); admLocks($chatId, $msgId); return; }
         if ($data === 'adm_join')    { answerCb(BOT_TOKEN, $cbId); admJoin($chatId, $msgId); return; }
         if ($data === 'adm_gw')      { answerCb(BOT_TOKEN, $cbId); admGateway($chatId, $msgId); return; }
+        if ($data === 'adm_pay')     { answerCb(BOT_TOKEN, $cbId); admPay($chatId, $msgId); return; }
+        foreach ([['payc', 'pay_card', "💳 شماره کارت را بفرستید (۱۶ رقم).\n\nخط تیره = پاک کردن"],
+                  ['payn', 'pay_name', "👤 نام صاحب کارت را بفرستید.\n\nخط تیره = پاک کردن"],
+                  ['payu', 'pay_usdt', "💠 آدرس USDT شبکه TRC20 را بفرستید.\n\nخط تیره = پاک کردن"],
+                  ['payt', 'pay_trx',  "🚀 آدرس TRX را بفرستید.\n\nخط تیره = پاک کردن"]] as [$d0, $act, $ask]) {
+            if ($data !== $d0) continue;
+            answerCb(BOT_TOKEN, $cbId);
+            setState(ADMIN_ID, $act, []);
+            sendMsg(BOT_TOKEN, $chatId, $ask, inlineKb([[btnUI('cancel', 'adm_pay', 'cancel')]]));
+            return;
+        }
         if ($data === 'gwx') {
             cfgSet(function (&$c) { $c['gateway']['on'] = empty($c['gateway']['on']); });
             answerCb(BOT_TOKEN, $cbId, '✅'); admGateway($chatId, $msgId); return;
@@ -5599,7 +5663,8 @@ function masterHandle($update) {
             return;
         }
 
-        if ($data === 'adm_web' || $data === 'adm_wallets' || $data === 'adm_sup' || $data === 'adm_prods') {
+        if ($data === 'adm_wallets') { answerCb(BOT_TOKEN, $cbId); admPay($chatId, $msgId); return; }
+        if ($data === 'adm_web' || $data === 'adm_sup' || $data === 'adm_prods') {
             answerCb(BOT_TOKEN, $cbId);
             editMsg(BOT_TOKEN, $chatId, $msgId,
                 "🌐 <b>پنل وب</b>\n\nاین بخش‌ها در پنل وب هستند:\n\n" .
@@ -5721,6 +5786,38 @@ function masterHandle($update) {
         clearState($uid);
         sendMsg(BOT_TOKEN, $chatId, $v !== '' ? "✅ کد لینک ذخیره شد." : "✅ حذف شد.",
             inlineKb([[btnCb('🤖 ربات تحویل', 'sbbot_' . $pid, 'admin')]]));
+        return;
+    }
+
+    if (str_starts_with($action, 'pay_')) {
+        $plain = trim($msg['text'] ?? '');
+        $back  = inlineKb([[btnCb('💳 مقصد پرداخت', 'adm_pay', 'admin')]]);
+        $blank = ($plain === '-' || $plain === '—');
+        $map   = ['pay_card' => 'card', 'pay_name' => 'card_name',
+                  'pay_usdt' => 'usdt', 'pay_trx'  => 'trx'];
+        $f = $map[$action] ?? '';
+        if ($f === '') { clearState($uid); return; }
+
+        $v = $blank ? '' : $plain;
+        if ($f === 'card' && $v !== '') {
+            // ارقام فارسی و فاصله و خط تیره را می‌پذیریم، ولی ذخیره‌شده باید ۱۶ رقم باشد
+            $digits = preg_replace('/\D/', '', norm_fa_digits($v));
+            if (strlen($digits) !== 16) {
+                sendMsg(BOT_TOKEN, $chatId,
+                    "⚠️ شماره کارت باید دقیقا ۱۶ رقم باشد — الان " . strlen($digits) . " رقم فرستادید.\n" .
+                    "با فاصله یا خط تیره هم اشکالی ندارد.");
+                return;
+            }
+            $v = implode('-', str_split($digits, 4));
+        }
+        if (in_array($f, ['usdt', 'trx'], true) && $v !== '' && mb_strlen($v) < 20) {
+            sendMsg(BOT_TOKEN, $chatId, "⚠️ آدرس معتبر به نظر نمی‌رسد. کامل و بدون فاصله بفرستید.");
+            return;
+        }
+        cfgSet(function (&$c) use ($f, $v) { $c['wallets'][$f] = $v; });
+        clearState($uid);
+        sendMsg(BOT_TOKEN, $chatId, $v !== '' ? "✅ ذخیره شد." : "✅ پاک شد.", $back);
+        admPay($chatId);
         return;
     }
 
