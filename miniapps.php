@@ -27,6 +27,15 @@ require_once __DIR__ . '/miniapp_view_cfg.php';
 /** کلیدهای دو مینی‌اپ — همیشه همین دوتا، جدا از هم */
 function maKeys() { return ['tg', 'cfg']; }
 
+/**
+ * ⚡️ سطح افکت گرافیکی: ۲ کامل · ۱ سبک · ۰ خاموش.
+ * روی گوشی ضعیف، ادمین می‌تواند بیاوردش پایین تا اسکرول روان بماند.
+ */
+function maFxLevel($th) {
+    if (isset($th['fx'])) return max(0, min(2, (int)$th['fx']));
+    return !empty($th['glow']) ? 2 : 1;
+}
+
 function maAppLabels() {
     return ['tg' => '🌟 خدمات تلگرام', 'cfg' => '🛡 فروش کانفیگ'];
 }
@@ -48,6 +57,7 @@ function maAskLabels() {
         'username' => '📎 آیدی تلگرام (@user)',
         'qty'      => '🔢 تعداد (قیمت × تعداد)',
         'wallet'   => '💼 آدرس ولت',
+        'qty_wallet' => '🔢 مقدار + 💼 آدرس ولت (برای ارز)',
         'text'     => '✍️ توضیح دلخواه',
     ];
 }
@@ -196,6 +206,24 @@ function maDefaultTg() {
             'low_bal'    => 'موجودی کافی نیست',
             'paid_ok'    => 'پرداخت شد',
             'topup_hint' => 'برای شارژ کیف پول، داخل ربات «افزایش موجودی» را بزنید.',
+            // 🆕 صفحه‌های تازه
+            'nav_home'   => 'خانه',
+            'nav_shop'   => 'فروشگاه',
+            'nav_orders' => 'سفارش‌ها',
+            'nav_me'     => 'حساب من',
+            'hot'        => 'پیشنهاد ویژه',
+            'cats_ttl'   => 'دسته‌بندی‌ها',
+            'rates_ttl'  => 'نرخ لحظه‌ای',
+            'orders_ttl' => 'سفارش‌های اخیر',
+            'no_orders'  => 'هنوز سفارشی ثبت نکرده‌اید.',
+            'me_ttl'     => 'حساب کاربری',
+            'topup'      => 'شارژ کیف پول',
+            'topup_do'   => 'ثبت درخواست شارژ',
+            'topup_amt'  => 'مبلغ شارژ (تومان)',
+            'card_ttl'   => 'کارت به کارت',
+            'copy'       => 'کپی شماره کارت',
+            'copied'     => 'کپی شد ✓',
+            'see_all'    => 'همه',
         ],
 
         // 💠 دکمه‌های شیشه‌ای فاکتور داخل ربات — متن و رنگ هردو قابل ویرایش
@@ -325,11 +353,11 @@ function maDefaultTg() {
             // ── 💱 ارز ──
             ['id' => 'i_ton', 'cat' => 'c_coin', 'emoji' => '💎', 'name' => 'تون (TON)',
              'desc' => 'قیمت هر ۱ TON — تحویل مستقیم به ولت', 'price' => 210000, 'unit' => 'TON',
-             'badge' => '', 'ask' => 'wallet', 'min' => 1, 'max' => 5000, 'on' => true, 'order' => 1,
+             'badge' => '', 'ask' => 'qty_wallet', 'min' => 1, 'max' => 5000, 'on' => true, 'order' => 1,
              'rate_key' => 'ton'],
             ['id' => 'i_trx', 'cat' => 'c_coin', 'emoji' => '🚀', 'name' => 'ترون (TRX)',
              'desc' => 'قیمت هر ۱ TRX — شبکه TRC20', 'price' => 21000, 'unit' => 'TRX',
-             'badge' => '', 'ask' => 'wallet', 'min' => 10, 'max' => 100000, 'on' => true, 'order' => 2,
+             'badge' => '', 'ask' => 'qty_wallet', 'min' => 10, 'max' => 100000, 'on' => true, 'order' => 2,
              'rate_key' => 'trx'],
         ],
     ];
@@ -377,6 +405,24 @@ function maDefaultCfg() {
             'low_bal'    => 'موجودی کافی نیست',
             'paid_ok'    => 'پرداخت شد',
             'topup_hint' => 'برای شارژ کیف پول، داخل ربات «افزایش موجودی» را بزنید.',
+            // 🆕 صفحه‌های تازه
+            'nav_home'   => 'خانه',
+            'nav_shop'   => 'پلن‌ها',
+            'nav_orders' => 'سفارش‌ها',
+            'nav_me'     => 'حساب من',
+            'hot'        => 'پرفروش‌ترین‌ها',
+            'cats_ttl'   => 'نوع سرویس',
+            'rates_ttl'  => 'نرخ لحظه‌ای',
+            'orders_ttl' => 'سفارش‌های اخیر',
+            'no_orders'  => 'هنوز سفارشی ثبت نکرده‌اید.',
+            'me_ttl'     => 'پروفایل من',
+            'topup'      => 'افزایش اعتبار',
+            'topup_do'   => 'ثبت درخواست شارژ',
+            'topup_amt'  => 'مبلغ شارژ (تومان)',
+            'card_ttl'   => 'کارت به کارت',
+            'copy'       => 'کپی شماره کارت',
+            'copied'     => 'کپی شد ✓',
+            'see_all'    => 'همه',
         ],
 
         'glass' => [
@@ -822,6 +868,21 @@ function maLivePrice($item) {
 function maItemPrice($item) {
     $live = maLivePrice($item);
     return $live !== null ? (float)$live : (float)($item['price'] ?? 0);
+}
+
+/**
+ * آیا این سرویس قیمتش باید زنده باشد؟ (تون، ترون، تتر و گیفت مارکت)
+ * برای اینها عدد ثابتِ داخل تنظیمات فقط یک پیش‌فرض قدیمی است و
+ * فروختن با آن یعنی ضرر — پس وقتی نرخ نمی‌آید اصلا نباید فروخته شوند.
+ */
+function maNeedsLive($item) {
+    return trim((string)($item['rate_key'] ?? '')) !== ''
+        || trim((string)($item['market_key'] ?? '')) !== '';
+}
+
+/** سرویسی که نرخ زنده می‌خواهد ولی نرخش نیامده — یعنی فعلا قابل فروش نیست */
+function maPriceStale($item) {
+    return maNeedsLive($item) && maLivePrice($item) === null;
 }
 
 /** آیا این سرویس قیمتش زنده است؟ (برای نشان دادن نشانه در مینی‌اپ) */
@@ -1553,7 +1614,8 @@ function maSecurityHeaders() {
         "script-src 'self' 'unsafe-inline' https://telegram.org https://*.telegram.org; " .
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " .
         "font-src https://fonts.gstatic.com data:; " .
-        "img-src 'self' data:; " .
+        // عکس پروفایل کاربر از سرور خود تلگرام می‌آید و جای دیگری مجاز نیست
+        "img-src 'self' data: https://t.me https://*.telegram.org https://*.telesco.pe; " .
         "connect-src 'self'; " .
         "base-uri 'none'; form-action 'none'; " .
         "frame-ancestors https://web.telegram.org https://*.telegram.org; " .
@@ -1582,6 +1644,25 @@ function maServe($key) {
     exit;
 }
 
+/**
+ * 💳 اطلاعات شارژ کارت‌به‌کارت — همان شماره‌ای که در پنل وب ست می‌شود.
+ * شماره کارت محرمانه نیست (خریدار برای واریز می‌بیندش) ولی اگر خالی باشد
+ * اصلا دکمه شارژ در مینی‌اپ نشان داده نمی‌شود تا کاربر سرگردان نشود.
+ */
+function maTopupInfo() {
+    $w = cfg()['wallets'] ?? [];
+    $g = cfg()['gateway'] ?? [];
+    $card = trim((string)($w['card'] ?? ''));
+    return [
+        'on'   => $card !== '' ? 1 : 0,
+        'card' => $card,
+        'name' => trim((string)($w['card_name'] ?? '')),
+        'min'  => (float)(cfg()['topup_min'] ?? 10000),
+        'gw'   => (function_exists('gwOn') && gwOn()) ? 1 : 0,
+        'gwmin'=> (float)($g['min'] ?? 0),
+    ];
+}
+
 /** داده‌ای که همان اول داخل صفحه تزریق می‌شود */
 function maBoot($key, $a) {
     return [
@@ -1594,6 +1675,7 @@ function maBoot($key, $a) {
         'ui'       => maUiAll($key),
         'cats'     => maCatsPublic($a),
         'items'    => maItemsPublic($a),
+        'topup'    => maTopupInfo(),
         'api'      => maApiUrl(),
     ];
 }
@@ -1638,6 +1720,7 @@ function maItemsPublic($a) {
             'badge' => (string)($i['badge'] ?? ''),
             'price' => maItemPrice($i),
             'live'  => maIsLive($i) ? 1 : 0,
+            'stale' => maPriceStale($i) ? 1 : 0,
             'unit'  => (string)($i['unit'] ?? ''),
             'ask'   => (string)($i['ask'] ?? 'none'),
             'min'   => (float)($i['min'] ?? 1),
@@ -1717,7 +1800,6 @@ function maApi() {
     $reason = '';
     $user = maVerifyInitData($initData, $reason);
     if (!$user) {
-        error_log('[miniapp-auth] ' . $reason . ' · len=' . strlen($initData));
         maApiOut(['ok' => false, 'error' => 'unauthorized', 'reason' => $reason,
                   'message' => maAuthReasonText($reason)], 401);
     }
@@ -1742,7 +1824,10 @@ function maApi() {
         maApiOut([
             'ok' => true,
             'balance' => (float)($u['balance'] ?? 0),
-            'name' => (string)($user['first_name'] ?? ''),
+            'uid'  => $uid,
+            'name' => trim((string)($user['first_name'] ?? '') . ' ' . (string)($user['last_name'] ?? '')),
+            'uname'=> $uname,
+            'photo'=> (string)($user['photo_url'] ?? ''),
             'orders' => array_map(fn($o) => [
                 'id' => $o['id'], 'name' => $o['item_name'], 'emoji' => $o['item_emoji'],
                 'total' => $o['total'], 'status' => MaOrder::statusLabel($o['status']),
@@ -1802,6 +1887,39 @@ function maApi() {
         ]);
     }
 
+    // ---- 💳 شارژ کیف پول، کارت به کارت ----
+    // مینی‌اپ فقط مبلغ را می‌گیرد؛ ساختن سفارش، متن کارت و دکمه «ارسال رسید»
+    // همان مسیر آزموده‌ی ربات است تا دو جای جدا برای یک کار نداشته باشیم.
+    if ($action === 'topup') {
+        if (!maRateOk('top', $uid, 5, 300))
+            maApiOut(['ok' => false, 'error' => 'rate_limited',
+                      'message' => 'درخواست شارژ زیاد شد. چند دقیقه بعد دوباره.'], 429);
+
+        $t = maTopupInfo();
+        if (empty($t['on']) && empty($t['gw']))
+            maApiOut(['ok' => false, 'error' => 'no_card',
+                      'message' => 'روش پرداخت هنوز تنظیم نشده است. با پشتیبانی تماس بگیرید.'], 503);
+
+        $amt = round(maNum($body['amount'] ?? 0));
+        $min = max(1000.0, (float)$t['min']);
+        if ($amt < $min)
+            maApiOut(['ok' => false, 'error' => 'min',
+                      'message' => 'حداقل مبلغ شارژ ' . fmtNum($min) . ' تومان است.'], 400);
+        if ($amt > 500000000)
+            maApiOut(['ok' => false, 'error' => 'max',
+                      'message' => 'مبلغ خیلی بزرگ است.'], 400);
+
+        $oid = createOrderAndAsk($uid, $uid, $uname, 'topup', null, $amt, 'تومان', '➕ شارژ کیف پول');
+        if (!$oid)
+            maApiOut(['ok' => false, 'error' => 'failed',
+                      'message' => 'ثبت درخواست شارژ انجام نشد. با پشتیبانی تماس بگیرید.'], 500);
+
+        maApiOut(['ok' => true, 'order' => $oid, 'amount' => $amt,
+                  'card' => (string)$t['card'], 'holder' => (string)$t['name'],
+                  'message' => 'درخواست شارژ ثبت شد. فاکتور و شماره کارت داخل ربات برایتان فرستاده شد؛ ' .
+                               'بعد از واریز، دکمه «ارسال رسید» را بزنید.']);
+    }
+
     // ---- ثبت سفارش ----
     if ($action === 'order') {
         // 🛡 سقف تعداد سفارش در دقیقه
@@ -1834,15 +1952,18 @@ function maApi() {
 
         $ask = (string)($item['ask'] ?? 'none');
         $qty = 1.0;
-        if ($ask === 'qty') {
-            $qty = (float)str_replace([',', '،', ' '], '', norm_fa_digits((string)($body['qty'] ?? 0)));
-            if (!is_finite($qty)) $qty = 0;
-            $qty = floor($qty);
+        // «qty» تعداد صحیح می‌خواهد (۵۰ استارز)، ولی «qty_wallet» برای ارز است
+        // و مقدار اعشاری هم می‌گیرد (۲٫۵ تون) — چون کسی مجبور نیست عدد رند بخرد.
+        if ($ask === 'qty' || $ask === 'qty_wallet') {
+            $frac = ($ask === 'qty_wallet');
+            $qty = maNum($body['qty'] ?? 0);
+            if (!is_finite($qty) || $qty < 0) $qty = 0;
+            $qty = $frac ? round($qty, 4) : floor($qty);
             $min = (float)($item['min'] ?? 1);
             $max = (float)($item['max'] ?? 0);
-            if ($qty <= 0) maApiOut(['ok' => false, 'error' => 'bad_qty', 'message' => 'تعداد را درست وارد کنید.'], 400);
-            if ($min > 0 && $qty < $min) maApiOut(['ok' => false, 'error' => 'min', 'message' => 'حداقل تعداد ' . fmtNum($min) . ' است.'], 400);
-            if ($max > 0 && $qty > $max) maApiOut(['ok' => false, 'error' => 'max', 'message' => 'حداکثر تعداد ' . fmtNum($max) . ' است.'], 400);
+            if ($qty <= 0) maApiOut(['ok' => false, 'error' => 'bad_qty', 'message' => 'مقدار را درست وارد کنید.'], 400);
+            if ($min > 0 && $qty < $min) maApiOut(['ok' => false, 'error' => 'min', 'message' => 'حداقل مقدار ' . fmtNum($min) . ' است.'], 400);
+            if ($max > 0 && $qty > $max) maApiOut(['ok' => false, 'error' => 'max', 'message' => 'حداکثر مقدار ' . fmtNum($max) . ' است.'], 400);
         }
 
         // 📦 حجم دلخواه — فقط عددهای رند: ۵۰۰ مگ، یا گیگ کامل
@@ -1872,7 +1993,7 @@ function maApi() {
         }
 
         $field = trim((string)($body['field'] ?? ''));
-        if (in_array($ask, ['username', 'wallet', 'text'], true) && $field === '') {
+        if (in_array($ask, ['username', 'wallet', 'qty_wallet', 'text'], true) && $field === '') {
             maApiOut(['ok' => false, 'error' => 'need_field', 'message' => 'لطفا فیلد خواسته‌شده را پر کنید.'], 400);
         }
         if ($ask === 'username') {
@@ -1881,7 +2002,7 @@ function maApi() {
                 maApiOut(['ok' => false, 'error' => 'bad_username', 'message' => 'آیدی تلگرام معتبر نیست.'], 400);
             $field = '@' . $field;
         }
-        if ($ask === 'wallet' && mb_strlen($field) < 8) {
+        if (($ask === 'wallet' || $ask === 'qty_wallet') && mb_strlen($field) < 8) {
             maApiOut(['ok' => false, 'error' => 'bad_wallet', 'message' => 'آدرس ولت معتبر نیست.'], 400);
         }
         if (mb_strlen($field) > 300) $field = mb_substr($field, 0, 300);
@@ -1901,7 +2022,14 @@ function maApi() {
         }
 
         $item['price'] = $unitPrice;
-        $total = round($unitPrice * ($ask === 'qty' ? $qty : 1), 2);
+        $total = round($unitPrice * (($ask === 'qty' || $ask === 'qty_wallet') ? $qty : 1), 2);
+
+        // 🛑 نرخ زنده نیامده؟ نفروش. قیمت قدیمی یعنی ضرر.
+        if (maPriceStale($item)) {
+            maApiOut(['ok' => false, 'error' => 'rate_down',
+                      'message' => 'نرخ لحظه‌ای این ارز الان در دسترس نیست، برای همین موقتا فروش آن بسته است. ' .
+                                   'چند دقیقه دیگر دوباره امتحان کنید.'], 503);
+        }
 
         if ($total <= 0 && empty(cfg()['test_mode']))
             maApiOut(['ok' => false, 'error' => 'bad_price', 'message' => 'قیمت این سرویس تنظیم نشده است.'], 400);
@@ -1966,7 +2094,8 @@ function maFieldLabel($o) {
     $a = maGet($o['app']);
     foreach ($a['items'] ?? [] as $i) {
         if ((string)$i['id'] !== (string)$o['item_id']) continue;
-        return ['username' => '📎 آیدی', 'wallet' => '💼 ولت', 'text' => '📝 توضیح'][$i['ask'] ?? ''] ?? '';
+        return ['username' => '📎 آیدی', 'wallet' => '💼 ولت',
+                'qty_wallet' => '💼 ولت', 'text' => '📝 توضیح'][$i['ask'] ?? ''] ?? '';
     }
     return '';
 }
@@ -2709,7 +2838,7 @@ function maAdmItem($chatId, $msgId, $key, $iid) {
     $text .= '📝 توضیح: ' . h($i['desc'] ?: '—') . "\n";
     $text .= '🏷 برچسب: ' . h($i['badge'] ?: '—') . "\n";
     $text .= '❓ سوال از کاربر: ' . h(maAskLabels()[$i['ask'] ?? 'none'] ?? '—') . "\n";
-    if (($i['ask'] ?? '') === 'qty') {
+    if (in_array($i['ask'] ?? '', ['qty', 'qty_wallet'], true)) {
         $text .= '🔢 حداقل: ' . fmtNum($i['min'] ?? 1) . ' · حداکثر: ' . fmtNum($i['max'] ?? 0) . "\n";
         $text .= '📐 واحد: ' . h($i['unit'] ?: '—') . "\n";
     }
