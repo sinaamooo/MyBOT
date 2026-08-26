@@ -36,7 +36,6 @@ function gmDefaults() {
         'tax'       => 10,          // درصدی که از جایزه کم می‌شود
         'wait'      => 8,           // ثانیه‌ی انتظار قرعه — کوتاه، تا نتیجه درجا بیاید
         'join_max'  => 50,          // بیشترین شرکت‌کننده در قرعه
-        'expire'    => 900,         // بازی بی‌حریف بعد از این مدت باطل می‌شود
         'send_tax'  => 10,          // درصد مالیات انتقال الماس
 
         // ✨ ایموجی پرمیومِ دکمه‌ها — خودکار از متنی که می‌فرستید برداشته
@@ -457,25 +456,22 @@ function gmBoardFull($b) {
 // ⏰ قرعه‌ها — چه با cron، چه با پیام بعدی
 // ============================================================
 
+/**
+ * قرعه‌های رسیده را می‌کشد.
+ *
+ * هیچ بازی‌ای خودش باطل نمی‌شود. قبلا بازیِ بی‌حریف بعد از مدتی
+ * خودبه‌خود لغو می‌شد؛ حالا تا وقتی حریف بیاید منتظر می‌ماند و فقط
+ * سازنده — یا ادمین از پنل — می‌تواند ببنددش.
+ */
 function gmTick($limit = 20) {
     $now  = time();
     $done = 0;
     foreach (gmAll() as $g) {
         if ($done >= $limit) break;
-        if (!in_array($g['status'], ['open', 'playing'], true)) continue;
-
-        // قرعه‌ی رسیده
-        if ($g['kind'] === 'rand' && $g['status'] === 'open' && (int)$g['ends'] > 0 && $now >= (int)$g['ends']) {
-            gmDraw($g);
-            $done++;
-            continue;
-        }
-        // بازیِ بی‌حریفِ کهنه
-        $ttl = max(120, (int)gmVal('expire', 900));
-        if (($now - (int)$g['created']) > $ttl) {
-            gmRefund($g, gmT('cancelled'));
-            $done++;
-        }
+        if (($g['status'] ?? '') !== 'open' || ($g['kind'] ?? '') !== 'rand') continue;
+        if ((int)$g['ends'] <= 0 || $now < (int)$g['ends']) continue;
+        gmDraw($g);
+        $done++;
     }
     return $done;
 }
@@ -495,12 +491,16 @@ function gmDraw($g) {
     $g = gmGet($g['id']) ?: $g;
     $ids = array_values(array_map(fn($p) => (int)$p['id'], $g['players']));
 
-    if (count($ids) < 2) {                       // کسی نیامد
-        foreach ($g['players'] as $p) gmAdd((int)$p['id'], (float)$g['stake']);
-        gmSetGame($g['id'], function (&$x) { $x['status'] = 'cancelled'; return true; });
-        $t = gmT('rand_none');
-        if ((int)$g['msg']) editMsg(BOT_TOKEN, $g['chat'], (int)$g['msg'], $t, null);
-        else                sendMsg(BOT_TOKEN, $g['chat'], $t);
+    if (count($ids) < 2) {
+        // کسی نیامد؟ باطلش نمی‌کنیم — مهلت را از نو می‌گذاریم و همان‌جا
+        // باز می‌ماند تا حریف پیدا شود. شرط هم دستِ کسی نمی‌ماند چون
+        // بازی هنوز زنده است.
+        gmSetGame($g['id'], function (&$x) {
+            $x['status'] = 'open';
+            $x['ends']   = time() + max(3, (int)gmVal('wait', 8));
+            return true;
+        });
+        gmShow(gmGet($g['id']) ?: $g);
         return;
     }
 

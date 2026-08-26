@@ -1247,8 +1247,9 @@ function pxAssetCaption($name, $price, $unit, $chg, $emoji = '', $key = '') {
 
     $t  = $head . ' <b>' . h($name) . "</b>\n\n";
     $t .= '<blockquote>';
+    // واحد نوشته نمی‌شود — ایموجی خودش می‌گوید تومان است یا دلار
     $t .= ($isT ? pxEm('toman', '💰') : pxEm('usd', '💵')) . ' ' .
-          pxToman($price) . ' ' . h($unit) . "\n";
+          pxToman($price) . ($isT ? '' : ' ' . h($unit)) . "\n";
     $t .= pxEm('chg', '📈') . ' ' . ($chg >= 0 ? '+' : '−') .
           number_format(abs($chg), 2) . "%\n";
     $t .= pxEm('date', '🕓') . ' ' . h(pxJalali());
