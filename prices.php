@@ -47,6 +47,13 @@ function pxDefaults() {
 
         // ایموجی پریمیوم — با /emoji در ربات کدشان را می‌گیرید
         'emoji' => [
+            // ── جاهایی که خودتان مشخص کردید ──
+            'date'   => '5413879192267805083',   // 🕓 جلوی تاریخ
+            'gold'   => '5949707595445968258',   // 🥇 سرِ قالب طلا
+            'usd'    => '5951773156887764244',   // 💵 سرِ دلار و جلوی قیمت دلاری
+            'toman'  => '5965097893491642896',   // 💰 جلوی قیمت تومانی
+            'chg'    => '6050900104431278847',   // 📈 جلوی درصد تغییرات
+
             'card'  => '5343902037438391058',
             'price' => '5841359408952513916',
             'prem'  => '5899945812296731931',
@@ -403,8 +410,13 @@ function pxPremiumText($fresh = false) {
         $t .= pxQuote($d['irt'], $d['usd'], $d['ton'], true) . "\n";
     }
     $t .= pxEm('card', '🔻') . ' <b>' . h(pxT('foot')) . "</b>\n";
-    $t .= pxEm('coin', '🕓') . ' <code>' . h(pxJalali()) . '</code>';
+    $t .= pxDateLine();
     return $t;
+}
+
+/** تاریخ — با ایموجی پرمیوم، داخل نقل‌قول خودش */
+function pxDateLine() {
+    return '<blockquote>' . pxEm('date', '🕓') . ' ' . h(pxJalali()) . '</blockquote>';
 }
 
 /**
@@ -487,7 +499,7 @@ function pxStarsText($n = 1, $fresh = false) {
     }
 
     $t .= pxEm('card', '🔻') . ' <b>' . h(pxT('foot')) . "</b>\n";
-    $t .= pxEm('coin', '🕓') . ' <code>' . h(pxJalali()) . '</code>';
+    $t .= pxDateLine();
     return $t;
 }
 
@@ -505,16 +517,17 @@ function pxRatesText($fresh = false) {
         $t .= '<blockquote>' . pxToman($usd * $irt) . ' ' . h(pxT('toman')) .
               "\n$" . pxNum($usd) . '</blockquote>';
     }
-    $t .= "\n" . pxEm('coin', '🕓') . ' <code>' . h(pxJalali()) . '</code>';
+    $t .= "\n" . pxDateLine();
     return $t;
 }
 
 /** متن زیر کارت یک ارز */
 function pxCoinCaption($sym, $usd, $irt, $chg, $hi, $lo, $n = 1) {
     $t  = pxEm('coin', '🪙') . ' <b>' . h(pxT('coin_head', ['n' => pxNum($n), 'sym' => $sym])) . "</b>\n\n";
-    $t .= pxEm('price', '💵') . ' ' . pxToman($irt) . ' ' . h(pxT('toman')) . "\n";
-    $t .= pxEm('price', '💲') . ' $' . pxNum($usd) . "\n";
-    $t .= ($chg >= 0 ? '🟢' : '🔴') . ' ' . number_format(abs($chg), 2) . "%\n\n";
+    $t .= '<blockquote>' . pxEm('usd', '💵') . ' ' . pxNum($usd) . '</blockquote>' . "\n";
+    $t .= '<blockquote>' . pxEm('toman', '💰') . ' ' . pxToman($irt) . '</blockquote>' . "\n";
+    $t .= '<blockquote>' . pxEm('chg', '📈') . ' ' . ($chg >= 0 ? '+' : '−') .
+          number_format(abs($chg), 2) . '%</blockquote>' . "\n";
 
     if ($hi > 0 && $lo > 0) {
         $t .= pxEm('chart', '📊') . ' <b>' . h(pxT('hl_head')) . "</b>\n";
@@ -523,7 +536,7 @@ function pxCoinCaption($sym, $usd, $irt, $chg, $hi, $lo, $n = 1) {
               pxToman($lo * ($usd > 0 ? $irt / $usd : 0)) . ' ' . h(pxT('toman')) . "\n" .
               pxNum($hi) . ' / ' . pxNum($lo) . ' ' . h(pxT('dollar')) . '</blockquote>' . "\n";
     }
-    $t .= pxEm('coin', '🕓') . ' <code>' . h(pxJalali()) . '</code>';
+    $t .= pxDateLine();
     return $t;
 }
 
@@ -1024,11 +1037,34 @@ function pxAssetOfWord($word) {
 }
 
 /** کپشن تبدیلِ دارایی */
-function pxConvAssetCaption($title, $val, $unit) {
+/**
+ * کپشن تبدیل — هر تکه داخل نقل‌قول خودش.
+ *
+ * سه سطر جدا: قیمت دلاری، قیمت تومانی، و تاریخ. واژه‌ی فارسی «تومان»
+ * نوشته نمی‌شود؛ خودِ ایموجی می‌گوید کدام است.
+ */
+function pxConvAssetCaption($title, $val, $unit, $usdVal = null, $chg = null) {
     $t  = pxEm('card', '💱') . ' <b>' . h($title) . "</b>\n\n";
-    $t .= '<blockquote>' . pxEm('price', '💵') . ' ' .
-          (($unit === 'تومان') ? pxToman($val) : pxNum($val)) . ' ' . h($unit) . '</blockquote>' . "\n";
-    $t .= pxEm('coin', '🕓') . ' <code>' . h(pxJalali()) . '</code>';
+    $t .= pxConvBody($val, $unit, $usdVal, $chg);
+    return $t;
+}
+
+/** بدنه‌ی مشترکِ تبدیل — هر عدد در نقل‌قولِ خودش */
+function pxConvBody($val, $unit, $usdVal = null, $chg = null) {
+    $isT = ($unit === 'تومان');
+    $t = '';
+
+    if ($usdVal !== null && $usdVal > 0)
+        $t .= '<blockquote>' . pxEm('usd', '💵') . ' ' . pxNum($usdVal) . '</blockquote>' . "\n";
+
+    $t .= '<blockquote>' . ($isT ? pxEm('toman', '💰') : pxEm('usd', '💵')) . ' ' .
+          ($isT ? pxToman($val) : pxNum($val)) . ($isT ? '' : ' ' . h($unit)) . '</blockquote>' . "\n";
+
+    if ($chg !== null)
+        $t .= '<blockquote>' . pxEm('chg', '📈') . ' ' . ($chg >= 0 ? '+' : '−') .
+              number_format(abs($chg), 2) . '%</blockquote>' . "\n";
+
+    $t .= '<blockquote>' . pxEm('date', '🕓') . ' ' . h(pxJalali()) . '</blockquote>';
     return $t;
 }
 
@@ -1112,7 +1148,9 @@ function pxHandleText($text, $chatId, $replyTo = null) {
         }
         $chg = pxAssetChange($ak);
         $png = pxTryCard(fn() => pxAssetCard($a['name'], $a['emoji'], $price, $a['unit'], $chg, $a['bg']));
-        pxDeliver($chatId, $png, pxAssetCaption($a['name'], $price, $a['unit'], $chg, $a['emoji'] ?? ''), $kb, $replyTo);
+        pxDeliver($chatId, $png,
+            pxAssetCaption($a['name'], $price, $a['unit'], $chg, $a['emoji'] ?? '', $ak),
+            $kb, $replyTo);
         return true;
     }
 
@@ -1130,9 +1168,16 @@ function pxHandleText($text, $chatId, $replyTo = null) {
                 $val = $amount * $unitPrice;
                 $chg = pxAssetChange($srcAsset);
                 $ttl = pxNum($amount) . ' ' . $as['name'];
+                // معادل دلاری، وقتی مبلغ تومانی است
+                $usdEq = null;
+                if ($as['unit'] === 'تومان') {
+                    $d = pxUsdtIrt();
+                    if ($d > 0) $usdEq = $val / $d;
+                }
                 $png = pxTryCard(fn() => pxAssetCard($ttl, $as['emoji'], $val, $as['unit'], $chg,
                                                      $as['bg'], pxSeries($val, $chg, 110)));
-                pxDeliver($chatId, $png, pxConvAssetCaption($ttl, $val, $as['unit']), $kb, $replyTo);
+                pxDeliver($chatId, $png,
+                    pxConvAssetCaption($ttl, $val, $as['unit'], $usdEq, $chg), $kb, $replyTo);
                 return true;
             }
         }
@@ -1148,10 +1193,14 @@ function pxHandleText($text, $chatId, $replyTo = null) {
                 $val = $amount * $fromUsd / $toUsd; $unit = $to;
             }
             $chg = pxChangeOf($from . '/USDT');
+            // معادل دلاری همیشه نوشته می‌شود — حتی وقتی خروجی تومان است
+            $usdEq = ($unit === 'دلار') ? null : $amount * $fromUsd;
+            // رنگِ قالب از خودِ ارزِ مبدا می‌آید، پس هر ارز رنگ خودش را دارد
             $png = pxTryCard(fn() => pxAssetCard(pxNum($amount) . ' ' . pxCoinName($from), '●',
                                                  $val, $unit, $chg, pxCoinColors($from),
                                                  pxSeries($val, $chg, 110)));
-            pxDeliver($chatId, $png, pxConvCaption($amount, $from, $val, $unit), $kb, $replyTo);
+            pxDeliver($chatId, $png,
+                pxConvCaption($amount, $from, $val, $unit, $usdEq, $chg), $kb, $replyTo);
             return true;
         }
     }
@@ -1188,21 +1237,42 @@ function pxChangeOf($pair) {
 }
 
 /** کپشن کارت دارایی */
-function pxAssetCaption($name, $price, $unit, $chg, $emoji = '') {
-    $t  = ($emoji !== '' ? $emoji : pxEm('coin', '🪙')) . ' <b>' . h($name) . "</b>\n\n";
-    $t .= '<blockquote>' . pxEm('price', '💵') . ' ' . pxToman($price) . ' ' . h($unit) . "\n" .
-          ($chg >= 0 ? '🟢' : '🔴') . ' ' . number_format(abs($chg), 2) . '%</blockquote>' . "\n";
-    $t .= pxEm('coin', '🕓') . ' <code>' . h(pxJalali()) . '</code>';
+/**
+ * کپشن طلا، دلار، سکه و پول کشورها.
+ * تاریخ داخل همان نقل‌قول می‌نشیند، نه بیرونش.
+ */
+function pxAssetCaption($name, $price, $unit, $chg, $emoji = '', $key = '') {
+    $head = pxHeadEmoji($key, $emoji);
+    $isT  = ($unit === 'تومان');
+
+    $t  = $head . ' <b>' . h($name) . "</b>\n\n";
+    $t .= '<blockquote>';
+    $t .= ($isT ? pxEm('toman', '💰') : pxEm('usd', '💵')) . ' ' .
+          pxToman($price) . ' ' . h($unit) . "\n";
+    $t .= pxEm('chg', '📈') . ' ' . ($chg >= 0 ? '+' : '−') .
+          number_format(abs($chg), 2) . "%\n";
+    $t .= pxEm('date', '🕓') . ' ' . h(pxJalali());
+    $t .= '</blockquote>';
     return $t;
 }
 
+/**
+ * ایموجی سرِ قالب.
+ * طلا و سکه ایموجی خودشان را دارند، دلار و ارزهای تومانی مالِ خودشان،
+ * و بقیه همان ایموجیِ خودِ دارایی.
+ */
+function pxHeadEmoji($key, $fallback = '') {
+    $key = (string)$key;
+    if (in_array($key, ['gold', 'gold24', 'ounce', 'coin', 'nim', 'rob'], true))
+        return pxEm('gold', $fallback !== '' ? $fallback : '🥇');
+    if ($key === 'usd') return pxEm('usd', $fallback !== '' ? $fallback : '💵');
+    return $fallback !== '' ? $fallback : pxEm('coin', '🪙');
+}
+
 /** کپشن تبدیل */
-function pxConvCaption($amount, $from, $val, $unit) {
-    // تومان رند می‌شود، ولی «۲٫۸۱ دلار» نباید بشود «۳ دلار»
-    $shown = ($unit === 'تومان') ? pxToman($val) : pxNum($val);
+function pxConvCaption($amount, $from, $val, $unit, $usdVal = null, $chg = null) {
     $t  = pxEm('card', '💱') . ' <b>' . h(pxNum($amount) . ' ' . pxCoinName($from)) . "</b>\n\n";
-    $t .= '<blockquote>' . pxEm('price', '💵') . ' ' . $shown . ' ' . h($unit) . '</blockquote>' . "\n";
-    $t .= pxEm('coin', '🕓') . ' <code>' . h(pxJalali()) . '</code>';
+    $t .= pxConvBody($val, $unit, $usdVal, $chg);
     return $t;
 }
 
@@ -1285,6 +1355,11 @@ function pxLabels() {
         'star'  => 'ایموجی استارز',
         'coin'  => 'ایموجی ارز و ساعت',
         'chart' => 'ایموجی نمودار',
+        'date'  => '🕓 ایموجی تاریخ',
+        'gold'  => '🥇 ایموجی سرِ قالب طلا',
+        'usd'   => '💵 ایموجی دلار',
+        'toman' => '💰 ایموجی تومان',
+        'chg'   => '📈 ایموجی درصد تغییرات',
         // کلمه‌ها
         'premium' => 'کلمه‌های پریمیوم',
         'stars'   => 'کلمه‌های استارز',
