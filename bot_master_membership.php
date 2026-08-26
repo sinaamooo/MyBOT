@@ -33,6 +33,7 @@ require_once __DIR__ . '/admin_ext.php';
 require_once __DIR__ . '/prices.php';
 require_once __DIR__ . '/diamond.php';
 require_once __DIR__ . '/channels.php';
+require_once __DIR__ . '/games.php';
 
 // ============================================================
 // 📚 ذخیره‌سازی اتمیک
@@ -3276,6 +3277,7 @@ function admHome($chatId, $msgId = null) {
         [btnCb('🛍 فروشگاه', 'ag_shop', 'admin'),      btnCb('🚀 مینی‌اپ‌ها', 'ag_mini', 'admin')],
         [btnCb('🤖 ربات‌های اپلودر', 'ag_up', 'admin'), btnCb('🎯 ممبر و قفل‌ها', 'ag_lock', 'admin')],
         [btnCb('💹 قیمت لحظه‌ای', 'px_home', 'admin'),  btnCb('💎 الماس', 'dm_home', 'admin')],
+        [btnCb('🎮 بازی‌ها', 'gm_home', 'admin')],
         [btnCb('💳 پرداخت', 'ag_pay', 'admin'),        btnCb('🎨 ظاهر و متن‌ها', 'ag_look', 'admin')],
         [btnCb('📡 کانال‌های متصل', 'ch_home', 'admin'),
          btnCb('📢 پیام همگانی و گزارش', 'ag_rep', 'admin')],
@@ -4492,7 +4494,10 @@ function masterHandle($update) {
         $cbId   = $cb['id'];
         $isAdmin = ($uid === ADMIN_ID);
 
-        // 🤐 در گروه و کانال چیزی نمی‌فرستد
+        // 🎮 دکمه‌های بازی عمدا در گروه هم کار می‌کنند — بازی همان‌جاست
+        if (gmCallback($data, $uid, $chatId, $msgId, $cbId, $cb['from'] ?? [])) return;
+
+        // 🤐 بقیه‌ی دکمه‌ها در گروه و کانال چیزی نمی‌فرستند
         if (($cb['message']['chat']['type'] ?? 'private') !== 'private') {
             answerCb(BOT_TOKEN, $cbId);
             return;
@@ -4850,7 +4855,7 @@ function masterHandle($update) {
         // هر پیشوند تازه‌ای که اینجا نباشد، بی‌صدا دور ریخته می‌شود —
         // نه خطایی، نه پیامی. پس با هر بخش تازه این فهرست هم باید کامل شود.
         $adminPrefixes = ['aok_', 'ano_', 'adm_', 'ag_', 'eb', 'et', 'eg', 'eu', 'sb', 'ep', 'esp',
-                          'rp', 'tf', 'jn', 'gw', 'pay', 'px', 'dm', 'ch', 'reply_', 'setup'];
+                          'rp', 'tf', 'jn', 'gw', 'pay', 'px', 'dm', 'ch', 'gma', 'gm_', 'reply_', 'setup'];
         $isAdminCb = false;
         foreach ($adminPrefixes as $pref) {
             if (str_starts_with($data, $pref)) { $isAdminCb = true; break; }
@@ -5036,6 +5041,7 @@ function masterHandle($update) {
         if (pxAdminCallback($data, $chatId, $msgId, $cbId)) return;
         if (dmAdminCallback($data, $chatId, $msgId, $cbId)) return;
         if (chAdminCallback($data, $chatId, $msgId, $cbId)) return;
+        if (gmAdminCallback($data, $chatId, $msgId, $cbId)) return;
         if ($data === 'adm_gw')      { answerCb(BOT_TOKEN, $cbId); admGateway($chatId, $msgId); return; }
         if ($data === 'adm_pay')     { answerCb(BOT_TOKEN, $cbId); admPay($chatId, $msgId); return; }
         foreach ([['payc', 'pay_card', "💳 شماره کارت را بفرستید (۱۶ رقم).\n\nخط تیره = پاک کردن"],
@@ -5780,6 +5786,7 @@ function masterHandle($update) {
     // می‌کنند: قیمت لحظه‌ای، و بازی الماس. بقیه‌ی ربات همچنان ساکت است.
     if (($msg['chat']['type'] ?? 'private') !== 'private') {
         $rt = $msg['message_id'] ?? null;
+        if (gmHandleText($text, $uid, $chatId, $fname, $uname, $rt, false, $msg)) return;
         if (dmHandleText($text, $uid, $chatId, $fname, $uname, $rt, false)) return;
         if (pxHandleText($text, $chatId, $rt)) return;
         return;
@@ -5864,6 +5871,7 @@ function masterHandle($update) {
     if (!$st) {
         // چیزی وسط کار نیست؟ شاید دنبال قیمت است — «پریمیوم»، «استارز»، «بیتکوین»
         $rt = $msg['message_id'] ?? null;
+        if (gmHandleText($text, $uid, $chatId, $fname, $uname, $rt, true, $msg)) return;
         if (dmHandleText($text, $uid, $chatId, $fname, $uname, $rt, true)) return;
         if (pxHandleText($text, $chatId, $rt)) return;
         return;
@@ -5890,6 +5898,7 @@ function masterHandle($update) {
     if (pxStateHandle($action, $msg, $uid, $chatId)) return;
     if (dmStateHandle($action, $msg, $uid, $chatId)) return;
     if (chStateHandle($action, $msg, $uid, $chatId)) return;
+    if (gmStateHandle($action, $msg, $uid, $chatId)) return;
 
     if (str_starts_with($action, 'pay_')) {
         $plain = trim($msg['text'] ?? '');
@@ -7539,6 +7548,7 @@ if (isset($_GET['cron'])) {
     if (!hash_equals(CRON_KEY, (string)$_GET['cron'])) { echo 'forbidden'; exit; }
     echo 'deleted: ' . processDeleteQueue(200) . ' · gw: ' . gwPoll(50) .
          ' · campaigns: ' . campaignCleanup() .
+         ' · games: ' . gmTick(50) .
          ' · miniapp: ' . maAutoQueue(10) .
          ' · stock: ' . maStockQueue(10) .
          ' · rates: ' . count(axRatesRefresh());
@@ -7554,6 +7564,7 @@ $qMark = DATA_DIR . '/.queue_at';
 $qLast = @filemtime($qMark) ?: 0;
 if (time() - $qLast >= 60) {
     @touch($qMark);
+    gmTick(5);        // قرعه‌های رسیده — بدون cron هم کشیده می‌شوند
     maAutoQueue(2);   // تحویل خودکارِ معطل‌مانده — بدون نیاز به cron هم پیش می‌رود
     maStockQueue(2);  // سفارش‌هایی که منتظر شارژ مخزن مانده‌اند
 }
