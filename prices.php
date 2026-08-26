@@ -27,10 +27,23 @@ function pxDefaults() {
         'ttl' => 15,          // ثانیه — قیمت لحظه‌ای یعنی کش کوتاه
 
         // 📡 منبع دوم: طلا، سکه و پول کشورها (API اصلی فقط ارز دیجیتال دارد)
-        'alt_url' => 'https://call1.tgju.org/ajax.json',
+        // چند آدرس، با خط جدا. هرکدام جواب داد، همان استفاده می‌شود — پس
+        // اگر یکی از دسترس خارج شد، بقیه سرِ پا نگهش می‌دارند.
+        'alt_url' => "https://call1.tgju.org/ajax.json\nhttps://call3.tgju.org/ajax.json\nhttps://call.tgju.org/ajax.json",
         'alt_ttl' => 300,
         'timeout' => 6,
         'cooldown' => 120,    // بعد از شکست، این مدت سراغ شبکه نرو
+
+        // 🌍 نرخ برابری پول کشورها نسبت به دلار — رایگان و بی‌کلید
+        'fx_url' => "https://open.er-api.com/v6/latest/USD\nhttps://api.exchangerate-api.com/v4/latest/USD\nhttps://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json",
+        'fx_ttl' => 3600,
+
+        // 🧮 وقتی هیچ منبع ایرانی جواب نداد، قیمت طلا و ارز از روی همین
+        // API ارز دیجیتال ساخته می‌شود. PAXG و XAUT هرکدام دقیقا یک انس
+        // طلای واقعی‌اند، پس انس از آن‌ها درمی‌آید و بقیه از انس و دلار.
+        'derive' => 1,
+        'gold_k' => 1.0,      // ضریب تنظیم گرم طلا (اگر با بازار چند درصد فرق داشت)
+        'coin_k' => 1.12,     // حباب سکه — نسبت قیمت سکه به ارزش طلای داخلش
 
         // ایموجی پریمیوم — با /emoji در ربات کدشان را می‌گیرید
         'emoji' => [
@@ -89,6 +102,11 @@ function pxDefaults() {
             'ton'        => 'ton',
             'down'       => 'موتور قیمت الان جواب نمی‌دهد. چند لحظه بعد دوباره امتحان کنید.',
             'nocoin'     => 'این نماد در بازار پیدا نشد.',
+
+            // 📝 قالب کاملِ پیام — خالی یعنی «خودت بساز».
+            // پرش کنید و کل پیام دقیقا همان می‌شود که نوشته‌اید.
+            'prem_full'  => '',
+            'star_full'  => '',
         ],
     ];
 }
@@ -368,6 +386,9 @@ function pxQuote($irt, $usd, $ton, $expandable = false) {
 }
 
 function pxPremiumText($fresh = false) {
+    $full = pxTplPremium($fresh);
+    if ($full !== null) return $full;
+
     $rows = pxPremiumRows($fresh);
     if (!$rows) return null;
 
@@ -383,7 +404,64 @@ function pxPremiumText($fresh = false) {
     return $t;
 }
 
+/**
+ * قالب کاملِ پیام، دستِ خود ادمین.
+ * اگر «قالب کامل پریمیوم» در پنل پر شده باشد، تمام پیام از همان ساخته
+ * می‌شود و هیچ‌چیز دیگری قاطی‌اش نمی‌شود — پس واقعا هر شکلی بخواهید
+ * می‌شود، با ایموجی پرمیوم و quote خودتان.
+ */
+function pxTplPremium($fresh = false) {
+    $tpl = trim((string)pxT('prem_full'));
+    if ($tpl === '') return null;
+    $rows = pxPremiumRows($fresh);
+    if (!$rows) return null;
+
+    $v = ['date' => pxJalali(), 'usdt' => pxToman(pxUsdtIrt()), 'tonusd' => pxNum(pxTonUsd())];
+    foreach ($rows as $m => $d) {
+        $v[$m . 'irt'] = pxToman($d['irt']);
+        $v[$m . 'ton'] = pxNum($d['ton']);
+        $v[$m . 'usd'] = pxNum($d['usd']);
+        $v[$m . 'off'] = (string)$d['off'];
+    }
+    return pxFill($tpl, $v);
+}
+
+function pxTplStars($n, $fresh = false) {
+    $tpl = trim((string)pxT('star_full'));
+    if ($tpl === '') return null;
+    $one = pxStars(max(1, (int)$n), $fresh);
+    if (!$one) return null;
+
+    $v = ['n' => pxNum($n), 'irt' => pxToman($one['irt']), 'ton' => pxNum($one['ton']),
+          'usd' => pxNum($one['usd']), 'date' => pxJalali(),
+          'usdt' => pxToman(pxUsdtIrt()), 'tonusd' => pxNum(pxTonUsd())];
+    $one1 = pxStars(1, $fresh);
+    if ($one1) { $v['each'] = pxToman($one1['irt']); $v['eachton'] = pxNum($one1['ton']); }
+
+    // {packs} — همان فهرست بسته‌ها، آماده برای چسباندن هرجای قالب
+    $lines = [];
+    foreach (array_map('intval', (array)pxVal('star_packs', [])) as $p) {
+        if ($p <= 0) continue;
+        $d = pxStars($p);
+        if (!$d) continue;
+        $lines[] = pxEm('star', '✨') . ' <b>' . number_format($p) . '</b> — ' .
+                   pxToman($d['irt']) . ' ' . h(pxT('toman'));
+    }
+    $v['packs'] = implode("\n", $lines);
+    return pxFill($tpl, $v);
+}
+
+/** {کلید} را با مقدارش عوض می‌کند و بقیه‌ی متن را دست نمی‌زند */
+function pxFill($tpl, array $vars) {
+    $map = [];
+    foreach ($vars as $k => $val) $map['{' . $k . '}'] = (string)$val;
+    return strtr((string)$tpl, $map);
+}
+
 function pxStarsText($n = 1, $fresh = false) {
+    $full = pxTplStars($n, $fresh);
+    if ($full !== null) return $full;
+
     $one = pxStars($n, $fresh);
     if (!$one) return null;
 
@@ -521,14 +599,32 @@ function pxTextW($size, $text, $bold = true) {
  */
 function pxSeries($last, $chgPct, $n = 90) {
     $last = max((float)$last, 1e-9);
-    $sigma = max(abs((float)$chgPct) / 100, 0.012) / sqrt($n);
-    $out = array_fill(0, $n, $last);
-    for ($i = $n - 2; $i >= 0; $i--) {
-        $u1 = max(1e-9, mt_rand(1, 1000000) / 1000000);
-        $u2 = mt_rand(1, 1000000) / 1000000;
-        $z  = sqrt(-2 * log($u1)) * cos(2 * M_PI * $u2);
-        $out[$i] = $out[$i + 1] / exp($sigma * $z);
+    $n    = max(8, (int)$n);
+    $chg  = (float)$chgPct;
+
+    // نمودار باید با همان درصدی که روی کارت نوشته شده جور دربیاید:
+    // اگر نشان «+۰٫۸۴٪» می‌دهیم، خط هم باید بالا رفته باشد. قبلا نمودار
+    // یک قدم‌زنیِ کاملا تصادفی بود و گاهی خلافِ برچسب را نشان می‌داد.
+    $first = $last / (1 + $chg / 100);
+    if (!is_finite($first) || $first <= 0) $first = $last;
+
+    $amp = abs($last - $first);
+    if ($amp <= 0) $amp = $last * 0.006;     // روز آرام هم صاف نباشد
+    $amp *= 0.42;                            // نوسان، کوچک‌تر از خودِ روند
+
+    $out = [];
+    $noise = 0.0;
+    for ($i = 0; $i < $n; $i++) {
+        $t    = $i / ($n - 1);
+        $base = $first + ($last - $first) * $t;
+        // نوسان نرم: هر قدم کمی از قدم قبل ارث می‌برد، پس خط دندانه‌ای نمی‌شود
+        $noise = $noise * 0.72 + (mt_rand(-1000, 1000) / 1000) * $amp * 0.5;
+        // دو سرِ خط به عددهای واقعی چفت می‌شوند
+        $edge  = sin(M_PI * $t);
+        $out[] = max(1e-9, $base + $noise * $edge);
     }
+    $out[0]      = $first;
+    $out[$n - 1] = $last;
     return $out;
 }
 
@@ -915,7 +1011,7 @@ function pxHandleText($text, $chatId, $replyTo = null) {
         }
         $chg = pxAssetChange($ak);
         $png = pxTryCard(fn() => pxAssetCard($a['name'], $a['emoji'], $price, $a['unit'], $chg, $a['bg']));
-        pxDeliver($chatId, $png, pxAssetCaption($a['name'], $price, $a['unit'], $chg), $kb, $replyTo);
+        pxDeliver($chatId, $png, pxAssetCaption($a['name'], $price, $a['unit'], $chg, $a['emoji'] ?? ''), $kb, $replyTo);
         return true;
     }
 
@@ -991,8 +1087,8 @@ function pxChangeOf($pair) {
 }
 
 /** کپشن کارت دارایی */
-function pxAssetCaption($name, $price, $unit, $chg) {
-    $t  = pxEm('coin', '🪙') . ' <b>' . h($name) . "</b>\n\n";
+function pxAssetCaption($name, $price, $unit, $chg, $emoji = '') {
+    $t  = ($emoji !== '' ? $emoji : pxEm('coin', '🪙')) . ' <b>' . h($name) . "</b>\n\n";
     $t .= '<blockquote>' . pxEm('price', '💵') . ' ' . pxToman($price) . ' ' . h($unit) . "\n" .
           ($chg >= 0 ? '🟢' : '🔴') . ' ' . number_format(abs($chg), 2) . '%</blockquote>' . "\n";
     $t .= pxEm('coin', '🕓') . ' <code>' . h(pxJalali()) . '</code>';
@@ -1078,6 +1174,8 @@ function pxLabels() {
         'ton'        => 'واژه‌ی تون',
         'down'       => 'پیام وقتی قیمت نمی‌آید',
         'nocoin'     => 'پیام نماد ناشناخته',
+        'prem_full'  => '📝 قالب کامل پیام پریمیوم',
+        'star_full'  => '📝 قالب کامل پیام استارز',
         // ایموجی‌ها
         'card'  => 'ایموجی سرتیتر',
         'price' => 'ایموجی قیمت',
@@ -1107,16 +1205,54 @@ function pxAdminList($chatId, $msgId, $kind) {
     $t = $title . "\n\n";
     if ($kind === 'pxe') $t .= "کد ایموجی پریمیوم را با /emoji می‌گیرید.\n\n";
     if ($kind === 'pxw') $t .= "کلمه‌ها را با ویرگول جدا کنید.\n\n";
-    if ($kind === 'pxt') $t .= "جای‌گذاری‌ها: <code>{n}</code> <code>{sym}</code> <code>{off}</code>\n\n";
 
     $rows = [];
+
+    // 📝 دو قالبِ کامل، جدا و بالا — چون همین دو تا هستند که کل پیام را
+    //    عوض می‌کنند و بقیه فقط تکه‌های ریزند.
+    if ($kind === 'pxt') {
+        $pf = trim((string)($c['texts']['prem_full'] ?? ''));
+        $sf = trim((string)($c['texts']['star_full'] ?? ''));
+        $t .= "🧩 <b>قالب کامل</b> — پرش کنید و کل پیام دقیقا همان می‌شود:\n";
+        $t .= '   ' . ($pf !== '' ? '✅' : '⚪️') . " پریمیوم: " .
+              ($pf !== '' ? '<code>' . h(mb_substr(str_replace("\n", ' ⏎ ', $pf), 0, 40)) . '</code>' : 'خالی (قالب خودکار)') . "\n";
+        $t .= '   ' . ($sf !== '' ? '✅' : '⚪️') . " استارز: " .
+              ($sf !== '' ? '<code>' . h(mb_substr(str_replace("\n", ' ⏎ ', $sf), 0, 40)) . '</code>' : 'خالی (قالب خودکار)') . "\n\n";
+        $t .= "داخل قالب می‌توانید ایموجی پرمیوم و <code>&lt;blockquote&gt;</code> بگذارید.\n";
+        $t .= "جای‌گذاری پریمیوم: <code>{3irt}</code> <code>{6irt}</code> <code>{12irt}</code> " .
+              "<code>{3ton}</code> <code>{3usd}</code> <code>{3off}</code> <code>{usdt}</code> <code>{date}</code>\n";
+        $t .= "جای‌گذاری استارز: <code>{n}</code> <code>{irt}</code> <code>{ton}</code> " .
+              "<code>{each}</code> <code>{packs}</code> <code>{usdt}</code> <code>{date}</code>\n\n";
+        $rows[] = [btnCb('📝 قالب کامل پریمیوم', 'pxts_prem_full', 'admin'),
+                   btnCb('📝 قالب کامل استارز', 'pxts_star_full', 'admin')];
+        $rows[] = [btnCb('✨ نمونه‌ی آماده بگذار', 'pxtdemo', 'confirm'),
+                   btnCb('🧹 برگرد به قالب خودکار', 'pxtclear', 'danger')];
+        $t .= "— — —\n<b>تکه‌های ریز</b> (وقتی قالب کامل خالی است کار می‌کنند):\n";
+    }
+
     foreach ((array)$c[$sec] as $k => $v) {
+        if ($kind === 'pxt' && in_array($k, ['prem_full', 'star_full'], true)) continue;
         $show = mb_substr(str_replace("\n", ' ', (string)$v), 0, 30);
         $t .= '• <b>' . h(pxLabel($k)) . '</b>: <code>' . h($show) . "</code>\n";
         $rows[] = [btnCb(pxLabel($k), $pre . $k, 'admin')];
     }
     $rows[] = [btnCb(UT('back'), 'px_home', 'nav')];
-    editMsg(BOT_TOKEN, $chatId, $msgId, $t, inlineKb($rows));
+    editMsg(BOT_TOKEN, $chatId, $msgId, mb_substr($t, 0, 3900), inlineKb($rows));
+}
+
+/** نمونه‌ی آماده‌ی قالب کامل — تا از صفر شروع نکنید */
+function pxDemoTpl($which) {
+    if ($which === 'prem') {
+        return "⭐️ <b>تلگرام پریمیوم</b>\n\n" .
+               "<blockquote>💎 <b>۳ ماهه</b>\n{3irt} تومان · {3ton} تون</blockquote>\n" .
+               "<blockquote>💎 <b>۶ ماهه</b>\n{6irt} تومان · {6ton} تون</blockquote>\n" .
+               "<blockquote>💎 <b>۱۲ ماهه</b>\n{12irt} تومان · {12ton} تون</blockquote>\n\n" .
+               "💵 دلار: <b>{usdt}</b> تومان\n🕓 <code>{date}</code>";
+    }
+    return "✨ <b>{n} استارز</b>\n\n" .
+           "<blockquote>💵 <b>{irt}</b> تومان\n💎 {ton} تون</blockquote>\n\n" .
+           "<blockquote expandable>{packs}</blockquote>\n" .
+           "💵 دلار: <b>{usdt}</b> تومان\n🕓 <code>{date}</code>";
 }
 
 /** دکمه‌های زیر پیام قیمت */
@@ -1145,22 +1281,58 @@ function pxAdminButtons($chatId, $msgId) {
 
 /** 🥇 طلا، دلار، سکه — نام، کلید API، کلمه‌ها */
 function pxAdminAssets($chatId, $msgId) {
-    $t = "🥇 <b>طلا، دلار، سکه</b>\n\n";
-    $t .= "هرکدام یک «کلید جفت‌ارز» دارد که باید در پاسخ API وجود داشته باشد.\n";
-    $t .= "با 🔎 کلیدهای API ببینید چه چیزی می‌آید.\n\n";
+    $t  = "🥇 <b>طلا، دلار، سکه و پول کشورها</b>\n\n";
+    $t .= "هر قیمت سه راه دارد و اولی که جواب بدهد برنده است:\n";
+    $t .= "۱) کلید جفت‌ارز در همان API اصلی\n";
+    $t .= "۲) منبع ایرانی (tgju)\n";
+    $t .= "۳) محاسبه از روی انس طلا و دلارِ همان API اصلی\n\n";
     $rows = [];
     foreach (pxAssets() as $k => $a) {
         $v = pxAssetPrice($k);
-        $t .= ($v > 0 ? '✅ ' : '⚠️ ') . '<b>' . h($a['name']) . "</b>\n";
-        $t .= '   کلید: <code>' . h($a['pair']) . '</code>' .
-              ($v > 0 ? ' — ' . pxToman($v) . ' ' . h($a['unit']) : ' — <b>پیدا نشد</b>') . "\n";
-        $t .= '   کلمه‌ها: <code>' . h($a['words']) . "</code>\n\n";
+        $t .= ($v > 0 ? '✅ ' : '⚠️ ') . '<b>' . h($a['name']) . '</b> — ' .
+              ($v > 0 ? pxToman($v) . ' ' . h($a['unit']) : '<b>هیچ منبعی نداد</b>') . "\n";
         $rows[] = [btnCb('✏️ ' . mb_substr($a['name'], 0, 14), 'pxan_' . $k, 'admin'),
                    btnCb('🔑 کلید', 'pxap_' . $k, 'admin'),
                    btnCb('🗣 کلمه‌ها', 'pxaw_' . $k, 'admin')];
     }
+    $rows[] = [btnCb('🩺 هر قیمت از کجا می‌آید؟', 'pxdiag', 'confirm')];
+    $rows[] = [btnCb('📡 آدرس منبع ایرانی', 'pxalturl', 'admin'),
+               btnCb('🌍 آدرس نرخ ارز', 'pxfxurl', 'admin')];
+    $rows[] = [btnCb('🥇 ضریب طلا', 'pxgk', 'admin'),
+               btnCb('🪙 حباب سکه', 'pxck', 'admin')];
     $rows[] = [btnCb(UT('back'), 'px_home', 'nav')];
     editMsg(BOT_TOKEN, $chatId, $msgId, mb_substr($t, 0, 3800), inlineKb($rows));
+}
+
+/** 🩺 تشخیص — دقیقا بگو کدام منبع زنده است و هر قیمت از کجا آمده */
+function pxAdminDiag($chatId) {
+    $main = pxFetch();
+    $alt  = pxAltFetch();
+    $fx   = pxFxFetch();
+
+    $t  = "🩺 <b>تشخیص منبع قیمت</b>\n\n";
+    $t .= ($main ? '✅' : '🔴') . ' <b>API اصلی</b> — ' . count($main) . " جفت‌ارز\n";
+    if (!$main) $t .= '   <code>' . h(mb_substr(pxLastError() ?: 'بی‌پاسخ', 0, 120)) . "</code>\n";
+    $t .= ($alt ? '✅' : '🔴') . ' <b>منبع ایرانی</b> — ' .
+          ($alt ? h((string)(maCacheGet('px_altsrc', 0) ?: 'زنده')) : 'در دسترس نیست') . "\n";
+    if (!$alt) $t .= '   <code>' . h(mb_substr(pxAltError() ?: 'بی‌پاسخ', 0, 120)) . "</code>\n";
+    $t .= ($fx ? '✅' : '🔴') . ' <b>نرخ برابری ارز</b> — ' . count($fx) . " ارز\n";
+    if (!$fx) $t .= '   <code>' . h(mb_substr(pxFxError() ?: 'بی‌پاسخ', 0, 120)) . "</code>\n";
+
+    $oz = 0.0;
+    foreach (['PAXG/USDT', 'XAUT/USDT'] as $pp) { $oz = pxPair($pp); if ($oz > 0) break; }
+    $t .= "\n🥇 انس طلا از API اصلی: " . ($oz > 0 ? '<b>$' . pxNum($oz) . '</b>' : '❌ نیست') . "\n";
+    if ($oz <= 0)
+        $t .= "   بدون انس، طلا فقط از منبع ایرانی می‌آید. اگر API شما\n" .
+              "   <code>PAXG/USDT</code> یا <code>XAUT/USDT</code> دارد، چیزی لازم نیست.\n";
+
+    $t .= "\n<b>هر قیمت از کجا:</b>\n";
+    foreach (pxAssets() as $k => $a) {
+        $v = pxAssetPrice($k);
+        $t .= ($v > 0 ? '✅' : '⚠️') . ' ' . h($a['name']) . ': ' .
+              ($v > 0 ? pxToman($v) . ' ' . h($a['unit']) . ' — ' . pxAssetSource($k) : 'هیچ‌کدام') . "\n";
+    }
+    sendMsg(BOT_TOKEN, $chatId, mb_substr($t, 0, 4000));
 }
 
 /** برگشت true یعنی این callback مال بخش قیمت بود */
@@ -1199,6 +1371,24 @@ function pxAdminCallback($data, $chatId, $msgId, $cbId) {
         answerCb(BOT_TOKEN, $cbId);
         $t = $data === 'pxprev_prem' ? pxPremiumText(true) : pxStarsText(1, true);
         sendMsg(BOT_TOKEN, $chatId, $t ?? pxT('down'), $t ? pxKeyboard() : null);
+        return true;
+    }
+
+    if ($data === 'pxdiag') { answerCb(BOT_TOKEN, $cbId, '🩺'); pxAdminDiag($chatId); return true; }
+
+    if ($data === 'pxtdemo') {
+        pxSet(function (&$c) {
+            $c['texts']['prem_full'] = pxDemoTpl('prem');
+            $c['texts']['star_full'] = pxDemoTpl('star');
+        });
+        answerCb(BOT_TOKEN, $cbId, '✨ نمونه گذاشته شد');
+        pxAdminList($chatId, $msgId, 'pxt');
+        return true;
+    }
+    if ($data === 'pxtclear') {
+        pxSet(function (&$c) { $c['texts']['prem_full'] = ''; $c['texts']['star_full'] = ''; });
+        answerCb(BOT_TOKEN, $cbId, '🧹 برگشت به قالب خودکار');
+        pxAdminList($chatId, $msgId, 'pxt');
         return true;
     }
 
@@ -1273,6 +1463,17 @@ function pxAdminCallback($data, $chatId, $msgId, $cbId) {
         'pxu'   => ['px_url',  "🌐 آدرس API قیمت را بفرستید:"],
         'pxm'   => ['px_marg', "📊 درصد سود روی نرخ بازار (۰ = دقیقا نرخ بازار):"],
         'pxttl' => ['px_ttl',  "⏱ چند ثانیه قیمت کش شود؟ (پیشنهاد ۱۵)"],
+        'pxalturl' => ['px_alturl',
+            "📡 آدرس منبع ایرانی (طلا و سکه).\n\nمی‌توانید چند آدرس بدهید، هرکدام در یک خط — " .
+            "اولی که جواب بدهد استفاده می‌شود."],
+        'pxfxurl'  => ['px_fxurl',
+            "🌍 آدرس نرخ برابری ارز.\n\nچند آدرس، هرکدام در یک خط. باید JSON با کلید " .
+            "<code>rates</code> بدهد، مثل <code>open.er-api.com</code>."],
+        'pxgk' => ['px_goldk',
+            "🥇 ضریب طلا.\n\nاگر گرم طلای محاسبه‌شده با بازار چند درصد فرق داشت، اینجا " .
+            "تنظیمش کنید. ۱ یعنی بدون تغییر، ۱٫۰۳ یعنی ۳٪ بالاتر."],
+        'pxck' => ['px_coink',
+            "🪙 حباب سکه.\n\nنسبت قیمت سکه به ارزش طلای داخلش. ۱٫۱۲ یعنی ۱۲٪ حباب."],
     ];
     if (isset($asks[$data])) {
         [$act, $ask] = $asks[$data];
@@ -1338,6 +1539,28 @@ function pxStateHandle($action, $msg, $uid, $chatId) {
         maCachePut('px_cool', 0);
         return $done();
     }
+    if ($action === 'px_alturl' || $action === 'px_fxurl') {
+        $urls = pxUrlList($text);
+        if ($text !== '' && !$blank && !$urls) {
+            sendMsg(BOT_TOKEN, $chatId, "⚠️ حداقل یک آدرس با http لازم است."); return true;
+        }
+        $val = $blank ? '' : implode("\n", $urls);
+        $key = ($action === 'px_alturl') ? 'alt_url' : 'fx_url';
+        pxSet(function (&$c) use ($key, $val) { $c[$key] = $val; });
+        // کش و قفلِ «تازه شکست خورد» را باز کن تا همین حالا امتحان شود
+        foreach (['px_altcool', 'px_alt', 'px_fxcool', 'px_fx'] as $ck) maCachePut($ck, 0);
+        $n = ($action === 'px_alturl') ? count(pxAltFetch(true)) : count(pxFxFetch(true));
+        return $done($n > 0 ? "✅ ذخیره شد — منبع جواب داد." :
+                              "✅ ذخیره شد، ولی هنوز جوابی نیامد:\n<code>" .
+                              h(mb_substr(($action === 'px_alturl' ? pxAltError() : pxFxError()), 0, 200)) . '</code>');
+    }
+    if ($action === 'px_goldk' || $action === 'px_coink') {
+        $v = (float)norm_fa_digits(str_replace('٫', '.', $text));
+        if ($v < 0.2 || $v > 5) { sendMsg(BOT_TOKEN, $chatId, "⚠️ بین ۰٫۲ تا ۵ باشد."); return true; }
+        $key = ($action === 'px_goldk') ? 'gold_k' : 'coin_k';
+        pxSet(function (&$c) use ($key, $v) { $c[$key] = $v; });
+        return $done();
+    }
     if ($action === 'px_marg') {
         $v = (float)norm_fa_digits($text);
         if ($v < -90 || $v > 900) { sendMsg(BOT_TOKEN, $chatId, "⚠️ بین ۹۰- تا ۹۰۰ باشد."); return true; }
@@ -1366,8 +1589,28 @@ function pxStateHandle($action, $msg, $uid, $chatId) {
     if ($action === 'px_text' || $action === 'px_word') {
         $sec = $action === 'px_text' ? 'texts' : 'words';
         $k   = (string)($sd['k'] ?? '');
-        if ($k === '' || $text === '') { sendMsg(BOT_TOKEN, $chatId, "⚠️ متن خالی نمی‌شود."); return true; }
-        pxSet(function (&$c) use ($sec, $k, $text) { $c[$sec][$k] = $text; });
+        if ($k === '') { sendMsg(BOT_TOKEN, $chatId, "⚠️ چیزی برای ذخیره نیست."); return true; }
+
+        // قالب کامل را «همان‌طور که تایپ شد» نگه می‌داریم: ایموجی پریمیوم،
+        // بولد، نقل‌قول و quote بازشونده به HTML تبدیل می‌شوند، نه اینکه
+        // به متن خشک تبدیل شوند و از دست بروند.
+        $isTpl = ($sec === 'texts' && in_array($k, ['prem_full', 'star_full'], true));
+        if ($isTpl && $blank) {
+            pxSet(function (&$c) use ($k) { $c['texts'][$k] = ''; });
+            return $done("🧹 پاک شد — دوباره از قالب خودکار استفاده می‌شود.");
+        }
+        $val = $isTpl ? msgHtml($msg) : $text;
+        if (trim($val) === '') { sendMsg(BOT_TOKEN, $chatId, "⚠️ متن خالی نمی‌شود."); return true; }
+        pxSet(function (&$c) use ($sec, $k, $val) { $c[$sec][$k] = $val; });
+
+        if ($isTpl) {
+            clearState($uid);
+            $prev = ($k === 'prem_full') ? pxPremiumText(true) : pxStarsText(50, true);
+            sendMsg(BOT_TOKEN, $chatId, "✅ ذخیره شد. پیش‌نمایش:");
+            sendMsg(BOT_TOKEN, $chatId, $prev ?? pxT('down'), $prev ? pxKeyboard() : $back);
+            if ($prev) sendMsg(BOT_TOKEN, $chatId, '👆 همین می‌رود داخل گروه.', $back);
+            return true;
+        }
         return $done();
     }
     if ($action === 'px_btntext') {
@@ -1605,7 +1848,7 @@ function pxTextFaW($size, $text, $bold = true) {
 function pxAssetsDefault() {
     $g = ['F5A524', 'C2410C'];
     return [
-        'usd'  => ['name' => 'دلار آمریکا', 'emoji' => '🇺🇸', 'pair' => 'USDT/IRT',
+        'usd'  => ['name' => 'دلار آمریکا', 'emoji' => '🇺🇸', 'pair' => 'USDT/IRT', 'code' => 'USD',
                    'path' => 'current.price_dollar_rl.p', 'div' => 10,
                    'unit' => 'تومان', 'bg' => ['B22234', '3C3B6E'], 'words' => 'دلار,دلار آمریکا,usd'],
         'gold' => ['name' => 'طلا ۱۸ عیار', 'emoji' => '🥇', 'pair' => '',
@@ -1628,28 +1871,28 @@ function pxAssetsDefault() {
                    'unit' => 'تومان', 'bg' => ['EAB308', '92400E'], 'words' => 'ربع سکه,ربع'],
 
         // ── پول کشورهای دیگر ──
-        'eur'  => ['name' => 'یورو', 'emoji' => '🇪🇺', 'pair' => '',
+        'eur'  => ['name' => 'یورو', 'emoji' => '🇪🇺', 'pair' => '', 'code' => 'EUR',
                    'path' => 'current.price_eur.p', 'div' => 10,
                    'unit' => 'تومان', 'bg' => ['003399', '001A4D'], 'words' => 'یورو,eur'],
-        'aed'  => ['name' => 'درهم امارات', 'emoji' => '🇦🇪', 'pair' => '',
+        'aed'  => ['name' => 'درهم امارات', 'emoji' => '🇦🇪', 'pair' => '', 'code' => 'AED',
                    'path' => 'current.price_aed.p', 'div' => 10,
                    'unit' => 'تومان', 'bg' => ['00732F', '111111'], 'words' => 'درهم,درهم امارات,aed'],
-        'try'  => ['name' => 'لیر ترکیه', 'emoji' => '🇹🇷', 'pair' => '',
+        'try'  => ['name' => 'لیر ترکیه', 'emoji' => '🇹🇷', 'pair' => '', 'code' => 'TRY',
                    'path' => 'current.price_try.p', 'div' => 10,
                    'unit' => 'تومان', 'bg' => ['E30A17', '7A0509'], 'words' => 'لیر,لیر ترکیه,ترکیه,try'],
-        'sar'  => ['name' => 'ریال عربستان', 'emoji' => '🇸🇦', 'pair' => '',
+        'sar'  => ['name' => 'ریال عربستان', 'emoji' => '🇸🇦', 'pair' => '', 'code' => 'SAR',
                    'path' => 'current.price_sar.p', 'div' => 10,
                    'unit' => 'تومان', 'bg' => ['006C35', '00381B'], 'words' => 'ریال عربستان,عربستان,ریال سعودی,sar'],
-        'pkr'  => ['name' => 'روپیه پاکستان', 'emoji' => '🇵🇰', 'pair' => '',
+        'pkr'  => ['name' => 'روپیه پاکستان', 'emoji' => '🇵🇰', 'pair' => '', 'code' => 'PKR',
                    'path' => 'current.price_pkr.p', 'div' => 10,
                    'unit' => 'تومان', 'bg' => ['01411C', '00250F'], 'words' => 'روپیه,روپیه پاکستان,پاکستان,pkr'],
-        'afn'  => ['name' => 'افغانی', 'emoji' => '🇦🇫', 'pair' => '',
+        'afn'  => ['name' => 'افغانی', 'emoji' => '🇦🇫', 'pair' => '', 'code' => 'AFN',
                    'path' => 'current.price_afn.p', 'div' => 10,
                    'unit' => 'تومان', 'bg' => ['000000', '4A0E0E'], 'words' => 'افغانی,افغانستان,afn'],
-        'gbp'  => ['name' => 'پوند انگلیس', 'emoji' => '🇬🇧', 'pair' => '',
+        'gbp'  => ['name' => 'پوند انگلیس', 'emoji' => '🇬🇧', 'pair' => '', 'code' => 'GBP',
                    'path' => 'current.price_gbp.p', 'div' => 10,
                    'unit' => 'تومان', 'bg' => ['012169', '000B26'], 'words' => 'پوند,پوند انگلیس,gbp'],
-        'iqd'  => ['name' => 'دینار عراق', 'emoji' => '🇮🇶', 'pair' => '',
+        'iqd'  => ['name' => 'دینار عراق', 'emoji' => '🇮🇶', 'pair' => '', 'code' => 'IQD',
                    'path' => 'current.price_iqd.p', 'div' => 10,
                    'unit' => 'تومان', 'bg' => ['CE1126', '5C0810'], 'words' => 'دینار,دینار عراق,عراق,iqd'],
     ];
@@ -1665,8 +1908,8 @@ function pxAssets() {
     $out = $def;
     foreach ($saved as $k => $a) {
         if (!is_array($a)) continue;
-        $base = $def[$k] ?? ['name' => $k, 'emoji' => '💠', 'pair' => '', 'path' => '', 'div' => 1,
-                             'unit' => 'تومان', 'bg' => ['334155', '0F172A'], 'words' => ''];
+        $base = $def[$k] ?? ['name' => $k, 'emoji' => '💠', 'pair' => '', 'code' => '', 'path' => '',
+                             'div' => 1, 'unit' => 'تومان', 'bg' => ['334155', '0F172A'], 'words' => ''];
         $out[$k] = array_replace($base, $a);
     }
     return $out;
@@ -1747,12 +1990,17 @@ function pxTint($hex, $pct, $onto = 'FFFFFF') {
  * API اصلی فقط ارز دیجیتال می‌دهد؛ این‌ها از جای دیگری می‌آیند.
  * آدرس و مسیرها از پنل قابل عوض کردن‌اند تا اگر منبع عوض شد، کد دست‌نخورده بماند.
  */
+/**
+ * منبع دوم (طلا، سکه، ارز کشورها).
+ * چند آدرس پشت سر هم امتحان می‌شود؛ اولی که جواب داد برنده است و
+ * تا پایان TTL همان می‌ماند. یک آدرس از کار افتاده کل بخش را نمی‌خواباند.
+ */
 function pxAltFetch($fresh = false) {
     static $mem = null;
     if (!$fresh && is_array($mem)) return $mem;
 
-    $url = trim((string)pxVal('alt_url', ''));
-    if ($url === '') return $mem = [];
+    $urls = pxUrlList(pxVal('alt_url', ''));
+    if (!$urls) return $mem = [];
 
     $ttl = max(30, (int)pxVal('alt_ttl', 300));
     if (!$fresh) {
@@ -1762,19 +2010,140 @@ function pxAltFetch($fresh = false) {
             return $mem = (array)(maCacheGet('px_alt', 0) ?: []);
     }
 
-    [$j, $err] = maHttp($url, 'GET', 'Accept: application/json', '', (int)pxVal('timeout', 6));
-    if (!is_array($j)) {
-        maCachePut('px_alterr', $err ?: 'پاسخی نیامد');
-        maCachePut('px_altcool', time());
-        return $mem = (array)(maCacheGet('px_alt', 0) ?: []);
+    $errs = [];
+    foreach ($urls as $u) {
+        [$j, $err] = maHttp($u, 'GET',
+            "Accept: application/json\nUser-Agent: Mozilla/5.0 (compatible; PriceBot/1.0)",
+            '', (int)pxVal('timeout', 6));
+        if (is_array($j) && $j) {
+            maCachePut('px_alterr', '');
+            maCachePut('px_altcool', 0);
+            maCachePut('px_altsrc', $u);
+            maCachePut('px_alt', $j);
+            return $mem = $j;
+        }
+        $errs[] = pxHost($u) . ': ' . ($err ?: 'پاسخی نیامد');
     }
-    maCachePut('px_alterr', '');
-    maCachePut('px_altcool', 0);
-    maCachePut('px_alt', $j);
-    return $mem = $j;
+    maCachePut('px_alterr', implode(' · ', $errs));
+    maCachePut('px_altcool', time());
+    return $mem = (array)(maCacheGet('px_alt', 0) ?: []);
+}
+
+/** یک رشته‌ی چندخطی/کاما‌دار را به فهرست آدرس تمیز تبدیل می‌کند */
+function pxUrlList($raw) {
+    $out = [];
+    foreach (preg_split('/[\r\n,|]+/', (string)$raw) as $u) {
+        $u = trim($u);
+        if ($u !== '' && preg_match('#^https?://#i', $u)) $out[] = $u;
+    }
+    return $out;
+}
+
+function pxHost($u) { return (string)(parse_url($u, PHP_URL_HOST) ?: $u); }
+
+/**
+ * 🌍 نرخ برابری ارزها نسبت به دلار — «چند واحد از این پول، برابر ۱ دلار».
+ * سه آدرس رایگان و بی‌کلید، پشت سر هم. خروجی: ['EUR'=>0.92, 'TRY'=>34.1, …]
+ */
+function pxFxFetch($fresh = false) {
+    static $mem = null;
+    if (!$fresh && is_array($mem)) return $mem;
+
+    $urls = pxUrlList(pxVal('fx_url', ''));
+    if (!$urls) return $mem = [];
+
+    $ttl = max(300, (int)pxVal('fx_ttl', 3600));
+    if (!$fresh) {
+        $hit = maCacheGet('px_fx', $ttl);
+        if (is_array($hit)) return $mem = $hit;
+        if (maCacheGet('px_fxcool', 900) !== null)
+            return $mem = (array)(maCacheGet('px_fx', 0) ?: []);
+    }
+
+    $errs = [];
+    foreach ($urls as $u) {
+        [$j, $err] = maHttp($u, 'GET', "Accept: application/json", '', (int)pxVal('timeout', 6));
+        // هر سه API شکل خروجی خودشان را دارند؛ هرکدام که بود بردار
+        $rows = null;
+        if (is_array($j)) {
+            foreach (['rates', 'conversion_rates', 'usd'] as $k)
+                if (isset($j[$k]) && is_array($j[$k])) { $rows = $j[$k]; break; }
+        }
+        if (is_array($rows) && $rows) {
+            $out = [];
+            foreach ($rows as $k => $v) if (is_scalar($v) && is_numeric($v) && $v > 0)
+                $out[strtoupper((string)$k)] = (float)$v;
+            if ($out) {
+                maCachePut('px_fxerr', '');
+                maCachePut('px_fxcool', 0);
+                maCachePut('px_fxsrc', $u);
+                maCachePut('px_fx', $out);
+                return $mem = $out;
+            }
+        }
+        $errs[] = pxHost($u) . ': ' . ($err ?: 'نرخی نداشت');
+    }
+    maCachePut('px_fxerr', implode(' · ', $errs));
+    maCachePut('px_fxcool', time());
+    return $mem = (array)(maCacheGet('px_fx', 0) ?: []);
 }
 
 function pxAltError() { return (string)(maCacheGet('px_alterr', 0) ?: ''); }
+function pxFxError()  { return (string)(maCacheGet('px_fxerr', 0) ?: ''); }
+
+/** یک اونس تروی، به گرم */
+const PX_OUNCE_G = 31.1034768;
+
+/**
+ * 🧮 ساختن قیمت از روی چیزی که همیشه در دسترس است.
+ *
+ * API ارز دیجیتال روی سرور شما کار می‌کند (چون پریمیوم و استارز درست
+ * درمی‌آیند)، پس طلا و ارز هم باید از همان بیرون بیایند و منتظر منبع
+ * ایرانی نمانند:
+ *
+ *   انس طلا      = PAXG یا XAUT  (هرکدام دقیقا یک انس طلای واقعی است)
+ *   دلار تومانی  = USDT/IRT
+ *   طلای ۲۴      = انس ÷ ۳۱٫۱ × دلار
+ *   طلای ۱۸      = طلای ۲۴ × ۰٫۷۵
+ *   سکه          = طلای ۲۴ × ۸٫۱۳۳ گرم × ۰٫۹۰۰ عیار × حباب
+ *   پول کشورها   = دلار تومانی ÷ نرخ آن پول به ازای ۱ دلار
+ *
+ * ۰ یعنی حتی این هم نشد.
+ */
+function pxDerive($key, $fresh = false) {
+    if (empty(pxVal('derive', 1))) return 0.0;
+
+    $usd = pxUsdtIrt($fresh);                    // تومان به ازای ۱ دلار
+    if ($key === 'usd') return $usd;
+
+    $ounce = 0.0;
+    foreach (['PAXG/USDT', 'XAUT/USDT'] as $pair) {
+        $v = pxPair($pair, $fresh);
+        if ($v > 0) { $ounce = $v; break; }
+    }
+    if ($key === 'ounce') return $ounce;
+
+    if ($usd <= 0) return 0.0;
+
+    $k24 = ($ounce > 0) ? ($ounce / PX_OUNCE_G * $usd) : 0.0;   // تومان، هر گرم طلای ۲۴
+    $gk  = (float)pxVal('gold_k', 1.0); if ($gk <= 0) $gk = 1.0;
+
+    switch ($key) {
+        case 'gold24': return $k24 * $gk;
+        case 'gold':   return $k24 * 0.750 * $gk;
+        case 'coin':   return $k24 * 8.133 * 0.900 * $gk * max(0.5, (float)pxVal('coin_k', 1.12));
+        case 'nim':    return $k24 * 4.066 * 0.900 * $gk * max(0.5, (float)pxVal('coin_k', 1.12));
+        case 'rob':    return $k24 * 2.033 * 0.900 * $gk * max(0.5, (float)pxVal('coin_k', 1.12));
+    }
+
+    // پول کشورها
+    $a    = pxAssets()[$key] ?? null;
+    $code = strtoupper(trim((string)($a['code'] ?? '')));
+    if ($code === '' || $code === 'USD') return 0.0;
+    $fx = pxFxFetch($fresh);
+    $per = (float)($fx[$code] ?? 0);              // چند واحد از این پول = ۱ دلار
+    return $per > 0 ? $usd / $per : 0.0;
+}
 
 /** قیمت یک دارایی — اول API اصلی، بعد منبع دوم. ۰ یعنی هیچ‌کدام نداشتند. */
 function pxAssetPrice($key, $fresh = false) {
@@ -1803,7 +2172,26 @@ function pxAssetPrice($key, $fresh = false) {
             return $n / $div;
         }
     }
-    return 0.0;
+
+    // ۳) هیچ‌کدام نبود؟ از روی انس و دلارِ همان API ارز دیجیتال بساز.
+    //    این همان چیزی است که نمی‌گذارد «طلا» و «دلار» بی‌جواب بمانند.
+    return max(0.0, pxDerive($key, $fresh));
+}
+
+/** قیمت آمد، ولی از کجا؟ — برای صفحه‌ی تشخیص پنل */
+function pxAssetSource($key) {
+    $a = pxAssets()[$key] ?? null;
+    if (!$a) return '—';
+    $pair = strtoupper(trim((string)($a['pair'] ?? '')));
+    if ($pair !== '') {
+        $p = pxFetch();
+        if (!empty($p[$pair])) return 'API ارز دیجیتال';
+    }
+    $path = trim((string)($a['path'] ?? ''));
+    if ($path !== '' && maNum(maJsonPath(pxAltFetch(), $path)) > 0)
+        return 'منبع ایرانی (' . h((string)(maCacheGet('px_altsrc', 0) ?: '—')) . ')';
+    if (pxDerive($key) > 0) return 'محاسبه‌شده از انس و دلار';
+    return '—';
 }
 
 /** درصد تغییر یک دارایی از منبع دوم (اگر داشت) */
@@ -1825,7 +2213,17 @@ function pxAssetChange($key) {
             return ($dt === 'low' || $dt === 'down') ? -abs($n) : $n;
         }
     }
-    return 0.0;
+
+    // درصدِ قیمت‌های محاسبه‌شده: طلا از انس، پول کشورها از دلار.
+    // بدون این، همه‌ی کارت‌های ساخته‌شده همیشه «۰٪» نشان می‌دادند.
+    if (in_array($key, ['gold', 'gold24', 'ounce', 'coin', 'nim', 'rob'], true)) {
+        foreach (['PAXG', 'XAUT'] as $sym) {
+            $c = pxChangeOf($sym . '/USDT');
+            if ($c != 0.0) return $c;
+        }
+        return 0.0;
+    }
+    return pxChangeOf('USDT/IRT');
 }
 
 /** گرادیان عمودی ساده */
