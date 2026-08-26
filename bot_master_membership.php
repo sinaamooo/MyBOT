@@ -32,6 +32,7 @@ require_once __DIR__ . '/ton_wallet.php';
 require_once __DIR__ . '/admin_ext.php';
 require_once __DIR__ . '/prices.php';
 require_once __DIR__ . '/diamond.php';
+require_once __DIR__ . '/channels.php';
 
 // ============================================================
 // 📚 ذخیره‌سازی اتمیک
@@ -794,7 +795,8 @@ function addBalance($userId, $amount) {
     mutate('users', function (&$users) use ($userId, $amount) {
         $k = (string)$userId;
         if (!isset($users[$k])) return;
-        $users[$k]['balance'] = round((float)$users[$k]['balance'] + (float)$amount, 2);
+        // کیف پول تومانی است و تومان جزء ندارد
+        $users[$k]['balance'] = (float)round((float)$users[$k]['balance'] + (float)$amount);
     });
 }
 
@@ -2949,6 +2951,14 @@ function reportSale($order, $force = false) {
     $p = Product::get($order['product_id']);
     if (!$p) return;
 
+    // 📡 کانالِ «گزارش خرید» — یک مقصد برای همه‌ی فروش‌ها، جدا از
+    //    تنظیمِ تاپیکِ تک‌تک محصول‌ها که پایین‌تر انجام می‌شود.
+    if (function_exists('chBuy')) {
+        $uu = getUser($order['user_id']) ?: [];
+        chBuy($order['user_id'], $uu['username'] ?? '', trim(($p['emoji'] ?? '') . ' ' . $p['name']),
+              (float)(($order['meta']['qty'] ?? 0) ?: 1), (float)$order['amount'], $order['id']);
+    }
+
     $r = reportOf($p);
     if (trim((string)$r['chat_id']) === '') return;
     if (empty($r['on']) && !$force) return;
@@ -3267,7 +3277,8 @@ function admHome($chatId, $msgId = null) {
         [btnCb('🤖 ربات‌های اپلودر', 'ag_up', 'admin'), btnCb('🎯 ممبر و قفل‌ها', 'ag_lock', 'admin')],
         [btnCb('💹 قیمت لحظه‌ای', 'px_home', 'admin'),  btnCb('💎 الماس', 'dm_home', 'admin')],
         [btnCb('💳 پرداخت', 'ag_pay', 'admin'),        btnCb('🎨 ظاهر و متن‌ها', 'ag_look', 'admin')],
-        [btnCb('📢 گزارش و پیام همگانی', 'ag_rep', 'admin')],
+        [btnCb('📡 کانال‌های متصل', 'ch_home', 'admin'),
+         btnCb('📢 پیام همگانی و گزارش', 'ag_rep', 'admin')],
         [btnCb('🔧 راه‌اندازی خودکار', 'setup', 'confirm')],
         [btnCb('🌐 پنل وب', 'adm_web', 'info')],
         [btnCb(UT('home'), 'home', 'nav')],
@@ -4805,15 +4816,32 @@ function masterHandle($update) {
             if ($o['status'] !== Order::PENDING) { answerCb(BOT_TOKEN, $cbId, 'قبلا ثبت شده', true); return; }
             answerCb(BOT_TOKEN, $cbId);
             setState($uid, 'receipt', ['order' => $oid]);
-            panelShow($uid, $chatId, $o['type'] === 'topup' ? 'wallet' : 'shop',
-                T('receipt_ask'), inlineKb([[btnUI('cancel', 'cancel', 'cancel')]]));
+
+            // درست همان پیامی که دکمه‌اش زده شد عوض می‌شود — یعنی فاکتورِ
+            // پایین. قبلا سراغ «اسلات» می‌رفت و چون فاکتور در اسلات ثبت
+            // نشده بود، پیامِ بالاییِ قدیمی ویرایش می‌شد و فاکتور دست‌نخورده
+            // پایین می‌ماند.
+            $ask = T('receipt_ask') . "\n\n🧾 کد پیگیری: <code>" . h($oid) . '</code>';
+            $kb  = inlineKb([[btnUI('cancel', 'ocancel_' . $oid, 'cancel')]]);
+            if ($msgId) editMsg(BOT_TOKEN, $chatId, $msgId, $ask, $kb);
+            else        sendMsg(BOT_TOKEN, $chatId, $ask, $kb);
             return;
         }
 
         if (str_starts_with($data, 'ocancel_')) {
+            $oid = substr($data, 8);
+            $o   = Order::get($oid);
             clearState($uid);
+            // سفارشِ پرداخت‌نشده را همان‌جا ببند، وگرنه تا ابد «منتظر رسید» می‌ماند
+            if ($o && (int)$o['user_id'] === $uid && ($o['status'] ?? '') === Order::PENDING)
+                mutate('orders', function (&$a) use ($oid) { unset($a[$oid]); });
             answerCb(BOT_TOKEN, $cbId, 'لغو شد');
-            if ($msgId) editMsg(BOT_TOKEN, $chatId, $msgId, "❌ سفارش لغو شد.");
+
+            // پیام «لغو شد» به درد کسی نمی‌خورد؛ همان پیام برمی‌گردد به
+            // فهرست محصول‌ها تا بشود بی‌مکث سفارش بعدی را داد.
+            if ($msgId) { delMsg(BOT_TOKEN, $chatId, $msgId); slotClear($uid, 'shop'); }
+            if ($o && ($o['type'] ?? '') === 'topup') startTopup($uid, $chatId);
+            else showProducts($uid, $chatId);
             return;
         }
 
@@ -4822,7 +4850,7 @@ function masterHandle($update) {
         // هر پیشوند تازه‌ای که اینجا نباشد، بی‌صدا دور ریخته می‌شود —
         // نه خطایی، نه پیامی. پس با هر بخش تازه این فهرست هم باید کامل شود.
         $adminPrefixes = ['aok_', 'ano_', 'adm_', 'ag_', 'eb', 'et', 'eg', 'eu', 'sb', 'ep', 'esp',
-                          'rp', 'tf', 'jn', 'gw', 'pay', 'px', 'dm', 'reply_', 'setup'];
+                          'rp', 'tf', 'jn', 'gw', 'pay', 'px', 'dm', 'ch', 'reply_', 'setup'];
         $isAdminCb = false;
         foreach ($adminPrefixes as $pref) {
             if (str_starts_with($data, $pref)) { $isAdminCb = true; break; }
@@ -5007,6 +5035,7 @@ function masterHandle($update) {
         }
         if (pxAdminCallback($data, $chatId, $msgId, $cbId)) return;
         if (dmAdminCallback($data, $chatId, $msgId, $cbId)) return;
+        if (chAdminCallback($data, $chatId, $msgId, $cbId)) return;
         if ($data === 'adm_gw')      { answerCb(BOT_TOKEN, $cbId); admGateway($chatId, $msgId); return; }
         if ($data === 'adm_pay')     { answerCb(BOT_TOKEN, $cbId); admPay($chatId, $msgId); return; }
         foreach ([['payc', 'pay_card', "💳 شماره کارت را بفرستید (۱۶ رقم).\n\nخط تیره = پاک کردن"],
@@ -5860,6 +5889,7 @@ function masterHandle($update) {
 
     if (pxStateHandle($action, $msg, $uid, $chatId)) return;
     if (dmStateHandle($action, $msg, $uid, $chatId)) return;
+    if (chStateHandle($action, $msg, $uid, $chatId)) return;
 
     if (str_starts_with($action, 'pay_')) {
         $plain = trim($msg['text'] ?? '');
@@ -6212,6 +6242,9 @@ function masterHandle($update) {
         clearState($uid);
         panelShow($uid, $chatId, $o['type'] === 'topup' ? 'wallet' : 'shop', T('receipt_ok'));
         notifyAdminOrder($oid);
+        // 📡 و یک نسخه هم روی کانالِ همان جریان
+        $fresh = Order::get($oid);
+        if (($fresh['type'] ?? '') === 'topup') chTopupReceipt($fresh);
         return;
     }
 

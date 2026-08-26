@@ -790,11 +790,23 @@ function maApplyRateSource($id) {
     return true;
 }
 
+/**
+ * گِرد کردن مبلغ تومانی.
+ *
+ * تومان جزء ندارد. وقتی قیمت اعشار داشت، کاربر روی صفحه «۲۹۵٬۹۰۰» را
+ * می‌دید ولی از کیف پولش ۲۹۵٬۹۰۰٫۴۷ خواسته می‌شد و پرداخت با پیامِ
+ * «موجودی کافی نیست» رد می‌شد — همان «۱ تومن این‌ور آن‌ور». حالا هر
+ * مبلغ به تومانِ کامل بالا گِرد می‌شود، پس عددی که دیده می‌شود دقیقا
+ * همان عددی است که کسر می‌شود.
+ */
 function maRound($v, $step) {
     $v = (float)$v;
-    if ($step <= 0) return round($v, 2);
-    return ceil($v / $step) * $step;
+    if ($step <= 0) return (float)ceil($v - 1e-9);
+    return (float)(ceil($v / $step - 1e-9) * $step);
 }
+
+/** هر مبلغ تومانی که قرار است نمایش داده یا کسر شود */
+function maMoney($v) { return (float)ceil((float)$v - 1e-9); }
 
 // ---------- مارکت گیفت ----------
 
@@ -919,7 +931,8 @@ function maItemPrice($item) {
     $base = $live !== null ? (float)$live : (float)($item['price'] ?? 0);
     if (function_exists('axPrice'))
         $base = (float)axPrice((string)($item['id'] ?? ''), $base, (string)($item['cat'] ?? ''));
-    return $base;
+    // تومانِ کامل — تا قیمتِ روی صفحه و مبلغِ کسرشده یکی باشند
+    return maMoney($base);
 }
 
 /**
@@ -2213,7 +2226,7 @@ function maApi() {
         }
 
         $item['price'] = $unitPrice;
-        $total = round($unitPrice * (in_array($ask, ['qty', 'qty_wallet', 'qty_username'], true) ? $qty : 1), 2);
+        $total = maMoney($unitPrice * (in_array($ask, ['qty', 'qty_wallet', 'qty_username'], true) ? $qty : 1));
 
         // 🛑 نرخ زنده نیامده؟ نفروش. قیمت قدیمی یعنی ضرر.
         if (maPriceStale($item)) {
@@ -2393,6 +2406,11 @@ function maMarkPaid($id, $payMethod) {
 
     // 📊 گزارش این مینی‌اپ در کانال مدیر
     if (function_exists('axReportOrder')) axReportOrder($o, 'paid');
+
+    // 📡 و روی کانالِ «گزارش خرید»، اگر تنظیم شده باشد
+    if (function_exists('chBuy'))
+        chBuy($o['user_id'], $o['username'] ?? '', maOrderTitle($o),
+              (float)($o['qty'] ?? 1), (float)$o['total'], $o['id']);
 
     // 🚚 زنجیره‌ی تحویل: مخزن → دستی → پنل خودکار → دست ادمین
     return maDeliver($o);
