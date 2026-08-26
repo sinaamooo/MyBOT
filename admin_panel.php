@@ -6,8 +6,16 @@
  * تا هرگز دو نسخه ناهماهنگ از داده‌ها وجود نداشته باشد.
  */
 
-// ⚙️ رمز پنل — حتما عوض کنید
-define('ADMIN_PASSWORD', 'admin123456');
+/**
+ * 🔑 رمز پنل وب.
+ *
+ * config.local.php باید قبل از تعریفِ رمز خوانده شود، وگرنه مقدارِ
+ * پایین زودتر می‌نشیند و رمزِ واقعی هیچ‌وقت اثر نمی‌کند.
+ * ترتیب: فایل محلی ← متغیر محیطی ← مقدار پیش‌فرض.
+ */
+if (is_file(__DIR__ . '/config.local.php')) require_once __DIR__ . '/config.local.php';
+if (!defined('ADMIN_PASSWORD'))
+    define('ADMIN_PASSWORD', getenv('ADMIN_PANEL_PASS') ?: 'admin123456');
 
 define('MEMBERSHIP_LIB_ONLY', true);
 require_once __DIR__ . '/bot_master_membership.php';

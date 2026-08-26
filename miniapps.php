@@ -1113,7 +1113,18 @@ class MaOrder
     const REJECT  = 'rejected';
 
     public static function all() { return load('ma_orders'); }
-    public static function get($id) { $a = load('ma_orders'); return $a[$id] ?? null; }
+
+    /** فایل داغ، و اگر نبود بایگانی — تا سفارش قدیمی هم پیدا شود */
+    public static function get($id) {
+        $a = load('ma_orders');
+        if (isset($a[$id])) return $a[$id];
+        $b = load('ma_orders_old');
+        return $b[$id] ?? null;
+    }
+
+    public static function allWithArchive() {
+        return load('ma_orders') + load('ma_orders_old');
+    }
 
     public static function create($app, $uid, $uname, $item, $qty, $total, $field) {
         $id = 'ma_' . base_convert((string)time(), 10, 36) . bin2hex(random_bytes(3));
@@ -1659,6 +1670,39 @@ function maPayFromWallet($orderId, $uid) {
     payReferralCommission($uid, (float)$o['total']);
     maMarkPaid($orderId, 'wallet');
     return [true, ''];
+}
+
+/**
+ * 🗄 بایگانی سفارش‌های تمام‌شده‌ی مینی‌اپ.
+ *
+ * همان دلیلِ سفارش‌های ربات: هر ثبت سفارش کل فایل را بازنویسی می‌کند،
+ * پس فایلِ بزرگ یعنی سفارشِ کند. تحویل‌شده‌ها و ردشده‌های قدیمی
+ * می‌روند کنار و فایل داغ کوچک می‌ماند.
+ */
+function maOrdersArchive($days = 0, $limit = 4000) {
+    $days = $days > 0 ? $days : (int)(cfg()['orders_keep_days'] ?? 14);
+    if ($days <= 0) return 0;
+    $cut = time() - $days * 86400;
+
+    $moved = [];
+    mutate('ma_orders', function (&$a) use ($cut, $limit, &$moved) {
+        foreach ($a as $id => $o) {
+            if (count($moved) >= $limit) break;
+            $st = (string)($o['status'] ?? '');
+            // فقط تمام‌شده‌ها؛ هرچه هنوز در جریان است می‌ماند
+            if ($st !== MaOrder::DONE && $st !== MaOrder::REJECT) continue;
+            $when = strtotime((string)($o['delivered_at'] ?: $o['decided_at'] ?: $o['created_at'] ?? '')) ?: 0;
+            if ($when === 0 || $when > $cut) continue;
+            $moved[$id] = $o;
+            unset($a[$id]);
+        }
+    });
+    if (!$moved) return 0;
+
+    mutate('ma_orders_old', function (&$b) use ($moved) {
+        foreach ($moved as $id => $o) $b[$id] = $o;
+    });
+    return count($moved);
 }
 
 // ============================================================

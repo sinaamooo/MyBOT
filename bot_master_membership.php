@@ -42,6 +42,42 @@ if (!defined('CRON_KEY'))
     define('CRON_KEY',  getenv('CRON_KEY') ?: 'change-this-cron-key');
 
 if (!is_dir(DATA_DIR)) @mkdir(DATA_DIR, 0755, true);
+dataDirLockdown();
+
+/**
+ * 🔒 قفلِ پوشه‌ی داده.
+ *
+ * پوشه‌ی داده کنار همین فایل و داخل ریشه‌ی وب است، پس بدون محافظت
+ * هرکس آدرسش را حدس بزند می‌تواند config.json را دانلود کند — یعنی
+ * شماره کارت، کلید API پنل فروش، و عبارت بازیابی ولت. users.json هم
+ * موجودی همه‌ی کاربران را می‌دهد.
+ *
+ * این تابع سه سد می‌گذارد و اگر از قبل باشند کاری نمی‌کند:
+ *   .htaccess   برای آپاچی و لایت‌اسپید
+ *   web.config  برای IIS
+ *   index.html  تا فهرستِ پوشه دیده نشود
+ *
+ * ⚠️ روی nginx هیچ‌کدام کار نمی‌کنند — آنجا باید در تنظیمات سرور
+ * مسیر را ببندید. دکمه‌ی «🔒 تست نشتی داده» در پنل خودش می‌رود و
+ * واقعا امتحان می‌کند که فایل از بیرون خوانده می‌شود یا نه.
+ */
+function dataDirLockdown() {
+    $d = rtrim(DATA_DIR, '/');
+    if (!is_dir($d)) return;
+
+    $files = [
+        '.htaccess' => "Require all denied\n" .
+                       "<IfModule !mod_authz_core.c>\nOrder allow,deny\nDeny from all\n</IfModule>\n",
+        'web.config' => '<?xml version="1.0"?><configuration><system.webServer><security>' .
+                        '<authorization><deny users="*" /></authorization>' .
+                        '</security></system.webServer></configuration>',
+        'index.html' => '',
+    ];
+    foreach ($files as $name => $content) {
+        $f = $d . '/' . $name;
+        if (!file_exists($f)) @file_put_contents($f, $content);
+    }
+}
 
 @ignore_user_abort(true);
 
@@ -60,13 +96,26 @@ require_once __DIR__ . '/games.php';
 
 function dataPath($file) { return DATA_DIR . '/' . $file . '.json'; }
 
-function load($file) {
+/**
+ * 🗃 خواندن فایل داده — با کشِ درون‌درخواستی.
+ *
+ * در یک درخواست، یک فایل چند بار خوانده می‌شود: مثلا صفحه‌ی پنل سه
+ * بار سراغ سفارش‌ها می‌رود. وقتی فایل چند مگابایت شد، هر بار خواندن
+ * و decode کردنش ده‌ها میلی‌ثانیه است. کش این را یک بار می‌کند.
+ *
+ * کش فقط تا پایان همین درخواست زنده است، و mutate() همیشه از روی
+ * دیسک می‌خواند — پس هیچ‌وقت با داده‌ی کهنه چیزی نوشته نمی‌شود.
+ */
+function load($file, $fresh = false) {
+    static $cache = [];
+    if (!$fresh && array_key_exists($file, $cache)) return $cache[$file];
+
     $path = dataPath($file);
-    if (!file_exists($path)) return [];
+    if (!file_exists($path)) return $cache[$file] = [];
     $raw = file_get_contents($path);
-    if ($raw === false || $raw === '') return [];
+    if ($raw === false || $raw === '') return $cache[$file] = [];
     $out = json_decode($raw, true);
-    return is_array($out) ? $out : [];
+    return $cache[$file] = (is_array($out) ? $out : []);
 }
 
 function save($file, $data) {
@@ -74,9 +123,14 @@ function save($file, $data) {
     $dir  = dirname($path);
     if (!is_dir($dir)) @mkdir($dir, 0755, true);
     $tmp  = $path . '.' . getmypid() . '.tmp';
-    $json = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    // بدون PRETTY_PRINT: فایل نصف می‌شود و encode چند برابر سریع‌تر.
+    // این فایل را آدم نمی‌خواند، برنامه می‌خواند.
+    $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if ($json === false) return false;
     if (file_put_contents($tmp, $json, LOCK_EX) === false) return false;
-    return rename($tmp, $path);
+    $ok = rename($tmp, $path);
+    if ($ok) load($file, true);          // کش را با چیزی که واقعا نوشته شد هم‌خط کن
+    return $ok;
 }
 
 /** تغییر با قفل انحصاری تا درخواست‌های همزمان همدیگر را پاک نکنند */
@@ -86,7 +140,8 @@ function mutate($file, callable $fn) {
     if (!is_dir($dir)) @mkdir($dir, 0755, true);
     $fp = fopen($lockPath, 'c');
     if ($fp) flock($fp, LOCK_EX);
-    $data   = load($file);
+    // 🔑 همیشه تازه از دیسک — ممکن است درخواست دیگری همین الان نوشته باشد
+    $data   = load($file, true);
     $result = $fn($data);
     save($file, $data);
     if ($fp) { flock($fp, LOCK_UN); fclose($fp); }
@@ -1164,7 +1219,23 @@ class Order
     const PENDING = 'pending', REVIEW = 'review', APPROVED = 'approved', REJECTED = 'rejected';
 
     public static function all() { return load('orders'); }
-    public static function get($id) { $a = load('orders'); return $a[$id] ?? null; }
+
+    /**
+     * سفارش را اول از فایل داغ می‌گیرد و اگر نبود از بایگانی.
+     * سفارش‌های قدیمیِ تمام‌شده به بایگانی می‌روند تا فایل داغ کوچک
+     * بماند — وگرنه هر ثبت سفارش یعنی بازنویسی چند مگابایت.
+     */
+    public static function get($id) {
+        $a = load('orders');
+        if (isset($a[$id])) return $a[$id];
+        $b = load('orders_old');
+        return $b[$id] ?? null;
+    }
+
+    /** فایل داغ + بایگانی، برای گزارش‌های کامل */
+    public static function allWithArchive() {
+        return load('orders') + load('orders_old');
+    }
 
     public static function create($userId, $username, $type, $productId, $amount, $currency, $meta = []) {
         $id = uid('or');
@@ -2508,6 +2579,44 @@ function createOrderAndAsk($uid, $chatId, $username, $type, $productId, $amount,
 }
 
 /** ⏱ بررسی دوره‌ای فاکتورهای باز درگاه — اگر IPN نرسید، خودمان می‌پرسیم */
+/**
+ * 🗄 بایگانی سفارش‌های کهنه.
+ *
+ * فایل سفارش‌ها بی‌نهایت بزرگ می‌شد و چون هر ثبت سفارش کلِ فایل را
+ * بازنویسی می‌کند، با هزار کاربر بعد از چند ماه هر سفارش نزدیک یک
+ * ثانیه طول می‌کشید. اندازه‌گیری: ۲۰ هزار سفارش = ۵ مگابایت =
+ * ۱۱۸ میلی‌ثانیه برای هر ثبت، آن هم روی سرور سریع.
+ *
+ * حالا سفارش‌های تمام‌شده‌ی قدیمی‌تر از چند روز می‌روند به فایل دوم.
+ * فایل داغ کوچک می‌ماند و سرعت ثابت. سفارش بایگانی‌شده هم گم نمی‌شود:
+ * Order::get() اگر در فایل داغ پیدایش نکرد، سراغ بایگانی می‌رود.
+ */
+function ordersArchive($days = 0, $limit = 4000) {
+    $days = $days > 0 ? $days : (int)(cfg()['orders_keep_days'] ?? 14);
+    if ($days <= 0) return 0;
+    $cut = time() - $days * 86400;
+
+    $moved = [];
+    mutate('orders', function (&$a) use ($cut, $limit, &$moved) {
+        foreach ($a as $id => $o) {
+            if (count($moved) >= $limit) break;
+            $st = (string)($o['status'] ?? '');
+            // فقط چیزی که کارش تمام شده — منتظرها هرچقدر هم کهنه، می‌مانند
+            if ($st !== Order::APPROVED && $st !== Order::REJECTED) continue;
+            $when = strtotime((string)($o['decided_at'] ?: $o['created_at'] ?? '')) ?: 0;
+            if ($when === 0 || $when > $cut) continue;
+            $moved[$id] = $o;
+            unset($a[$id]);
+        }
+    });
+    if (!$moved) return 0;
+
+    mutate('orders_old', function (&$b) use ($moved) {
+        foreach ($moved as $id => $o) $b[$id] = $o;
+    });
+    return count($moved);
+}
+
 /** 🧹 کمپین‌های تمام‌شده بعد از چند روز پاک می‌شوند تا فهرست شلوغ نشود */
 function campaignCleanup() {
     $days = (int)(cfg()['campaign_keep_days'] ?? 3);
@@ -3301,7 +3410,8 @@ function admHome($chatId, $msgId = null) {
         [btnCb('📡 کانال‌های متصل', 'ch_home', 'admin'),
          btnCb('📢 پیام همگانی و گزارش', 'ag_rep', 'admin')],
         [btnCb('🔧 راه‌اندازی خودکار', 'setup', 'confirm')],
-        [btnCb('🌐 پنل وب', 'adm_web', 'info')],
+        [btnCb('🌐 پنل وب', 'adm_web', 'info'),
+         btnCb('🔒 تست نشتی داده', 'adm_leak', 'confirm')],
         [btnCb(UT('home'), 'home', 'nav')],
     ];
     if ($msgId) editMsg(BOT_TOKEN, $chatId, $msgId, $text, inlineKb($rows));
@@ -3309,6 +3419,70 @@ function admHome($chatId, $msgId = null) {
 }
 
 /** 🗂 هر گروه از تنظیمات، پشت در خودش */
+/**
+ * 🔒 آیا پوشه‌ی داده از بیرون خوانده می‌شود؟
+ *
+ * .htaccess روی آپاچی کار می‌کند ولی روی nginx هیچ اثری ندارد. پس
+ * به‌جای فرض کردن، واقعا از بیرون درخواست می‌دهیم و می‌بینیم فایل
+ * برمی‌گردد یا نه. این تنها راه مطمئن است.
+ */
+function admLeakTest($chatId) {
+    $base = function_exists('maBaseUrl') ? maBaseUrl() : '';
+    if ($base === '') {
+        sendMsg(BOT_TOKEN, $chatId,
+            "⚠️ اول آدرس عمومی را ثبت کنید تا بشود از بیرون امتحان کرد.
+
+" .
+            "پنل ← 🚀 مینی‌اپ‌ها ← 🔗 آدرس عمومی");
+        return;
+    }
+    $dir  = basename(rtrim(DATA_DIR, '/'));
+    $root = preg_replace('#/[^/]+$#', '', $base);        // آدرس فایل ربات → پوشه‌اش
+
+    $t = "🔒 <b>تست نشتی داده</b>
+
+از بیرون امتحان می‌کنم که فایل‌های حساس خوانده می‌شوند یا نه…
+
+";
+    $leaks = [];
+    foreach (['config.json', 'users.json', 'orders.json'] as $f) {
+        $url = $root . '/' . $dir . '/' . $f;
+        [$body, $err] = maHttpRaw($url, 8);
+        $open = is_string($body) && strlen($body) > 2 &&
+                (str_starts_with(ltrim($body), '{') || str_starts_with(ltrim($body), '['));
+        if ($open) $leaks[] = $f;
+        $t .= ($open ? '🔴' : '✅') . ' <code>' . h($dir . '/' . $f) . '</code>' .
+              ($open ? ' — <b>از بیرون باز است!</b>' : ' — بسته') . "
+";
+    }
+
+    if ($leaks) {
+        $t .= "
+🚨 <b>همین حالا باید بسته شود.</b>
+";
+        $t .= "این فایل‌ها شماره کارت، کلید API، و موجودی همه‌ی کاربران را دارند.
+
+";
+        $t .= "<b>اگر سرورتان nginx است</b>، این را به کانفیگ اضافه کنید:
+";
+        $t .= "<code>location ~ /" . h($dir) . "/ { deny all; return 404; }</code>
+
+";
+        $t .= "<b>اگر آپاچی است</b> و باز هم باز مانده، یعنی <code>AllowOverride</code> " .
+              "خاموش است — از پشتیبانی هاست بخواهید روشنش کند.
+
+";
+        $t .= "<b>راه مطمئن‌تر:</b> پوشه‌ی داده را کلا بیرون از ریشه‌ی وب ببرید و در " .
+              "<code>config.local.php</code> بنویسید:
+" .
+              "<code>define('DATA_DIR', '/home/user/private/data_master');</code>";
+    } else {
+        $t .= "
+✅ هیچ‌کدام از بیرون خوانده نمی‌شوند. پوشه‌ی داده امن است.";
+    }
+    sendMsg(BOT_TOKEN, $chatId, $t);
+}
+
 function admGroups() {
     return [
         'shop' => ['🛍 <b>فروشگاه</b>', 'محصول، سفارش، تعرفه — هرچه به فروش مربوط است.', [
@@ -5779,6 +5953,11 @@ function masterHandle($update) {
         }
 
         if ($data === 'adm_wallets') { answerCb(BOT_TOKEN, $cbId); admPay($chatId, $msgId); return; }
+        if ($data === 'adm_leak') {
+            answerCb(BOT_TOKEN, $cbId, '🔒 در حال تست…');
+            admLeakTest($chatId);
+            return;
+        }
         if ($data === 'adm_web' || $data === 'adm_sup' || $data === 'adm_prods') {
             answerCb(BOT_TOKEN, $cbId);
             editMsg(BOT_TOKEN, $chatId, $msgId,
@@ -7574,7 +7753,8 @@ if (isset($_GET['cron'])) {
          ' · games: ' . gmTick(50) .
          ' · miniapp: ' . maAutoQueue(10) .
          ' · stock: ' . maStockQueue(10) .
-         ' · rates: ' . count(axRatesRefresh());
+         ' · rates: ' . count(axRatesRefresh()) .
+         ' · archive: ' . (ordersArchive() + maOrdersArchive());
     exit;
 }
 
@@ -7590,6 +7770,15 @@ if (time() - $qLast >= 60) {
     gmTick(5);        // قرعه‌های رسیده — بدون cron هم کشیده می‌شوند
     maAutoQueue(2);   // تحویل خودکارِ معطل‌مانده — بدون نیاز به cron هم پیش می‌رود
     maStockQueue(2);  // سفارش‌هایی که منتظر شارژ مخزن مانده‌اند
+}
+
+// 🗄 بایگانی سفارش‌ها — کم‌تکرار، چون خودش سنگین است. بدون این، فایل
+//    سفارش‌ها بزرگ می‌شود و کم‌کم هر ثبت سفارش کند می‌شود.
+$aMark = DATA_DIR . '/.archive_at';
+if (time() - (@filemtime($aMark) ?: 0) >= 3600) {
+    @touch($aMark);
+    ordersArchive(0, 800);
+    maOrdersArchive(0, 800);
 }
 
 $raw = file_get_contents('php://input');
