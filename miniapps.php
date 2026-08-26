@@ -897,19 +897,24 @@ function maLivePrice($item) {
     if ($st > 0) {
         if (function_exists('pxStars') && !empty(pxVal('on'))) {
             $d = pxStars($st);
-            return ($d && $d['irt'] > 0) ? maMoney($d['irt']) : null;
+            if ($d && $d['irt'] > 0) return maMoney($d['irt']);
         }
+        // نرخ دستی فقط وقتی که خودتان عمدا روشنش کرده باشید. اگر روشن
+        // نباشد، نرخ که نیامد این سرویس فروختنی نیست — بهتر از فروختن
+        // با عددِ کهنه و ضرر کردن.
         if (!empty($c['stars']['on'])) {
             $p = (float)($c['stars']['price'] ?? 0);
             if ($p > 0) return maRound($st * $p, (float)($c['stars']['round'] ?? 0));
         }
+        return null;
     }
 
     // ۲.۵) 💎 پریمیوم — قیمت دلاری‌اش روی فرگمنت ثابت است، فقط نرخ ارز عوض می‌شود
     $pm = (int)($item['premium'] ?? 0);
     if ($pm > 0 && function_exists('pxPremiumRows') && !empty(pxVal('on'))) {
         $rows = pxPremiumRows();
-        return (isset($rows[$pm]) && $rows[$pm]['irt'] > 0) ? maMoney($rows[$pm]['irt']) : null;
+        if (isset($rows[$pm]) && $rows[$pm]['irt'] > 0) return maMoney($rows[$pm]['irt']);
+        return null;
     }
 
     // ۳) نرخ ارز (تون/ترون) — قیمت هر واحد
@@ -1445,7 +1450,7 @@ function maAutoFulfill($orderId, $manual = false) {
 
     $o = MaOrder::get($orderId);
     if (function_exists('axReportOrder')) axReportOrder($o, 'done');
-    sendMsg(BOT_TOKEN, $o['user_id'],
+    maTellUser($o,
         "✅ <b>سفارش شما انجام شد</b>\n\n" .
         '📦 ' . h(maOrderTitle($o)) . "\n" .
         ((float)$o['qty'] > 1 ? '🔢 ' . fmtNum($o['qty']) . ' ' . h($o['unit']) . "\n" : '') .
@@ -2365,6 +2370,34 @@ function maInvoiceKb($o) {
 }
 
 /** ادمین را از سفارش تازه خبر می‌کند */
+/**
+ * 📮 خبر دادن به مشتری — همیشه روی یک پیام.
+ *
+ * قبلا هر مرحله یک پیام تازه می‌فرستاد: «پرداخت تایید شد»، بعد
+ * «سفارش انجام شد»… و چت شلوغ می‌شد. حالا هر سفارش یک پیام دارد که
+ * همان‌جا به‌روز می‌شود، پس همیشه فقط آخرین وضعیت دیده می‌شود.
+ */
+function maTellUser($o, $text, $markup = null) {
+    $id  = (string)($o['id'] ?? '');
+    $uid = (int)($o['user_id'] ?? 0);
+    if (!$uid) return;
+
+    $mid = (int)($o['msg_id'] ?? 0);
+    if ($mid) {
+        $d = ['chat_id' => $uid, 'message_id' => $mid, 'text' => $text,
+              'parse_mode' => 'HTML', 'disable_web_page_preview' => 'true'];
+        if ($markup) $d['reply_markup'] = json_encode($markup);
+        $r = tg(BOT_TOKEN, 'editMessageText', $d);
+        if (!empty($r['ok'])) return;
+        // «تغییری نکرده» یعنی همان متن سرِ جایش هست — کاری لازم نیست
+        if (str_contains(strtolower((string)($r['description'] ?? '')), 'not modified')) return;
+        // پیام پاک شده یا خیلی کهنه است → تازه بفرست
+    }
+    $r = sendMsg(BOT_TOKEN, $uid, $text, $markup);
+    $new = (int)($r['result']['message_id'] ?? 0);
+    if ($new && $id !== '') MaOrder::set($id, function (&$x) use ($new) { $x['msg_id'] = $new; });
+}
+
 function maNotifyAdmin($o, $head = '🆕 <b>سفارش تازه مینی‌اپ</b>') {
     $a = maGet($o['app']);
     $t  = $head . "\n\n";
@@ -2410,7 +2443,7 @@ function maMarkPaid($id, $payMethod) {
     if (!$o) return null;
 
     $a = maGet($o['app']);
-    sendMsg(BOT_TOKEN, $o['user_id'],
+    maTellUser($o,
         "✅ <b>پرداخت شما تایید شد</b>\n\n" .
         '📦 ' . h(maOrderTitle($o)) . "\n" .
         '💰 ' . fmtNum($o['total']) . ' ' . h($o['currency']) . "\n" .
@@ -2423,7 +2456,7 @@ function maMarkPaid($id, $payMethod) {
     // 📡 و روی کانالِ «گزارش خرید»، اگر تنظیم شده باشد
     if (function_exists('chBuy'))
         chBuy($o['user_id'], $o['username'] ?? '', maOrderTitle($o),
-              (float)($o['qty'] ?? 1), (float)$o['total'], $o['id']);
+              (float)($o['qty'] ?? 1), (float)$o['total'], $o['id'], [], (string)$o['app']);
 
     // 🚚 زنجیره‌ی تحویل: مخزن → دستی → پنل خودکار → دست ادمین
     return maDeliver($o);
@@ -2482,8 +2515,42 @@ function maDeliver($o) {
     }
 
     // 4️⃣ هیچ‌کدام — دست ادمین
-    maNotifyAdmin($o, '💸 <b>سفارش پرداخت‌شده — آماده تحویل</b>');
+    //
+    // ولی نه بی‌توضیح: تا حالا فقط «آماده تحویل» می‌آمد و معلوم نبود
+    // چرا خودکار نشد. حالا دقیقا همان‌جا می‌گوید کدام تکه کم است.
+    $why = maAutoWhy($o);
+    maNotifyAdmin($o, '💸 <b>سفارش پرداخت‌شده — آماده تحویل</b>' .
+        ($why !== '' ? "\n\n⚠️ <b>چرا خودکار نشد:</b> " . h($why) : ''));
     return $o;
+}
+
+/**
+ * چرا این سفارش خودکار تحویل نشد؟ رشته‌ی خالی یعنی باید می‌شد.
+ *
+ * زنجیره‌ی تحویل چهار حلقه دارد و اگر یکی‌شان نباشد کار می‌افتد دست
+ * ادمین. تا حالا معلوم نبود کدام حلقه؛ حالا هست.
+ */
+function maAutoWhy($o) {
+    $f = maCfg()['fulfill'] ?? [];
+    [$op] = maAutoOp($o);
+
+    if (!$op) {
+        $i = maFindItem($o['app'], $o['item_id']);
+        return $i
+            ? 'این محصول «عملیات خودکار» ندارد. پنل ← 🚀 مینی‌اپ‌ها ← محصول ← عملیات خودکار.'
+            : 'محصول پیدا نشد.';
+    }
+    if (empty($f['on']))
+        return 'پنل فروش خاموش است. پنل ← 🚀 مینی‌اپ‌ها ← 🤖 تحویل خودکار.';
+    if (trim((string)($f['base'] ?? '')) === '')
+        return 'آدرس پنل فروش خالی است.';
+    if (($f['auth_type'] ?? '') !== 'none' && trim((string)($f['auth_value'] ?? '')) === '')
+        return 'کلید API پنل فروش خالی است.';
+    if (trim((string)($f['ops'][$op]['path'] ?? '')) === '')
+        return 'مسیر «' . h($op) . '» در پنل فروش تنظیم نشده است.';
+    if (empty($f['auto_pay']))
+        return 'تحویلِ بلافاصله بعد از پرداخت خاموش است.';
+    return '';
 }
 
 // ============================================================
@@ -2593,7 +2660,7 @@ function maCallback($data, $uid, $chatId, $msgId, $cbId, $isAdmin) {
         }
         MaOrder::set($id, function (&$x) { $x['status'] = MaOrder::REJECT; $x['decided_at'] = nowStr(); });
         answerCb(BOT_TOKEN, $cbId, '❌ رد شد');
-        sendMsg(BOT_TOKEN, $o['user_id'],
+        maTellUser($o,
             "❌ <b>رسید شما تایید نشد</b>\n\n" .
             '📦 ' . h(maOrderTitle($o)) . "\n" .
             '🔑 <code>' . h($o['id']) . "</code>\n\n" .
@@ -2724,6 +2791,80 @@ function maStateHandle($action, $sd, $msg, $uid, $chatId) {
 // 👑 پنل مدیریت مینی‌اپ‌ها
 // ============================================================
 
+/**
+ * 🩺 تشخیص خودکارسازی.
+ *
+ * «چرا سفارش خودکار انجام نشد» جوابِ کوتاه ندارد: چهار حلقه باید با هم
+ * جور باشند. این صفحه هر حلقه را جدا می‌سنجد و بعد تک‌تک محصول‌ها را
+ * می‌گوید کدام خودکار می‌شود و کدام دستِ ادمین می‌ماند.
+ */
+function maAdmAutoDiag($chatId) {
+    $f = maCfg()['fulfill'] ?? [];
+    $t  = "🩺 <b>چرا سفارش‌ها خودکار انجام نمی‌شوند؟</b>\n\n";
+
+    $on   = !empty($f['on']);
+    $base = trim((string)($f['base'] ?? ''));
+    $key  = trim((string)($f['auth_value'] ?? ''));
+    $needKey = ($f['auth_type'] ?? '') !== 'none';
+
+    $t .= "<b>پنل فروش</b>\n";
+    $t .= ($on ? '✅' : '🔴') . ' روشن بودن' . ($on ? '' : ' — خاموش است') . "\n";
+    $t .= ($base !== '' ? '✅' : '🔴') . ' آدرس: ' . ($base !== '' ? '<code>' . h($base) . '</code>' : 'خالی') . "\n";
+    $t .= (!$needKey || $key !== '' ? '✅' : '🔴') . ' کلید API' .
+          ($needKey && $key === '' ? ' — خالی' : '') . "\n";
+    $t .= (!empty($f['auto_pay']) ? '✅' : '🔴') . " تحویل بلافاصله بعد از پرداخت\n";
+
+    $t .= "\n<b>مسیرها</b>\n";
+    foreach (['stars' => '⭐️ استارز', 'premium' => '💎 پریمیوم', 'gift' => '🎁 گیفت'] as $k => $lbl) {
+        $pth = trim((string)($f['ops'][$k]['path'] ?? ''));
+        $t .= ($pth !== '' ? '✅' : '⚪️') . ' ' . $lbl . ': ' .
+              ($pth !== '' ? '<code>' . h($pth) . '</code>' : 'تنظیم نشده') . "\n";
+    }
+
+    // اتصال واقعی، همین حالا
+    if ($on && $base !== '') {
+        [$resp, $err] = maFulfillCall('balance');
+        $t .= "\n<b>اتصال</b>\n" . (is_array($resp)
+            ? '✅ برقرار — پاسخ پنل: <code>' .
+              h(mb_substr(json_encode($resp, JSON_UNESCAPED_UNICODE), 0, 120)) . "</code>\n"
+            : '🔴 <code>' . h(mb_substr((string)$err, 0, 140)) . "</code>\n");
+    }
+
+    // ⚠️ نرخ دستیِ کمتر از نرخ واقعی = ضررِ هر سفارش
+    if (!empty(maCfg()['stars']['on']) && function_exists('pxStars')) {
+        $manual = (float)(maCfg()['stars']['price'] ?? 0);
+        $live   = pxStars(1);
+        if ($manual > 0 && $live && $live['irt'] > 0 && $manual < $live['irt'] * 0.95) {
+            $t .= "\n🔴 <b>هشدار ضرر</b>\n";
+            $t .= 'نرخ دستی استارز <b>' . fmtNum($manual) . '</b> تومان است ولی نرخ واقعی <b>' .
+                  fmtNum($live['irt']) . "</b> تومان.\n";
+            $t .= "هر استارز که با نرخ دستی فروخته شود یعنی ضرر. یا نرخ را درست کنید،\n" .
+                  "یا «نرخ دستی استارز» را خاموش کنید تا فقط با نرخ زنده بفروشد.\n";
+        }
+    }
+
+    $t .= "\n<b>محصول‌ها</b>\n";
+    $auto = 0; $manual = 0;
+    foreach (maKeys() as $appKey) {
+        foreach ((array)(maGet($appKey)['items'] ?? []) as $i) {
+            if (empty($i['on'])) continue;
+            $fake = ['app' => $appKey, 'item_id' => $i['id'], 'qty' => 1,
+                     'field' => '@x', 'user_id' => 0, 'id' => 'diag'];
+            $why = maAutoWhy($fake);
+            if ($why === '') { $auto++; continue; }
+            $manual++;
+            if ($manual <= 12)
+                $t .= '⚠️ ' . h(mb_substr((string)$i['name'], 0, 24)) . ' — ' . h(mb_substr($why, 0, 70)) . "\n";
+        }
+    }
+    $t .= "\n✅ خودکار: <b>{$auto}</b> · ⚠️ دستی: <b>{$manual}</b>";
+    if ($manual > 12) $t .= "\n(بقیه هم همین‌طور)";
+
+    sendMsg(BOT_TOKEN, $chatId, mb_substr($t, 0, 4000),
+        inlineKb([[btnCb('🤖 تحویل خودکار', 'maadm_fulfill', 'admin')],
+                  [btnCb(UT('back'), 'maadm_home', 'nav')]]));
+}
+
 function maAdmHome($chatId, $msgId = null) {
     $base = maBaseUrl();
     $text  = "🚀 <b>مینی‌اپ‌ها</b>\n\n";
@@ -2757,7 +2898,8 @@ function maAdmHome($chatId, $msgId = null) {
         [btnCb('🔗 آدرس عمومی', 'maadm_base', 'admin'),
          btnCb('📐 چیدمان دکمه‌ها', 'maadm_rowlay', 'admin')],
         [btnCb('🔌 قیمت‌گذاری زنده', 'maadm_pricing', 'confirm')],
-        [btnCb('🤖 تحویل خودکار', 'maadm_fulfill', 'confirm')],
+        [btnCb('🤖 تحویل خودکار', 'maadm_fulfill', 'confirm'),
+         btnCb('🩺 چرا خودکار نیست؟', 'maadm_autodiag', 'confirm')],
         [btnCb("🧾 سفارش‌ها ({$pend} منتظر · {$paid} آماده تحویل)", 'maadm_orders', 'admin')],
         [btnCb(UT('back'), 'adm_home', 'nav')],
     ];
@@ -3880,6 +4022,7 @@ function maAdminCallback($data, $uid, $chatId, $msgId, $cbId) {
 
     // ---- 🤖 تحویل خودکار ----
     if ($data === 'maadm_fulfill') { answerCb(BOT_TOKEN, $cbId); maAdmFulfill($chatId, $msgId); return true; }
+    if ($data === 'maadm_autodiag') { answerCb(BOT_TOKEN, $cbId, '🩺'); maAdmAutoDiag($chatId); return true; }
     if ($data === 'maadm_ffstuck') { answerCb(BOT_TOKEN, $cbId); maAdmStuck($chatId, $msgId); return true; }
     if ($data === 'maadm_fftest')  { answerCb(BOT_TOKEN, $cbId, '⏳ تست…'); maAdmFulfillTest($chatId); return true; }
     if ($data === 'maadm_spec')    { answerCb(BOT_TOKEN, $cbId, '⏳ خواندن…'); maAdmSpecRead($chatId); return true; }

@@ -20,19 +20,84 @@ if (!defined('CH_LIB')) define('CH_LIB', 1);
 // ⚙️ پیکربندی
 // ============================================================
 
+/**
+ * هر بخش، کانال خودش.
+ *
+ * اول همه‌ی فروش‌ها در یک کانال می‌افتادند و «گزارش الماس» هم بود که
+ * به درد نمی‌خورد. حالا هر بخشِ فروش مقصد جدا دارد، تا هرکدام را
+ * بشود جدا دنبال کرد.
+ */
 function chStreams() {
     return [
-        'topup' => ['🧾 رسید شارژ حساب', 'وقتی کاربر برای شارژ کیف پول رسید می‌فرستد.'],
-        'buy'   => ['🛒 گزارش خرید',      'هر فروشِ ربات و مینی‌اپ‌ها.'],
-        'game'  => ['💎 گزارش الماس',     'برنده و بازنده‌ی بازی‌ها و انتقال الماس.'],
+        'topup'   => ['🧾 رسید شارژ حساب', 'رسیدهای شارژ کیف پول — از همین‌جا تایید کنید.'],
+        'mini_tg' => ['🌟 مینی‌اپ خدمات تلگرام', 'استارز، پریمیوم، گیفت، تون.'],
+        'mini_cfg'=> ['🛡 مینی‌اپ فروش کانفیگ', 'همه‌ی فروش‌های کانفیگ.'],
+        'mem_vip' => ['💎 ممبر ویژه', 'سفارش‌های ممبر ویژه.'],
+        'mem_ok'  => ['✅ ممبر اخلاقی', 'سفارش‌های ممبر اخلاقی.'],
+        'mem_no'  => ['🔞 ممبر غیراخلاقی', 'سفارش‌های ممبر غیراخلاقی.'],
+        'buy'     => ['🛒 بقیه‌ی فروش‌ها', 'هر فروشی که در دسته‌های بالا نیفتد.'],
     ];
 }
 
+/**
+ * یک محصول به کدام کانال می‌رود؟
+ *
+ * برای مینی‌اپ‌ها از روی خودِ اپ، و برای محصول‌های ربات از روی نام
+ * محصول — چون دسته‌بندیِ ممبر همان‌جا در نامش است. هرچه جا نیفتاد،
+ * می‌رود در «بقیه‌ی فروش‌ها».
+ */
+function chStreamFor($app, $productName = '') {
+    $app = strtolower(trim((string)$app));
+    if ($app === 'tg')  return 'mini_tg';
+    if ($app === 'cfg') return 'mini_cfg';
+
+    $n = chNormFa(mb_strtolower(trim((string)$productName)));
+    if ($n !== '') {
+        foreach (chMemberWords() as $stream => $words)
+            foreach ($words as $w) {
+                $w = chNormFa(mb_strtolower(trim($w)));
+                if ($w !== '' && str_contains($n, $w)) return $stream;
+            }
+    }
+    return 'buy';
+}
+
+/** کلمه‌هایی که دسته‌ی ممبر را می‌سازند — از پنل قابل تغییر */
+function chMemberWords() {
+    $d = [
+        'mem_no'  => 'غیراخلاقی,غیر اخلاقی,نامناسب',
+        'mem_vip' => 'ویژه,vip,پریمیوم ممبر',
+        'mem_ok'  => 'اخلاقی,عادی,ممبر',
+    ];
+    $out = [];
+    foreach ($d as $k => $def) {
+        $raw = (string)(cfg()['channels']['words'][$k] ?? $def);
+        $out[$k] = array_values(array_filter(array_map('trim', explode(',', $raw)), fn($x) => $x !== ''));
+    }
+    return $out;
+}
+
+/** فارسی‌سازی ساده برای مقایسه: ی و ک عربی، نیم‌فاصله */
+function chNormFa($s) {
+    return strtr((string)$s, ['ي' => 'ی', 'ك' => 'ک', "\u{200c}" => ' ', '‌' => ' ']);
+}
+
 function chDefaults() {
-    return [
+    $saleText = "{icon} <b>{section}</b>\n\n" .
+                "👤 {user}\n" .
+                "<blockquote>📦 {product}\n" .
+                "🔢 تعداد: <b>{qty}</b>\n" .
+                "💰 مبلغ: <b>{amount}</b> تومان</blockquote>\n" .
+                "🧾 <code>{code}</code>\n🕓 {date}";
+    $saleBtns = [
+        ['on' => 1, 'text' => '🛒 ثبت سفارش', 'url' => '', 'color' => 'success', 'icon' => ''],
+        ['on' => 1, 'text' => '💬 پشتیبانی',  'url' => '', 'color' => 'primary', 'icon' => ''],
+    ];
+
+    $out = [
         'topup' => [
             'on' => false, 'chat_id' => '', 'thread_id' => 0,
-            'text' => "🧾 <b>رسید شارژ</b>\n\n" .
+            'text' => "🧾 <b>رسید شارژ حساب</b>\n\n" .
                       "👤 {user}\n🆔 <code>{uid}</code>\n" .
                       "<blockquote>💰 مبلغ: <b>{amount}</b> تومان\n" .
                       "💳 موجودی بعد از تایید: <b>{balance}</b> تومان</blockquote>\n" .
@@ -42,30 +107,17 @@ function chDefaults() {
                 ['on' => 1, 'text' => '🤖 ربات', 'url' => '', 'color' => 'primary', 'icon' => ''],
             ],
         ],
-        'buy' => [
-            'on' => false, 'chat_id' => '', 'thread_id' => 0,
-            'text' => "🛒 <b>فروش جدید</b>\n\n" .
-                      "👤 {user}\n" .
-                      "<blockquote>📦 {product}\n" .
-                      "🔢 تعداد: <b>{qty}</b>\n" .
-                      "💰 مبلغ: <b>{amount}</b> تومان</blockquote>\n" .
-                      "🧾 <code>{code}</code>\n🕓 {date}",
-            'photo'   => false,
-            'buttons' => [
-                ['on' => 1, 'text' => '🛒 ثبت سفارش', 'url' => '', 'color' => 'success', 'icon' => ''],
-                ['on' => 1, 'text' => '💬 پشتیبانی',  'url' => '', 'color' => 'primary', 'icon' => ''],
-            ],
-        ],
-        'game' => [
-            'on' => false, 'chat_id' => '', 'thread_id' => 0,
-            'text' => "💎 <b>{title}</b>\n\n" .
-                      "<blockquote>{body}</blockquote>\n🕓 {date}",
-            'photo'   => false,
-            'buttons' => [
-                ['on' => 1, 'text' => '🎮 بازی کن', 'url' => '', 'color' => 'success', 'icon' => ''],
-            ],
-        ],
     ];
+
+    // بقیه‌ی جریان‌ها همه فروشند و یک شکل دارند
+    foreach (chStreams() as $k => [$label, $desc]) {
+        if ($k === 'topup') continue;
+        $out[$k] = [
+            'on' => false, 'chat_id' => '', 'thread_id' => 0,
+            'text' => $saleText, 'photo' => false, 'buttons' => $saleBtns,
+        ];
+    }
+    return $out;
 }
 
 function chCfg() {
@@ -213,21 +265,28 @@ function chTopupReceipt($order) {
     ], ($order['receipt_type'] ?? '') === 'photo' ? ($order['receipt'] ?? null) : null);
 }
 
-/** یک فروش انجام شد */
-function chBuy($uid, $uname, $productName, $qty, $amount, $code, $extra = []) {
-    chSend('buy', array_merge([
+/**
+ * یک فروش انجام شد — می‌رود روی کانالِ همان بخش.
+ * $app: 'tg' یا 'cfg' برای مینی‌اپ‌ها، خالی برای محصول‌های خودِ ربات.
+ */
+function chBuy($uid, $uname, $productName, $qty, $amount, $code, $extra = [], $app = '') {
+    $stream = chStreamFor($app, $productName);
+    [$label] = chStreams()[$stream] ?? ['🛒 فروش'];
+    // ایموجیِ سرِ برچسب را جدا می‌کنیم تا {icon} و {section} هرکدام جای خود
+    $icon = '';
+    if (preg_match('/^(\X)\s+(.*)$/u', $label, $m)) { $icon = $m[1]; $label = $m[2]; }
+
+    chSend($stream, array_merge([
         'user'    => chUser($uid, $uname, ''),
         'uid'     => (int)$uid,
         'product' => (string)$productName,
         'qty'     => fmtNum((float)$qty),
         'amount'  => fmtNum((float)$amount),
         'code'    => (string)$code,
+        'section' => $label,
+        'icon'    => $icon !== '' ? $icon : '🛒',
+        'app'     => (string)$app,
     ], $extra));
-}
-
-/** یک اتفاق در بازی/الماس */
-function chGame($title, $body) {
-    chSend('game', ['title' => (string)$title, 'body' => (string)$body]);
 }
 
 // ============================================================
@@ -251,10 +310,27 @@ function chAdminHome($chatId, $msgId = null) {
                 : 'تنظیم نشده') . "\n";
         $rows[] = [btnCb($label, 'chs_' . $k, 'admin')];
     }
+    $t .= "\n💡 محصول‌های ربات بر اساس کلمه‌های داخل نامشان دسته‌بندی می‌شوند.";
+    $rows[] = [btnCb('🗣 کلمه‌های دسته‌بندی ممبر', 'chwords', 'admin')];
     $rows[] = [btnCb(UT('back'), 'adm_home', 'nav')];
 
     if ($msgId) editMsg(BOT_TOKEN, $chatId, $msgId, $t, inlineKb($rows));
     else sendMsg(BOT_TOKEN, $chatId, $t, inlineKb($rows));
+}
+
+/** کلمه‌هایی که تصمیم می‌گیرند یک محصول کدام دسته‌ی ممبر است */
+function chAdminWords($chatId, $msgId) {
+    $w = chMemberWords();
+    $t  = "🗣 <b>کلمه‌های دسته‌بندی ممبر</b>\n\n";
+    $t .= "نام هر محصول از بالا به پایین با این‌ها سنجیده می‌شود و\n";
+    $t .= "اولی که جور دربیاید برنده است. پس ترتیب مهم است.\n\n";
+    $rows = [];
+    foreach (['mem_no' => '🔞 غیراخلاقی', 'mem_vip' => '💎 ویژه', 'mem_ok' => '✅ اخلاقی'] as $k => $lbl) {
+        $t .= '• <b>' . h($lbl) . '</b>: <code>' . h(implode('، ', $w[$k])) . "</code>\n";
+        $rows[] = [btnCb($lbl, 'chw_' . $k, 'admin')];
+    }
+    $rows[] = [btnCb(UT('back'), 'ch_home', 'nav')];
+    editMsg(BOT_TOKEN, $chatId, $msgId, $t, inlineKb($rows));
 }
 
 function chAdminStream($chatId, $msgId, $k) {
@@ -293,15 +369,24 @@ function chAdminStream($chatId, $msgId, $k) {
 
 function chVarsOf($k) {
     if ($k === 'topup') return ['user', 'uid', 'amount', 'balance', 'code', 'receipt', 'date'];
-    if ($k === 'game')  return ['title', 'body', 'date'];
-    return ['user', 'uid', 'product', 'qty', 'amount', 'code', 'date'];
+    return ['user', 'uid', 'product', 'qty', 'amount', 'code', 'section', 'icon', 'date'];
 }
 
 /** برگشت true یعنی این callback مال بخش کانال‌ها بود */
 function chAdminCallback($data, $chatId, $msgId, $cbId) {
     if (!str_starts_with($data, 'ch')) return false;
 
-    if ($data === 'ch_home') { answerCb(BOT_TOKEN, $cbId); chAdminHome($chatId, $msgId); return true; }
+    if ($data === 'ch_home')  { answerCb(BOT_TOKEN, $cbId); chAdminHome($chatId, $msgId); return true; }
+    if ($data === 'chwords')  { answerCb(BOT_TOKEN, $cbId); chAdminWords($chatId, $msgId); return true; }
+    if (preg_match('/^chw_(mem_[a-z]+)$/', $data, $m)) {
+        answerCb(BOT_TOKEN, $cbId);
+        setState(ADMIN_ID, 'ch_words', ['k' => $m[1]]);
+        sendMsg(BOT_TOKEN, $chatId,
+            "🗣 کلمه‌ها را با ویرگول جدا بفرستید.\n\nالان:\n<code>" .
+            h(implode('، ', chMemberWords()[$m[1]] ?? [])) . '</code>',
+            inlineKb([[btnCb('انصراف', 'chwords', 'cancel')]]));
+        return true;
+    }
 
     foreach (['chs_' => 'open', 'chx_' => 'toggle', 'chp_' => 'photo', 'cht_' => 'test'] as $pre => $what) {
         if (!str_starts_with($data, $pre)) continue;
@@ -379,9 +464,12 @@ function chAdminCallback($data, $chatId, $msgId, $cbId) {
 function chSampleVars($k) {
     if ($k === 'topup') return ['user' => '@testuser', 'uid' => 123456789, 'amount' => fmtNum(500000),
                                 'balance' => fmtNum(750000), 'code' => 'TEST-1234', 'receipt' => 'آزمایشی'];
-    if ($k === 'game')  return ['title' => 'نتیجه بازی', 'body' => "برنده: @a\nبازنده: @b\nجایزه: ۱۰۰ الماس"];
+    [$label] = chStreams()[$k] ?? ['🛒 فروش'];
+    $icon = '🛒';
+    if (preg_match('/^(\X)\s+(.*)$/u', $label, $m)) { $icon = $m[1]; $label = $m[2]; }
     return ['user' => '@testuser', 'uid' => 123456789, 'product' => '⭐️ ۵۰ استارز',
-            'qty' => '1', 'amount' => fmtNum(149000), 'code' => 'TEST-1234'];
+            'qty' => '1', 'amount' => fmtNum(149000), 'code' => 'TEST-1234',
+            'section' => $label, 'icon' => $icon, 'app' => ''];
 }
 
 /** برگشت true یعنی این گفتگو مال بخش کانال‌ها بود */
@@ -394,13 +482,26 @@ function chStateHandle($action, $msg, $uid, $chatId) {
     $k    = (string)($sd['k'] ?? '');
     $text = trim((string)($msg['text'] ?? ''));
     $blank = ($text === '-' || $text === '—');
-    if (!isset(chStreams()[$k])) { clearState($uid); return true; }
+    if ($action !== 'ch_words' && !isset(chStreams()[$k])) { clearState($uid); return true; }
 
     $done = function ($m = "✅ ذخیره شد.") use ($uid, $chatId, $k) {
         clearState($uid);
         sendMsg(BOT_TOKEN, $chatId, $m, inlineKb([[btnCb('📡 کانال‌های متصل', 'chs_' . $k, 'admin')]]));
         return true;
     };
+
+    if ($action === 'ch_words') {
+        if ($text === '') { sendMsg(BOT_TOKEN, $chatId, "⚠️ خالی نمی‌شود."); return true; }
+        cfgSet(function (&$c) use ($k, $text) {
+            if (!isset($c['channels']['words']) || !is_array($c['channels']['words']))
+                $c['channels']['words'] = [];
+            $c['channels']['words'][$k] = $text;
+        });
+        clearState($uid);
+        sendMsg(BOT_TOKEN, $chatId, "✅ ذخیره شد.",
+            inlineKb([[btnCb('🗣 کلمه‌ها', 'chwords', 'admin')]]));
+        return true;
+    }
 
     if ($action === 'ch_link') {
         if ($blank) {

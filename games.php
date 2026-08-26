@@ -430,10 +430,6 @@ function gmFinish($g, $winnerId, $loserId) {
     if ((int)$g['msg']) editMsg(BOT_TOKEN, $g['chat'], (int)$g['msg'], $text, $kb);
     else                sendMsg(BOT_TOKEN, $g['chat'], $text, $kb);
 
-    if (function_exists('chGame'))
-        chGame('نتیجه بازی', "برنده: " . strip_tags(gmName($w)) . "\n" .
-                             "بازنده: " . ($l ? strip_tags(gmName($l)) : '—') . "\n" .
-                             "جایزه: " . gmNum($prize) . " الماس");
 }
 
 /** شرط همه را برمی‌گرداند و بازی را می‌بندد */
@@ -631,9 +627,6 @@ function gmTransfer($amount, $uid, $chatId, $name, $uname, $replyTo, $msg) {
          gmBtn('send_bal2', [], 'gmnop', 'success')],
     ]), $extra);
 
-    if (function_exists('chGame'))
-        chGame('انتقال الماس', strip_tags(gmName($from)) . ' → ' . strip_tags(gmName($dst)) .
-                               "\nمبلغ: " . gmNum($amount) . ' الماس');
 }
 
 // ============================================================
