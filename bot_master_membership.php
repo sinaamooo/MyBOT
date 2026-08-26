@@ -902,7 +902,29 @@ function getUser($id) {
     return $u[(string)$id] ?? null;
 }
 
+/**
+ * ثبت/به‌روزرسانی کاربر.
+ *
+ * این تابع پرتکرارترین نوشتن روی دیسک است — هر کلیک، هر پیام. ولی
+ * بیشتر وقت‌ها هیچ‌چیز عوض نشده و فقط seen_at چند ثانیه جلو می‌رود.
+ * پس اگر کاربر قبلا هست و نام و آیدی‌اش همان است و کمتر از یک دقیقه
+ * از آخرین دیدنش گذشته، اصلا قفل نمی‌گیریم و فایل را بازنویسی نمی‌کنیم.
+ */
 function touchUser($id, $username = '', $firstName = '', $referrer = null) {
+    $k = (string)$id;
+    $cur = load('users')[$k] ?? null;
+    // رکورد قدیمی که هنوز همه‌ی فیلدها را ندارد باید از مسیر عادی رد شود
+    // تا فیلدهای تازه به آن اضافه شوند
+    $whole = is_array($cur)
+          && array_key_exists('balance', $cur) && array_key_exists('banned', $cur)
+          && array_key_exists('referrer', $cur) && array_key_exists('joined_at', $cur);
+    if ($whole && $referrer === null
+        && (string)($cur['username'] ?? '')   === (string)$username
+        && (string)($cur['first_name'] ?? '') === (string)$firstName) {
+        $seen = strtotime((string)($cur['seen_at'] ?? '')) ?: 0;
+        if ($seen > 0 && (time() - $seen) < 60) return $cur;
+    }
+
     return mutate('users', function (&$users) use ($id, $username, $firstName, $referrer) {
         $k = (string)$id;
         $isNew = !isset($users[$k]);
