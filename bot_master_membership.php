@@ -30,6 +30,8 @@ if (!is_dir(DATA_DIR)) @mkdir(DATA_DIR, 0755, true);
 require_once __DIR__ . '/miniapps.php';
 require_once __DIR__ . '/ton_wallet.php';
 require_once __DIR__ . '/admin_ext.php';
+require_once __DIR__ . '/prices.php';
+require_once __DIR__ . '/diamond.php';
 
 // ============================================================
 // 📚 ذخیره‌سازی اتمیک
@@ -5690,8 +5692,14 @@ function masterHandle($update) {
     $text   = trim($msg['text'] ?? '');
     if (!$uid) return;
 
-    // 🤐 ربات مادر فقط در چت خصوصی حرف می‌زند — در گروه و کانال هیچ‌وقت پیام نمی‌دهد
-    if (($msg['chat']['type'] ?? 'private') !== 'private') return;
+    // 🤐 ربات فروشگاه در گروه چیزی نمی‌فروشد. ولی دو چیز عمدا در گروه کار
+    // می‌کنند: قیمت لحظه‌ای، و بازی الماس. بقیه‌ی ربات همچنان ساکت است.
+    if (($msg['chat']['type'] ?? 'private') !== 'private') {
+        $rt = $msg['message_id'] ?? null;
+        if (dmHandleText($text, $uid, $chatId, $fname, $uname, $rt, false)) return;
+        if (pxHandleText($text, $chatId, $rt)) return;
+        return;
+    }
 
     // /start [ref…]
     if (str_starts_with($text, '/start')) {
@@ -5769,7 +5777,13 @@ function masterHandle($update) {
 
     // --- ادامه گفتگو ---
     $st = getState($uid);
-    if (!$st) return;
+    if (!$st) {
+        // چیزی وسط کار نیست؟ شاید دنبال قیمت است — «پریمیوم»، «استارز»، «بیتکوین»
+        $rt = $msg['message_id'] ?? null;
+        if (dmHandleText($text, $uid, $chatId, $fname, $uname, $rt, true)) return;
+        if (pxHandleText($text, $chatId, $rt)) return;
+        return;
+    }
     $action = $st['action'];
     $sd     = $st['data'] ?? [];
 
