@@ -353,3 +353,183 @@ function dmHandleText($text, $uid, $chatId, $name, $username = '', $replyTo = nu
     }
     return false;
 }
+
+// ============================================================
+// 👑 پنل مدیریت — الماس
+// ============================================================
+
+function dmAdminHome($chatId, $msgId = null) {
+    $c = dmCfg();
+    $s = dmStats();
+
+    $t  = "💎 <b>الماس</b>\n\n";
+    $t .= 'وضعیت: ' . (!empty($c['on']) ? '✅ روشن' : '❌ خاموش') . "\n";
+    $t .= 'کلمه: <code>' . h($c['word']) . '</code>' .
+          (trim((string)$c['aliases']) !== '' ? ' · <code>' . h($c['aliases']) . '</code>' : '') . "\n";
+    $t .= '⏳ فاصله: <b>' . number_format((int)$c['cooldown']) . "</b> ثانیه\n";
+    $t .= '🎁 جایزه پایه: <b>' . $c['base'] . '</b> · ضریب رشد: <b>' . $c['ratio'] . "</b>\n";
+    $t .= '📍 جای بازی: ' . (!empty($c['group_only']) ? 'فقط گروه' : 'گروه و خصوصی') . "\n\n";
+    $t .= "👥 بازیکن‌ها: <b>" . number_format($s['users']) . "</b>\n";
+    $t .= "💎 مجموع الماس: <b>" . number_format($s['points']) . "</b>\n";
+    $t .= "🔁 مجموع دفعات: <b>" . number_format($s['total']) . "</b>\n\n";
+    $t .= '🔁 تبدیل به کیف پول: ' . ((float)$c['to_wallet'] > 0
+            ? 'هر ۱ الماس = <b>' . $c['to_wallet'] . '</b> تومان (حداقل ' . number_format((float)$c['min_swap']) . ')'
+            : '❌ خاموش');
+
+    $rows = [
+        [btnCb(!empty($c['on']) ? '✅ روشن' : '❌ خاموش', 'dmx', 'info'),
+         btnCb(!empty($c['group_only']) ? '📍 فقط گروه' : '📍 همه‌جا', 'dmg', 'info')],
+        [btnCb('💬 کلمه', 'dmw', 'admin'), btnCb('➕ کلمه‌های دیگر', 'dma', 'admin')],
+        [btnCb('⏳ فاصله', 'dmcd', 'admin'), btnCb('🎁 جایزه پایه', 'dmb', 'admin')],
+        [btnCb('📈 ضریب رشد', 'dmr', 'admin'), btnCb('🔢 کف جایزه', 'dmmin', 'admin')],
+        [btnCb('🔁 نرخ تبدیل', 'dmsw', 'admin'), btnCb('🔢 حداقل تبدیل', 'dmms', 'admin')],
+        [btnCb('✏️ متن‌ها', 'dmt_home', 'admin'), btnCb('🏆 برترین‌ها', 'dmtop', 'confirm')],
+        [btnCb('🎁 دادن الماس به کاربر', 'dmgive', 'admin')],
+        [btnCb(UT('back'), 'adm_home', 'nav')],
+    ];
+    if ($msgId) editMsg(BOT_TOKEN, $chatId, $msgId, $t, inlineKb($rows));
+    else sendMsg(BOT_TOKEN, $chatId, $t, inlineKb($rows));
+}
+
+function dmAdminTexts($chatId, $msgId) {
+    $t = "✏️ <b>متن‌های الماس</b>\n\n";
+    $t .= "جای‌گذاری‌ها: <code>{name}</code> <code>{reward}</code> <code>{points}</code> " .
+          "<code>{level}</code> <code>{total}</code> <code>{progress}</code> <code>{m}</code> <code>{s}</code>\n\n";
+    $rows = [];
+    foreach ((array)dmVal('texts', []) as $k => $v) {
+        $t .= '• <b>' . h($k) . '</b>: <code>' . h(mb_substr(str_replace("\n", ' ', (string)$v), 0, 40)) . "</code>\n";
+        $rows[] = [btnCb($k, 'dmts_' . $k, 'admin')];
+    }
+    $rows[] = [btnCb(UT('back'), 'dm_home', 'nav')];
+    editMsg(BOT_TOKEN, $chatId, $msgId, $t, inlineKb($rows));
+}
+
+function dmAdminCallback($data, $chatId, $msgId, $cbId) {
+    if (!str_starts_with($data, 'dm')) return false;
+
+    if ($data === 'dm_home') { answerCb(BOT_TOKEN, $cbId); dmAdminHome($chatId, $msgId); return true; }
+    if ($data === 'dmx') {
+        dmSet(function (&$c) { $c['on'] = empty($c['on']); });
+        answerCb(BOT_TOKEN, $cbId, '✅'); dmAdminHome($chatId, $msgId); return true;
+    }
+    if ($data === 'dmg') {
+        dmSet(function (&$c) { $c['group_only'] = empty($c['group_only']) ? 1 : 0; });
+        answerCb(BOT_TOKEN, $cbId, '✅'); dmAdminHome($chatId, $msgId); return true;
+    }
+    if ($data === 'dmtop') {
+        answerCb(BOT_TOKEN, $cbId);
+        sendMsg(BOT_TOKEN, $chatId, dmTopText());
+        return true;
+    }
+    if ($data === 'dmt_home') { answerCb(BOT_TOKEN, $cbId); dmAdminTexts($chatId, $msgId); return true; }
+
+    $asks = [
+        'dmw'   => ['dm_word',  "💬 کلمه‌ی بازی را بفرستید (مثلا الماس):"],
+        'dma'   => ['dm_alias', "➕ کلمه‌های دیگر را با ویرگول بفرستید (خط تیره = هیچ‌کدام):"],
+        'dmcd'  => ['dm_cd',    "⏳ چند ثانیه بین دو الماس فاصله باشد؟"],
+        'dmb'   => ['dm_base',  "🎁 جایزه‌ی پایه در سطح ۱ (مثلا ۵۶٫۷۴):"],
+        'dmr'   => ['dm_ratio', "📈 ضریب رشد جایزه با هر سطح (مثلا ۱٫۲۳۳۶):"],
+        'dmmin' => ['dm_min',   "🔢 کف جایزه (کمترین عددی که ممکن است بگیرد):"],
+        'dmsw'  => ['dm_swap',  "🔁 هر ۱ الماس چند تومان؟ (۰ = تبدیل خاموش)"],
+        'dmms'  => ['dm_mins',  "🔢 حداقل الماس برای تبدیل:"],
+        'dmgive'=> ['dm_give',  "🎁 آیدی عددی کاربر و مقدار را بفرستید.\n\nمثال: <code>123456789 5000</code>"],
+    ];
+    if (isset($asks[$data])) {
+        [$act, $ask] = $asks[$data];
+        answerCb(BOT_TOKEN, $cbId);
+        setState(ADMIN_ID, $act, []);
+        sendMsg(BOT_TOKEN, $chatId, $ask, inlineKb([[btnUI('cancel', 'dm_home', 'cancel')]]));
+        return true;
+    }
+    if (str_starts_with($data, 'dmts_')) {
+        $k = substr($data, 5);
+        answerCb(BOT_TOKEN, $cbId);
+        setState(ADMIN_ID, 'dm_text', ['k' => $k]);
+        sendMsg(BOT_TOKEN, $chatId,
+            "✏️ متن تازه‌ی <b>" . h($k) . "</b> را بفرستید.\n\nالان:\n<code>" .
+            h(mb_substr((string)dmVal('texts.' . $k, ''), 0, 500)) . '</code>',
+            inlineKb([[btnUI('cancel', 'dm_home', 'cancel')]]));
+        return true;
+    }
+    return false;
+}
+
+function dmStateHandle($action, $msg, $uid, $chatId) {
+    if (!str_starts_with((string)$action, 'dm_')) return false;
+    if ($uid !== ADMIN_ID) return false;
+
+    $st   = getState($uid);
+    $sd   = $st['data'] ?? [];
+    $text = trim((string)($msg['text'] ?? ''));
+    $back = inlineKb([[btnCb('💎 الماس', 'dm_home', 'admin')]]);
+    $num  = (float)str_replace([',', '،'], '', norm_fa_digits($text));
+
+    $done = function ($m = "✅ ذخیره شد.") use ($uid, $chatId, $back) {
+        clearState($uid);
+        sendMsg(BOT_TOKEN, $chatId, $m, $back);
+        return true;
+    };
+    $bad = function ($m) use ($chatId) { sendMsg(BOT_TOKEN, $chatId, "⚠️ " . $m); return true; };
+
+    if ($action === 'dm_word') {
+        if (mb_strlen($text) < 2 || mb_strlen($text) > 20) return $bad('کلمه باید بین ۲ تا ۲۰ نویسه باشد.');
+        dmSet(function (&$c) use ($text) { $c['word'] = $text; });
+        return $done('✅ حالا کلمه‌ی بازی «' . h($text) . '» است.');
+    }
+    if ($action === 'dm_alias') {
+        $v = ($text === '-' || $text === '—') ? '' : $text;
+        dmSet(function (&$c) use ($v) { $c['aliases'] = $v; });
+        return $done();
+    }
+    if ($action === 'dm_cd') {
+        if ($num < 5 || $num > 86400) return $bad('بین ۵ تا ۸۶۴۰۰ ثانیه.');
+        dmSet(function (&$c) use ($num) { $c['cooldown'] = (int)$num; });
+        return $done();
+    }
+    if ($action === 'dm_base') {
+        if ($num < 1 || $num > 1000000) return $bad('بین ۱ تا ۱۰۰۰۰۰۰.');
+        dmSet(function (&$c) use ($num) { $c['base'] = $num; });
+        return $done();
+    }
+    if ($action === 'dm_ratio') {
+        if ($num < 1 || $num > 3) return $bad('ضریب باید بین ۱ تا ۳ باشد — بالاتر از این، جایزه‌ها از کنترل خارج می‌شوند.');
+        dmSet(function (&$c) use ($num) { $c['ratio'] = $num; });
+        return $done();
+    }
+    if ($action === 'dm_min') {
+        if ($num < 1 || $num > 1000000) return $bad('بین ۱ تا ۱۰۰۰۰۰۰.');
+        dmSet(function (&$c) use ($num) { $c['min'] = (int)$num; });
+        return $done();
+    }
+    if ($action === 'dm_swap') {
+        if ($num < 0 || $num > 100000) return $bad('بین ۰ تا ۱۰۰۰۰۰.');
+        dmSet(function (&$c) use ($num) { $c['to_wallet'] = $num; });
+        return $done($num > 0 ? '✅ هر ۱ الماس = ' . $num . ' تومان' : '✅ تبدیل خاموش شد.');
+    }
+    if ($action === 'dm_mins') {
+        if ($num < 1) return $bad('عدد معتبر بفرستید.');
+        dmSet(function (&$c) use ($num) { $c['min_swap'] = $num; });
+        return $done();
+    }
+    if ($action === 'dm_text') {
+        $k = (string)($sd['k'] ?? '');
+        if ($k === '' || $text === '') return $bad('متن خالی نمی‌شود.');
+        dmSet(function (&$c) use ($k, $text) { $c['texts'][$k] = $text; });
+        return $done();
+    }
+    if ($action === 'dm_give') {
+        $parts = preg_split('/\s+/', norm_fa_digits($text));
+        $target = (int)($parts[0] ?? 0);
+        $amount = (float)str_replace([',', '،'], '', (string)($parts[1] ?? 0));
+        if ($target <= 0 || $amount == 0.0) return $bad('آیدی عددی و مقدار را با فاصله بفرستید. مثال: 123456789 5000');
+        dmUserSet($target, function (&$x) use ($amount) {
+            $x['points'] = max(0, (float)$x['points'] + $amount);
+        });
+        return $done('✅ ' . number_format($amount) . ' الماس برای <code>' . $target .
+                     '</code> اعمال شد.\nموجودی تازه: <b>' .
+                     number_format((float)dmUser($target)['points']) . '</b>');
+    }
+
+    clearState($uid);
+    return true;
+}

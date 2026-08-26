@@ -759,3 +759,272 @@ function pxHandleText($text, $chatId, $replyTo = null) {
     sendMsg(BOT_TOKEN, $chatId, $cap, $kb, $replyTo ? ['reply_to_message_id' => $replyTo] : []);
     return true;
 }
+
+// ============================================================
+// 👑 پنل مدیریت — قیمت لحظه‌ای
+// ============================================================
+
+function pxAdminHome($chatId, $msgId = null) {
+    $c = pxCfg();
+    $irt = pxUsdtIrt();
+    $ton = pxTonUsd();
+    $err = pxLastError();
+
+    $t  = "💹 <b>قیمت لحظه‌ای</b>\n\n";
+    $t .= 'وضعیت: ' . (!empty($c['on']) ? '✅ روشن' : '❌ خاموش') . "\n";
+    $t .= 'اتصال: ' . ($irt > 0 ? '✅ برقرار' : '🔴 قطع') . "\n";
+    if ($irt > 0) {
+        $t .= '💵 دلار: <b>' . pxToman($irt) . "</b> تومان\n";
+        $t .= '💎 تون: <b>$' . pxNum($ton) . '</b> · <b>' . pxToman($ton * $irt) . "</b> تومان\n";
+        $rows = pxPremiumRows();
+        if ($rows) {
+            $k = array_key_first($rows);
+            $t .= '⭐️ پریمیوم ' . $k . ' ماهه: <b>' . pxToman($rows[$k]['irt']) . "</b> تومان\n";
+        }
+        $s = pxStars(1);
+        if ($s) $t .= '✨ هر استارز: <b>' . pxToman($s['irt']) . "</b> تومان\n";
+    }
+    if ($err !== '') $t .= "\n⚠️ آخرین خطا:\n<code>" . h(mb_substr($err, 0, 180)) . "</code>\n";
+    $t .= "\n🖼 کارت گرافیکی: " . (!empty($c['card']['on'])
+            ? (pxCardReady() ? '✅ روشن' : '⚠️ روشن ولی GD/فونت نیست') : '❌ خاموش') . "\n";
+    $t .= '📊 سود روی نرخ: <b>' . $c['margin'] . "٪</b>\n";
+    $t .= "\nکلمه‌هایی که جواب می‌گیرند:\n";
+    $t .= '• پریمیوم: <code>' . h($c['words']['premium']) . "</code>\n";
+    $t .= '• استارز: <code>' . h($c['words']['stars']) . "</code>\n";
+    $t .= '• نرخ ارز: <code>' . h($c['words']['rates']) . '</code>';
+
+    $rows = [
+        [btnCb(!empty($c['on']) ? '✅ روشن' : '❌ خاموش', 'pxx', 'info'),
+         btnCb('🔄 تازه‌سازی', 'pxr', 'confirm')],
+        [btnCb('🧪 تست اتصال', 'pxtest', 'confirm')],
+        [btnCb('🔑 کلید API', 'pxk', 'admin'), btnCb('🌐 آدرس API', 'pxu', 'admin')],
+        [btnCb('📊 درصد سود', 'pxm', 'admin'), btnCb('⏱ ثانیه کش', 'pxttl', 'admin')],
+        [btnCb('🗣 کلمه‌ها', 'pxw_home', 'admin'), btnCb('✏️ متن‌ها', 'pxt_home', 'admin')],
+        [btnCb('✨ ایموجی پریمیوم', 'pxe_home', 'admin'), btnCb('🔘 دکمه‌ها', 'pxb_home', 'admin')],
+        [btnCb(!empty($c['card']['on']) ? '🖼 کارت: روشن' : '🖼 کارت: خاموش', 'pxc', 'info')],
+        [btnCb('👀 پیش‌نمایش پریمیوم', 'pxprev_prem', 'confirm'),
+         btnCb('👀 استارز', 'pxprev_star', 'confirm')],
+        [btnCb(UT('back'), 'adm_home', 'nav')],
+    ];
+    if ($msgId) editMsg(BOT_TOKEN, $chatId, $msgId, $t, inlineKb($rows));
+    else sendMsg(BOT_TOKEN, $chatId, $t, inlineKb($rows));
+}
+
+/** فهرست ویرایش یک بخش (متن‌ها، ایموجی‌ها، کلمه‌ها) */
+function pxAdminList($chatId, $msgId, $kind) {
+    $c = pxCfg();
+    $map = [
+        'pxt' => ['✏️ <b>متن‌ها</b>', 'texts', 'pxts_'],
+        'pxe' => ['✨ <b>ایموجی پریمیوم</b>', 'emoji', 'pxes_'],
+        'pxw' => ['🗣 <b>کلمه‌ها</b>', 'words', 'pxws_'],
+    ];
+    [$title, $sec, $pre] = $map[$kind] ?? $map['pxt'];
+
+    $t = $title . "\n\n";
+    if ($kind === 'pxe') $t .= "کد ایموجی پریمیوم را با /emoji می‌گیرید.\n\n";
+    if ($kind === 'pxw') $t .= "کلمه‌ها را با ویرگول جدا کنید.\n\n";
+    if ($kind === 'pxt') $t .= "جای‌گذاری‌ها: <code>{n}</code> <code>{sym}</code> <code>{off}</code>\n\n";
+
+    $rows = [];
+    foreach ((array)$c[$sec] as $k => $v) {
+        $show = mb_substr((string)$v, 0, 34);
+        $t .= '• <b>' . h($k) . '</b>: <code>' . h($show) . "</code>\n";
+        $rows[] = [btnCb($k, $pre . $k, 'admin')];
+    }
+    $rows[] = [btnCb(UT('back'), 'px_home', 'nav')];
+    editMsg(BOT_TOKEN, $chatId, $msgId, $t, inlineKb($rows));
+}
+
+/** دکمه‌های زیر پیام قیمت */
+function pxAdminButtons($chatId, $msgId) {
+    $bs = (array)pxVal('buttons', []);
+    $t = "🔘 <b>دکمه‌های زیر پیام قیمت</b>\n\n";
+    $t .= "دکمه بدون لینک نشان داده نمی‌شود.\n\n";
+    $rows = [];
+    foreach ($bs as $i => $b) {
+        $t .= ($i + 1) . ') ' . (!empty($b['on']) ? '✅' : '❌') . ' <b>' . h($b['text']) . "</b>\n";
+        $t .= '   🔗 ' . ($b['url'] !== '' ? '<code>' . h($b['url']) . '</code>' : '—') . "\n";
+        $rows[] = [
+            btnCb(!empty($b['on']) ? '✅' : '❌', 'pxbx_' . $i, 'info'),
+            btnCb('✏️ متن', 'pxbt_' . $i, 'admin'),
+            btnCb('🔗 لینک', 'pxbu_' . $i, 'admin'),
+            btnCb('🎨 رنگ', 'pxbc_' . $i, 'admin'),
+        ];
+    }
+    $rows[] = [btnCb(UT('back'), 'px_home', 'nav')];
+    editMsg(BOT_TOKEN, $chatId, $msgId, $t, inlineKb($rows));
+}
+
+/** برگشت true یعنی این callback مال بخش قیمت بود */
+function pxAdminCallback($data, $chatId, $msgId, $cbId) {
+    if (!str_starts_with($data, 'px')) return false;
+
+    if ($data === 'px_home') { answerCb(BOT_TOKEN, $cbId); pxAdminHome($chatId, $msgId); return true; }
+
+    if ($data === 'pxx') {
+        pxSet(function (&$c) { $c['on'] = empty($c['on']); });
+        answerCb(BOT_TOKEN, $cbId, '✅'); pxAdminHome($chatId, $msgId); return true;
+    }
+    if ($data === 'pxc') {
+        pxSet(function (&$c) { $c['card']['on'] = empty($c['card']['on']) ? 1 : 0; });
+        answerCb(BOT_TOKEN, $cbId, '✅'); pxAdminHome($chatId, $msgId); return true;
+    }
+    if ($data === 'pxr') {
+        pxFetch(true);
+        answerCb(BOT_TOKEN, $cbId, '🔄'); pxAdminHome($chatId, $msgId); return true;
+    }
+    if ($data === 'pxtest') {
+        answerCb(BOT_TOKEN, $cbId);
+        $p = pxFetch(true);
+        if (!$p) {
+            sendMsg(BOT_TOKEN, $chatId, "🔴 <b>اتصال برقرار نشد</b>\n\n<code>" .
+                h(pxLastError() ?: 'بی‌پاسخ') . "</code>\n\nآدرس و کلید API را بررسی کنید.");
+        } else {
+            $t = "✅ <b>اتصال برقرار است</b>\n\n" . count($p) . " جفت‌ارز آمد:\n\n";
+            $i = 0;
+            foreach ($p as $k => $v) { if ($i++ >= 12) break; $t .= '• ' . h($k) . ': <code>' . pxNum($v) . "</code>\n"; }
+            sendMsg(BOT_TOKEN, $chatId, $t);
+        }
+        return true;
+    }
+    if ($data === 'pxprev_prem' || $data === 'pxprev_star') {
+        answerCb(BOT_TOKEN, $cbId);
+        $t = $data === 'pxprev_prem' ? pxPremiumText(true) : pxStarsText(1, true);
+        sendMsg(BOT_TOKEN, $chatId, $t ?? pxT('down'), $t ? pxKeyboard() : null);
+        return true;
+    }
+
+    foreach (['pxt_home' => 'pxt', 'pxe_home' => 'pxe', 'pxw_home' => 'pxw'] as $d => $kind) {
+        if ($data === $d) { answerCb(BOT_TOKEN, $cbId); pxAdminList($chatId, $msgId, $kind); return true; }
+    }
+    if ($data === 'pxb_home') { answerCb(BOT_TOKEN, $cbId); pxAdminButtons($chatId, $msgId); return true; }
+
+    // روشن/خاموش یک دکمه
+    if (str_starts_with($data, 'pxbx_')) {
+        $i = (int)substr($data, 5);
+        pxSet(function (&$c) use ($i) {
+            if (isset($c['buttons'][$i])) $c['buttons'][$i]['on'] = empty($c['buttons'][$i]['on']) ? 1 : 0;
+        });
+        answerCb(BOT_TOKEN, $cbId, '✅'); pxAdminButtons($chatId, $msgId); return true;
+    }
+    // رنگ دکمه
+    if (str_starts_with($data, 'pxbc_')) {
+        $i = (int)substr($data, 5);
+        pxSet(function (&$c) use ($i) {
+            $seq = ['primary', 'success', 'danger', 'info', 'nav'];
+            $cur = $c['buttons'][$i]['color'] ?? 'primary';
+            $k = array_search($cur, $seq, true);
+            $c['buttons'][$i]['color'] = $seq[(($k === false ? 0 : $k) + 1) % count($seq)];
+        });
+        answerCb(BOT_TOKEN, $cbId, '🎨'); pxAdminButtons($chatId, $msgId); return true;
+    }
+
+    // ورودی متنی
+    $asks = [
+        'pxk'   => ['px_key',  "🔑 کلید API را بفرستید:"],
+        'pxu'   => ['px_url',  "🌐 آدرس API قیمت را بفرستید:"],
+        'pxm'   => ['px_marg', "📊 درصد سود روی نرخ بازار (۰ = دقیقا نرخ بازار):"],
+        'pxttl' => ['px_ttl',  "⏱ چند ثانیه قیمت کش شود؟ (پیشنهاد ۱۵)"],
+    ];
+    if (isset($asks[$data])) {
+        [$act, $ask] = $asks[$data];
+        answerCb(BOT_TOKEN, $cbId);
+        setState(ADMIN_ID, $act, []);
+        sendMsg(BOT_TOKEN, $chatId, $ask, inlineKb([[btnUI('cancel', 'px_home', 'cancel')]]));
+        return true;
+    }
+    foreach (['pxts_' => ['px_text', 'texts'], 'pxes_' => ['px_emoji', 'emoji'],
+              'pxws_' => ['px_word', 'words']] as $pre => [$act, $sec]) {
+        if (!str_starts_with($data, $pre)) continue;
+        $k = substr($data, strlen($pre));
+        $cur = (string)(pxVal($sec . '.' . $k) ?? '');
+        answerCb(BOT_TOKEN, $cbId);
+        setState(ADMIN_ID, $act, ['k' => $k]);
+        sendMsg(BOT_TOKEN, $chatId,
+            "✏️ مقدار تازه‌ی <b>" . h($k) . "</b> را بفرستید.\n\nالان:\n<code>" .
+            h(mb_substr($cur, 0, 500)) . '</code>',
+            inlineKb([[btnUI('cancel', 'px_home', 'cancel')]]));
+        return true;
+    }
+    foreach (['pxbt_' => ['px_btntext', 'text'], 'pxbu_' => ['px_btnurl', 'url']] as $pre => [$act, $f]) {
+        if (!str_starts_with($data, $pre)) continue;
+        $i = (int)substr($data, strlen($pre));
+        answerCb(BOT_TOKEN, $cbId);
+        setState(ADMIN_ID, $act, ['i' => $i]);
+        sendMsg(BOT_TOKEN, $chatId,
+            $f === 'url' ? "🔗 لینک دکمه را بفرستید (خط تیره = پاک کردن):"
+                         : "✏️ متن دکمه را بفرستید:",
+            inlineKb([[btnUI('cancel', 'px_home', 'cancel')]]));
+        return true;
+    }
+    return false;
+}
+
+/** گرفتن مقدار متنی — برگشت true یعنی رسیدگی شد */
+function pxStateHandle($action, $msg, $uid, $chatId) {
+    if (!str_starts_with((string)$action, 'px_')) return false;
+    if ($uid !== ADMIN_ID) return false;
+
+    $st   = getState($uid);
+    $sd   = $st['data'] ?? [];
+    $text = trim((string)($msg['text'] ?? ''));
+    $back = inlineKb([[btnCb('💹 قیمت لحظه‌ای', 'px_home', 'admin')]]);
+    $blank = ($text === '-' || $text === '—');
+
+    $done = function ($m = "✅ ذخیره شد.") use ($uid, $chatId, $back) {
+        clearState($uid);
+        sendMsg(BOT_TOKEN, $chatId, $m, $back);
+        return true;
+    };
+
+    if ($action === 'px_key')  { pxSet(function (&$c) use ($text) { $c['key'] = $text; }); return $done(); }
+    if ($action === 'px_url') {
+        if ($text !== '' && !preg_match('#^https?://#i', $text)) {
+            sendMsg(BOT_TOKEN, $chatId, "⚠️ آدرس باید با http شروع شود."); return true;
+        }
+        pxSet(function (&$c) use ($text) { $c['api'] = $text; });
+        maCachePut('px_cool', 0);
+        return $done();
+    }
+    if ($action === 'px_marg') {
+        $v = (float)norm_fa_digits($text);
+        if ($v < -90 || $v > 900) { sendMsg(BOT_TOKEN, $chatId, "⚠️ بین ۹۰- تا ۹۰۰ باشد."); return true; }
+        pxSet(function (&$c) use ($v) { $c['margin'] = $v; });
+        return $done('✅ درصد سود روی ' . $v . '٪ تنظیم شد.');
+    }
+    if ($action === 'px_ttl') {
+        $v = (int)norm_fa_digits($text);
+        if ($v < 1 || $v > 3600) { sendMsg(BOT_TOKEN, $chatId, "⚠️ بین ۱ تا ۳۶۰۰ ثانیه."); return true; }
+        pxSet(function (&$c) use ($v) { $c['ttl'] = $v; });
+        return $done();
+    }
+    if ($action === 'px_emoji') {
+        $ids = function_exists('customEmojiIds') ? customEmojiIds($msg) : [];
+        $v = $ids ? (string)$ids[0] : preg_replace('/\D/', '', norm_fa_digits($text));
+        if ($v !== '' && !ctype_digit($v)) { sendMsg(BOT_TOKEN, $chatId, "⚠️ کد ایموجی فقط عدد است."); return true; }
+        $k = (string)($sd['k'] ?? '');
+        pxSet(function (&$c) use ($k, $v) { if ($k !== '') $c['emoji'][$k] = $v; });
+        return $done();
+    }
+    if ($action === 'px_text' || $action === 'px_word') {
+        $sec = $action === 'px_text' ? 'texts' : 'words';
+        $k   = (string)($sd['k'] ?? '');
+        if ($k === '' || $text === '') { sendMsg(BOT_TOKEN, $chatId, "⚠️ متن خالی نمی‌شود."); return true; }
+        pxSet(function (&$c) use ($sec, $k, $text) { $c[$sec][$k] = $text; });
+        return $done();
+    }
+    if ($action === 'px_btntext' || $action === 'px_btnurl') {
+        $i = (int)($sd['i'] ?? -1);
+        $f = $action === 'px_btnurl' ? 'url' : 'text';
+        $v = $blank ? '' : $text;
+        if ($f === 'url' && $v !== '' && !preg_match('#^https?://#i', $v)) {
+            sendMsg(BOT_TOKEN, $chatId, "⚠️ لینک باید با https شروع شود."); return true;
+        }
+        if ($f === 'text' && $v === '') { sendMsg(BOT_TOKEN, $chatId, "⚠️ متن خالی نمی‌شود."); return true; }
+        pxSet(function (&$c) use ($i, $f, $v) { if (isset($c['buttons'][$i])) $c['buttons'][$i][$f] = $v; });
+        return $done();
+    }
+
+    clearState($uid);
+    return true;
+}

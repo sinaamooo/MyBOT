@@ -3260,27 +3260,73 @@ function admHome($chatId, $msgId = null) {
     $text .= "⏳ منتظر تایید: " . Order::countBy(Order::REVIEW) . "\n";
     $text .= "✅ سفارش موفق: " . Order::countBy(Order::APPROVED) . "\n";
 
+    // شانزده دکمه پشت سر هم، دیوار می‌شد. حالا هر حوزه یک در دارد و
+    // چیزهای مربوط به هم پشت همان در جمع‌اند.
     $rows = [
-        [btnCb('🎨 دکمه‌ها', 'ebuttons', 'admin'), btnCb('📝 متن‌ها', 'etexts', 'admin')],
-        [btnCb('💠 رنگ دکمه‌های شیشه‌ای', 'eglass', 'admin')],
+        [btnCb('🛍 فروشگاه', 'ag_shop', 'admin'),      btnCb('🚀 مینی‌اپ‌ها', 'ag_mini', 'admin')],
+        [btnCb('🤖 ربات‌های اپلودر', 'ag_up', 'admin'), btnCb('🎯 ممبر و قفل‌ها', 'ag_lock', 'admin')],
+        [btnCb('💹 قیمت لحظه‌ای', 'px_home', 'admin'),  btnCb('💎 الماس', 'dm_home', 'admin')],
+        [btnCb('💳 پرداخت', 'ag_pay', 'admin'),        btnCb('🎨 ظاهر و متن‌ها', 'ag_look', 'admin')],
+        [btnCb('📢 گزارش و پیام همگانی', 'ag_rep', 'admin')],
         [btnCb('🔧 راه‌اندازی خودکار', 'setup', 'confirm')],
-        [btnCb('🛒 محصولات', 'eprods', 'admin'),
-         btnCb('🤖 ربات‌های زیرمجموعه', 'eupload', 'admin')],
-        [btnCb('📢 گزارش خرید در گروه', 'adm_reports', 'admin')],
-        [btnCb('🧩 افزونه — مخزن، سفارش دستی، سود', 'ax_home', 'admin')],
-        [btnCb('💠 درگاه پرداخت', 'adm_gw', 'admin')],
-        [btnCb('💳 مقصد پرداخت — شماره کارت', 'adm_pay', 'admin')],
-        [btnCb('🔒 عضویت اجباری ربات مادر', 'adm_join', 'admin')],
-        [btnCb('🔒 قفل‌های عضویت اجباری', 'adm_locks', 'admin')],
-        [btnCb('📋 لیست تعرفه‌ها', 'adm_tariff', 'admin')],
-        [btnCb('🚀 مینی اپ‌ها (خدمات تلگرام · کانفیگ)', 'maadm_home', 'admin')],
-        [btnCb('🧾 سفارش‌ها', 'adm_orders', 'admin'), btnCb('🤖 ربات‌ها', 'adm_bots', 'admin')],
-        [btnCb('📢 کانال‌ها', 'adm_chans', 'admin'), btnCb('📢 پیام همگانی', 'adm_bc', 'admin')],
         [btnCb('🌐 پنل وب', 'adm_web', 'info')],
         [btnCb(UT('home'), 'home', 'nav')],
     ];
     if ($msgId) editMsg(BOT_TOKEN, $chatId, $msgId, $text, inlineKb($rows));
     else sendMsg(BOT_TOKEN, $chatId, $text, inlineKb($rows));
+}
+
+/** 🗂 هر گروه از تنظیمات، پشت در خودش */
+function admGroups() {
+    return [
+        'shop' => ['🛍 <b>فروشگاه</b>', 'محصول، سفارش، تعرفه — هرچه به فروش مربوط است.', [
+            [['🛒 محصولات', 'eprods'], ['🧾 سفارش‌ها', 'adm_orders']],
+            [['📋 لیست تعرفه‌ها', 'adm_tariff']],
+            [['🧩 مخزن، سفارش دستی، سود', 'ax_home']],
+        ]],
+        'mini' => ['🚀 <b>مینی‌اپ‌ها</b>', 'خدمات تلگرام و فروش کانفیگ — ظاهر، محصول‌ها و قیمت‌ها.', [
+            [['🚀 تنظیمات مینی‌اپ‌ها', 'maadm_home']],
+            [['🧩 مخزن کانفیگ و سود', 'ax_home']],
+        ]],
+        'up' => ['🤖 <b>ربات‌های اپلودر</b>', 'ربات‌های زیرمجموعه و کانال‌هایشان.', [
+            [['🤖 ربات‌های زیرمجموعه', 'eupload']],
+            [['🤖 فهرست ربات‌ها', 'adm_bots'], ['📢 کانال‌ها', 'adm_chans']],
+        ]],
+        'lock' => ['🎯 <b>ممبر و قفل‌ها</b>', 'سفارش ممبر و عضویت اجباری.', [
+            [['🔒 قفل‌های عضویت اجباری', 'adm_locks']],
+            [['🔒 عضویت اجباری ربات مادر', 'adm_join']],
+        ]],
+        'pay' => ['💳 <b>پرداخت</b>', 'مقصد پول و درگاه خودکار.', [
+            [['💳 مقصد پرداخت — شماره کارت', 'adm_pay']],
+            [['💠 درگاه پرداخت', 'adm_gw']],
+        ]],
+        'look' => ['🎨 <b>ظاهر و متن‌ها</b>', 'هرچه کاربر می‌بیند: دکمه‌ها، متن‌ها، رنگ‌ها.', [
+            [['🎨 دکمه‌ها', 'ebuttons'], ['📝 متن‌ها', 'etexts']],
+            [['💠 رنگ دکمه‌های شیشه‌ای', 'eglass']],
+        ]],
+        'rep' => ['📢 <b>گزارش و پیام همگانی</b>', 'اعلام فروش و پیام به همه.', [
+            [['📢 گزارش خرید در گروه', 'adm_reports']],
+            [['📢 پیام همگانی', 'adm_bc']],
+        ]],
+    ];
+}
+
+function admGroup($chatId, $msgId, $key) {
+    $g = admGroups()[$key] ?? null;
+    if (!$g) { admHome($chatId, $msgId); return; }
+    [$title, $desc, $rows] = $g;
+
+    $kb = [];
+    foreach ($rows as $row) {
+        $line = [];
+        foreach ($row as [$label, $data]) $line[] = btnCb($label, $data, 'admin');
+        $kb[] = $line;
+    }
+    $kb[] = [btnCb(UT('back'), 'adm_home', 'nav')];
+
+    $text = $title . "\n\n" . $desc;
+    if ($msgId) editMsg(BOT_TOKEN, $chatId, $msgId, $text, inlineKb($kb));
+    else sendMsg(BOT_TOKEN, $chatId, $text, inlineKb($kb));
 }
 
 /**
@@ -4773,8 +4819,10 @@ function masterHandle($update) {
 
         // ---------------- ادمین ----------------
         // همه کال‌بک‌های مدیریتی — شامل ویرایشگر داخل ربات
-        $adminPrefixes = ['aok_', 'ano_', 'adm_', 'eb', 'et', 'eg', 'eu', 'sb', 'ep', 'esp',
-                          'rp', 'tf', 'jn', 'gw', 'reply_', 'setup'];
+        // هر پیشوند تازه‌ای که اینجا نباشد، بی‌صدا دور ریخته می‌شود —
+        // نه خطایی، نه پیامی. پس با هر بخش تازه این فهرست هم باید کامل شود.
+        $adminPrefixes = ['aok_', 'ano_', 'adm_', 'ag_', 'eb', 'et', 'eg', 'eu', 'sb', 'ep', 'esp',
+                          'rp', 'tf', 'jn', 'gw', 'pay', 'px', 'dm', 'reply_', 'setup'];
         $isAdminCb = false;
         foreach ($adminPrefixes as $pref) {
             if (str_starts_with($data, $pref)) { $isAdminCb = true; break; }
@@ -4952,6 +5000,13 @@ function masterHandle($update) {
         if ($data === 'adm_reports') { answerCb(BOT_TOKEN, $cbId); admReports($chatId, $msgId); return; }
         if ($data === 'adm_locks')   { answerCb(BOT_TOKEN, $cbId); admLocks($chatId, $msgId); return; }
         if ($data === 'adm_join')    { answerCb(BOT_TOKEN, $cbId); admJoin($chatId, $msgId); return; }
+        if (str_starts_with($data, 'ag_')) {
+            answerCb(BOT_TOKEN, $cbId);
+            admGroup($chatId, $msgId, substr($data, 3));
+            return;
+        }
+        if (pxAdminCallback($data, $chatId, $msgId, $cbId)) return;
+        if (dmAdminCallback($data, $chatId, $msgId, $cbId)) return;
         if ($data === 'adm_gw')      { answerCb(BOT_TOKEN, $cbId); admGateway($chatId, $msgId); return; }
         if ($data === 'adm_pay')     { answerCb(BOT_TOKEN, $cbId); admPay($chatId, $msgId); return; }
         foreach ([['payc', 'pay_card', "💳 شماره کارت را بفرستید (۱۶ رقم).\n\nخط تیره = پاک کردن"],
@@ -5802,6 +5857,9 @@ function masterHandle($update) {
             inlineKb([[btnCb('🤖 ربات تحویل', 'sbbot_' . $pid, 'admin')]]));
         return;
     }
+
+    if (pxStateHandle($action, $msg, $uid, $chatId)) return;
+    if (dmStateHandle($action, $msg, $uid, $chatId)) return;
 
     if (str_starts_with($action, 'pay_')) {
         $plain = trim($msg['text'] ?? '');
