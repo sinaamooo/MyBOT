@@ -1974,6 +1974,15 @@ function scheduleDelete($botId, $chatId, $msgIds, $seconds, $noticeId = null) {
 
 /** حذف موارد سررسیدشده — در هر درخواست و در cron صدا زده می‌شود */
 function processDeleteQueue($limit = 60) {
+    // نگاه ارزان قبل از قفل: بیشتر درخواست‌ها چیزی برای حذف ندارند و
+    // نباید برای یک صفِ خالی، فایل را قفل و بازنویسی کنند.
+    $peek = load('delqueue');
+    if (!$peek) return 0;
+    $now = time();
+    $any = false;
+    foreach ($peek as $it) if ((int)($it['due'] ?? 0) <= $now) { $any = true; break; }
+    if (!$any) return 0;
+
     $due = [];
     mutate('delqueue', function (&$q) use (&$due, $limit) {
         if (!$q) return;
@@ -8009,7 +8018,15 @@ if (isset($_GET['cron'])) {
 }
 
 processDeleteQueue(20);
-gwPoll(10);
+
+// 💠 بررسی واریز رمزارز تماس شبکه دارد. روی هر درخواست اجرا کردنش یعنی
+//    هر کلیکِ هر کاربر پشت چند تماس بلاکچین معطل بماند. هر ۲۰ ثانیه کافی
+//    است — cron هم جدا و پرشمارتر همین کار را می‌کند.
+$gMark = DATA_DIR . '/.gw_at';
+if (time() - (@filemtime($gMark) ?: 0) >= 20) {
+    @touch($gMark);
+    gwPoll(10);
+}
 // 🐢 صف‌های پس‌زمینه فقط هر یک دقیقه یک‌بار، نه روی هر پیام.
 // روی هر درخواست اجرا کردنشان یعنی خواندن و پیمایش همه‌ی سفارش‌ها
 // پیش از جواب دادن به کاربر — که ربات را کند می‌کند.
