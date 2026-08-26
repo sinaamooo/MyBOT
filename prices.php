@@ -182,8 +182,13 @@ function pxFetch($fresh = false) {
     $out = [];
     foreach ($rows as $k => $v) {
         if (!is_string($k) || !str_contains($k, '/')) continue;
-        $n = maNum($v);
-        if ($n > 0) $out[strtoupper($k)] = $n;
+        if (!is_scalar($v)) continue;
+        // درصد تغییر می‌تواند منفی باشد؛ فیلترِ «بزرگ‌تر از صفر» همه‌ی
+        // ریزش‌ها را دور می‌ریخت و کارت‌ها همیشه ۰٪ نشان می‌دادند.
+        $raw = norm_fa_digits((string)$v);
+        $raw = str_replace([',', '،', '٬', ' '], '', $raw);
+        if (!is_numeric($raw)) continue;
+        $out[strtoupper($k)] = (float)$raw;
     }
     if (!$out) {
         maCachePut('px_err', 'پاسخ آمد ولی هیچ جفت‌ارزی نداشت');
@@ -327,6 +332,17 @@ function pxNum($v) {
     if ($a >= 1)      return rtrim(rtrim(number_format($v, 3), '0'), '.');
     if ($a >= 0.0001) return rtrim(rtrim(number_format($v, 6), '0'), '.');
     return rtrim(rtrim(number_format($v, 8), '0'), '.');
+}
+
+/** عدد فشرده برای محور نمودار: 15,161,977,525 → 15.16B */
+function pxCompact($v) {
+    $v = (float)$v;
+    $a = abs($v);
+    if ($a >= 1e9) return rtrim(rtrim(number_format($v / 1e9, 2), '0'), '.') . 'B';
+    if ($a >= 1e6) return rtrim(rtrim(number_format($v / 1e6, 2), '0'), '.') . 'M';
+    if ($a >= 1e4) return rtrim(rtrim(number_format($v / 1e3, 1), '0'), '.') . 'K';
+    if ($a >= 1)   return number_format($v);
+    return pxNum($v);
 }
 
 /** تومان همیشه رند و با جداکننده */
@@ -708,6 +724,55 @@ function pxStarsCount($text) {
 }
 
 /**
+ * «۵۰ تتر به تومان» یا «2 sol به usdt» یا فقط «۵۰ تتر»
+ * برگشت: [مقدار, نماد مبدا, نماد مقصد] یا null
+ */
+function pxConvert($text) {
+    $t = trim(mb_strtolower(norm_fa_digits((string)$text)));
+    $t = str_replace(['،', ',', '٬'], '', $t);
+    if (!preg_match('/^([\d\.]+)\s*([^\d]+?)(?:\s+(?:به|to|in)\s+(.+))?$/u', $t, $m)) return null;
+
+    $amount = (float)$m[1];
+    if ($amount <= 0 || !is_finite($amount)) return null;
+
+    $map = pxCoinMap();
+    $src = trim($m[2]);
+    $from = $map[$src] ?? strtoupper($src);
+
+    $dst = isset($m[3]) ? trim($m[3]) : '';
+    if ($dst === '' || in_array($dst, ['تومان', 'تومن', 'ریال', 'irt', 'toman'], true)) $to = 'IRT';
+    elseif (in_array($dst, ['دلار', 'تتر', 'usd', 'usdt'], true))                        $to = 'USDT';
+    else                                                                                 $to = $map[$dst] ?? strtoupper($dst);
+
+    if (!preg_match('/^[A-Z0-9]{2,10}$/', $from)) return null;
+    if ($to !== 'IRT' && !preg_match('/^[A-Z0-9]{2,10}$/', $to)) return null;
+    return [$amount, $from, $to];
+}
+
+/** کارت یک ارز — همان قالب روشن، با رنگ اختصاصی خودش */
+function pxCoinCard($sym, $priceShown, $unit, $chg, $seriesBase = null) {
+    $bg = pxCoinColors($sym);
+    $name = pxCoinName($sym);
+    return pxAssetCard($name, '●', $priceShown, $unit, $chg, $bg,
+                       pxSeries($seriesBase ?? $priceShown, $chg, 110));
+}
+
+/** نام نمایشی یک نماد — اگر فارسی‌اش را بلد باشیم */
+function pxCoinName($sym) {
+    $sym = strtoupper((string)$sym);
+    $fa = array_flip(array_map('strtoupper', pxCoinMap()));
+    $names = [
+        'BTC' => 'بیت کوین', 'ETH' => 'اتریوم', 'USDT' => 'تتر', 'TON' => 'تون کوین',
+        'TRX' => 'ترون', 'BNB' => 'بایننس کوین', 'SOL' => 'سولانا', 'XRP' => 'ریپل',
+        'DOGE' => 'دوج کوین', 'ADA' => 'کاردانو', 'NOT' => 'نات کوین', 'SHIB' => 'شیبا',
+        'AVAX' => 'آواکس', 'LINK' => 'چین لینک', 'DOT' => 'پولکادات', 'MATIC' => 'ماتیک',
+        'LTC' => 'لایت کوین', 'PEPE' => 'پپه', 'ATOM' => 'کازماس', 'NEAR' => 'نیر',
+        'XLM' => 'استلار', 'UNI' => 'یونی سواپ',
+    ];
+    return $names[$sym] ?? $sym;
+}
+
+/**
  * پیام را می‌بیند و اگر مربوط به قیمت بود، جواب می‌دهد.
  * برگشت true یعنی رسیدگی شد و بقیه‌ی ربات نباید دستش بزند.
  */
@@ -749,6 +814,56 @@ function pxHandleText($text, $chatId, $replyTo = null) {
         }
     }
 
+    // 🥇 دارایی‌های ایرانی — طلا، دلار، سکه
+    $ak = pxAssetOf($raw);
+    if ($ak !== null) {
+        $a = pxAssets()[$ak];
+        $price = pxAssetPrice($ak);
+        if ($price <= 0) {
+            sendMsg(BOT_TOKEN, $chatId,
+                '⚠️ قیمت «' . h($a['name']) . '» در منبع فعلی نیست.' . "\n\n" .
+                'کلید <code>' . h($a['pair']) . '</code> در پاسخ API پیدا نشد. ' .
+                'از پنل ← 💹 قیمت ← 🔎 کلیدهای API ببینید چه کلیدهایی می‌آید و درستش را ست کنید.',
+                null, $replyTo ? ['reply_to_message_id' => $replyTo] : []);
+            return true;
+        }
+        $chg = pxChangeOf($a['pair']);
+        $png = !empty(pxVal('card.on'))
+             ? pxAssetCard($a['name'], $a['emoji'], $price, $a['unit'], $chg, $a['bg'])
+             : null;
+        $cap = pxAssetCaption($a['name'], $price, $a['unit'], $chg);
+        if ($png !== null) pxSendPhoto($chatId, $png, $cap, $kb, $replyTo);
+        else sendMsg(BOT_TOKEN, $chatId, $cap, $kb, $replyTo ? ['reply_to_message_id' => $replyTo] : []);
+        return true;
+    }
+
+    // 💱 تبدیل — «۵۰ تتر به تومان» یا فقط «۵۰ تتر»
+    $cv = pxConvert($raw);
+    if ($cv !== null) {
+        [$amount, $from, $to] = $cv;
+        $p = pxFetch();
+        $irt = (float)($p['USDT/IRT'] ?? 0);
+        $fromUsd = ($from === 'USDT') ? 1.0 : (float)($p[$from . '/USDT'] ?? 0);
+        if ($fromUsd > 0 && $irt > 0) {
+            if ($to === 'IRT')          { $val = $amount * $fromUsd * $irt; $unit = 'تومان'; }
+            elseif ($to === 'USDT')     { $val = $amount * $fromUsd;        $unit = 'دلار'; }
+            else {
+                $toUsd = (float)($p[$to . '/USDT'] ?? 0);
+                if ($toUsd <= 0) return false;
+                $val = $amount * $fromUsd / $toUsd; $unit = $to;
+            }
+            $chg = pxChangeOf($from . '/USDT');
+            $png = !empty(pxVal('card.on'))
+                 ? pxAssetCard(pxNum($amount) . ' ' . pxCoinName($from), '●', $val, $unit, $chg,
+                               pxCoinColors($from), pxSeries($val, $chg, 110))
+                 : null;
+            $cap = pxConvCaption($amount, $from, $val, $unit);
+            if ($png !== null) pxSendPhoto($chatId, $png, $cap, $kb, $replyTo);
+            else sendMsg(BOT_TOKEN, $chatId, $cap, $kb, $replyTo ? ['reply_to_message_id' => $replyTo] : []);
+            return true;
+        }
+    }
+
     // نماد یک ارز
     $key = mb_strtolower($raw);
     $sym = pxCoinMap()[$key] ?? strtoupper($raw);
@@ -759,13 +874,14 @@ function pxHandleText($text, $chatId, $replyTo = null) {
     $usd = ($sym === 'USDT') ? 1.0 : (float)($p[$sym . '/USDT'] ?? 0);
     if ($usd <= 0 || $irtRate <= 0) return false;      // نماد ناشناخته — بگذار بقیه رسیدگی کنند
 
-    $chg = (float)($p[$sym . '/CHANGE24'] ?? $p[$sym . '/CHG'] ?? 0);
+    $chg = pxChangeOf($sym . '/USDT');
     $hi  = (float)($p[$sym . '/HIGH24'] ?? 0);
     $lo  = (float)($p[$sym . '/LOW24'] ?? 0);
     $cap = pxCoinCaption($sym, $usd, $usd * $irtRate, $chg, $hi, $lo);
 
     if (!empty(pxVal('card.on'))) {
-        $png = pxCard($sym, $usd, $chg);
+        // قیمت تومانی روی کارت — چون مخاطب ایرانی است
+        $png = pxCoinCard($sym, $usd * $irtRate, 'تومان', $chg, $usd * $irtRate);
         if ($png !== null) {
             pxSendPhoto($chatId, $png, $cap, $kb, $replyTo);
             return true;
@@ -773,6 +889,35 @@ function pxHandleText($text, $chatId, $replyTo = null) {
     }
     sendMsg(BOT_TOKEN, $chatId, $cap, $kb, $replyTo ? ['reply_to_message_id' => $replyTo] : []);
     return true;
+}
+
+/** درصد تغییر ۲۴ ساعت، اگر API بدهد */
+function pxChangeOf($pair) {
+    $p = pxFetch();
+    $base = explode('/', strtoupper((string)$pair))[0];
+    foreach ([$pair . '/CHANGE24', $base . '/CHANGE24', $base . '/CHG', $base . '/CHANGE'] as $k) {
+        if (isset($p[$k])) return (float)$p[$k];
+    }
+    return 0.0;
+}
+
+/** کپشن کارت دارایی */
+function pxAssetCaption($name, $price, $unit, $chg) {
+    $t  = pxEm('coin', '🪙') . ' <b>' . h($name) . "</b>\n\n";
+    $t .= '<blockquote>' . pxEm('price', '💵') . ' ' . pxToman($price) . ' ' . h($unit) . "\n" .
+          ($chg >= 0 ? '🟢' : '🔴') . ' ' . number_format(abs($chg), 2) . '%</blockquote>' . "\n";
+    $t .= pxEm('coin', '🕓') . ' <code>' . h(pxJalali()) . '</code>';
+    return $t;
+}
+
+/** کپشن تبدیل */
+function pxConvCaption($amount, $from, $val, $unit) {
+    // تومان رند می‌شود، ولی «۲٫۸۱ دلار» نباید بشود «۳ دلار»
+    $shown = ($unit === 'تومان') ? pxToman($val) : pxNum($val);
+    $t  = pxEm('card', '💱') . ' <b>' . h(pxNum($amount) . ' ' . pxCoinName($from)) . "</b>\n\n";
+    $t .= '<blockquote>' . pxEm('price', '💵') . ' ' . $shown . ' ' . h($unit) . '</blockquote>' . "\n";
+    $t .= pxEm('coin', '🕓') . ' <code>' . h(pxJalali()) . '</code>';
+    return $t;
 }
 
 // ============================================================
@@ -817,6 +962,8 @@ function pxAdminHome($chatId, $msgId = null) {
         [btnCb('🗣 کلمه‌ها', 'pxw_home', 'admin'), btnCb('✏️ متن‌ها', 'pxt_home', 'admin')],
         [btnCb('✨ ایموجی پریمیوم', 'pxe_home', 'admin'), btnCb('🔘 دکمه‌ها', 'pxb_home', 'admin')],
         [btnCb(!empty($c['card']['on']) ? '🖼 کارت: روشن' : '🖼 کارت: خاموش', 'pxc', 'info')],
+        [btnCb('🥇 طلا، دلار، سکه', 'pxa_home', 'admin'),
+         btnCb('🔎 کلیدهای API', 'pxkeys', 'confirm')],
         [btnCb('👀 پیش‌نمایش پریمیوم', 'pxprev_prem', 'confirm'),
          btnCb('👀 استارز', 'pxprev_star', 'confirm')],
         [btnCb(UT('back'), 'adm_home', 'nav')],
@@ -854,20 +1001,46 @@ function pxAdminList($chatId, $msgId, $kind) {
 function pxAdminButtons($chatId, $msgId) {
     $bs = (array)pxVal('buttons', []);
     $t = "🔘 <b>دکمه‌های زیر پیام قیمت</b>\n\n";
-    $t .= "دکمه بدون لینک نشان داده نمی‌شود.\n\n";
+    $t .= "دکمه بدون لینک نشان داده نمی‌شود.\n";
+    $t .= "برای ایموجی پریمیوم، با /emoji کدش را بگیرید یا همان‌جا یک پیام حاوی آن ایموجی بفرستید.\n\n";
     $rows = [];
     foreach ($bs as $i => $b) {
         $t .= ($i + 1) . ') ' . (!empty($b['on']) ? '✅' : '❌') . ' <b>' . h($b['text']) . "</b>\n";
         $t .= '   🔗 ' . ($b['url'] !== '' ? '<code>' . h($b['url']) . '</code>' : '—') . "\n";
+        if (trim((string)($b['icon'] ?? '')) !== '')
+            $t .= '   ✨ ایموجی پریمیوم: <code>' . h($b['icon']) . "</code>\n";
         $rows[] = [
             btnCb(!empty($b['on']) ? '✅' : '❌', 'pxbx_' . $i, 'info'),
             btnCb('✏️ متن', 'pxbt_' . $i, 'admin'),
             btnCb('🔗 لینک', 'pxbu_' . $i, 'admin'),
-            btnCb('🎨 رنگ', 'pxbc_' . $i, 'admin'),
+        ];
+        $rows[] = [
+            btnCb('🎨 رنگ: ' . (string)($b['color'] ?? '—'), 'pxbc_' . $i, 'info'),
+            btnCb('✨ ایموجی پریمیوم', 'pxbi_' . $i, 'admin'),
         ];
     }
     $rows[] = [btnCb(UT('back'), 'px_home', 'nav')];
     editMsg(BOT_TOKEN, $chatId, $msgId, $t, inlineKb($rows));
+}
+
+/** 🥇 طلا، دلار، سکه — نام، کلید API، کلمه‌ها */
+function pxAdminAssets($chatId, $msgId) {
+    $t = "🥇 <b>طلا، دلار، سکه</b>\n\n";
+    $t .= "هرکدام یک «کلید جفت‌ارز» دارد که باید در پاسخ API وجود داشته باشد.\n";
+    $t .= "با 🔎 کلیدهای API ببینید چه چیزی می‌آید.\n\n";
+    $rows = [];
+    foreach (pxAssets() as $k => $a) {
+        $v = pxAssetPrice($k);
+        $t .= ($v > 0 ? '✅ ' : '⚠️ ') . '<b>' . h($a['name']) . "</b>\n";
+        $t .= '   کلید: <code>' . h($a['pair']) . '</code>' .
+              ($v > 0 ? ' — ' . pxToman($v) . ' ' . h($a['unit']) : ' — <b>پیدا نشد</b>') . "\n";
+        $t .= '   کلمه‌ها: <code>' . h($a['words']) . "</code>\n\n";
+        $rows[] = [btnCb('✏️ ' . mb_substr($a['name'], 0, 14), 'pxan_' . $k, 'admin'),
+                   btnCb('🔑 کلید', 'pxap_' . $k, 'admin'),
+                   btnCb('🗣 کلمه‌ها', 'pxaw_' . $k, 'admin')];
+    }
+    $rows[] = [btnCb(UT('back'), 'px_home', 'nav')];
+    editMsg(BOT_TOKEN, $chatId, $msgId, mb_substr($t, 0, 3800), inlineKb($rows));
 }
 
 /** برگشت true یعنی این callback مال بخش قیمت بود */
@@ -913,6 +1086,46 @@ function pxAdminCallback($data, $chatId, $msgId, $cbId) {
         if ($data === $d) { answerCb(BOT_TOKEN, $cbId); pxAdminList($chatId, $msgId, $kind); return true; }
     }
     if ($data === 'pxb_home') { answerCb(BOT_TOKEN, $cbId); pxAdminButtons($chatId, $msgId); return true; }
+    if ($data === 'pxa_home') { answerCb(BOT_TOKEN, $cbId); pxAdminAssets($chatId, $msgId); return true; }
+
+    // 🔎 دقیقا چه کلیدهایی از API می‌آید — تا طلا و سکه را درست ست کنند
+    if ($data === 'pxkeys') {
+        answerCb(BOT_TOKEN, $cbId);
+        $p = pxFetch(true);
+        if (!$p) {
+            sendMsg(BOT_TOKEN, $chatId, "🔴 چیزی از API نیامد.\n\n<code>" .
+                h(pxLastError() ?: 'بی‌پاسخ') . '</code>');
+            return true;
+        }
+        $keys = array_keys($p);
+        sort($keys);
+        $t = "🔎 <b>کلیدهای API</b> — " . count($keys) . " مورد\n\n";
+        $t .= "برای طلا و سکه، کلید درست را از این فهرست بردارید و در\n" .
+              "💹 قیمت ← 🥇 طلا، دلار، سکه بگذارید.\n\n<blockquote expandable>";
+        foreach (array_slice($keys, 0, 220) as $k)
+            $t .= '<code>' . h($k) . '</code> = ' . pxNum($p[$k]) . "\n";
+        $t .= '</blockquote>';
+        sendMsg(BOT_TOKEN, $chatId, mb_substr($t, 0, 4000));
+        return true;
+    }
+
+    // ویرایش یک دارایی
+    foreach (['pxan_' => ['px_asname', 'نام فارسی'], 'pxap_' => ['px_aspair', 'کلید جفت‌ارز در API'],
+              'pxaw_' => ['px_aswords', 'کلمه‌هایی که این دارایی را صدا می‌زنند (با ویرگول)'],
+              'pxau_' => ['px_asunit', 'واحد (مثلا تومان)']] as $pre => [$act, $label]) {
+        if (!str_starts_with($data, $pre)) continue;
+        $k = substr($data, strlen($pre));
+        $a = pxAssets()[$k] ?? null;
+        if (!$a) { answerCb(BOT_TOKEN, $cbId, 'پیدا نشد', true); return true; }
+        answerCb(BOT_TOKEN, $cbId);
+        setState(ADMIN_ID, $act, ['k' => $k]);
+        $cur = ['px_asname' => $a['name'], 'px_aspair' => $a['pair'],
+                'px_aswords' => $a['words'], 'px_asunit' => $a['unit']][$act] ?? '';
+        sendMsg(BOT_TOKEN, $chatId,
+            '✏️ ' . $label . " را بفرستید.\n\nالان: <code>" . h((string)$cur) . '</code>',
+            inlineKb([[btnUI('cancel', 'pxa_home', 'cancel')]]));
+        return true;
+    }
 
     // روشن/خاموش یک دکمه
     if (str_starts_with($data, 'pxbx_')) {
@@ -961,15 +1174,19 @@ function pxAdminCallback($data, $chatId, $msgId, $cbId) {
             inlineKb([[btnUI('cancel', 'px_home', 'cancel')]]));
         return true;
     }
-    foreach (['pxbt_' => ['px_btntext', 'text'], 'pxbu_' => ['px_btnurl', 'url']] as $pre => [$act, $f]) {
+    foreach (['pxbt_' => ['px_btntext', 'text'], 'pxbu_' => ['px_btnurl', 'url'],
+              'pxbi_' => ['px_btnicon', 'icon']] as $pre => [$act, $f]) {
         if (!str_starts_with($data, $pre)) continue;
         $i = (int)substr($data, strlen($pre));
         answerCb(BOT_TOKEN, $cbId);
         setState(ADMIN_ID, $act, ['i' => $i]);
-        sendMsg(BOT_TOKEN, $chatId,
-            $f === 'url' ? "🔗 لینک دکمه را بفرستید (خط تیره = پاک کردن):"
-                         : "✏️ متن دکمه را بفرستید:",
-            inlineKb([[btnUI('cancel', 'px_home', 'cancel')]]));
+        $ask = [
+            'url'  => "🔗 لینک دکمه را بفرستید (خط تیره = پاک کردن):",
+            'text' => "✏️ متن دکمه را بفرستید:",
+            'icon' => "✨ یک پیام با همان ایموجی پریمیوم بفرستید، یا کد عددی‌اش را.\n\n" .
+                      "خط تیره = برداشتن ایموجی",
+        ][$f];
+        sendMsg(BOT_TOKEN, $chatId, $ask, inlineKb([[btnUI('cancel', 'px_home', 'cancel')]]));
         return true;
     }
     return false;
@@ -1015,8 +1232,13 @@ function pxStateHandle($action, $msg, $uid, $chatId) {
     }
     if ($action === 'px_emoji') {
         $ids = function_exists('customEmojiIds') ? customEmojiIds($msg) : [];
-        $v = $ids ? (string)$ids[0] : preg_replace('/\D/', '', norm_fa_digits($text));
-        if ($v !== '' && !ctype_digit($v)) { sendMsg(BOT_TOKEN, $chatId, "⚠️ کد ایموجی فقط عدد است."); return true; }
+        $v = $blank ? '' : ($ids ? (string)$ids[0] : preg_replace('/\D/', '', norm_fa_digits($text)));
+        if (!$blank && $v === '') {
+            sendMsg(BOT_TOKEN, $chatId,
+                "⚠️ ایموجی پیدا نشد. یک پیام با همان ایموجی بفرستید، یا کد عددی‌اش را.\n" .
+                "برای برداشتنش خط تیره بفرستید.");
+            return true;
+        }
         $k = (string)($sd['k'] ?? '');
         pxSet(function (&$c) use ($k, $v) { if ($k !== '') $c['emoji'][$k] = $v; });
         return $done();
@@ -1027,6 +1249,49 @@ function pxStateHandle($action, $msg, $uid, $chatId) {
         if ($k === '' || $text === '') { sendMsg(BOT_TOKEN, $chatId, "⚠️ متن خالی نمی‌شود."); return true; }
         pxSet(function (&$c) use ($sec, $k, $text) { $c[$sec][$k] = $text; });
         return $done();
+    }
+    if (str_starts_with($action, 'px_as')) {
+        $k = (string)($sd['k'] ?? '');
+        $f = ['px_asname' => 'name', 'px_aspair' => 'pair',
+              'px_aswords' => 'words', 'px_asunit' => 'unit'][$action] ?? '';
+        if ($k === '' || $f === '' || $text === '') {
+            sendMsg(BOT_TOKEN, $chatId, "⚠️ مقدار خالی نمی‌شود."); return true;
+        }
+        if ($f === 'pair') $text = strtoupper(str_replace(' ', '', $text));
+        pxSet(function (&$c) use ($k, $f, $text) {
+            if (!is_array($c['assets'] ?? null)) $c['assets'] = pxAssetsDefault();
+            if (!isset($c['assets'][$k])) $c['assets'][$k] = pxAssetsDefault()[$k] ?? [];
+            $c['assets'][$k][$f] = $text;
+        });
+        $note = '';
+        if ($f === 'pair') {
+            $v = pxAssetPrice($k, true);
+            $note = $v > 0 ? "\n\n✅ با این کلید قیمت آمد: <b>" . pxToman($v) . '</b>'
+                           : "\n\n⚠️ با این کلید چیزی نیامد. 🔎 کلیدهای API را ببینید.";
+        }
+        clearState($uid);
+        sendMsg(BOT_TOKEN, $chatId, "✅ ذخیره شد." . $note,
+                inlineKb([[btnCb('🥇 طلا، دلار، سکه', 'pxa_home', 'admin')]]));
+        return true;
+    }
+
+    if ($action === 'px_btnicon') {
+        $i = (int)($sd['i'] ?? -1);
+        // یا از خودِ پیام برش می‌داریم، یا کد عددی‌ای که تایپ کرده
+        $ids = function_exists('customEmojiIds') ? customEmojiIds($msg) : [];
+        $v = $blank ? '' : ($ids ? (string)$ids[0] : preg_replace('/\D/', '', norm_fa_digits($text)));
+        // متنی فرستاده که نه ایموجی بود نه عدد؟ نباید بی‌صدا پاکش کنیم —
+        // «خط تیره» تنها راه پاک کردن است.
+        if (!$blank && $v === '') {
+            sendMsg(BOT_TOKEN, $chatId,
+                "⚠️ ایموجی پریمیوم پیدا نشد.\n\n" .
+                "یا یک پیام بفرستید که همان ایموجی داخلش باشد، یا کد عددی‌اش را.\n" .
+                "برای برداشتن ایموجی، خط تیره بفرستید.");
+            return true;
+        }
+        pxSet(function (&$c) use ($i, $v) { if (isset($c['buttons'][$i])) $c['buttons'][$i]['icon'] = $v; });
+        return $done($v !== '' ? '✅ ایموجی پریمیوم دکمه ثبت شد: <code>' . h($v) . '</code>'
+                               : '✅ ایموجی دکمه برداشته شد.');
     }
     if ($action === 'px_btntext' || $action === 'px_btnurl') {
         $i = (int)($sd['i'] ?? -1);
@@ -1042,4 +1307,460 @@ function pxStateHandle($action, $msg, $uid, $chatId) {
 
     clearState($uid);
     return true;
+}
+
+// ============================================================
+// 🔤 نوشتن فارسی روی تصویر
+//
+// GD حروف فارسی را نه به هم می‌چسباند و نه راست‌به‌چپ می‌نویسد؛
+// «طلا» می‌شود «ا ل ط» جدا از هم. پس خودمان هر حرف را به شکل
+// درستش (آغازی/میانی/پایانی/تنها) تبدیل می‌کنیم و ترتیب را
+// برمی‌گردانیم. عددها و لاتین سرِ جای خودشان می‌مانند.
+// ============================================================
+
+/** ch => [تنها, پایانی, آغازی, میانی] — صفر یعنی آن شکل وجود ندارد */
+function pxArabicTable() {
+    static $t = null;
+    if ($t !== null) return $t;
+    $t = [
+        'ء' => [0xFE80, 0, 0, 0],
+        'آ' => [0xFE81, 0xFE82, 0, 0],
+        'أ' => [0xFE83, 0xFE84, 0, 0],
+        'ؤ' => [0xFE85, 0xFE86, 0, 0],
+        'إ' => [0xFE87, 0xFE88, 0, 0],
+        'ئ' => [0xFE89, 0xFE8A, 0xFE8B, 0xFE8C],
+        'ا' => [0xFE8D, 0xFE8E, 0, 0],
+        'ب' => [0xFE8F, 0xFE90, 0xFE91, 0xFE92],
+        'ة' => [0xFE93, 0xFE94, 0, 0],
+        'ت' => [0xFE95, 0xFE96, 0xFE97, 0xFE98],
+        'ث' => [0xFE99, 0xFE9A, 0xFE9B, 0xFE9C],
+        'ج' => [0xFE9D, 0xFE9E, 0xFE9F, 0xFEA0],
+        'ح' => [0xFEA1, 0xFEA2, 0xFEA3, 0xFEA4],
+        'خ' => [0xFEA5, 0xFEA6, 0xFEA7, 0xFEA8],
+        'د' => [0xFEA9, 0xFEAA, 0, 0],
+        'ذ' => [0xFEAB, 0xFEAC, 0, 0],
+        'ر' => [0xFEAD, 0xFEAE, 0, 0],
+        'ز' => [0xFEAF, 0xFEB0, 0, 0],
+        'س' => [0xFEB1, 0xFEB2, 0xFEB3, 0xFEB4],
+        'ش' => [0xFEB5, 0xFEB6, 0xFEB7, 0xFEB8],
+        'ص' => [0xFEB9, 0xFEBA, 0xFEBB, 0xFEBC],
+        'ض' => [0xFEBD, 0xFEBE, 0xFEBF, 0xFEC0],
+        'ط' => [0xFEC1, 0xFEC2, 0xFEC3, 0xFEC4],
+        'ظ' => [0xFEC5, 0xFEC6, 0xFEC7, 0xFEC8],
+        'ع' => [0xFEC9, 0xFECA, 0xFECB, 0xFECC],
+        'غ' => [0xFECD, 0xFECE, 0xFECF, 0xFED0],
+        'ف' => [0xFED1, 0xFED2, 0xFED3, 0xFED4],
+        'ق' => [0xFED5, 0xFED6, 0xFED7, 0xFED8],
+        'ك' => [0xFED9, 0xFEDA, 0xFEDB, 0xFEDC],
+        'ل' => [0xFEDD, 0xFEDE, 0xFEDF, 0xFEE0],
+        'م' => [0xFEE1, 0xFEE2, 0xFEE3, 0xFEE4],
+        'ن' => [0xFEE5, 0xFEE6, 0xFEE7, 0xFEE8],
+        'ه' => [0xFEE9, 0xFEEA, 0xFEEB, 0xFEEC],
+        'و' => [0xFEED, 0xFEEE, 0, 0],
+        'ي' => [0xFEF1, 0xFEF2, 0xFEF3, 0xFEF4],
+        // ویژه‌ی فارسی
+        'پ' => [0xFB56, 0xFB57, 0xFB58, 0xFB59],
+        'چ' => [0xFB7A, 0xFB7B, 0xFB7C, 0xFB7D],
+        'ژ' => [0xFB8A, 0xFB8B, 0, 0],
+        'ک' => [0xFB8E, 0xFB8F, 0xFB90, 0xFB91],
+        'گ' => [0xFB92, 0xFB93, 0xFB94, 0xFB95],
+        'ی' => [0xFBFC, 0xFBFD, 0xFBFE, 0xFBFF],
+    ];
+    return $t;
+}
+
+/** لام + الف یک نشانه‌ی واحد می‌شود */
+function pxLamAlef() {
+    return ['آ' => [0xFEF5, 0xFEF6], 'أ' => [0xFEF7, 0xFEF8],
+            'إ' => [0xFEF9, 0xFEFA], 'ا' => [0xFEFB, 0xFEFC]];
+}
+
+function pxIsArabic($ch) {
+    $c = mb_ord($ch, 'UTF-8');
+    return $c !== false && (($c >= 0x0600 && $c <= 0x06FF) || ($c >= 0xFB50 && $c <= 0xFEFF));
+}
+
+/** رقم فارسی/عربی هم «عدد» است و نباید برعکس شود */
+function pxIsDigitCh($ch) {
+    $c = mb_ord($ch, 'UTF-8');
+    return $c !== false && (($c >= 0x30 && $c <= 0x39) ||
+                            ($c >= 0x0660 && $c <= 0x0669) || ($c >= 0x06F0 && $c <= 0x06F9));
+}
+
+/**
+ * متن فارسی را به شکلی درمی‌آورد که GD درست بکشد:
+ * حروف چسبیده، و ترتیب برعکس‌شده برای راست‌به‌چپ.
+ */
+function pxShape($text) {
+    $text = (string)$text;
+    if ($text === '') return '';
+
+    $chars = preg_split('//u', $text, -1, PREG_SPLIT_NO_EMPTY);
+    if (!$chars) return $text;
+
+    $tbl = pxArabicTable();
+    $lam = pxLamAlef();
+
+    // ── ۱) هر حرف را به شکل درستش ──
+    $out = [];
+    $n = count($chars);
+    for ($i = 0; $i < $n; $i++) {
+        $ch = $chars[$i];
+        if (!isset($tbl[$ch])) { $out[] = $ch; continue; }
+
+        $prev = null;
+        for ($k = $i - 1; $k >= 0; $k--) { if ($chars[$k] !== "\u{200C}") { $prev = $chars[$k]; break; } }
+        $next = null;
+        for ($k = $i + 1; $k < $n; $k++) { if ($chars[$k] !== "\u{200C}") { $next = $chars[$k]; break; } }
+
+        // حرف قبلی می‌تواند به جلو بچسبد؟ (یعنی شکل آغازی/میانی دارد)
+        $joinBefore = $prev !== null && isset($tbl[$prev]) && $tbl[$prev][2] !== 0;
+        $joinAfter  = $next !== null && isset($tbl[$next]);
+
+        // لام + الف
+        if ($ch === 'ل' && $next !== null && isset($lam[$next])) {
+            $pair = $lam[$next];
+            $out[] = mb_chr($joinBefore ? $pair[1] : $pair[0], 'UTF-8');
+            $i++;                      // الف را مصرف کردیم
+            continue;
+        }
+
+        $f = $tbl[$ch];
+        if ($joinBefore && $joinAfter && $f[3] !== 0)      $g = $f[3];   // میانی
+        elseif ($joinBefore && $f[1] !== 0)                $g = $f[1];   // پایانی
+        elseif ($joinAfter && $f[2] !== 0)                 $g = $f[2];   // آغازی
+        else                                               $g = $f[0];   // تنها
+        $out[] = mb_chr($g, 'UTF-8');
+    }
+
+    // ── ۲) ترتیب: راست‌به‌چپ، ولی عدد و لاتین سرِ جایشان ──
+    // فاصله دسته‌ی خودش است؛ اگر به یکی از دو طرف بچسبد، موقع برعکس
+    // کردن یک طرف دو فاصله می‌گیرد و طرف دیگر هیچ.
+    $runs = [];
+    $cur  = null;
+    foreach ($out as $ch) {
+        if ($ch === ' ')                       $kind = 'sp';
+        elseif (pxIsDigitCh($ch) ||
+                in_array($ch, ['.', ',', '٬', '/', '%', '$', '+', '-'], true)) $kind = 'ltr';
+        elseif (pxIsArabic($ch))               $kind = 'rtl';
+        else                                   $kind = 'ltr';
+
+        if ($cur === null || $cur['k'] !== $kind) {
+            if ($cur !== null) $runs[] = $cur;
+            $cur = ['k' => $kind, 'buf' => []];
+        }
+        $cur['buf'][] = $ch;
+    }
+    if ($cur !== null) $runs[] = $cur;
+
+    $res = '';
+    foreach (array_reverse($runs) as $r) {
+        $res .= ($r['k'] === 'rtl') ? implode('', array_reverse($r['buf'])) : implode('', $r['buf']);
+    }
+    return $res;
+}
+
+/** نوشتن متن فارسی — همان pxText ولی با شکل‌دهی */
+function pxTextFa($im, $size, $x, $y, $color, $text, $bold = true) {
+    pxText($im, $size, $x, $y, $color, pxShape($text), $bold);
+}
+
+function pxTextFaW($size, $text, $bold = true) {
+    return pxTextW($size, pxShape($text), $bold);
+}
+
+// ============================================================
+// 🖼 کارت روشن — سبک طلا و دلار
+// ============================================================
+
+/**
+ * دارایی‌هایی که کارت اختصاصی دارند.
+ * هرکدام: نام فارسی، ایموجی، کلید جفت‌ارز در API، واحد، و رنگ پس‌زمینه.
+ * از پنل هم می‌شود کم و زیادشان کرد.
+ */
+function pxAssetsDefault() {
+    return [
+        'usd'  => ['name' => 'دلار آمریکا', 'emoji' => '🇺🇸', 'pair' => 'USDT/IRT',
+                   'unit' => 'تومان', 'bg' => ['B22234', '3C3B6E'], 'words' => 'دلار,دلار آمریکا,usd'],
+        'gold' => ['name' => 'طلا ۱۸ عیار', 'emoji' => '🥇', 'pair' => 'GOLD18/IRT',
+                   'unit' => 'تومان', 'bg' => ['F5A524', 'C2410C'], 'words' => 'طلا,طلا ۱۸ عیار,gold,طلای ۱۸'],
+        'coin' => ['name' => 'سکه امامی', 'emoji' => '🪙', 'pair' => 'COIN/IRT',
+                   'unit' => 'تومان', 'bg' => ['EAB308', '92400E'], 'words' => 'سکه,سکه امامی,coin'],
+    ];
+}
+
+function pxAssets() {
+    $saved = pxVal('assets', null);
+    if (!is_array($saved)) return pxAssetsDefault();
+    $out = [];
+    foreach ($saved as $k => $a) {
+        if (!is_array($a)) continue;
+        $out[$k] = array_replace(pxAssetsDefault()[$k] ?? [
+            'name' => $k, 'emoji' => '💠', 'pair' => '', 'unit' => 'تومان',
+            'bg' => ['334155', '0F172A'], 'words' => '',
+        ], $a);
+    }
+    return $out ?: pxAssetsDefault();
+}
+
+/**
+ * رنگ اختصاصی هر ارز.
+ * چند نماد شناخته‌شده رنگ خودشان را دارند؛ بقیه از روی خودِ نماد
+ * یک رنگ ثابت می‌گیرند — پس هیچ ارزی بی‌رنگ نمی‌ماند و فهرست
+ * هیچ‌وقت تمام نمی‌شود.
+ */
+function pxCoinColors($sym) {
+    $known = [
+        'BTC' => ['F7931A', '7C4A03'], 'ETH' => ['627EEA', '2B3A78'],
+        'USDT'=> ['26A17B', '0E5C43'], 'TON' => ['0098EA', '00457A'],
+        'TRX' => ['EF0027', '7A0015'], 'BNB' => ['F3BA2F', '8A6512'],
+        'SOL' => ['9945FF', '4B1F8C'], 'XRP' => ['23292F', '000000'],
+        'DOGE'=> ['C2A633', '6B5A18'], 'ADA' => ['0033AD', '001B5C'],
+        'NOT' => ['000000', '333333'], 'SHIB'=> ['FFA409', '8A5600'],
+        'AVAX'=> ['E84142', '7C1F20'], 'LINK'=> ['2A5ADA', '152E77'],
+        'DOT' => ['E6007A', '7A0041'], 'MATIC'=> ['8247E5', '43227A'],
+        'LTC' => ['345D9D', '1B3054'], 'PEPE'=> ['3D8130', '1F4318'],
+        'ATOM'=> ['2E3148', '16182A'], 'NEAR'=> ['00C08B', '006146'],
+        'XLM' => ['14B6E7', '0A5F79'], 'UNI' => ['FF007A', '85003F'],
+    ];
+    $sym = strtoupper((string)$sym);
+    if (isset($known[$sym])) return $known[$sym];
+
+    // رنگ ثابت از روی نماد — همیشه یک ارز، یک رنگ
+    $h = crc32($sym);
+    $hue = $h % 360;
+    return [pxHsl($hue, 62, 48), pxHsl($hue, 66, 24)];
+}
+
+/** HSL → RRGGBB */
+function pxHsl($h, $s, $l) {
+    $h = ($h % 360) / 360; $s /= 100; $l /= 100;
+    $q = $l < 0.5 ? $l * (1 + $s) : $l + $s - $l * $s;
+    $p = 2 * $l - $q;
+    $f = function ($t) use ($p, $q) {
+        if ($t < 0) $t += 1;
+        if ($t > 1) $t -= 1;
+        if ($t < 1 / 6) return $p + ($q - $p) * 6 * $t;
+        if ($t < 1 / 2) return $q;
+        if ($t < 2 / 3) return $p + ($q - $p) * (2 / 3 - $t) * 6;
+        return $p;
+    };
+    return sprintf('%02X%02X%02X',
+        (int)round($f($h + 1 / 3) * 255), (int)round($f($h) * 255), (int)round($f($h - 1 / 3) * 255));
+}
+
+/** «طلا» → کلید دارایی، یا null */
+function pxAssetOf($text) {
+    $t = trim(mb_strtolower(norm_fa_digits((string)$text)));
+    if ($t === '') return null;
+    foreach (pxAssets() as $k => $a) {
+        foreach (explode(',', (string)($a['words'] ?? '')) as $w) {
+            $w = trim(mb_strtolower(norm_fa_digits($w)));
+            if ($w !== '' && $t === $w) return $k;
+        }
+    }
+    return null;
+}
+
+/** رنگ را با سفید رقیق می‌کند — تینتِ توپر، بدون آلفا */
+function pxTint($hex, $pct, $onto = 'FFFFFF') {
+    [$r, $g, $b]    = pxHex($hex);
+    [$r2, $g2, $b2] = pxHex($onto);
+    $t = max(0.0, min(1.0, (float)$pct));
+    return sprintf('%02X%02X%02X',
+        (int)round($r2 + ($r - $r2) * $t),
+        (int)round($g2 + ($g - $g2) * $t),
+        (int)round($b2 + ($b - $b2) * $t));
+}
+
+/** قیمت یک دارایی (طلا، دلار، سکه) — ۰ یعنی کلیدش در API نیست */
+function pxAssetPrice($key, $fresh = false) {
+    $a = pxAssets()[$key] ?? null;
+    if (!$a) return 0.0;
+    $pair = strtoupper(trim((string)($a['pair'] ?? '')));
+    if ($pair === '') return 0.0;
+    $p = pxFetch($fresh);
+    if (isset($p[$pair])) return (float)$p[$pair];
+    // شاید فقط به دلار داده شده — به تومان بیاورش
+    if (str_ends_with($pair, '/IRT')) {
+        $usdPair = substr($pair, 0, -4) . '/USDT';
+        $irt = (float)($p['USDT/IRT'] ?? 0);
+        if (isset($p[$usdPair]) && $irt > 0) return (float)$p[$usdPair] * $irt;
+    }
+    return 0.0;
+}
+
+/** گرادیان عمودی ساده */
+function pxGradient($im, $x1, $y1, $x2, $y2, $hexA, $hexB) {
+    [$r1, $g1, $b1] = pxHex($hexA);
+    [$r2, $g2, $b2] = pxHex($hexB);
+    $h = max(1, $y2 - $y1);
+    for ($y = 0; $y <= $h; $y++) {
+        $t = $y / $h;
+        $c = imagecolorallocate($im,
+            (int)round($r1 + ($r2 - $r1) * $t),
+            (int)round($g1 + ($g2 - $g1) * $t),
+            (int)round($b1 + ($b2 - $b1) * $t));
+        imageline($im, $x1, $y1 + $y, $x2, $y1 + $y, $c);
+    }
+}
+
+/** خط نرم از میان نقطه‌ها — گوشه‌های تیز نمودار را گرد می‌کند */
+function pxSmooth($data, $passes = 2) {
+    $d = array_values(array_map('floatval', $data));
+    $n = count($d);
+    if ($n < 3) return $d;
+    for ($p = 0; $p < $passes; $p++) {
+        $o = $d;
+        for ($i = 1; $i < $n - 1; $i++) $d[$i] = ($o[$i - 1] + 2 * $o[$i] + $o[$i + 1]) / 4;
+    }
+    return $d;
+}
+
+/**
+ * کارت روشن یک دارایی — همان چیدمانی که فرستادید.
+ * برگشت: بایت‌های PNG یا null.
+ */
+function pxAssetCard($name, $emoji, $price, $unit, $chgPct, $bg = ['334155', '0F172A'], $series = null) {
+    if (!pxCardReady()) return null;
+
+    $W = 1200; $H = 675;
+    $up = $chgPct >= 0;
+
+    $im = imagecreatetruecolor($W, $H);
+    imagealphablending($im, true);
+    imageantialias($im, true);
+
+    $C = function ($hex, $a = 0) use ($im) {
+        [$r, $g, $b] = pxHex($hex);
+        return imagecolorallocatealpha($im, $r, $g, $b, $a);
+    };
+
+    // پس‌زمینه‌ی رنگی دارایی
+    pxGradient($im, 0, 0, $W, $H, $bg[0] ?? '334155', $bg[1] ?? '0F172A');
+
+    // کارت سفید با سایه‌ی نرم
+    $cx1 = 78; $cy1 = 62; $cx2 = $W - 78; $cy2 = $H - 96;
+    for ($i = 14; $i >= 1; $i--)
+        pxRoundRect($im, $cx1 - $i, $cy1 - $i + 5, $cx2 + $i, $cy2 + $i + 5, 34 + $i, $C('000000', 126));
+    pxRoundRect($im, $cx1, $cy1, $cx2, $cy2, 34, $C('F7F7F8'));
+
+    $ink   = $C('101114');
+    $muted = $C('9AA0A6');
+    $line  = $C('E6E7EA');
+    $accHex = $up ? '16A34A' : 'DC2626';
+    $acc    = $C($accHex);
+
+    // ── نشان IRT، بالا-چپ ──
+    $tagW = pxTextW(21, 'IRT') + 46;
+    pxRoundRect($im, $cx1 + 34, $cy1 + 40, $cx1 + 34 + $tagW, $cy1 + 92, 24, $C('EBECEF'));
+    pxText($im, 21, $cx1 + 34 + 23, $cy1 + 76, $C('6B7280'), 'IRT');
+
+    // ── نام دارایی، بالا-راست ──
+    $pad = 40;
+    $right = $cx2 - $pad;
+    $emo = trim((string)$emoji);
+    $nameW = pxTextFaW(32, $name);
+    pxTextFa($im, 32, $right - $nameW, $cy1 + 82, $ink, $name);
+    if ($emo !== '') {
+        // ایموجی را فونت نمی‌کشد؛ یک دایره‌ی رنگی به‌جایش
+        $ec = $C($bg[0] ?? '334155');
+        $ex = $right - $nameW - 36; $ey = $cy1 + 70;
+        imagefilledellipse($im, $ex, $ey, 38, 38, $C(pxTint($bg[0] ?? '334155', 0.18, 'F7F7F8')));
+        imagefilledellipse($im, $ex, $ey, 22, 22, $ec);
+    }
+
+    // ── قیمت بزرگ ──
+    // عددهای بزرگ رند، عددهای کوچک با اعشار — «۲٫۸۱ دلار» نباید «۳» شود
+    $ps = ((float)$price >= 1000) ? number_format((float)$price) : pxNum($price);
+
+    // اگر عدد بلند باشد (مثلا بیت‌کوین به تومان) فونت کوچک‌تر می‌شود
+    // تا از کارت بیرون نزند.
+    $uw   = pxTextFaW(26, $unit);
+    $room = ($right - ($cx1 + 34 + $tagW + 24)) - $uw - 26;
+    $fs = 64;
+    while ($fs > 30 && pxTextW($fs, $ps) > $room) $fs -= 2;
+    $pw = pxTextW($fs, $ps);
+    pxText($im, $fs, $right - $pw, $cy1 + 176, $ink, $ps);
+    pxTextFa($im, 26, $right - $pw - 26 - $uw, $cy1 + 172, $muted, $unit);
+
+    // ── درصد و فلش ──
+    $pct = ($up ? '+' : '-') . number_format(abs((float)$chgPct), 2) . '%';
+    $pcw = pxTextW(23, $pct);
+    $px2 = $right;
+    $px1 = $px2 - $pcw - 46;
+    $soft = $C(pxTint($accHex, 0.13, 'F7F7F8'));
+    pxRoundRect($im, $px1, $cy1 + 206, $px2, $cy1 + 258, 24, $soft);
+    pxText($im, 23, $px1 + 23, $cy1 + 243, $acc, $pct);
+    // دایره‌ی فلش
+    $ax = $px1 - 42;
+    imagefilledellipse($im, $ax, $cy1 + 232, 46, 46, $soft);
+    $dir = $up ? -1 : 1;
+    imagesetthickness($im, 4);
+    foreach ([-7, 3] as $off) {
+        imageline($im, $ax - 10, $cy1 + 232 + $off * $dir, $ax, $cy1 + 232 + ($off + 7) * $dir, $acc);
+        imageline($im, $ax, $cy1 + 232 + ($off + 7) * $dir, $ax + 10, $cy1 + 232 + $off * $dir, $acc);
+    }
+    imagesetthickness($im, 1);
+
+    // ── نمودار ──
+    $gx1 = $cx1 + 150; $gx2 = $cx2 - 34;
+    $gy1 = $cy1 + 300; $gy2 = $cy2 - 34;
+    $data = pxSmooth(is_array($series) && count($series) > 5 ? $series
+                                                            : pxSeries($price, $chgPct, 110), 3);
+    $n = count($data);
+    $min = min($data); $max = max($data);
+    if ($max - $min < 1e-9) $max = $min + 1;
+    $lo = $min - ($max - $min) * 0.35;
+    $hi = $max + ($max - $min) * 0.18;
+
+    // خط‌های افقی و عددهای محور
+    for ($i = 0; $i <= 4; $i++) {
+        $yy = (int)($gy2 - ($gy2 - $gy1) * $i / 4);
+        imageline($im, $gx1, $yy, $gx2, $yy, $line);
+        $v = $lo + ($hi - $lo) * $i / 4;
+        pxText($im, 15, $cx1 + 34, $yy + 6, $muted, pxCompact($v), false);
+    }
+
+    $fx = function ($i) use ($gx1, $gx2, $n) { return $gx1 + ($gx2 - $gx1) * $i / max(1, $n - 1); };
+    $fy = function ($v) use ($gy1, $gy2, $lo, $hi) {
+        return $gy2 - ($gy2 - $gy1) * (($v - $lo) / max(1e-9, $hi - $lo));
+    };
+
+    // سایه‌ی زیر خط — نوار‌به‌نوار، هر نوار رنگ خودش را دارد.
+    // نسخه‌ی قبلی چند چندضلعی روی هم می‌کشید و راه‌راه می‌افتاد.
+    $bands = 56;
+    for ($bnd = 0; $bnd < $bands; $bnd++) {
+        $yTop = $gy1 + ($gy2 - $gy1) * $bnd / $bands;
+        $yBot = $gy1 + ($gy2 - $gy1) * ($bnd + 1) / $bands;
+        // بالا پررنگ‌تر، پایین محوتر
+        $col = $C(pxTint($accHex, 0.30 * (1 - $bnd / $bands) + 0.05, 'F7F7F8'));
+        for ($i = 0; $i < $n - 1; $i++) {
+            $x1 = (int)$fx($i); $x2 = (int)$fx($i + 1);
+            $yc = min($fy($data[$i]), $fy($data[$i + 1]));
+            $top = max($yTop, $yc);
+            if ($top < $yBot) imagefilledrectangle($im, $x1, (int)$top, $x2 + 1, (int)$yBot, $col);
+        }
+    }
+
+    imagesetthickness($im, 5);
+    for ($i = 1; $i < $n; $i++)
+        imageline($im, (int)$fx($i - 1), (int)$fy($data[$i - 1]), (int)$fx($i), (int)$fy($data[$i]), $acc);
+    imagesetthickness($im, 1);
+
+    // نقطه‌ی آخر
+    $lx = (int)$fx($n - 1); $ly = (int)$fy($data[$n - 1]);
+    imagefilledellipse($im, $lx, $ly, 20, 20, $acc);
+    imagefilledellipse($im, $lx, $ly, 9, 9, $C('FFFFFF'));
+
+    // ── امضا ──
+    $wm = trim((string)(cfg()['bot_username'] ?? ''));
+    $wm = $wm !== '' ? '@' . $wm : 'Live Market';
+    pxText($im, 20, (int)(($W - pxTextW(20, $wm)) / 2), $H - 34, $C('FFFFFF', 40), $wm);
+
+    ob_start();
+    imagepng($im, null, 6);
+    $bytes = ob_get_clean();
+    imagedestroy($im);
+    return $bytes;
 }

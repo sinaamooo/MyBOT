@@ -300,13 +300,13 @@ function maDefaultTg() {
             // ── 💎 پریمیوم ──
             ['id' => 'i_prem3', 'cat' => 'c_prem', 'emoji' => '💎', 'name' => 'پریمیوم ۳ ماهه',
              'desc' => 'فعال‌سازی روی آیدی شما — بدون نیاز به رمز', 'price' => 690000, 'unit' => '',
-             'badge' => '', 'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 1, 'auto' => 'premium', 'auto_qty' => 3],
+             'badge' => '', 'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 1, 'auto' => 'premium', 'auto_qty' => 3, 'premium' => 3],
             ['id' => 'i_prem6', 'cat' => 'c_prem', 'emoji' => '💎', 'name' => 'پریمیوم ۶ ماهه',
              'desc' => 'فعال‌سازی روی آیدی شما — بدون نیاز به رمز', 'price' => 990000, 'unit' => '',
-             'badge' => 'اقتصادی', 'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 2, 'auto' => 'premium', 'auto_qty' => 6],
+             'badge' => 'اقتصادی', 'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 2, 'auto' => 'premium', 'auto_qty' => 6, 'premium' => 6],
             ['id' => 'i_prem12', 'cat' => 'c_prem', 'emoji' => '👑', 'name' => 'پریمیوم ۱۲ ماهه',
              'desc' => 'یک سال کامل — بهترین قیمت', 'price' => 1690000, 'unit' => '',
-             'badge' => 'ویژه', 'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 3, 'auto' => 'premium', 'auto_qty' => 12],
+             'badge' => 'ویژه', 'ask' => 'username', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 3, 'auto' => 'premium', 'auto_qty' => 12, 'premium' => 12],
 
             // ── 🎁 گیفت‌های استارزی (قیمت بر پایه استارز، قابل اتصال به مارکت) ──
             ['id' => 'g_teddy',     'cat' => 'c_gift', 'emoji' => '🧸', 'name' => 'گیفت تدی',
@@ -873,11 +873,25 @@ function maLivePrice($item) {
         }
     }
 
-    // ۲) نرخ استارز
+    // ۲) ⭐️ استارز — اول قیمت لحظه‌ای فرگمنت، بعد نرخ دستی
     $st = (float)($item['stars'] ?? 0);
-    if ($st > 0 && !empty($c['stars']['on'])) {
-        $p = (float)($c['stars']['price'] ?? 0);
-        if ($p > 0) return maRound($st * $p, (float)($c['stars']['round'] ?? 0));
+    if ($st > 0) {
+        if (function_exists('pxStars') && !empty(pxVal('on'))) {
+            $d = pxStars($st);
+            if ($d && $d['irt'] > 0) return maRound($d['irt'], (float)($c['stars']['round'] ?? 0));
+        }
+        if (!empty($c['stars']['on'])) {
+            $p = (float)($c['stars']['price'] ?? 0);
+            if ($p > 0) return maRound($st * $p, (float)($c['stars']['round'] ?? 0));
+        }
+    }
+
+    // ۲.۵) 💎 پریمیوم — قیمت دلاری‌اش روی فرگمنت ثابت است، فقط نرخ ارز عوض می‌شود
+    $pm = (int)($item['premium'] ?? 0);
+    if ($pm > 0 && function_exists('pxPremiumRows') && !empty(pxVal('on'))) {
+        $rows = pxPremiumRows();
+        if (isset($rows[$pm]) && $rows[$pm]['irt'] > 0)
+            return maRound($rows[$pm]['irt'], (float)($c['stars']['round'] ?? 0));
     }
 
     // ۳) نرخ ارز (تون/ترون) — قیمت هر واحد
@@ -891,9 +905,19 @@ function maLivePrice($item) {
 }
 
 /** قیمت قابل استفاده: زنده اگر بود، وگرنه قیمت دستی */
+/**
+ * قیمتی که مشتری واقعا می‌پردازد.
+ *
+ * تا حالا سود و «قیمت دستی» که در پنل تنظیم می‌شد فقط در خودِ پنل
+ * نشان داده می‌شد و هیچ‌وقت روی فاکتور نمی‌نشست — یعنی هر عددی هم
+ * می‌گذاشتید، مشتری قیمت پایه را می‌داد.
+ */
 function maItemPrice($item) {
     $live = maLivePrice($item);
-    return $live !== null ? (float)$live : (float)($item['price'] ?? 0);
+    $base = $live !== null ? (float)$live : (float)($item['price'] ?? 0);
+    if (function_exists('axPrice'))
+        $base = (float)axPrice((string)($item['id'] ?? ''), $base, (string)($item['cat'] ?? ''));
+    return $base;
 }
 
 /**
@@ -902,6 +926,13 @@ function maItemPrice($item) {
  * فروختن با آن یعنی ضرر — پس وقتی نرخ نمی‌آید اصلا نباید فروخته شوند.
  */
 function maNeedsLive($item) {
+    // وقتی موتور قیمت روشن است، استارز و پریمیوم هم نرخ لحظه‌ای می‌خواهند:
+    // قیمت دلاری‌شان روی فرگمنت ثابت است ولی نرخ ارز هر لحظه عوض می‌شود،
+    // و فروختن با عدد دیروز یعنی ضرر.
+    if (function_exists('pxVal') && !empty(pxVal('on'))) {
+        if ((float)($item['stars'] ?? 0) > 0)   return true;
+        if ((int)($item['premium'] ?? 0) > 0)   return true;
+    }
     return trim((string)($item['rate_key'] ?? '')) !== ''
         || trim((string)($item['market_key'] ?? '')) !== '';
 }
@@ -1056,9 +1087,18 @@ class MaOrder
         });
     }
 
-    public static function forUser($uid, $limit = 10) {
+    /**
+     * سفارش‌های یک کاربر. با $app، فقط سفارش‌های همان مینی‌اپ.
+     * بدون این، کسی که داخل «فروش کانفیگ» بود سفارش استارزش را هم
+     * آنجا می‌دید — دو فروشگاه جدا که فهرست سفارششان قاطی بود.
+     */
+    public static function forUser($uid, $limit = 10, $app = null) {
         $out = [];
-        foreach (self::all() as $o) if ((int)$o['user_id'] === (int)$uid) $out[] = $o;
+        foreach (self::all() as $o) {
+            if ((int)$o['user_id'] !== (int)$uid) continue;
+            if ($app !== null && (string)($o['app'] ?? '') !== (string)$app) continue;
+            $out[] = $o;
+        }
         usort($out, fn($a, $b) => strcmp($b['created_at'], $a['created_at']));
         return array_slice($out, 0, $limit);
     }
@@ -1858,7 +1898,7 @@ function maApi() {
                 'id' => $o['id'], 'name' => $o['item_name'], 'emoji' => $o['item_emoji'],
                 'total' => $o['total'], 'status' => MaOrder::statusLabel($o['status']),
                 'date' => $o['created_at'],
-            ], MaOrder::forUser($uid, 8)),
+            ], MaOrder::forUser($uid, 8, $key)),
         ]);
     }
 
