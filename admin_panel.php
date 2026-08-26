@@ -14,18 +14,24 @@
  * ترتیب: فایل محلی ← متغیر محیطی ← مقدار پیش‌فرض.
  */
 if (is_file(__DIR__ . '/config.local.php')) require_once __DIR__ . '/config.local.php';
+// هر دو نام پذیرفته می‌شوند تا اگر در config.local.php هرکدام را نوشتید کار کند
 if (!defined('ADMIN_PASSWORD'))
-    define('ADMIN_PASSWORD', (string)getenv('ADMIN_PANEL_PASS'));
+    define('ADMIN_PASSWORD', defined('ADMIN_PANEL_PASS')
+        ? (string)ADMIN_PANEL_PASS
+        : (string)getenv('ADMIN_PANEL_PASS'));
 
-// رمزِ ضعیف یا تنظیم‌نشده = پنل اصلا باز نمی‌شود.
-// از این پنل می‌شود به موجودی کاربران و ولت TON رسید؛ رمز پیش‌فرض
-// یعنی هرکس آدرس صفحه را حدس زد، همه‌چیز را دارد.
-if (strlen(ADMIN_PASSWORD) < 8) {
+// رمزِ تنظیم‌نشده = پنل اصلا باز نمی‌شود. از این پنل می‌شود به موجودی
+// کاربران و ولت TON رسید، پس بدون رمز حتی صفحه‌ی ورود هم نباید بیاید.
+//
+// حداقل ۶ کاراکتر است نه بیشتر، چون چیزی که رمزِ کوتاه را در برابر حدس
+// آنلاین نگه می‌دارد طولش نیست — قفلِ بعد از چند تلاش است (پایین‌تر:
+// ۶ تلاش برای هر IP و ۳۰ تلاش در کل، بعد ۱۵ دقیقه قفل).
+if (strlen(ADMIN_PASSWORD) < 6) {
     http_response_code(500);
     header('Content-Type: text/plain; charset=utf-8');
     exit("رمز پنل تنظیم نشده است.\n\n" .
          "کنار همین فایل در config.local.php بنویسید:\n\n" .
-         "define('ADMIN_PANEL_PASS', 'یک رمز حداقل ۸ کاراکتری');\n");
+         "define('ADMIN_PANEL_PASS', 'رمز شما');\n");
 }
 
 define('MEMBERSHIP_LIB_ONLY', true);
@@ -56,6 +62,7 @@ session_start();
  * ناموفق، آن IP یک ربع بیرون می‌ماند.
  */
 define('PANEL_MAX_TRIES', 6);
+define('PANEL_MAX_TRIES_ALL', 30);   // مجموع تلاش ناموفق از همه‌ی آی‌پی‌ها
 define('PANEL_LOCK_SECONDS', 900);
 define('PANEL_IDLE_SECONDS', 7200);
 
@@ -65,28 +72,51 @@ function panelIp() {
 }
 
 /** چند ثانیه دیگر قفل است؟ ۰ یعنی باز است */
+/**
+ * قفل ورود.
+ *
+ * قفلِ فقط-IP را کسی که چند آی‌پی دارد دور می‌زند، پس یک شمارنده‌ی
+ * سراسری هم هست: مجموع تلاش‌های ناموفق از هر جایی. یعنی حتی حمله‌ی
+ * پخش‌شده روی صدها آی‌پی هم بعد از ۳۰ حدس متوقف می‌شود.
+ */
 function panelLockLeft() {
-    $r = load('panel_lock')[panelIp()] ?? null;
-    if (!is_array($r) || (int)($r['n'] ?? 0) < PANEL_MAX_TRIES) return 0;
-    $left = PANEL_LOCK_SECONDS - (time() - (int)($r['at'] ?? 0));
-    return $left > 0 ? $left : 0;
+    $a = load('panel_lock');
+    $now = time();
+
+    $r = $a[panelIp()] ?? null;
+    if (is_array($r) && (int)($r['n'] ?? 0) >= PANEL_MAX_TRIES) {
+        $left = PANEL_LOCK_SECONDS - ($now - (int)($r['at'] ?? 0));
+        if ($left > 0) return $left;
+    }
+
+    $g = $a['_all'] ?? null;
+    if (is_array($g) && (int)($g['n'] ?? 0) >= PANEL_MAX_TRIES_ALL) {
+        $left = PANEL_LOCK_SECONDS - ($now - (int)($g['at'] ?? 0));
+        if ($left > 0) return $left;
+    }
+    return 0;
 }
 
 function panelNoteFail() {
     $k = panelIp();
     mutate('panel_lock', function (&$a) use ($k) {
-        $r = $a[$k] ?? ['n' => 0, 'at' => 0];
-        if (time() - (int)$r['at'] > PANEL_LOCK_SECONDS) $r = ['n' => 0, 'at' => 0];
-        $r['n'] = (int)$r['n'] + 1;
-        $r['at'] = time();
-        $a[$k] = $r;
-        foreach ($a as $kk => $vv) if (time() - (int)($vv['at'] ?? 0) > 86400) unset($a[$kk]);
+        foreach ([$k, '_all'] as $kk) {
+            $r = $a[$kk] ?? ['n' => 0, 'at' => 0];
+            if (time() - (int)$r['at'] > PANEL_LOCK_SECONDS) $r = ['n' => 0, 'at' => 0];
+            $r['n'] = (int)$r['n'] + 1;
+            $r['at'] = time();
+            $a[$kk] = $r;
+        }
+        foreach ($a as $kk => $vv)
+            if ($kk !== '_all' && time() - (int)($vv['at'] ?? 0) > 86400) unset($a[$kk]);
     });
 }
 
 function panelClearFails() {
     $k = panelIp();
-    mutate('panel_lock', function (&$a) use ($k) { unset($a[$k]); });
+    // ورود موفق، شمارنده‌ی سراسری را هم صفر می‌کند — وگرنه یک حمله‌ی
+    // بی‌ربط می‌توانست خود مدیر را بیرون نگه دارد
+    mutate('panel_lock', function (&$a) use ($k) { unset($a[$k], $a['_all']); });
 }
 
 function renderLogin($error) { ?>
