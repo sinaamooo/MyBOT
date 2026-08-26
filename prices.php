@@ -25,6 +25,10 @@ function pxDefaults() {
         'api' => 'https://swapwallet.app/api/v1/market/prices',
         'key' => 'apikey-h8T5ufE73fILlDudXnPJp6CRYV9PSMKviBB0SxCXCAOzSFneGcBHaUa19am2kTIU',
         'ttl' => 15,          // ثانیه — قیمت لحظه‌ای یعنی کش کوتاه
+
+        // 📡 منبع دوم: طلا، سکه و پول کشورها (API اصلی فقط ارز دیجیتال دارد)
+        'alt_url' => 'https://call1.tgju.org/ajax.json',
+        'alt_ttl' => 300,
         'timeout' => 6,
         'cooldown' => 120,    // بعد از شکست، این مدت سراغ شبکه نرو
 
@@ -646,30 +650,88 @@ function pxSendPhoto($chatId, $bytes, $caption, $markup = null, $replyTo = null)
         return __tgHook(BOT_TOKEN, 'sendPhoto',
             ['chat_id' => $chatId, 'caption' => $caption, 'photo_len' => strlen((string)$bytes)]);
 
-    $tmp = tempnam(sys_get_temp_dir(), 'pxc') . '.png';
-    file_put_contents($tmp, $bytes);
+    if (!is_string($bytes) || strlen($bytes) < 100)
+        return ['ok' => false, 'description' => 'تصویر ساخته نشد'];
+
+    // فایل موقت را کنار داده‌های خود ربات می‌سازیم، نه در /tmp سیستم.
+    // روی هاست‌های اشتراکی /tmp اغلب قابل نوشتن نیست و آن‌وقت عکس
+    // بی‌صدا ناپدید می‌شد — نه خطایی، نه پیامی.
+    $dir = rtrim(DATA_DIR, '/') . '/tmp';
+    if (!is_dir($dir)) @mkdir($dir, 0755, true);
+    $tmp = $dir . '/px_' . bin2hex(random_bytes(6)) . '.png';
+
+    if (@file_put_contents($tmp, $bytes) === false) {
+        $tmp2 = @tempnam(sys_get_temp_dir(), 'px');       // آخرین تلاش
+        if ($tmp2 === false || @file_put_contents($tmp2, $bytes) === false)
+            return ['ok' => false, 'description' => 'جایی برای نوشتن فایل موقت نبود'];
+        $tmp = $tmp2;
+    }
 
     $post = [
         'chat_id' => $chatId,
-        'caption' => $caption,
+        'caption' => mb_substr((string)$caption, 0, 1024),
         'parse_mode' => 'HTML',
         'photo' => new CURLFile($tmp, 'image/png', 'chart.png'),
     ];
-    if ($markup) $post['reply_markup'] = json_encode($markup);
+    if ($markup)  $post['reply_markup'] = is_string($markup) ? $markup : json_encode($markup);
     if ($replyTo) $post['reply_to_message_id'] = $replyTo;
 
-    $ch = curl_init(TG_API_BASE . '/bot' . BOT_TOKEN . '/sendPhoto');
+    $base = defined('TG_API_BASE') ? TG_API_BASE : 'https://api.telegram.org';
+    $ch = curl_init($base . '/bot' . BOT_TOKEN . '/sendPhoto');
     curl_setopt_array($ch, [
         CURLOPT_POST => true,
         CURLOPT_POSTFIELDS => $post,
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT => 30,
+        CURLOPT_TIMEOUT => 40,
+        CURLOPT_CONNECTTIMEOUT => 10,
     ]);
     $res = curl_exec($ch);
+    $err = curl_error($ch);
     curl_close($ch);
     @unlink($tmp);
+
+    if ($res === false) return ['ok' => false, 'description' => 'curl: ' . $err];
     $out = json_decode((string)$res, true);
-    return is_array($out) ? $out : ['ok' => false, 'description' => 'bad response'];
+    return is_array($out) ? $out : ['ok' => false, 'description' => 'پاسخ نامعتبر تلگرام'];
+}
+
+/**
+ * کارت را می‌فرستد؛ اگر به هر دلیلی نشد، همان متن را می‌فرستد.
+ *
+ * قانون: کاربر نباید هیچ‌وقت دست خالی بماند. عکس نرفت؟ متن می‌رود.
+ * و علتش یک بار در ساعت به مدیر گفته می‌شود تا خرابی ساکت نماند.
+ */
+function pxDeliver($chatId, $png, $caption, $markup = null, $replyTo = null) {
+    $extra = $replyTo ? ['reply_to_message_id' => $replyTo] : [];
+
+    if ($png !== null) {
+        $r = pxSendPhoto($chatId, $png, $caption, $markup, $replyTo);
+        if (!empty($r['ok'])) return true;
+
+        $why = (string)($r['description'] ?? 'نامشخص');
+        if (function_exists('adminAlertOnce')) {
+            adminAlertOnce('px_photo', "⚠️ <b>کارت قیمت فرستاده نشد</b>\n\n" .
+                "<code>" . h(mb_substr($why, 0, 200)) . "</code>\n\n" .
+                "فعلا همان متن فرستاده می‌شود. اگر ادامه داشت، از\n" .
+                "/panel ← 💹 قیمت لحظه‌ای ← 🖼 کارت را خاموش کنید.");
+        }
+    }
+
+    sendMsg(BOT_TOKEN, $chatId, $caption, $markup, $extra);
+    return true;
+}
+
+/** کارت بساز، ولی اگر GD سرِ راه مرد، کل پیام را نکش */
+function pxTryCard(callable $fn) {
+    if (empty(pxVal('card.on'))) return null;
+    try {
+        return $fn();
+    } catch (Throwable $e) {
+        if (function_exists('adminAlertOnce'))
+            adminAlertOnce('px_card', "⚠️ <b>ساخت کارت قیمت شکست خورد</b>\n\n<code>" .
+                h(mb_substr($e->getMessage(), 0, 200)) . "</code>");
+        return null;
+    }
 }
 
 // ============================================================
@@ -744,9 +806,33 @@ function pxConvert($text) {
     elseif (in_array($dst, ['دلار', 'تتر', 'usd', 'usdt'], true))                        $to = 'USDT';
     else                                                                                 $to = $map[$dst] ?? strtoupper($dst);
 
-    if (!preg_match('/^[A-Z0-9]{2,10}$/', $from)) return null;
+    // کلمه‌ی خام مبدا را هم برمی‌گردانیم تا اگر ارز دیجیتال نبود،
+    // بشود بین دارایی‌ها (افغانی، لیر، طلا…) دنبالش گشت.
+    if (!preg_match('/^[A-Z0-9]{2,10}$/', $from) && pxAssetOfWord($src) === null) return null;
     if ($to !== 'IRT' && !preg_match('/^[A-Z0-9]{2,10}$/', $to)) return null;
-    return [$amount, $from, $to];
+    return [$amount, $from, $to, $src];
+}
+
+/** یک کلمه‌ی خام → کلید دارایی (بدون گیر دادن به فاصله‌های اضافه) */
+function pxAssetOfWord($word) {
+    $w = trim(mb_strtolower(norm_fa_digits((string)$word)));
+    if ($w === '') return null;
+    foreach (pxAssets() as $k => $a) {
+        foreach (explode(',', (string)($a['words'] ?? '')) as $x) {
+            $x = trim(mb_strtolower(norm_fa_digits($x)));
+            if ($x !== '' && $x === $w) return $k;
+        }
+    }
+    return null;
+}
+
+/** کپشن تبدیلِ دارایی */
+function pxConvAssetCaption($title, $val, $unit) {
+    $t  = pxEm('card', '💱') . ' <b>' . h($title) . "</b>\n\n";
+    $t .= '<blockquote>' . pxEm('price', '💵') . ' ' .
+          (($unit === 'تومان') ? pxToman($val) : pxNum($val)) . ' ' . h($unit) . '</blockquote>' . "\n";
+    $t .= pxEm('coin', '🕓') . ' <code>' . h(pxJalali()) . '</code>';
+    return $t;
 }
 
 /** کارت یک ارز — همان قالب روشن، با رنگ اختصاصی خودش */
@@ -827,20 +913,32 @@ function pxHandleText($text, $chatId, $replyTo = null) {
                 null, $replyTo ? ['reply_to_message_id' => $replyTo] : []);
             return true;
         }
-        $chg = pxChangeOf($a['pair']);
-        $png = !empty(pxVal('card.on'))
-             ? pxAssetCard($a['name'], $a['emoji'], $price, $a['unit'], $chg, $a['bg'])
-             : null;
-        $cap = pxAssetCaption($a['name'], $price, $a['unit'], $chg);
-        if ($png !== null) pxSendPhoto($chatId, $png, $cap, $kb, $replyTo);
-        else sendMsg(BOT_TOKEN, $chatId, $cap, $kb, $replyTo ? ['reply_to_message_id' => $replyTo] : []);
+        $chg = pxAssetChange($ak);
+        $png = pxTryCard(fn() => pxAssetCard($a['name'], $a['emoji'], $price, $a['unit'], $chg, $a['bg']));
+        pxDeliver($chatId, $png, pxAssetCaption($a['name'], $price, $a['unit'], $chg), $kb, $replyTo);
         return true;
     }
 
-    // 💱 تبدیل — «۵۰ تتر به تومان» یا فقط «۵۰ تتر»
+    // 💱 تبدیل — «۵۰ تتر به تومان»، «۱۰۰ افغانی»، «2 sol به usdt»
     $cv = pxConvert($raw);
     if ($cv !== null) {
         [$amount, $from, $to] = $cv;
+
+        // مبدا یکی از دارایی‌هاست؟ («۱۰۰ افغانی»)
+        $srcAsset = pxAssetOfWord($cv[3] ?? '');
+        if ($srcAsset !== null) {
+            $unitPrice = pxAssetPrice($srcAsset);
+            if ($unitPrice > 0) {
+                $as  = pxAssets()[$srcAsset];
+                $val = $amount * $unitPrice;
+                $chg = pxAssetChange($srcAsset);
+                $ttl = pxNum($amount) . ' ' . $as['name'];
+                $png = pxTryCard(fn() => pxAssetCard($ttl, $as['emoji'], $val, $as['unit'], $chg,
+                                                     $as['bg'], pxSeries($val, $chg, 110)));
+                pxDeliver($chatId, $png, pxConvAssetCaption($ttl, $val, $as['unit']), $kb, $replyTo);
+                return true;
+            }
+        }
         $p = pxFetch();
         $irt = (float)($p['USDT/IRT'] ?? 0);
         $fromUsd = ($from === 'USDT') ? 1.0 : (float)($p[$from . '/USDT'] ?? 0);
@@ -853,13 +951,10 @@ function pxHandleText($text, $chatId, $replyTo = null) {
                 $val = $amount * $fromUsd / $toUsd; $unit = $to;
             }
             $chg = pxChangeOf($from . '/USDT');
-            $png = !empty(pxVal('card.on'))
-                 ? pxAssetCard(pxNum($amount) . ' ' . pxCoinName($from), '●', $val, $unit, $chg,
-                               pxCoinColors($from), pxSeries($val, $chg, 110))
-                 : null;
-            $cap = pxConvCaption($amount, $from, $val, $unit);
-            if ($png !== null) pxSendPhoto($chatId, $png, $cap, $kb, $replyTo);
-            else sendMsg(BOT_TOKEN, $chatId, $cap, $kb, $replyTo ? ['reply_to_message_id' => $replyTo] : []);
+            $png = pxTryCard(fn() => pxAssetCard(pxNum($amount) . ' ' . pxCoinName($from), '●',
+                                                 $val, $unit, $chg, pxCoinColors($from),
+                                                 pxSeries($val, $chg, 110)));
+            pxDeliver($chatId, $png, pxConvCaption($amount, $from, $val, $unit), $kb, $replyTo);
             return true;
         }
     }
@@ -879,15 +974,9 @@ function pxHandleText($text, $chatId, $replyTo = null) {
     $lo  = (float)($p[$sym . '/LOW24'] ?? 0);
     $cap = pxCoinCaption($sym, $usd, $usd * $irtRate, $chg, $hi, $lo);
 
-    if (!empty(pxVal('card.on'))) {
-        // قیمت تومانی روی کارت — چون مخاطب ایرانی است
-        $png = pxCoinCard($sym, $usd * $irtRate, 'تومان', $chg, $usd * $irtRate);
-        if ($png !== null) {
-            pxSendPhoto($chatId, $png, $cap, $kb, $replyTo);
-            return true;
-        }
-    }
-    sendMsg(BOT_TOKEN, $chatId, $cap, $kb, $replyTo ? ['reply_to_message_id' => $replyTo] : []);
+    // قیمت تومانی روی کارت — چون مخاطب ایرانی است
+    $png = pxTryCard(fn() => pxCoinCard($sym, $usd * $irtRate, 'تومان', $chg, $usd * $irtRate));
+    pxDeliver($chatId, $png, $cap, $kb, $replyTo);
     return true;
 }
 
@@ -972,6 +1061,39 @@ function pxAdminHome($chatId, $msgId = null) {
     else sendMsg(BOT_TOKEN, $chatId, $t, inlineKb($rows));
 }
 
+/** نام فارسی کلیدها — تا در پنل معلوم باشد هرکدام چیست */
+function pxLabels() {
+    return [
+        // متن‌ها
+        'prem_head'  => 'سرتیتر پریمیوم',
+        'prem_month' => 'برچسب هر پلن پریمیوم',
+        'prem_off'   => 'برچسب تخفیف پریمیوم',
+        'star_head'  => 'سرتیتر استارز',
+        'rates_head' => 'سرتیتر نرخ ارز',
+        'coin_head'  => 'سرتیتر هر ارز',
+        'hl_head'    => 'سرتیتر بیشترین و کمترین',
+        'foot'       => 'امضای پایین پیام',
+        'toman'      => 'واژه‌ی تومان',
+        'dollar'     => 'واژه‌ی دلار',
+        'ton'        => 'واژه‌ی تون',
+        'down'       => 'پیام وقتی قیمت نمی‌آید',
+        'nocoin'     => 'پیام نماد ناشناخته',
+        // ایموجی‌ها
+        'card'  => 'ایموجی سرتیتر',
+        'price' => 'ایموجی قیمت',
+        'prem'  => 'ایموجی پریمیوم',
+        'star'  => 'ایموجی استارز',
+        'coin'  => 'ایموجی ارز و ساعت',
+        'chart' => 'ایموجی نمودار',
+        // کلمه‌ها
+        'premium' => 'کلمه‌های پریمیوم',
+        'stars'   => 'کلمه‌های استارز',
+        'rates'   => 'کلمه‌های نرخ ارز',
+    ];
+}
+
+function pxLabel($k) { return pxLabels()[$k] ?? $k; }
+
 /** فهرست ویرایش یک بخش (متن‌ها، ایموجی‌ها، کلمه‌ها) */
 function pxAdminList($chatId, $msgId, $kind) {
     $c = pxCfg();
@@ -989,9 +1111,9 @@ function pxAdminList($chatId, $msgId, $kind) {
 
     $rows = [];
     foreach ((array)$c[$sec] as $k => $v) {
-        $show = mb_substr((string)$v, 0, 34);
-        $t .= '• <b>' . h($k) . '</b>: <code>' . h($show) . "</code>\n";
-        $rows[] = [btnCb($k, $pre . $k, 'admin')];
+        $show = mb_substr(str_replace("\n", ' ', (string)$v), 0, 30);
+        $t .= '• <b>' . h(pxLabel($k)) . '</b>: <code>' . h($show) . "</code>\n";
+        $rows[] = [btnCb(pxLabel($k), $pre . $k, 'admin')];
     }
     $rows[] = [btnCb(UT('back'), 'px_home', 'nav')];
     editMsg(BOT_TOKEN, $chatId, $msgId, $t, inlineKb($rows));
@@ -1002,7 +1124,8 @@ function pxAdminButtons($chatId, $msgId) {
     $bs = (array)pxVal('buttons', []);
     $t = "🔘 <b>دکمه‌های زیر پیام قیمت</b>\n\n";
     $t .= "دکمه بدون لینک نشان داده نمی‌شود.\n";
-    $t .= "برای ایموجی پریمیوم، با /emoji کدش را بگیرید یا همان‌جا یک پیام حاوی آن ایموجی بفرستید.\n\n";
+    $t .= "✨ برای ایموجی پریمیوم کار جدایی لازم نیست: موقع نوشتن متن دکمه، " .
+          "همان ایموجی را جلوی متن بگذارید — خودش برداشته می‌شود.\n\n";
     $rows = [];
     foreach ($bs as $i => $b) {
         $t .= ($i + 1) . ') ' . (!empty($b['on']) ? '✅' : '❌') . ' <b>' . h($b['text']) . "</b>\n";
@@ -1013,10 +1136,7 @@ function pxAdminButtons($chatId, $msgId) {
             btnCb(!empty($b['on']) ? '✅' : '❌', 'pxbx_' . $i, 'info'),
             btnCb('✏️ متن', 'pxbt_' . $i, 'admin'),
             btnCb('🔗 لینک', 'pxbu_' . $i, 'admin'),
-        ];
-        $rows[] = [
-            btnCb('🎨 رنگ: ' . (string)($b['color'] ?? '—'), 'pxbc_' . $i, 'info'),
-            btnCb('✨ ایموجی پریمیوم', 'pxbi_' . $i, 'admin'),
+            btnCb('🎨 رنگ', 'pxbc_' . $i, 'info'),
         ];
     }
     $rows[] = [btnCb(UT('back'), 'px_home', 'nav')];
@@ -1168,24 +1288,24 @@ function pxAdminCallback($data, $chatId, $msgId, $cbId) {
         $cur = (string)(pxVal($sec . '.' . $k) ?? '');
         answerCb(BOT_TOKEN, $cbId);
         setState(ADMIN_ID, $act, ['k' => $k]);
+        $hint = ($sec === 'emoji')
+            ? "\n\nیک پیام با همان ایموجی پریمیوم بفرستید، یا کد عددی‌اش را."
+            : (($sec === 'words') ? "\n\nچند کلمه را با ویرگول جدا کنید." : '');
         sendMsg(BOT_TOKEN, $chatId,
-            "✏️ مقدار تازه‌ی <b>" . h($k) . "</b> را بفرستید.\n\nالان:\n<code>" .
+            "✏️ <b>" . h(pxLabel($k)) . "</b> را بفرستید." . $hint . "\n\nالان:\n<code>" .
             h(mb_substr($cur, 0, 500)) . '</code>',
             inlineKb([[btnUI('cancel', 'px_home', 'cancel')]]));
         return true;
     }
-    foreach (['pxbt_' => ['px_btntext', 'text'], 'pxbu_' => ['px_btnurl', 'url'],
-              'pxbi_' => ['px_btnicon', 'icon']] as $pre => [$act, $f]) {
+    foreach (['pxbt_' => ['px_btntext', 'text'], 'pxbu_' => ['px_btnurl', 'url']] as $pre => [$act, $f]) {
         if (!str_starts_with($data, $pre)) continue;
         $i = (int)substr($data, strlen($pre));
         answerCb(BOT_TOKEN, $cbId);
         setState(ADMIN_ID, $act, ['i' => $i]);
-        $ask = [
-            'url'  => "🔗 لینک دکمه را بفرستید (خط تیره = پاک کردن):",
-            'text' => "✏️ متن دکمه را بفرستید:",
-            'icon' => "✨ یک پیام با همان ایموجی پریمیوم بفرستید، یا کد عددی‌اش را.\n\n" .
-                      "خط تیره = برداشتن ایموجی",
-        ][$f];
+        $ask = ($f === 'url')
+            ? "🔗 لینک دکمه را بفرستید (خط تیره = پاک کردن):"
+            : "✏️ متن دکمه را بفرستید.\n\n" .
+              "✨ اگر ایموجی پریمیوم می‌خواهید، همان را جلوی متن بگذارید — خودش برداشته می‌شود.";
         sendMsg(BOT_TOKEN, $chatId, $ask, inlineKb([[btnUI('cancel', 'px_home', 'cancel')]]));
         return true;
     }
@@ -1250,6 +1370,22 @@ function pxStateHandle($action, $msg, $uid, $chatId) {
         pxSet(function (&$c) use ($sec, $k, $text) { $c[$sec][$k] = $text; });
         return $done();
     }
+    if ($action === 'px_btntext') {
+        $i = (int)($sd['i'] ?? -1);
+        if ($text === '') { sendMsg(BOT_TOKEN, $chatId, "⚠️ متن خالی نمی‌شود."); return true; }
+        // ✨ ایموجی پریمیومی که جلوی متن گذاشته، خودکار برداشته می‌شود
+        $ids  = function_exists('customEmojiIds') ? customEmojiIds($msg) : [];
+        $icon = $ids ? (string)$ids[0] : '';
+        pxSet(function (&$c) use ($i, $text, $icon) {
+            if (!isset($c['buttons'][$i])) return;
+            $c['buttons'][$i]['text'] = $text;
+            $c['buttons'][$i]['icon'] = $icon;      // نبود؟ یعنی برداشته شود
+        });
+        return $done($icon !== ''
+            ? '✅ متن ذخیره شد و ایموجی پریمیوم هم خودکار برداشته شد.'
+            : '✅ متن ذخیره شد.');
+    }
+
     if (str_starts_with($action, 'px_as')) {
         $k = (string)($sd['k'] ?? '');
         $f = ['px_asname' => 'name', 'px_aspair' => 'pair',
@@ -1275,33 +1411,13 @@ function pxStateHandle($action, $msg, $uid, $chatId) {
         return true;
     }
 
-    if ($action === 'px_btnicon') {
+    if ($action === 'px_btnurl') {
         $i = (int)($sd['i'] ?? -1);
-        // یا از خودِ پیام برش می‌داریم، یا کد عددی‌ای که تایپ کرده
-        $ids = function_exists('customEmojiIds') ? customEmojiIds($msg) : [];
-        $v = $blank ? '' : ($ids ? (string)$ids[0] : preg_replace('/\D/', '', norm_fa_digits($text)));
-        // متنی فرستاده که نه ایموجی بود نه عدد؟ نباید بی‌صدا پاکش کنیم —
-        // «خط تیره» تنها راه پاک کردن است.
-        if (!$blank && $v === '') {
-            sendMsg(BOT_TOKEN, $chatId,
-                "⚠️ ایموجی پریمیوم پیدا نشد.\n\n" .
-                "یا یک پیام بفرستید که همان ایموجی داخلش باشد، یا کد عددی‌اش را.\n" .
-                "برای برداشتن ایموجی، خط تیره بفرستید.");
-            return true;
-        }
-        pxSet(function (&$c) use ($i, $v) { if (isset($c['buttons'][$i])) $c['buttons'][$i]['icon'] = $v; });
-        return $done($v !== '' ? '✅ ایموجی پریمیوم دکمه ثبت شد: <code>' . h($v) . '</code>'
-                               : '✅ ایموجی دکمه برداشته شد.');
-    }
-    if ($action === 'px_btntext' || $action === 'px_btnurl') {
-        $i = (int)($sd['i'] ?? -1);
-        $f = $action === 'px_btnurl' ? 'url' : 'text';
         $v = $blank ? '' : $text;
-        if ($f === 'url' && $v !== '' && !preg_match('#^https?://#i', $v)) {
+        if ($v !== '' && !preg_match('#^https?://#i', $v)) {
             sendMsg(BOT_TOKEN, $chatId, "⚠️ لینک باید با https شروع شود."); return true;
         }
-        if ($f === 'text' && $v === '') { sendMsg(BOT_TOKEN, $chatId, "⚠️ متن خالی نمی‌شود."); return true; }
-        pxSet(function (&$c) use ($i, $f, $v) { if (isset($c['buttons'][$i])) $c['buttons'][$i][$f] = $v; });
+        pxSet(function (&$c) use ($i, $v) { if (isset($c['buttons'][$i])) $c['buttons'][$i]['url'] = $v; });
         return $done();
     }
 
@@ -1478,29 +1594,82 @@ function pxTextFaW($size, $text, $bold = true) {
  * هرکدام: نام فارسی، ایموجی، کلید جفت‌ارز در API، واحد، و رنگ پس‌زمینه.
  * از پنل هم می‌شود کم و زیادشان کرد.
  */
+/**
+ * دارایی‌هایی که کارت اختصاصی دارند.
+ *
+ * هرکدام دو راه برای قیمت دارند:
+ *   pair — کلیدی در همان API اصلی (اگر داشته باشدش)
+ *   path — مسیری در «منبع دوم» (tgju)، وقتی API اصلی طلا و ارز کشورها را نمی‌دهد
+ * اولی مقدم است؛ نبود، دومی. div برای ریال→تومان است.
+ */
 function pxAssetsDefault() {
+    $g = ['F5A524', 'C2410C'];
     return [
         'usd'  => ['name' => 'دلار آمریکا', 'emoji' => '🇺🇸', 'pair' => 'USDT/IRT',
+                   'path' => 'current.price_dollar_rl.p', 'div' => 10,
                    'unit' => 'تومان', 'bg' => ['B22234', '3C3B6E'], 'words' => 'دلار,دلار آمریکا,usd'],
-        'gold' => ['name' => 'طلا ۱۸ عیار', 'emoji' => '🥇', 'pair' => 'GOLD18/IRT',
-                   'unit' => 'تومان', 'bg' => ['F5A524', 'C2410C'], 'words' => 'طلا,طلا ۱۸ عیار,gold,طلای ۱۸'],
-        'coin' => ['name' => 'سکه امامی', 'emoji' => '🪙', 'pair' => 'COIN/IRT',
+        'gold' => ['name' => 'طلا ۱۸ عیار', 'emoji' => '🥇', 'pair' => '',
+                   'path' => 'current.geram18.p', 'div' => 10,
+                   'unit' => 'تومان', 'bg' => $g, 'words' => 'طلا,طلا ۱۸ عیار,طلای ۱۸,gold'],
+        'gold24'=> ['name' => 'طلا ۲۴ عیار', 'emoji' => '🥇', 'pair' => '',
+                   'path' => 'current.geram24.p', 'div' => 10,
+                   'unit' => 'تومان', 'bg' => $g, 'words' => 'طلا ۲۴,طلای ۲۴,gold24'],
+        'ounce'=> ['name' => 'انس جهانی طلا', 'emoji' => '🥇', 'pair' => '',
+                   'path' => 'current.ons.p', 'div' => 1,
+                   'unit' => 'دلار', 'bg' => $g, 'words' => 'انس,انس طلا,ounce'],
+        'coin' => ['name' => 'سکه امامی', 'emoji' => '🪙', 'pair' => '',
+                   'path' => 'current.sekee.p', 'div' => 10,
                    'unit' => 'تومان', 'bg' => ['EAB308', '92400E'], 'words' => 'سکه,سکه امامی,coin'],
+        'nim'  => ['name' => 'نیم سکه', 'emoji' => '🪙', 'pair' => '',
+                   'path' => 'current.nim.p', 'div' => 10,
+                   'unit' => 'تومان', 'bg' => ['EAB308', '92400E'], 'words' => 'نیم سکه,نیم'],
+        'rob'  => ['name' => 'ربع سکه', 'emoji' => '🪙', 'pair' => '',
+                   'path' => 'current.rob.p', 'div' => 10,
+                   'unit' => 'تومان', 'bg' => ['EAB308', '92400E'], 'words' => 'ربع سکه,ربع'],
+
+        // ── پول کشورهای دیگر ──
+        'eur'  => ['name' => 'یورو', 'emoji' => '🇪🇺', 'pair' => '',
+                   'path' => 'current.price_eur.p', 'div' => 10,
+                   'unit' => 'تومان', 'bg' => ['003399', '001A4D'], 'words' => 'یورو,eur'],
+        'aed'  => ['name' => 'درهم امارات', 'emoji' => '🇦🇪', 'pair' => '',
+                   'path' => 'current.price_aed.p', 'div' => 10,
+                   'unit' => 'تومان', 'bg' => ['00732F', '111111'], 'words' => 'درهم,درهم امارات,aed'],
+        'try'  => ['name' => 'لیر ترکیه', 'emoji' => '🇹🇷', 'pair' => '',
+                   'path' => 'current.price_try.p', 'div' => 10,
+                   'unit' => 'تومان', 'bg' => ['E30A17', '7A0509'], 'words' => 'لیر,لیر ترکیه,ترکیه,try'],
+        'sar'  => ['name' => 'ریال عربستان', 'emoji' => '🇸🇦', 'pair' => '',
+                   'path' => 'current.price_sar.p', 'div' => 10,
+                   'unit' => 'تومان', 'bg' => ['006C35', '00381B'], 'words' => 'ریال عربستان,عربستان,ریال سعودی,sar'],
+        'pkr'  => ['name' => 'روپیه پاکستان', 'emoji' => '🇵🇰', 'pair' => '',
+                   'path' => 'current.price_pkr.p', 'div' => 10,
+                   'unit' => 'تومان', 'bg' => ['01411C', '00250F'], 'words' => 'روپیه,روپیه پاکستان,پاکستان,pkr'],
+        'afn'  => ['name' => 'افغانی', 'emoji' => '🇦🇫', 'pair' => '',
+                   'path' => 'current.price_afn.p', 'div' => 10,
+                   'unit' => 'تومان', 'bg' => ['000000', '4A0E0E'], 'words' => 'افغانی,افغانستان,afn'],
+        'gbp'  => ['name' => 'پوند انگلیس', 'emoji' => '🇬🇧', 'pair' => '',
+                   'path' => 'current.price_gbp.p', 'div' => 10,
+                   'unit' => 'تومان', 'bg' => ['012169', '000B26'], 'words' => 'پوند,پوند انگلیس,gbp'],
+        'iqd'  => ['name' => 'دینار عراق', 'emoji' => '🇮🇶', 'pair' => '',
+                   'path' => 'current.price_iqd.p', 'div' => 10,
+                   'unit' => 'تومان', 'bg' => ['CE1126', '5C0810'], 'words' => 'دینار,دینار عراق,عراق,iqd'],
     ];
 }
 
 function pxAssets() {
+    $def   = pxAssetsDefault();
     $saved = pxVal('assets', null);
-    if (!is_array($saved)) return pxAssetsDefault();
-    $out = [];
+    if (!is_array($saved) || !$saved) return $def;
+
+    // دارایی‌های تازه‌ی نسخه‌های بعدی هم باید ظاهر شوند، نه اینکه
+    // پیکربندی قدیمی برای همیشه فهرست را قفل کند.
+    $out = $def;
     foreach ($saved as $k => $a) {
         if (!is_array($a)) continue;
-        $out[$k] = array_replace(pxAssetsDefault()[$k] ?? [
-            'name' => $k, 'emoji' => '💠', 'pair' => '', 'unit' => 'تومان',
-            'bg' => ['334155', '0F172A'], 'words' => '',
-        ], $a);
+        $base = $def[$k] ?? ['name' => $k, 'emoji' => '💠', 'pair' => '', 'path' => '', 'div' => 1,
+                             'unit' => 'تومان', 'bg' => ['334155', '0F172A'], 'words' => ''];
+        $out[$k] = array_replace($base, $a);
     }
-    return $out ?: pxAssetsDefault();
+    return $out;
 }
 
 /**
@@ -1573,19 +1742,88 @@ function pxTint($hex, $pct, $onto = 'FFFFFF') {
         (int)round($b2 + ($b - $b2) * $t));
 }
 
-/** قیمت یک دارایی (طلا، دلار، سکه) — ۰ یعنی کلیدش در API نیست */
+/**
+ * 📡 منبع دوم — طلا، سکه و پول کشورها.
+ * API اصلی فقط ارز دیجیتال می‌دهد؛ این‌ها از جای دیگری می‌آیند.
+ * آدرس و مسیرها از پنل قابل عوض کردن‌اند تا اگر منبع عوض شد، کد دست‌نخورده بماند.
+ */
+function pxAltFetch($fresh = false) {
+    static $mem = null;
+    if (!$fresh && is_array($mem)) return $mem;
+
+    $url = trim((string)pxVal('alt_url', ''));
+    if ($url === '') return $mem = [];
+
+    $ttl = max(30, (int)pxVal('alt_ttl', 300));
+    if (!$fresh) {
+        $hit = maCacheGet('px_alt', $ttl);
+        if (is_array($hit)) return $mem = $hit;
+        if (maCacheGet('px_altcool', 600) !== null)
+            return $mem = (array)(maCacheGet('px_alt', 0) ?: []);
+    }
+
+    [$j, $err] = maHttp($url, 'GET', 'Accept: application/json', '', (int)pxVal('timeout', 6));
+    if (!is_array($j)) {
+        maCachePut('px_alterr', $err ?: 'پاسخی نیامد');
+        maCachePut('px_altcool', time());
+        return $mem = (array)(maCacheGet('px_alt', 0) ?: []);
+    }
+    maCachePut('px_alterr', '');
+    maCachePut('px_altcool', 0);
+    maCachePut('px_alt', $j);
+    return $mem = $j;
+}
+
+function pxAltError() { return (string)(maCacheGet('px_alterr', 0) ?: ''); }
+
+/** قیمت یک دارایی — اول API اصلی، بعد منبع دوم. ۰ یعنی هیچ‌کدام نداشتند. */
 function pxAssetPrice($key, $fresh = false) {
     $a = pxAssets()[$key] ?? null;
     if (!$a) return 0.0;
+
+    // ۱) API اصلی
     $pair = strtoupper(trim((string)($a['pair'] ?? '')));
-    if ($pair === '') return 0.0;
-    $p = pxFetch($fresh);
-    if (isset($p[$pair])) return (float)$p[$pair];
-    // شاید فقط به دلار داده شده — به تومان بیاورش
-    if (str_ends_with($pair, '/IRT')) {
-        $usdPair = substr($pair, 0, -4) . '/USDT';
-        $irt = (float)($p['USDT/IRT'] ?? 0);
-        if (isset($p[$usdPair]) && $irt > 0) return (float)$p[$usdPair] * $irt;
+    if ($pair !== '') {
+        $p = pxFetch($fresh);
+        if (isset($p[$pair]) && $p[$pair] > 0) return (float)$p[$pair];
+        if (str_ends_with($pair, '/IRT')) {
+            $usdPair = substr($pair, 0, -4) . '/USDT';
+            $irt = (float)($p['USDT/IRT'] ?? 0);
+            if (isset($p[$usdPair]) && $irt > 0) return (float)$p[$usdPair] * $irt;
+        }
+    }
+
+    // ۲) منبع دوم
+    $path = trim((string)($a['path'] ?? ''));
+    if ($path !== '') {
+        $v = maJsonPath(pxAltFetch($fresh), $path);
+        $n = maNum($v);
+        if ($n > 0) {
+            $div = max(1e-9, (float)($a['div'] ?? 1));
+            return $n / $div;
+        }
+    }
+    return 0.0;
+}
+
+/** درصد تغییر یک دارایی از منبع دوم (اگر داشت) */
+function pxAssetChange($key) {
+    $a = pxAssets()[$key] ?? null;
+    if (!$a) return 0.0;
+    $pair = strtoupper(trim((string)($a['pair'] ?? '')));
+    if ($pair !== '') {
+        $c = pxChangeOf($pair);
+        if ($c != 0.0) return $c;
+    }
+    $path = trim((string)($a['path'] ?? ''));
+    if ($path !== '' && str_ends_with($path, '.p')) {
+        // tgju درصد را در همان گره، کلید dp می‌گذارد
+        $dp = maJsonPath(pxAltFetch(), substr($path, 0, -2) . '.dp');
+        if ($dp !== null) {
+            $n = maNum($dp);
+            $dt = (string)maJsonPath(pxAltFetch(), substr($path, 0, -2) . '.dt');
+            return ($dt === 'low' || $dt === 'down') ? -abs($n) : $n;
+        }
     }
     return 0.0;
 }
