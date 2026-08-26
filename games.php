@@ -34,7 +34,7 @@ function gmDefaults() {
         'min'       => 10,          // کمترین شرط
         'max'       => 1000000000,  // بیشترین شرط
         'tax'       => 10,          // درصدی که از جایزه کم می‌شود
-        'wait'      => 60,          // ثانیه‌ی انتظار قرعه
+        'wait'      => 8,           // ثانیه‌ی انتظار قرعه — کوتاه، تا نتیجه درجا بیاید
         'join_max'  => 50,          // بیشترین شرکت‌کننده در قرعه
         'expire'    => 900,         // بازی بی‌حریف بعد از این مدت باطل می‌شود
         'send_tax'  => 10,          // درصد مالیات انتقال الماس
@@ -281,7 +281,7 @@ function gmCreate($kind, $stake, $uid, $chat, $name, $uname, $thread = 0) {
         'turn'    => (int)$uid,
         'status'  => 'open',
         'created' => time(),
-        'ends'    => $kind === 'rand' ? time() + max(10, (int)gmVal('wait', 60)) : 0,
+        'ends'    => $kind === 'rand' ? time() + max(3, (int)gmVal('wait', 8)) : 0,
     ];
     gmPut($g);
     return $g;
@@ -659,6 +659,16 @@ function gmCallback($data, $uid, $chatId, $msgId, $cbId, $from = []) {
         return true;
     }
 
+    // قرعه‌ای که وقتش رسیده، همین‌جا بسته شود — نه اینکه منتظر پیام
+    // بعدی گروه بماند. با مهلتِ کوتاه، همین یک خط فرقِ «درجا» و
+    // «چند دقیقه بعد» است.
+    if ($g['kind'] === 'rand' && $g['status'] === 'open'
+        && (int)$g['ends'] > 0 && time() >= (int)$g['ends']) {
+        gmDraw($g);
+        answerCb(BOT_TOKEN, $cbId, gmT('gone'), true);
+        return true;
+    }
+
     // ✅ پیوستن
     if ($act === 'j') {
         if (isset($g['players'][(string)$uid])) {
@@ -694,7 +704,11 @@ function gmCallback($data, $uid, $chatId, $msgId, $cbId, $from = []) {
             return true;
         }
         answerCb(BOT_TOKEN, $cbId, '✅');
-        gmShow(gmGet($gid));
+        $g = gmGet($gid);
+        gmShow($g);
+        // مهلت همین حالا تمام شد؟ منتظر تیکِ بعدی نمان
+        if ($g && $g['kind'] === 'rand' && $g['status'] === 'open'
+            && (int)$g['ends'] > 0 && time() >= (int)$g['ends']) gmDraw($g);
         return true;
     }
 
@@ -859,7 +873,7 @@ function gmAdminCallback($data, $chatId, $msgId, $cbId) {
     $asks = [
         'gmatax'   => ['gm_tax',   "🧾 چند درصد از جایزه به‌عنوان مالیات کم شود؟ (۰ تا ۹۰)"],
         'gmastax'  => ['gm_stax',  "📤 چند درصد مالیات روی انتقال الماس؟ (۰ تا ۹۰)"],
-        'gmawait'  => ['gm_wait',  "⏳ قرعه چند ثانیه بعد کشیده شود؟ (پیشنهاد ۶۰)"],
+        'gmawait'  => ['gm_wait',  "⏳ قرعه چند ثانیه بعد کشیده شود؟ (پیشنهاد ۸ — کمترین ۳)"],
         'gmarange' => ['gm_range', "💎 کف و سقف شرط را با خط تیره بفرستید.\nمثال: <code>10-1000000</code>"],
     ];
     if (isset($asks[$data])) {
@@ -929,7 +943,7 @@ function gmStateHandle($action, $msg, $uid, $chatId) {
     }
     if ($action === 'gm_wait') {
         $v = (int)norm_fa_digits($text);
-        if ($v < 10 || $v > 3600) { sendMsg(BOT_TOKEN, $chatId, "⚠️ بین ۱۰ تا ۳۶۰۰ ثانیه باشد."); return true; }
+        if ($v < 3 || $v > 3600) { sendMsg(BOT_TOKEN, $chatId, "⚠️ بین ۳ تا ۳۶۰۰ ثانیه باشد."); return true; }
         gmSet(function (&$c) use ($v) { $c['wait'] = $v; });
         return $done();
     }

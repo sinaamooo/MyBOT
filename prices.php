@@ -590,19 +590,54 @@ function pxFont($bold = true) {
     foreach ($dirs as $d) foreach ($names as $n)
         if (is_file($d . '/' . $n)) return $cache[$k] = $d . '/' . $n;
 
-    // هنوز نه؟ هر ttf ای که در این پوشه‌ها باشد بهتر از هیچ است
-    foreach ($dirs as $d) {
-        if (!is_dir($d)) continue;
-        $g = glob($d . '/*.[tT][tT][fF]') ?: [];
-        if ($g) return $cache[$k] = $g[0];
-    }
-    // آخرین تیر: کل درختِ فونتِ سیستم، یک‌بار و با سقف
-    foreach (['/usr/share/fonts', '/usr/local/share/fonts', DATA_DIR] as $root) {
+    // هنوز نه؟ هر ttf ای که پیدا شود — ولی فقط آن‌هایی که واقعا حرف
+    // فارسی دارند. فونتِ فقط‌لاتین کارت را با مربع پر می‌کند، که از
+    // نساختنِ کارت هم بدتر است.
+    $any = '';
+    foreach (['/usr/share/fonts', '/usr/local/share/fonts', rtrim(DATA_DIR, '/')] as $root) {
         if (!is_dir($root)) continue;
-        $g = glob($root . '/*/*.[tT][tT][fF]') ?: [];
-        if ($g) return $cache[$k] = $g[0];
+        foreach ([$root . '/*.[tT][tT][fF]', $root . '/*/*.[tT][tT][fF]',
+                  $root . '/*/*/*.[tT][tT][fF]'] as $pat) {
+            foreach ((glob($pat) ?: []) as $f) {
+                if ($any === '') $any = $f;
+                if (pxFontHasFa($f)) return $cache[$k] = $f;
+            }
+        }
     }
-    return $cache[$k] = '';
+    return $cache[$k] = $any;      // هیچ‌کدام فارسی نداشت — لااقل یکی
+}
+
+/**
+ * این فونت حرف فارسی دارد یا مربع می‌کشد؟
+ *
+ * شمردن پیکسل جواب نمی‌دهد: مربعِ «حرف را ندارم» هم پیکسل دارد و
+ * حتی پررنگ‌تر از خودِ حرف است. پس یک نویسه‌ی «قطعا موجود نیست»
+ * (ناحیه‌ی خصوصی یونیکد) را هم می‌کشیم؛ اگر شکلشان یکی درآمد،
+ * یعنی هر دو مربع‌اند و این فونت فارسی ندارد.
+ */
+function pxFontHasFa($file) {
+    static $memo = [];
+    if (isset($memo[$file])) return $memo[$file];
+    if (!is_file($file) || !function_exists('imagettftext')) return $memo[$file] = false;
+
+    $shot = function ($ch) use ($file) {
+        $im = imagecreatetruecolor(70, 70);
+        imagefilledrectangle($im, 0, 0, 69, 69, imagecolorallocate($im, 255, 255, 255));
+        $ok = @imagettftext($im, 34, 0, 8, 52, imagecolorallocate($im, 0, 0, 0), $file, $ch);
+        if (!$ok) { imagedestroy($im); return null; }
+        $sig = '';
+        for ($y = 0; $y < 70; $y += 2)
+            for ($x = 0; $x < 70; $x += 2)
+                $sig .= ((imagecolorat($im, $x, $y) >> 16) & 255) < 128 ? '1' : '0';
+        imagedestroy($im);
+        return $sig;
+    };
+
+    $miss = $shot("\u{E000}");          // ناحیه‌ی خصوصی — هیچ فونتی ندارد
+    $fa   = $shot('ط');
+    if ($miss === null || $fa === null) return $memo[$file] = false;
+    if (substr_count($fa, '1') < 8)     return $memo[$file] = false;   // چیزی نکشید
+    return $memo[$file] = ($fa !== $miss);
 }
 
 function pxCardReady() {

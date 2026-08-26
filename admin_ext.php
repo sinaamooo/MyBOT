@@ -87,6 +87,7 @@ function axDefaults() {
             'margin'  => [],       // category => درصد سود
             'fixed'   => [],       // item_id  => قیمت دستی تومان (۰ = خودکار)
             'auto'    => ['ton', 'trx', 'usdt'],   // اینها همیشه از صرافی
+            'imargin' => [],       // item_id => درصد سودِ همان محصول
         ],
 
         // ---------- ✍️ متن‌ها و برچسب دکمه‌ها ----------
@@ -627,7 +628,7 @@ function axPrice($itemId, $basePrice, $category = '') {
         if ($fixed !== null && (float)$fixed > 0) return (float)$fixed;
     }
 
-    return axPriceMargin($base, $category);
+    return axPriceMargin($base, $category, $itemId);
 }
 
 /**
@@ -637,14 +638,36 @@ function axPrice($itemId, $basePrice, $category = '') {
  * قیمت دستی معنی ندارد و اگر بنشیند، عددِ مینی‌اپ با عددِ گروه فرق
  * می‌کند. سود اما باید کار کند، پس همان تکه جدا شد.
  */
-function axPriceMargin($basePrice, $category = '') {
+function axPriceMargin($basePrice, $category = '', $itemId = '') {
     $base = (float)$basePrice;
     if (empty(axVal('pricing.on'))) return $base;
-    $marg = axCfg()['pricing']['margin'] ?? [];
+    $m = axMarginOf($itemId, $category);
+    if ($m != 0.0) $base = $base * (1 + $m / 100);
+    return $base;
+}
+
+/**
+ * درصد سودی که روی این محصول می‌نشیند.
+ * ترتیب: سودِ خودِ محصول → سودِ دسته → سودِ عمومی.
+ */
+function axMarginOf($itemId = '', $category = '') {
+    $c = axCfg()['pricing'];
+    $im = $c['imargin'][axSku($itemId)] ?? null;
+    if ($im !== null && $im !== '') return (float)$im;
+    $marg = $c['margin'] ?? [];
     $m = $marg[axSku($category)] ?? null;
     if ($m === null) $m = $marg['_all'] ?? null;
-    if ($m !== null && (float)$m != 0.0) $base = $base * (1 + ((float)$m / 100));
-    return $base;
+    return $m === null ? 0.0 : (float)$m;
+}
+
+function axSetItemMargin($itemId, $percent) {
+    axSet(function (&$c) use ($itemId, $percent) {
+        if (!isset($c['pricing']['imargin']) || !is_array($c['pricing']['imargin']))
+            $c['pricing']['imargin'] = [];
+        $sku = axSku($itemId);
+        if ($percent === null || $percent === '') unset($c['pricing']['imargin'][$sku]);
+        else $c['pricing']['imargin'][$sku] = (float)$percent;
+    });
 }
 
 function axSetFixed($itemId, $price) {
@@ -928,22 +951,29 @@ function axManualItems($chatId, $msgId) {
 }
 
 /** همه‌ی محصول‌های دو مینی‌اپ — [id، name، category، app] */
+/**
+ * فهرست همه‌ی محصول‌های دو مینی‌اپ.
+ *
+ * قبلا سراغ ساختاری می‌رفت که وجود نداشت ($c[$app]['cats']) و همیشه
+ * فهرستِ خالی برمی‌گرداند — پس صفحه‌ی «قیمت دستی محصول‌ها» هیچ‌وقت
+ * چیزی نشان نمی‌داد. محصول‌ها در maGet($app)['items'] هستند.
+ */
 function axCatalogItems() {
     $out = [];
-    if (!function_exists('maCfg')) return $out;
-    $c = maCfg();
+    if (!function_exists('maGet')) return $out;
     foreach (['tg', 'cfg'] as $app) {
-        foreach ((array)($c[$app]['cats'] ?? []) as $cat) {
-            foreach ((array)($cat['items'] ?? []) as $it) {
-                if (!is_array($it) || empty($it['id'])) continue;
-                $out[] = [
-                    'id'       => (string)$it['id'],
-                    'name'     => (string)($it['name'] ?? $it['id']),
-                    'category' => (string)($cat['id'] ?? ''),
-                    'app'      => $app,
-                    'price'    => (float)($it['price'] ?? 0),
-                ];
-            }
+        foreach ((array)(maGet($app)['items'] ?? []) as $it) {
+            if (!is_array($it) || empty($it['id'])) continue;
+            $out[] = [
+                'id'       => (string)$it['id'],
+                'name'     => (string)($it['name'] ?? $it['id']),
+                'category' => (string)($it['cat'] ?? ''),
+                'app'      => $app,
+                'price'    => (float)($it['price'] ?? 0),
+                'live'     => function_exists('maNeedsLive') ? maNeedsLive($it) : false,
+                'on'       => !empty($it['on']),
+                'item'     => $it,
+            ];
         }
     }
     return $out;
@@ -987,13 +1017,64 @@ function axPriceHome($chatId, $msgId) {
     $t .= "قیمت دستی: <b>" . $n . "</b> محصول\n\n";
     $t .= "💱 <b>نرخ زنده</b>\n" . axRatesText();
 
+    $im = count(array_filter((array)($p['imargin'] ?? []), fn($x) => (float)$x != 0.0));
+    $t .= "\n📈 سود اختصاصی: <b>" . $im . "</b> محصول";
+
     $rows = [
         [btnCb((!empty($p['on']) ? '🟢 روشن' : '🔴 خاموش'), 'axptog', 'admin')],
         [btnCb('📈 سود عمومی', 'axpall', 'admin')],
+        [btnCb('🎯 سود هر محصول', 'axpim', 'admin')],
         [btnCb('🏷 قیمت دستی محصول‌ها', 'axpfix', 'admin')],
         [btnCb('🔙 بازگشت', 'ax_home', 'nav')],
     ];
     axShow($chatId, $msgId, $t, $rows);
+}
+
+/**
+ * 🎯 سود هر محصول.
+ *
+ * برای سرویس‌های نرخ‌زنده (استارز، پریمیوم، گیفت، تون) قیمت دستی
+ * معنی ندارد — قیمتشان هر لحظه عوض می‌شود. ولی سود معنی دارد: نرخ
+ * لحظه‌ای بازار، به‌اضافه‌ی درصدی که شما می‌گذارید. اینجا همان است،
+ * و کنار هرکدام قیمتِ همین لحظه با سود نوشته شده.
+ */
+function axItemMarginList($chatId, $msgId, $page = 0) {
+    $items = axCatalogItems();
+    $per   = 10;
+    $tot   = max(1, (int)ceil(count($items) / $per));
+    $page  = max(0, min($tot - 1, (int)$page));
+
+    $t  = "🎯 <b>سود هر محصول</b> — صفحه " . ($page + 1) . " از {$tot}\n\n";
+    $t .= "روی هر محصول بزنید و درصد سودش را بدهید.\n";
+    $t .= "خالی یعنی از سود دسته یا سود عمومی پیروی کند.\n";
+    $t .= "🔴 = نرخ زنده · قیمتش لحظه‌ای است و سود رویش سوار می‌شود.\n\n";
+
+    $rows = [];
+    foreach (array_slice($items, $page * $per, $per) as $it) {
+        $own  = axCfg()['pricing']['imargin'][axSku($it['id'])] ?? null;
+        $eff  = axMarginOf($it['id'], $it['category']);
+        $now  = function_exists('maItemPrice') ? maItemPrice($it['item']) : 0;
+
+        $t .= ($it['live'] ? '🔴' : '⚪️') . ' <b>' . h(mb_substr($it['name'], 0, 22)) . "</b>\n";
+        $t .= '   سود: ' . ($own !== null && $own !== ''
+                ? '<b>' . fmtNum((float)$own) . '٪</b> (اختصاصی)'
+                : fmtNum($eff) . '٪ (ارثی)');
+        if ($now > 0) $t .= ' · الان: <b>' . fmtNum($now) . '</b> تومان';
+        $t .= "\n";
+
+        $rows[] = [btnCb(($own !== null && $own !== '' ? '🎯 ' : '⚪️ ') .
+                         mb_substr($it['name'], 0, 18) .
+                         ($own !== null && $own !== '' ? ' — ' . fmtNum((float)$own) . '٪' : ''),
+                         'axpim_' . $it['id'], 'admin')];
+    }
+    if (!$items) $t .= "<i>محصولی پیدا نشد.</i>\n";
+
+    $nav = [];
+    if ($page > 0)        $nav[] = btnCb('◀️', 'axpimp_' . ($page - 1), 'nav');
+    if ($page < $tot - 1) $nav[] = btnCb('▶️', 'axpimp_' . ($page + 1), 'nav');
+    if ($nav) $rows[] = $nav;
+    $rows[] = [btnCb('🔙 بازگشت', 'ax_price', 'nav')];
+    axShow($chatId, $msgId, mb_substr($t, 0, 3800), $rows);
 }
 
 function axPriceList($chatId, $msgId) {
@@ -1081,6 +1162,23 @@ function axCallback($data, $uid, $chatId, $msgId, $cbId, $isAdmin) {
     if ($data === 'ax_texts')  { $ack(); axTextsHome($chatId, $msgId);   return true; }
     if ($data === 'axmitems')  { $ack(); axManualItems($chatId, $msgId); return true; }
     if ($data === 'axpfix')    { $ack(); axPriceList($chatId, $msgId);   return true; }
+    if ($data === 'axpim')     { $ack(); axItemMarginList($chatId, $msgId, 0); return true; }
+    if (preg_match('/^axpimp_(\d+)$/', $data, $mm)) {
+        $ack(); axItemMarginList($chatId, $msgId, (int)$mm[1]); return true;
+    }
+    if (str_starts_with($data, 'axpim_')) {
+        $id  = substr($data, 6);
+        $own = axCfg()['pricing']['imargin'][axSku($id)] ?? null;
+        $ack();
+        setState(ADMIN_ID, 'ax_item_margin', ['id' => $id]);
+        sendMsg(BOT_TOKEN, $chatId,
+            "🎯 درصد سود این محصول را بفرستید (فقط عدد).\n\n" .
+            "مثلا <code>15</code> یعنی نرخ لحظه‌ای بازار + ۱۵٪.\n" .
+            "<code>-</code> یعنی سودِ اختصاصی برداشته شود و از دسته پیروی کند.\n\n" .
+            'الان: ' . ($own !== null && $own !== '' ? '<b>' . fmtNum((float)$own) . '٪</b>' : 'اختصاصی ندارد'),
+            inlineKb([[btnCb('❌ انصراف', 'axpim', 'cancel')]]));
+        return true;
+    }
     if ($data === 'ax_rep_tg') { $ack(); axReportHome($chatId, $msgId, 'tg');  return true; }
     if ($data === 'ax_rep_cfg'){ $ack(); axReportHome($chatId, $msgId, 'cfg'); return true; }
 
@@ -1484,6 +1582,36 @@ function axStateHandle($action, $sd, $msg, $uid, $chatId) {
             axSet(function (&$c) use ($plain) { $c['pricing']['margin']['_all'] = (float)axDigits($plain); });
             $done("📈 سود عمومی روی <b>" . fmtNum(axVal('pricing.margin._all')) . "%</b> تنظیم شد.", 'ax_price');
             return true;
+
+        case 'ax_item_margin': {
+            $id = (string)($sd['id'] ?? '');
+            if ($plain === '-' || $plain === '—') {
+                axSetItemMargin($id, null);
+                $done("⚪️ سود اختصاصی برداشته شد — از دسته پیروی می‌کند.", 'axpim');
+                return true;
+            }
+            $v = (float)axDigits($plain);
+            if ($v < -90 || $v > 900) {
+                sendMsg(BOT_TOKEN, $chatId, "⚠️ بین ۹۰- تا ۹۰۰ باشد."); return true;
+            }
+            axSetItemMargin($id, $v);
+
+            // همان‌جا نشان بده چه شد — نرخ خام، سود، و قیمت نهایی
+            $it = null;
+            foreach (axCatalogItems() as $x) if ($x['id'] === $id) { $it = $x; break; }
+            $msg = "🎯 سود این محصول: <b>" . fmtNum($v) . "٪</b>";
+            if ($it && function_exists('maItemPrice')) {
+                $raw = function_exists('maLivePrice') ? maLivePrice($it['item']) : null;
+                $fin = maItemPrice($it['item']);
+                if ($raw !== null)
+                    $msg .= "\n\n<blockquote>💱 نرخ بازار: <b>" . fmtNum($raw) . "</b> تومان\n" .
+                            "📈 با سود: <b>" . fmtNum($fin) . "</b> تومان</blockquote>";
+                else
+                    $msg .= "\n\n<blockquote>💰 قیمت نهایی: <b>" . fmtNum($fin) . "</b> تومان</blockquote>";
+            }
+            $done($msg, 'axpim');
+            return true;
+        }
 
         case 'ax_price_fix': {
             $item = (string)($sd['item'] ?? '');

@@ -522,9 +522,37 @@ function maCfg() {
 }
 
 /** پیکربندی یک مینی‌اپ */
+/**
+ * پیکربندی یک مینی‌اپ.
+ *
+ * محصول‌های ذخیره‌شده با محصول‌های پیش‌فرضِ هم‌نام ادغام می‌شوند.
+ * چرا مهم است: نسخه‌های بعدی به محصول‌ها فیلد اضافه می‌کنند —
+ * مثل stars و premium که می‌گویند «قیمت این را زنده حساب کن» یا auto
+ * که می‌گوید «خودکار تحویلش بده». نصب‌های قدیمی این فیلدها را ذخیره
+ * نکرده‌اند و بدون ادغام برای همیشه بی‌نصیب می‌مانند: پریمیوم با
+ * قیمت ثابتِ ۶۹۰٬۰۰۰ می‌ماند و استارزِ دلخواه روی ۱٬۹۰۰ گیر می‌کند،
+ * هرچه هم که نرخ زنده روشن باشد.
+ *
+ * هرچه ادمین خودش ست کرده سرِ جایش می‌ماند، و محصولی که حذف کرده
+ * برنمی‌گردد.
+ */
 function maGet($key) {
     $a = maCfg()['apps'][$key] ?? null;
-    if (!is_array($a)) $a = maDefaultConfig()['apps'][$key] ?? [];
+    if (!is_array($a)) return maDefaultConfig()['apps'][$key] ?? [];
+
+    $def = maDefaultConfig()['apps'][$key]['items'] ?? [];
+    if (!is_array($a['items'] ?? null) || !$def) return $a;
+
+    $byId = [];
+    foreach ($def as $d) if (isset($d['id'])) $byId[(string)$d['id']] = $d;
+
+    foreach ($a['items'] as $i => $it) {
+        $id = (string)($it['id'] ?? '');
+        if ($id === '' || !isset($byId[$id])) continue;
+        // پیش‌فرض پایه، ذخیره‌شده رویش — پس فیلدهای تازه می‌آیند و
+        // چیزی که ادمین دست‌کاری کرده دست‌نخورده می‌ماند.
+        $a['items'][$i] = array_replace($byId[$id], is_array($it) ? $it : []);
+    }
     return $a;
 }
 
@@ -946,7 +974,7 @@ function maItemPrice($item) {
         // می‌زد و مینی‌اپ ۹۵٬۰۰۰ نشان می‌داد در حالی که گروه
         // ۱۴۸٬۱۴۷ می‌گفت. سود دسته‌ای سرِ جایش می‌ماند.
         $base = ($live !== null && maNeedsLive($item))
-            ? (float)axPriceMargin($base, (string)($item['cat'] ?? ''))
+            ? (float)axPriceMargin($base, (string)($item['cat'] ?? ''), (string)($item['id'] ?? ''))
             : (float)axPrice((string)($item['id'] ?? ''), $base, (string)($item['cat'] ?? ''));
     }
     // تومانِ کامل — تا قیمتِ روی صفحه و مبلغِ کسرشده یکی باشند
