@@ -17,10 +17,29 @@
 // ⚙️ تنظیمات پایه
 // ============================================================
 
-if (!defined('BOT_TOKEN')) define('BOT_TOKEN', '8844162743:AAHkwPZ4svLSXgkZ2-PxvNRYNGMEWvhxHaQ');
-if (!defined('ADMIN_ID'))  define('ADMIN_ID',  8213021584);
-if (!defined('DATA_DIR'))  define('DATA_DIR',  __DIR__ . '/data_master');
-if (!defined('CRON_KEY'))  define('CRON_KEY',  'change-this-cron-key');
+/**
+ * 🔑 توکن و کلیدها.
+ *
+ * تا حالا مستقیم همین‌جا نوشته می‌شدند، یعنی هرکس فایل را داشت توکن
+ * ربات را هم داشت. حالا سه جا دنبالشان می‌گردیم و اولی که بود برنده است:
+ *
+ *   ۱) فایل config.local.php کنار همین فایل — بیرون از گیت
+ *   ۲) متغیرهای محیطی سرور (BOT_TOKEN، ADMIN_ID، CRON_KEY)
+ *   ۳) همین مقدارهای پایین
+ *
+ * پس اگر هیچ‌کاری نکنید همه‌چیز مثل قبل کار می‌کند؛ ولی به‌محض ساختن
+ * config.local.php، توکن از سورس بیرون می‌رود.
+ */
+if (is_file(__DIR__ . '/config.local.php')) require_once __DIR__ . '/config.local.php';
+
+if (!defined('BOT_TOKEN'))
+    define('BOT_TOKEN', getenv('BOT_TOKEN') ?: '8844162743:AAHkwPZ4svLSXgkZ2-PxvNRYNGMEWvhxHaQ');
+if (!defined('ADMIN_ID'))
+    define('ADMIN_ID',  (int)(getenv('ADMIN_ID') ?: 8213021584));
+if (!defined('DATA_DIR'))
+    define('DATA_DIR',  getenv('DATA_DIR') ?: __DIR__ . '/data_master');
+if (!defined('CRON_KEY'))
+    define('CRON_KEY',  getenv('CRON_KEY') ?: 'change-this-cron-key');
 
 if (!is_dir(DATA_DIR)) @mkdir(DATA_DIR, 0755, true);
 
