@@ -53,6 +53,7 @@ function pxDefaults() {
             'usd'    => '5951773156887764244',   // 💵 سرِ دلار و جلوی قیمت دلاری
             'toman'  => '5965097893491642896',   // 💰 جلوی قیمت تومانی
             'chg'    => '6050900104431278847',   // 📈 جلوی درصد تغییرات
+            'conv'   => '4931934645626341248',   // 💱 سرِ قالب تبدیل
 
             'card'  => '5343902037438391058',
             'price' => '5841359408952513916',
@@ -676,6 +677,45 @@ function pxHex($hex) {
     return [hexdec(substr($hex, 0, 2)), hexdec(substr($hex, 2, 2)), hexdec(substr($hex, 4, 2))];
 }
 
+/**
+ * سایه‌ی نرمِ زیر کارت.
+ *
+ * قبلا چهارده مستطیلِ روی‌هم بود و هرکدام تقریبا تمام بوم را می‌پوشاند
+ * — ۱۵۰ میلی‌ثانیه از ۱۸۰ میلی‌ثانیه‌ی کل کارت، فقط برای همین سایه.
+ * حالا روی یک بوم کوچک (یک‌ششم) کشیده و بلور می‌شود و بعد بزرگ
+ * می‌شود: هم چند برابر سریع‌تر، هم نرم‌تر از قبل.
+ */
+function pxSoftShadow($im, $x1, $y1, $x2, $y2, $r, $layers = 14, $alpha = 126) {
+    // فقط حلقه‌ی بیرونی کشیده می‌شود، نه تمام سطح.
+    //
+    // شکلِ نهایی مو‌به‌مو همان قبلی است — چون کارتِ سفید بلافاصله بعد
+    // رویش می‌نشیند و داخلِ سایه هیچ‌وقت دیده نمی‌شد. ولی به‌جای
+    // چهارده بار پر کردنِ یک سطح ۱۰۵۰×۵۰۰، هر لایه فقط چند نوار باریک
+    // و چهار گوشه است: همان ظاهر، کسری از هزینه.
+    for ($i = $layers; $i >= 1; $i--)
+        pxRoundRing($im, $x1 - $i, $y1 - $i + 5, $x2 + $i, $y2 + $i + 5, $r + $i, $i, $alpha);
+}
+
+/**
+ * حلقه‌ی بیرونیِ یک مستطیلِ گردگوشه، به ضخامت $t.
+ * داخلش دست‌نخورده می‌ماند.
+ */
+function pxRoundRing($im, $x1, $y1, $x2, $y2, $r, $t, $alpha = 126) {
+    $t = max(1, (int)$t);
+    $c = imagecolorallocatealpha($im, 0, 0, 0, (int)$alpha);
+
+    // چهار نوارِ لبه
+    imagefilledrectangle($im, $x1 + $r, $y1,          $x2 - $r, $y1 + $t, $c);   // بالا
+    imagefilledrectangle($im, $x1 + $r, $y2 - $t,     $x2 - $r, $y2,      $c);   // پایین
+    imagefilledrectangle($im, $x1,      $y1 + $r,     $x1 + $t, $y2 - $r, $c);   // چپ
+    imagefilledrectangle($im, $x2 - $t, $y1 + $r,     $x2,      $y2 - $r, $c);   // راست
+
+    // چهار گوشه — کمانِ کامل، ولی روی سطحِ کوچکِ خودِ گوشه
+    foreach ([[$x1 + $r, $y1 + $r], [$x2 - $r, $y1 + $r],
+              [$x1 + $r, $y2 - $r], [$x2 - $r, $y2 - $r]] as $p)
+        imagefilledellipse($im, $p[0], $p[1], $r * 2, $r * 2, $c);
+}
+
 function pxRoundRect($im, $x1, $y1, $x2, $y2, $r, $color) {
     imagefilledrectangle($im, $x1 + $r, $y1, $x2 - $r, $y2, $color);
     imagefilledrectangle($im, $x1, $y1 + $r, $x2, $y2 - $r, $color);
@@ -1044,7 +1084,7 @@ function pxAssetOfWord($word) {
  * نوشته نمی‌شود؛ خودِ ایموجی می‌گوید کدام است.
  */
 function pxConvAssetCaption($title, $val, $unit, $usdVal = null, $chg = null) {
-    $t  = pxEm('card', '💱') . ' <b>' . h($title) . "</b>\n\n";
+    $t  = pxEm('conv', '💱') . ' <b>' . h($title) . "</b>\n\n";
     $t .= pxConvBody($val, $unit, $usdVal, $chg);
     return $t;
 }
@@ -1246,14 +1286,15 @@ function pxAssetCaption($name, $price, $unit, $chg, $emoji = '', $key = '') {
     $isT  = ($unit === 'تومان');
 
     $t  = $head . ' <b>' . h($name) . "</b>\n\n";
+    // قیمت و درصد با هم، ولی تاریخ در نقل‌قولِ خودش
     $t .= '<blockquote>';
     // واحد نوشته نمی‌شود — ایموجی خودش می‌گوید تومان است یا دلار
     $t .= ($isT ? pxEm('toman', '💰') : pxEm('usd', '💵')) . ' ' .
           pxToman($price) . ($isT ? '' : ' ' . h($unit)) . "\n";
     $t .= pxEm('chg', '📈') . ' ' . ($chg >= 0 ? '+' : '−') .
-          number_format(abs($chg), 2) . "%\n";
-    $t .= pxEm('date', '🕓') . ' ' . h(pxJalali());
-    $t .= '</blockquote>';
+          number_format(abs($chg), 2) . '%';
+    $t .= '</blockquote>' . "\n";
+    $t .= pxDateLine();
     return $t;
 }
 
@@ -1272,7 +1313,7 @@ function pxHeadEmoji($key, $fallback = '') {
 
 /** کپشن تبدیل */
 function pxConvCaption($amount, $from, $val, $unit, $usdVal = null, $chg = null) {
-    $t  = pxEm('card', '💱') . ' <b>' . h(pxNum($amount) . ' ' . pxCoinName($from)) . "</b>\n\n";
+    $t  = pxEm('conv', '💱') . ' <b>' . h(pxNum($amount) . ' ' . pxCoinName($from)) . "</b>\n\n";
     $t .= pxConvBody($val, $unit, $usdVal, $chg);
     return $t;
 }
@@ -1361,6 +1402,7 @@ function pxLabels() {
         'usd'   => '💵 ایموجی دلار',
         'toman' => '💰 ایموجی تومان',
         'chg'   => '📈 ایموجی درصد تغییرات',
+        'conv'  => '💱 ایموجی سرِ قالب تبدیل',
         // کلمه‌ها
         'premium' => 'کلمه‌های پریمیوم',
         'stars'   => 'کلمه‌های استارز',
@@ -2565,8 +2607,7 @@ function pxAssetCard($name, $emoji, $price, $unit, $chgPct, $bg = ['334155', '0F
 
     // کارت سفید با سایه‌ی نرم
     $cx1 = 78; $cy1 = 62; $cx2 = $W - 78; $cy2 = $H - 96;
-    for ($i = 14; $i >= 1; $i--)
-        pxRoundRect($im, $cx1 - $i, $cy1 - $i + 5, $cx2 + $i, $cy2 + $i + 5, 34 + $i, $C('000000', 126));
+    pxSoftShadow($im, $cx1, $cy1, $cx2, $cy2, 34);
     pxRoundRect($im, $cx1, $cy1, $cx2, $cy2, 34, $C('F7F7F8'));
 
     $ink   = $C('101114');
