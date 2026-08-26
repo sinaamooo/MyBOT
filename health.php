@@ -11,12 +11,40 @@
  * بعد از رفع مشکل، این فایل را از هاست پاک کنید.
  */
 
-const H_TOKEN = '8844162743:AAHkwPZ4svLSXgkZ2-PxvNRYNGMEWvhxHaQ';
-const H_ADMIN = '8213021584';
+// ⚠️ هیچ رمزی داخل این فایل نوشته نمی‌شود.
+// توکن و کلید ورود از config.local.php (کنار همین فایل) یا متغیر محیطی
+// خوانده می‌شوند. این فایل عمدا هیچ فایل دیگری از ربات را require نمی‌کند
+// تا وقتی خود ربات بالا نمی‌آید هم کار کند؛ config.local.php استثناست
+// چون فقط چند define ساده دارد.
+if (is_file(__DIR__ . '/config.local.php')) {
+    require_once __DIR__ . '/config.local.php';
+}
 
-if (($_GET['key'] ?? '') !== H_ADMIN) {
-    http_response_code(403);
-    exit('forbidden');
+define('H_TOKEN', defined('BOT_TOKEN') ? BOT_TOKEN : (string)getenv('BOT_TOKEN'));
+$H_KEY = defined('HEALTH_KEY') ? HEALTH_KEY : (string)getenv('HEALTH_KEY');
+
+// بدون کلیدِ مخصوص، این صفحه اصلا باز نمی‌شود.
+// شناسه‌ی عددی ادمین کلید نیست — همه‌جا دیده می‌شود و حدس‌زدنی است.
+if (!is_string($H_KEY) || strlen($H_KEY) < 16) {
+    http_response_code(404);
+    exit('Not Found');
+}
+
+// مقایسه‌ی زمان‌ثابت تا با آزمون‌وخطای زمانی حدس زده نشود
+$given = (string)($_GET['key'] ?? '');
+if (!hash_equals($H_KEY, $given)) {
+    // تاخیر کوچک تا حدس‌زدن پشت‌سرهم بی‌صرفه شود
+    usleep(300000);
+    http_response_code(404);
+    exit('Not Found');
+}
+
+/** توکن هیچ‌وقت کامل چاپ نمی‌شود — فقط چند رقم اول برای شناسایی */
+function h_mask($t) {
+    $t = (string)$t;
+    if ($t === '') return '—';
+    $p = strpos($t, ':');
+    return ($p > 0 ? substr($t, 0, $p) : substr($t, 0, 4)) . ':••••••••';
 }
 
 header('Content-Type: text/html; charset=utf-8');
@@ -132,6 +160,11 @@ function h_api($method, $data = []) {
 }
 
 $me = function_exists('curl_init') ? h_api('getMe') : ['ok' => false, 'description' => 'curl ندارد'];
+row($rows, H_TOKEN !== '', 'توکن از کجا خوانده شد',
+    H_TOKEN !== '' ? h_mask(H_TOKEN) . ' — از config.local.php یا متغیر محیطی' : 'هیچ توکنی تنظیم نشده',
+    'کنار همین فایل یک <code>config.local.php</code> بسازید و داخلش ' .
+    "<code>define('BOT_TOKEN', '…');</code> بگذارید.");
+
 row($rows, !empty($me['ok']), 'توکن ربات',
     !empty($me['ok'])
         ? '@' . ($me['result']['username'] ?? '?') . ' — ' . ($me['result']['first_name'] ?? '')
@@ -148,8 +181,20 @@ $guess = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' ? 'https' : 'h
 
 row($rows, $whUrl !== '', 'آدرس وبهوک',
     $whUrl !== '' ? $whUrl : '<b>ست نشده</b>',
-    'وبهوک ست نشده. این آدرس را یک بار در مرورگر باز کنید:<br><code>https://api.telegram.org/bot' .
-    H_TOKEN . '/setWebhook?url=' . rawurlencode($guess) . '</code>');
+    'وبهوک ست نشده. از دکمه‌ی زیر استفاده کنید (توکن عمدا اینجا چاپ نمی‌شود ' .
+    'تا اگر کسی این صفحه را دید نتواند ربات را بدزدد):<br>' .
+    '<a class="fixbtn" href="?key=' . rawurlencode($given) . '&amp;setwebhook=1">🔗 وبهوک را همین‌جا ست کن</a>' .
+    '<br><span class="muted">مقصد: <code>' . htmlspecialchars($guess, ENT_QUOTES, 'UTF-8') . '</code></span>');
+
+// ست کردن وبهوک از خود همین صفحه — بدون اینکه توکن جایی چاپ شود
+if (!empty($_GET['setwebhook']) && function_exists('curl_init')) {
+    $sw = h_api('setWebhook', ['url' => $guess, 'drop_pending_updates' => 'true']);
+    row($rows, !empty($sw['ok']), 'ست کردن وبهوک',
+        !empty($sw['ok']) ? 'انجام شد → ' . $guess : ($sw['description'] ?? 'ناموفق'),
+        'اگر ناموفق بود یعنی سرور به تلگرام دسترسی ندارد یا آدرس https معتبر نیست.');
+    $wh    = h_api('getWebhookInfo');
+    $whUrl = $wh['result']['url'] ?? '';
+}
 
 $sameFile = $whUrl !== '' && strpos($whUrl, 'bot_master_membership.php') !== false;
 if ($whUrl !== '') {
@@ -204,6 +249,9 @@ h1{font-size:21px;margin:0 0 6px}
 .f{font-size:12.5px;color:#FFC46B;margin-top:9px;padding-top:9px;border-top:1px dashed #2A3242}
 code{background:#0A0D14;padding:2px 6px;border-radius:6px;font-size:12px;word-break:break-all}
 .ok{color:#4ADE80}.no{color:#F87171}
+.muted{color:#6E7891}
+.fixbtn{display:inline-block;margin-top:8px;background:#1D4ED8;color:#fff;text-decoration:none;
+        padding:8px 15px;border-radius:10px;font-size:13px}
 </style>
 </head>
 <body><div class="box">

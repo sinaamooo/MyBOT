@@ -15,7 +15,18 @@
  */
 if (is_file(__DIR__ . '/config.local.php')) require_once __DIR__ . '/config.local.php';
 if (!defined('ADMIN_PASSWORD'))
-    define('ADMIN_PASSWORD', getenv('ADMIN_PANEL_PASS') ?: 'admin123456');
+    define('ADMIN_PASSWORD', (string)getenv('ADMIN_PANEL_PASS'));
+
+// رمزِ ضعیف یا تنظیم‌نشده = پنل اصلا باز نمی‌شود.
+// از این پنل می‌شود به موجودی کاربران و ولت TON رسید؛ رمز پیش‌فرض
+// یعنی هرکس آدرس صفحه را حدس زد، همه‌چیز را دارد.
+if (strlen(ADMIN_PASSWORD) < 8) {
+    http_response_code(500);
+    header('Content-Type: text/plain; charset=utf-8');
+    exit("رمز پنل تنظیم نشده است.\n\n" .
+         "کنار همین فایل در config.local.php بنویسید:\n\n" .
+         "define('ADMIN_PANEL_PASS', 'یک رمز حداقل ۸ کاراکتری');\n");
+}
 
 define('MEMBERSHIP_LIB_ONLY', true);
 require_once __DIR__ . '/bot_master_membership.php';
@@ -307,8 +318,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $text = trim($_POST['text'] ?? '');
         if ($text === '') go('متن خالی است.', 'err');
         $ids = $_POST['bots'] ?? null;
-        [$sent, $fail] = broadcastToChildBots($text, is_array($ids) && $ids ? $ids : null);
-        go("ارسال به ربات‌های زیرمجموعه — موفق: {$sent} | ناموفق: {$fail}");
+        [$n, $err] = bcQueueChild($text, is_array($ids) && $ids ? $ids : null);
+        if ($n <= 0) go($err ?: 'هیچ گیرنده‌ای نبود.', 'err');
+        go("در صف ارسال قرار گرفت — {$n} گیرنده از ربات‌های زیرمجموعه.");
     }
 
     // ---- متن‌ها ----
@@ -888,14 +900,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($a === 'broadcast') {
         $text = trim($_POST['text'] ?? '');
         if ($text === '') go('متن خالی است.', 'err');
-        $sent = 0; $fail = 0;
-        foreach (load('users') as $u) {
-            if (!empty($u['banned'])) continue;
-            $r = sendMsg(BOT_TOKEN, $u['telegram_id'], $text);
-            if (!empty($r['ok'])) $sent++; else $fail++;
-            usleep(50000);
-        }
-        go("ارسال شد — موفق: {$sent} | ناموفق: {$fail}");
+        // حلقه‌ی مستقیم با هزار کاربر بیش از یک دقیقه طول می‌کشید و
+        // مرورگر/PHP وسط کار قطع می‌کرد. حالا در صف می‌رود و پس‌زمینه می‌فرستد.
+        [$n, $err] = bcQueue($text);
+        if ($n <= 0) go($err ?: 'هیچ گیرنده‌ای نبود.', 'err');
+        go("در صف ارسال قرار گرفت — {$n} گیرنده. ارسال در پس‌زمینه انجام می‌شود.");
     }
 
     go();
@@ -913,6 +922,12 @@ $products = Product::all();
 $bots     = BotManager::all();
 $orders   = Order::all();
 $users    = load('users');
+// شمارش زیرمجموعه‌ها یک‌بار برای کل جدول (قبلا برای هر ردیف کل کاربران پیمایش می‌شد)
+$refCount = [];
+foreach ($users as $_u) {
+    $r = (int)($_u['referrer'] ?? 0);
+    if ($r > 0) $refCount[$r] = ($refCount[$r] ?? 0) + 1;
+}
 $channels  = Channels::all();
 $partners  = Partner::all();
 $campaigns = Campaign::all();
@@ -1063,10 +1078,10 @@ foreach ($tabs as $k => $l): ?>
     <?= nl2br(strip_tags((string)$flash['msg'], '<code><b>')) ?>
   </div>
 <?php endif; ?>
-<?php if (ADMIN_PASSWORD === 'admin123456'): ?>
-  <div class="flash err">🔴 <b>رمز پنل هنوز پیش‌فرض است.</b>
-  هرکس آدرس این صفحه را بداند وارد می‌شود — و از تب ⚡ خودکارسازی به ولت شما هم می‌رسد.
-  خط ۱۰ فایل <code>admin_panel.php</code> را همین حالا عوض کنید.</div>
+<?php if (strlen(ADMIN_PASSWORD) < 12 || !preg_match('/[^A-Za-z0-9]/', ADMIN_PASSWORD)): ?>
+  <div class="flash err">🟠 <b>رمز پنل ضعیف است.</b>
+  از این پنل می‌شود به موجودی کاربران و ولت TON رسید. رمز را در
+  <code>config.local.php</code> به دست‌کم ۱۲ کاراکتر با حرف و عدد و علامت تغییر دهید.</div>
 <?php endif; ?>
 
 <?php // ================= داشبورد ================= ?>
@@ -2323,7 +2338,7 @@ def join_gate(user_id):
           </form>
         </td>
         <td><?= !empty($u['referrer']) ? h(uLabel($users, $u['referrer'])) : '<span class="muted">—</span>' ?></td>
-        <td><?= countReferrals($u['telegram_id']) ?></td>
+        <td><?= (int)($refCount[(int)$u['telegram_id']] ?? 0) ?></td>
         <td><?= !empty($u['banned']) ? '<span class="badge red">مسدود</span>' : '<span class="badge green">فعال</span>' ?></td>
         <td><form method="post">
           <input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="tab" value="users">

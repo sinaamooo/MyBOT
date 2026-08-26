@@ -25,21 +25,33 @@
  *
  *   ۱) فایل config.local.php کنار همین فایل — بیرون از گیت
  *   ۲) متغیرهای محیطی سرور (BOT_TOKEN، ADMIN_ID، CRON_KEY)
- *   ۳) همین مقدارهای پایین
  *
- * پس اگر هیچ‌کاری نکنید همه‌چیز مثل قبل کار می‌کند؛ ولی به‌محض ساختن
- * config.local.php، توکن از سورس بیرون می‌رود.
+ * ⚠️ دیگر هیچ توکنی داخل خود سورس نیست. اگر هیچ‌کدام تنظیم نشده باشند
+ * ربات عمدا بالا نمی‌آید — چون سورسی که توکن دارد یعنی هرکس فایل را
+ * گرفت، ربات را هم گرفت.
  */
 if (is_file(__DIR__ . '/config.local.php')) require_once __DIR__ . '/config.local.php';
 
-if (!defined('BOT_TOKEN'))
-    define('BOT_TOKEN', getenv('BOT_TOKEN') ?: '8844162743:AAHkwPZ4svLSXgkZ2-PxvNRYNGMEWvhxHaQ');
-if (!defined('ADMIN_ID'))
-    define('ADMIN_ID',  (int)(getenv('ADMIN_ID') ?: 8213021584));
+if (!defined('BOT_TOKEN')) define('BOT_TOKEN', (string)getenv('BOT_TOKEN'));
+if (!defined('ADMIN_ID'))  define('ADMIN_ID',  (int)getenv('ADMIN_ID'));
 if (!defined('DATA_DIR'))
     define('DATA_DIR',  getenv('DATA_DIR') ?: __DIR__ . '/data_master');
 if (!defined('CRON_KEY'))
-    define('CRON_KEY',  getenv('CRON_KEY') ?: 'change-this-cron-key');
+    define('CRON_KEY',  getenv('CRON_KEY') ?: '');
+
+// بدون توکن و شناسه‌ی ادمین جلوتر نمی‌رویم
+if (!defined('MEMBERSHIP_LIB_ONLY') && (BOT_TOKEN === '' || ADMIN_ID <= 0)) {
+    http_response_code(500);
+    header('Content-Type: text/plain; charset=utf-8');
+    exit("پیکربندی ناقص است.\n\n" .
+         "کنار همین فایل یک config.local.php بسازید:\n\n" .
+         "<?php\n" .
+         "define('BOT_TOKEN', 'توکن ربات از BotFather');\n" .
+         "define('ADMIN_ID', 123456789);\n" .
+         "define('CRON_KEY', 'یک رشته تصادفی بلند');\n" .
+         "define('ADMIN_PANEL_PASS', 'رمز پنل وب');\n" .
+         "define('HEALTH_KEY', 'یک رشته تصادفی بلند دیگر');\n");
+}
 
 if (!is_dir(DATA_DIR)) @mkdir(DATA_DIR, 0755, true);
 dataDirLockdown();
@@ -178,6 +190,54 @@ function tg($token, $method, $data = [], $timeout = 20) {
     if ($res === false) return ['ok' => false, 'description' => 'curl error'];
     $out = json_decode($res, true);
     return is_array($out) ? $out : ['ok' => false, 'description' => 'bad response'];
+}
+
+/**
+ * چند درخواست همزمان به تلگرام — به‌جای پشت‌سرهم.
+ * ورودی: [کلید => داده]  خروجی: [همان کلید => پاسخ]
+ * برای بررسی عضویت چند کانال در یک رفت‌وبرگشت استفاده می‌شود.
+ */
+function tgMulti($token, $method, array $items, $timeout = 6) {
+    if (!$items) return [];
+    // در تست (یا نبود curl_multi) همان مسیر عادی
+    if (function_exists('__tgHook') || !function_exists('curl_multi_init')) {
+        $out = [];
+        foreach ($items as $k => $d) $out[$k] = tg($token, $method, $d, $timeout);
+        return $out;
+    }
+
+    $url = TG_API_BASE . "/bot{$token}/{$method}";
+    $mh  = curl_multi_init();
+    $hs  = [];
+    foreach ($items as $k => $d) {
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => http_build_query($d),
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => max(3, (int)$timeout),
+            CURLOPT_CONNECTTIMEOUT => min(10, max(3, (int)$timeout)),
+        ]);
+        curl_multi_add_handle($mh, $ch);
+        $hs[$k] = $ch;
+    }
+
+    $running = null;
+    do {
+        curl_multi_exec($mh, $running);
+        if ($running) curl_multi_select($mh, 0.5);
+    } while ($running > 0);
+
+    $out = [];
+    foreach ($hs as $k => $ch) {
+        $res = curl_multi_getcontent($ch);
+        curl_multi_remove_handle($mh, $ch);
+        curl_close($ch);
+        $j = is_string($res) ? json_decode($res, true) : null;
+        $out[$k] = is_array($j) ? $j : ['ok' => false, 'description' => 'curl error'];
+    }
+    curl_multi_close($mh);
+    return $out;
 }
 
 /** کیبورد شیشه‌ای (زیر پیام) */
@@ -1440,31 +1500,76 @@ class Channels
      * اگر بررسی ممکن نباشد، کانال «عضو نشده» حساب می‌شود (fail-closed)
      * تا کسی نتواند با خراب کردن دسترسی، قفل را دور بزند.
      */
-    public static function isMemberOf($chatId, $userId, $fresh = false) {
-        static $cache = [];
-        $k = $chatId . ':' . $userId;
-        if ($fresh) unset($cache[$k]);          // «عضو شدم» را زد — از نو بپرس
-        if (isset($cache[$k])) return $cache[$k];
+    /** کش عضویت — فقط در همین درخواست زنده است */
+    private static $memCache = [];
+    /**
+     * کلیدهایی که همین الان دسته‌ای پرسیده شده‌اند.
+     * فقط یک بار مصرف می‌شود: جلوی «گرم کن، بعد بلافاصله دوباره بپرس»
+     * را می‌گیرد، ولی درخواست تازه‌ی بعدی را بی‌اثر نمی‌کند.
+     */
+    private static $memFresh = [];
 
-        $r = tg(BOT_TOKEN, 'getChatMember',
-                ['chat_id' => $chatId, 'user_id' => $userId], 6);
+    /** آیا این کلید همین الان گرم شده؟ (و علامتش را مصرف کن) */
+    private static function takeFresh($k) {
+        if (!isset(self::$memFresh[$k])) return false;
+        unset(self::$memFresh[$k]);
+        return true;
+    }
 
+    /** پاسخ خام تلگرام را به نتیجه‌ی قابل استفاده تبدیل می‌کند */
+    private static function memberResult($r) {
         if (empty($r['ok'])) {
             $desc = strtolower($r['description'] ?? '');
             // «کاربر پیدا نشد» یعنی واقعا عضو نیست، نه اینکه دسترسی نداریم
             $reallyNotMember = str_contains($desc, 'user not found')
                             || str_contains($desc, 'participant_id_invalid');
-            return $cache[$k] = ['ok' => $reallyNotMember, 'member' => false, 'error' => $r['description'] ?? ''];
+            return ['ok' => $reallyNotMember, 'member' => false, 'error' => $r['description'] ?? ''];
         }
         $st = $r['result']['status'] ?? '';
-        $isIn = in_array($st, ['member', 'administrator', 'creator'], true);
-        return $cache[$k] = ['ok' => true, 'member' => $isIn, 'error' => ''];
+        return ['ok' => true,
+                'member' => in_array($st, ['member', 'administrator', 'creator'], true),
+                'error' => ''];
+    }
+
+    /**
+     * چند کانال را با هم می‌پرسد — یک رفت‌وبرگشت به‌جای چندتا.
+     * بدون این، هر کمپین فعال یک درخواست جدا می‌شد و کاربر کندی حس می‌کرد.
+     */
+    public static function warmMembership($chatIds, $userId, $fresh = false) {
+        $need = [];
+        foreach ($chatIds as $cid) {
+            $cid = (string)$cid;
+            if ($cid === '') continue;
+            $k = $cid . ':' . $userId;
+            if ($fresh && !self::takeFresh($k)) unset(self::$memCache[$k]);
+            if (isset(self::$memCache[$k]) || isset($need[$k])) continue;
+            $need[$k] = ['chat_id' => $cid, 'user_id' => $userId];
+        }
+        if (count($need) < 2) return;            // یکی بود، همان مسیر عادی ارزان‌تر است
+        foreach (tgMulti(BOT_TOKEN, 'getChatMember', $need, 6) as $k => $r) {
+            self::$memCache[$k] = self::memberResult($r);
+            self::$memFresh[$k] = true;          // دیگر در همین درخواست دوباره پرسیده نشود
+        }
+    }
+
+    public static function isMemberOf($chatId, $userId, $fresh = false) {
+        $k = $chatId . ':' . $userId;
+        // «عضو شدم» را زد — از نو بپرس، مگر همین حالا دسته‌ای پرسیده شده باشد
+        if ($fresh && !self::takeFresh($k)) unset(self::$memCache[$k]);
+        if (isset(self::$memCache[$k])) return self::$memCache[$k];
+
+        $r = tg(BOT_TOKEN, 'getChatMember',
+                ['chat_id' => $chatId, 'user_id' => $userId], 6);
+        unset(self::$memFresh[$k]);
+        return self::$memCache[$k] = self::memberResult($r);
     }
 
     /** کانال‌هایی که کاربر هنوز عضو نشده — برای این ربات */
     public static function missing($userId, $botId = null) {
         $list = $botId ? self::forBot($botId)
                        : array_values(array_filter(self::all(), fn($c) => !empty($c['on'])));
+        self::warmMembership(array_column($list, 'chat_id'), $userId);
+
         $missing = [];
         foreach ($list as $ch) {
             $res = self::isMemberOf($ch['chat_id'], $userId);
@@ -1745,13 +1850,20 @@ function requiredMissing($userId, $botId = null, $partnerId = null) {
         $fixedOn = !empty($bs['force_join']);
     }
 
-    if ($botId !== null && $fixedOn) {
-        foreach (Channels::missing($userId, $botId) as $m) $missing[] = $m;
-    }
-
     // کمپین‌ها — قدیمی‌ترین اول تا سفارش‌ها به‌ترتیب تمام شوند
     $camps = Campaign::activeFor($botId, $partnerId);
     usort($camps, fn($x, $y) => strcmp((string)($x['created_at'] ?? ''), (string)($y['created_at'] ?? '')));
+
+    // همه‌ی کانال‌های این کاربر را در یک رفت‌وبرگشت بپرس، نه یکی‌یکی
+    $warm = [];
+    if ($botId !== null && $fixedOn)
+        foreach (Channels::forBot($botId) as $ch) $warm[] = $ch['chat_id'];
+    foreach ($camps as $c) $warm[] = $c['chat_id'];
+    Channels::warmMembership($warm, $userId);
+
+    if ($botId !== null && $fixedOn) {
+        foreach (Channels::missing($userId, $botId) as $m) $missing[] = $m;
+    }
 
     foreach ($camps as $c) {
         if (Campaign::overDailyQuota($c)) continue;
@@ -4627,6 +4739,13 @@ function masterJoinMissing($uid, $fresh = false) {
     if (empty($j['on']) || empty($j['channels'])) return [];
     if ($uid === ADMIN_ID) return [];
 
+    $ids = [];
+    foreach ($j['channels'] as $ch) {
+        $cid = trim((string)($ch['chat_id'] ?? ''));
+        if ($cid !== '') $ids[] = $cid;
+    }
+    Channels::warmMembership($ids, $uid, $fresh);
+
     $missing = [];
     foreach ($j['channels'] as $ch) {
         $cid = trim((string)($ch['chat_id'] ?? ''));
@@ -7034,8 +7153,42 @@ function bcQueue($html, $botIds = null) {
     $ids = array_values(array_unique($ids));
     if (!$ids) return [0, 'هیچ کاربری نیست.'];
 
-    mutate('broadcast', function (&$b) use ($html, $ids) {
-        $b = ['text' => $html, 'ids' => $ids, 'i' => 0,
+    return bcStore($html, $ids, []);
+}
+
+/**
+ * پیام همگانی کاربران ربات‌های اپلودر — همان صف، ولی هر گیرنده با
+ * توکن ربات خودش. اینجا فقط شناسه‌ی ربات ذخیره می‌شود نه توکن.
+ */
+function bcQueueChild($html, $botIds = null) {
+    $ids = []; $from = []; $seen = [];
+    foreach (BotManager::all() as $b) {
+        if ($botIds !== null && !in_array($b['id'], $botIds, true)) continue;
+        if (empty($b['token'])) continue;
+        foreach (load('bots/' . $b['id'] . '/users') as $u) {
+            $t = (int)($u['id'] ?? 0);
+            if ($t <= 0) continue;
+            $key = $b['id'] . ':' . $t;
+            if (isset($seen[$key])) continue;
+            $seen[$key] = true;
+            $ids[]  = $t;
+            $from[] = $b['id'];
+        }
+    }
+    if (!$ids) return [0, 'هیچ کاربری در ربات‌های زیرمجموعه نیست.'];
+    return bcStore($html, $ids, $from);
+}
+
+/** صف را می‌نویسد — روی صف نیمه‌تمام نمی‌نویسد */
+function bcStore($html, $ids, $from) {
+    $busy = load('broadcast');
+    if ($busy && empty($busy['done']) && !empty($busy['ids'])) {
+        $left = count((array)$busy['ids']) - (int)($busy['i'] ?? 0);
+        if ($left > 0) return [0, 'یک پیام همگانی نیمه‌تمام در صف است (' .
+                                  number_format($left) . ' گیرنده مانده). بگذارید تمام شود.'];
+    }
+    mutate('broadcast', function (&$b) use ($html, $ids, $from) {
+        $b = ['text' => $html, 'ids' => $ids, 'from' => $from, 'i' => 0,
               'sent' => 0, 'fail' => 0, 'at' => time(), 'done' => false];
     });
     return [count($ids), ''];
@@ -7051,9 +7204,23 @@ function bcTick($limit = 25) {
     $ids  = (array)$b['ids'];
     if ($text === '' || $i >= count($ids)) { bcFinish(); return 0; }
 
+    $from = (array)($b['from'] ?? []);
+    $tok  = [];                              // شناسه ربات ← توکن، یک بار خوانده می‌شود
+
     $sent = 0; $fail = 0; $n = 0;
     for (; $i < count($ids) && $n < $limit; $i++, $n++) {
-        $r = sendMsg(BOT_TOKEN, $ids[$i], $text);
+        $bid = (string)($from[$i] ?? '');
+        if ($bid === '') {
+            $t = BOT_TOKEN;
+        } else {
+            if (!array_key_exists($bid, $tok)) {
+                $bb = BotManager::get($bid);
+                $tok[$bid] = $bb['token'] ?? '';
+            }
+            $t = $tok[$bid];
+            if ($t === '') { $fail++; continue; }
+        }
+        $r = sendMsg($t, $ids[$i], $text);
         if (!empty($r['ok'])) $sent++; else $fail++;
         usleep(40000);                       // ~۲۵ پیام در ثانیه، زیر سقف تلگرام
     }
@@ -7087,19 +7254,7 @@ function bcFinish() {
  * چون کاربر ممکن است فقط با ربات فرعی چت کرده باشد نه با ربات مادر.
  */
 function broadcastToChildBots($text, $botIds = null) {
-    $sent = 0; $fail = 0; $seen = [];
-    foreach (BotManager::all() as $b) {
-        if ($botIds !== null && !in_array($b['id'], $botIds, true)) continue;
-        foreach (load('bots/' . $b['id'] . '/users') as $u) {
-            $key = $b['id'] . ':' . $u['id'];
-            if (isset($seen[$key])) continue;
-            $seen[$key] = true;
-            $r = sendMsg($b['token'], $u['id'], $text);
-            if (!empty($r['ok'])) $sent++; else $fail++;
-            usleep(50000);
-        }
-    }
-    return [$sent, $fail];
+    return bcQueueChild($text, $botIds);
 }
 
 /**
@@ -7816,7 +7971,10 @@ if (isset($_GET['api'])) {
 // اجرای صف حذف — با cron یا در هر درخواست
 if (isset($_GET['cron'])) {
     http_response_code(200);
-    if (!hash_equals(CRON_KEY, (string)$_GET['cron'])) { echo 'forbidden'; exit; }
+    // کلید خالی یعنی کوتاه — وگرنه ?cron= خالی هم رد می‌شد
+    if (strlen(CRON_KEY) < 12 || !hash_equals(CRON_KEY, (string)$_GET['cron'])) {
+        echo 'forbidden'; exit;
+    }
     echo 'deleted: ' . processDeleteQueue(200) . ' · gw: ' . gwPoll(50) .
          ' · campaigns: ' . campaignCleanup() .
          ' · games: ' . gmTick(50) .

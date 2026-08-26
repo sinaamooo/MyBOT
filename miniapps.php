@@ -77,8 +77,20 @@ function maDefaultConfig() {
         // را بین ممبرها گذاشت.
         'merge' => true,
 
-        // ⏰ سقف عمر داده ورود تلگرام (ثانیه) — پیش‌فرض ۲۴ ساعت
-        'init_max_age' => 86400,
+        // ⏰ سقف عمر داده ورود تلگرام (ثانیه).
+        // تلگرام هر بار که مینی‌اپ باز می‌شود این داده را از نو می‌سازد،
+        // پس ۶ ساعت برای استفاده‌ی عادی زیاد هم هست و پنجره‌ی سوءاستفاده
+        // از یک داده‌ی شنودشده را کوتاه می‌کند.
+        'init_max_age' => 21600,
+
+        // 🚦 سقف درخواست در دقیقه.
+        // روی IP بالا (پشت کلادفلر همه یک IP دارند) و روی کاربر سخت‌گیر.
+        'rate_ip'   => 600,
+        'rate_user' => 40,
+
+        // 🌐 پشت کلادفلر/پروکسی هستید؟ فقط آن موقع روشن کنید —
+        // وگرنه هرکس می‌تواند با جعل هدر، سقف IP را دور بزند.
+        'trust_proxy' => false,
 
         // 🔌 قیمت‌گیری زنده از مارکت گیفت (Tonnel / Portals / هر API دیگر)
         // چون هر مارکت ساختار پاسخ خودش را دارد، آدرس و مسیر فیلدها اینجا تنظیم می‌شود
@@ -496,6 +508,9 @@ function maMergeConfig($def, $saved) {
     if (isset($saved['row_layout']))   $out['row_layout']   = (string)$saved['row_layout'];
     if (isset($saved['merge']))        $out['merge']        = (bool)$saved['merge'];
     if (isset($saved['init_max_age'])) $out['init_max_age'] = (int)$saved['init_max_age'];
+    if (isset($saved['rate_ip']))      $out['rate_ip']      = max(60,  (int)$saved['rate_ip']);
+    if (isset($saved['rate_user']))    $out['rate_user']    = max(10,  (int)$saved['rate_user']);
+    if (isset($saved['trust_proxy']))  $out['trust_proxy']  = (bool)$saved['trust_proxy'];
     foreach (['market', 'rates', 'stars', 'fulfill'] as $sec) {
         if (isset($saved[$sec]) && is_array($saved[$sec]))
             $out[$sec] = array_replace($def[$sec] ?? [], $saved[$sec]);
@@ -1713,18 +1728,55 @@ function maOrdersArchive($days = 0, $limit = 4000) {
  * پنجره لغزان ساده: بیش از $limit بار در $win ثانیه = رد.
  * جلوی سیل درخواست، اسکریپت خودکار و آزمون‌وخطای مهاجم را می‌گیرد.
  */
+/** تعداد تکه‌های فایل محدودیت نرخ */
+if (!defined('MA_RATE_SHARDS')) define('MA_RATE_SHARDS', 16);
+
+/**
+ * فایل محدودیت نرخ به تکه تقسیم می‌شود.
+ *
+ * قبلا همه‌ی کاربران در یک فایل بودند: با هزار کاربر فعال آن فایل
+ * ۲۲۸ کیلوبایت می‌شد و هر درخواست کلِ آن را با قفل انحصاری بازنویسی
+ * می‌کرد — یعنی همه‌ی درخواست‌های مینی‌اپ پشت یک قفل صف می‌کشیدند.
+ * حالا هر کلید در یکی از ۱۶ تکه می‌نشیند: هم فایل کوچک می‌ماند، هم
+ * قفل‌ها روی هم نمی‌افتند.
+ */
+/**
+ * IP واقعی کاربر.
+ *
+ * پشت کلادفلر/پروکسی، REMOTE_ADDR آدرسِ خود پروکسی است و همه‌ی
+ * کاربران یکی می‌شوند. ولی هدرها را هم نمی‌شود همین‌طوری باور کرد —
+ * هرکس می‌تواند X-Forwarded-For جعل کند. پس فقط وقتی به هدر اعتماد
+ * می‌کنیم که ادمین صریحا گفته باشد پشت پروکسی است.
+ */
+function maClientIp() {
+    $real = (string)($_SERVER['REMOTE_ADDR'] ?? '0');
+    if (empty(maCfg()['trust_proxy'])) return $real;
+
+    foreach (['HTTP_CF_CONNECTING_IP', 'HTTP_X_REAL_IP', 'HTTP_X_FORWARDED_FOR'] as $h) {
+        $v = trim((string)($_SERVER[$h] ?? ''));
+        if ($v === '') continue;
+        $v = trim(explode(',', $v)[0]);          // اولی = خودِ کاربر
+        if (filter_var($v, FILTER_VALIDATE_IP)) return $v;
+    }
+    return $real;
+}
+
+function maRateFile($k) {
+    return 'ma_rate_' . (hexdec(substr(md5($k), 0, 4)) % MA_RATE_SHARDS);
+}
+
 function maRateOk($bucket, $id, $limit, $win) {
     $ok = true;
-    mutate('ma_rate', function (&$a) use ($bucket, $id, $limit, $win, &$ok) {
+    $k  = $bucket . ':' . $id;
+    mutate(maRateFile($k), function (&$a) use ($k, $limit, $win, &$ok) {
         $now = time();
-        $k   = $bucket . ':' . $id;
         $hits = array_values(array_filter((array)($a[$k] ?? []), fn($t) => ($now - (int)$t) < $win));
         if (count($hits) >= $limit) { $ok = false; }
         else { $hits[] = $now; }
         $a[$k] = $hits;
 
-        // خانه‌تکانی تا فایل بی‌نهایت بزرگ نشود
-        if (count($a) > 400) {
+        // خانه‌تکانی تا تکه بی‌نهایت بزرگ نشود
+        if (count($a) > 200) {
             foreach ($a as $kk => $vv) {
                 $last = is_array($vv) && $vv ? (int)max($vv) : 0;
                 if (($now - $last) > 3600) unset($a[$kk]);
@@ -1959,9 +2011,12 @@ function maApi() {
     if ((int)($_SERVER['CONTENT_LENGTH'] ?? 0) > 32768)
         maApiOut(['ok' => false, 'error' => 'too_large'], 413);
 
-    // 🛡 سد اول: محدودیت نرخ روی IP، قبل از هر کار سنگینی
-    $ip = (string)($_SERVER['REMOTE_ADDR'] ?? '0');
-    if (!maRateOk('ip', $ip, 90, 60))
+    // 🛡 سد اول: محدودیت نرخ روی IP، قبل از هر کار سنگینی.
+    // سقف اینجا عمدا بالاست چون پشت کلادفلر یا اینترنت همراه، صدها
+    // کاربر یک IP دارند؛ سدِ اصلی، محدودیت روی خودِ کاربر است که
+    // بعد از بررسی امضای تلگرام اعمال می‌شود و جعل‌ناپذیر است.
+    $ip = maClientIp();
+    if (!maRateOk('ip', $ip, (int)(maCfg()['rate_ip'] ?? 600), 60))
         maApiOut(['ok' => false, 'error' => 'rate_limited', 'message' => 'درخواست‌ها زیاد است، کمی صبر کنید.'], 429);
 
     $raw  = file_get_contents('php://input', false, null, 0, 32768);
@@ -1982,8 +2037,8 @@ function maApi() {
 
     $uid   = (int)$user['id'];
 
-    // 🛡 سد دوم: محدودیت نرخ روی خود کاربر
-    if (!maRateOk('u', $uid, 40, 60))
+    // 🛡 سد دوم: محدودیت نرخ روی خود کاربر — این همان سدی است که واقعا می‌گیرد
+    if (!maRateOk('u', $uid, (int)(maCfg()['rate_user'] ?? 40), 60))
         maApiOut(['ok' => false, 'error' => 'rate_limited', 'message' => 'درخواست‌ها زیاد است، کمی صبر کنید.'], 429);
 
     $uname = (string)($user['username'] ?? '');
