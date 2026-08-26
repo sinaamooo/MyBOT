@@ -473,6 +473,150 @@ body.is-admin .adm{display:block}
 .aswitch i:after{content:"";position:absolute;top:3px;right:3px;width:18px;height:18px;background:#fff;transition:.2s}
 .aswitch.on i{background:var(--c1)}
 .aswitch.on i:after{right:21px}
+
+/* ══════════════════════════════════════════════════════════════
+   ⚡️ لایه‌ی جان‌دار — فقط بخش خرید
+
+   همه‌چیز اینجا روی transform و opacity کار می‌کند، یعنی روی کارت
+   گرافیک، نه روی CPU. هیچ چیزی layout را دوباره حساب نمی‌کند، پس
+   هرچقدر هم چشمگیر باشد اسکرول کند نمی‌شود. با «جلوه: کم» و با
+   تنظیمِ کم‌کردنِ حرکتِ خودِ گوشی، همه‌شان خاموش می‌شوند.
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── ورودِ پلکانیِ کارت‌ها ── */
+.grid.first .tile{animation:tileIn .52s cubic-bezier(.16,1,.3,1) backwards}
+@keyframes tileIn{
+  from{opacity:0;transform:translateY(22px) scale(.94)}
+  to  {opacity:1;transform:none}
+}
+.grid.first .tile:nth-child(1),.grid.first .tile:nth-child(2){animation-delay:.02s}
+.grid.first .tile:nth-child(3),.grid.first .tile:nth-child(4){animation-delay:.09s}
+.grid.first .tile:nth-child(5),.grid.first .tile:nth-child(6){animation-delay:.16s}
+.grid.first .tile:nth-child(7),.grid.first .tile:nth-child(8){animation-delay:.23s}
+.grid.first .tile:nth-child(9),.grid.first .tile:nth-child(10){animation-delay:.30s}
+.grid.first .tile:nth-child(n+11){animation-delay:.36s}
+
+/* ── نورِ روان روی کارت ── یک نوار مورب که آرام رد می‌شود */
+.tile:after{content:"";position:absolute;top:-60%;bottom:-60%;width:38%;left:-45%;z-index:1;
+  pointer-events:none;transform:skewX(-18deg);
+  background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--c1) 16%,transparent),transparent)}
+.tile.hot:after{animation:tileSheen 3.6s ease-in-out infinite}
+.tile:active:after{animation:tileSheen .55s ease-out}
+@keyframes tileSheen{0%{left:-45%}55%,100%{left:135%}}
+
+/* لبه‌ی سمت راستِ کارتِ داغ، نفس می‌کشد */
+.tile.hot:before{animation:edgePulse 2.4s ease-in-out infinite}
+@keyframes edgePulse{0%,100%{opacity:.55;transform:scaleY(.82)}50%{opacity:1;transform:scaleY(1)}}
+
+.tile:active{transform:scale(.965)}
+.tile .plus{transition:transform .18s cubic-bezier(.2,1.6,.4,1)}
+.tile:active .plus{transform:rotate(90deg) scale(1.14)}
+
+/* ── باز شدنِ شیت ── */
+.scrim.on{animation:scrimIn .34s ease-out}
+@keyframes scrimIn{from{opacity:0}to{opacity:1}}
+
+.sheet{transition:transform .42s cubic-bezier(.16,1,.3,1)}
+/* ریلِ بالای شیت، از وسط باز می‌شود — انگار دارد شارژ می‌گیرد */
+.sheet:before{content:"";position:absolute;top:-1px;left:0;right:0;height:2px;z-index:2;
+  background:linear-gradient(90deg,transparent,var(--c1),var(--c2),var(--c1),transparent);
+  transform:scaleX(0);transform-origin:50% 50%}
+.sheet.on:before{animation:railCharge .62s cubic-bezier(.16,1,.3,1) .1s forwards}
+@keyframes railCharge{to{transform:scaleX(1)}}
+
+/* محتوای شیت، آبشاری بالا می‌آید */
+.sheet.on .head,
+.sheet.on #sField,
+.sheet.on .total,
+.sheet.on .go,
+.sheet.on .go.alt{animation:sheetRise .46s cubic-bezier(.16,1,.3,1) backwards}
+.sheet.on .head    {animation-delay:.10s}
+.sheet.on #sField  {animation-delay:.16s}
+.sheet.on .total   {animation-delay:.22s}
+.sheet.on .go      {animation-delay:.28s}
+.sheet.on .go.alt  {animation-delay:.33s}
+@keyframes sheetRise{
+  from{opacity:0;transform:translateY(18px)}
+  to  {opacity:1;transform:none}
+}
+
+/* نشانِ محصول، با یک چرخشِ کوتاه می‌نشیند */
+.sheet.on .head .orb{animation:orbLand .6s cubic-bezier(.2,1.5,.35,1) .12s backwards}
+@keyframes orbLand{
+  from{opacity:0;transform:scale(.4) rotate(-32deg)}
+  to  {opacity:1;transform:none}
+}
+
+/* ── مبلغِ قابل پرداخت ── قابِ نفس‌کش و عددِ درخشان */
+.total{position:relative;overflow:hidden}
+.total:before{content:"";position:absolute;inset:0;pointer-events:none;
+  border:1px solid color-mix(in srgb,var(--c1) 55%,transparent);
+  clip-path:inherit;animation:totalBreath 2.8s ease-in-out infinite}
+@keyframes totalBreath{0%,100%{opacity:.28}50%{opacity:.9}}
+.total b{position:relative;transition:transform .22s cubic-bezier(.2,1.7,.4,1)}
+.total:after{content:"";position:absolute;top:0;bottom:0;width:44%;left:-50%;pointer-events:none;
+  transform:skewX(-20deg);
+  background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--c1) 13%,transparent),transparent);
+  animation:totalSweep 3.4s ease-in-out infinite}
+@keyframes totalSweep{0%{left:-50%}60%,100%{left:130%}}
+
+/* ── دکمه‌ی پرداخت ── حلقه‌ی انرژی دور دکمه */
+.go{position:relative;overflow:hidden;isolation:isolate;
+  transition:transform .16s cubic-bezier(.2,1.6,.4,1),box-shadow .2s}
+.go:not([disabled]):before{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.42),transparent);
+  transform:translateX(-100%) skewX(-20deg);
+  animation:goSweep 2.6s cubic-bezier(.5,0,.5,1) infinite}
+@keyframes goSweep{0%{transform:translateX(-140%) skewX(-20deg)}
+                   55%,100%{transform:translateX(240%) skewX(-20deg)}}
+.go:not([disabled]):active{transform:scale(.972)}
+body.glow-on .go:not([disabled]){animation:goGlow 2.6s ease-in-out infinite}
+@keyframes goGlow{0%,100%{box-shadow:0 12px 30px -18px var(--c1)}
+                  50%    {box-shadow:0 14px 38px -14px var(--c1)}}
+
+/* ── انتخابِ بسته و حجم ── */
+.plans i,.vols i{transition:border-color .18s,transform .16s cubic-bezier(.2,1.6,.4,1)}
+.plans i:active,.vols i:active{transform:scale(.955)}
+.plans i.on,.vols i.on{animation:pickPop .42s cubic-bezier(.2,1.55,.35,1)}
+@keyframes pickPop{
+  0%  {transform:scale(1)}
+  42% {transform:scale(1.045)}
+  100%{transform:scale(1)}
+}
+.plans i.on:after,.vols i.on:after{content:"";position:absolute;inset:0;pointer-events:none;
+  border:1px solid var(--c1);clip-path:inherit;animation:pickRing .5s ease-out forwards}
+@keyframes pickRing{from{opacity:.95;transform:scale(1.035)}to{opacity:0;transform:scale(1)}}
+.plans i .chk,.vols i .chk{transition:transform .2s cubic-bezier(.2,1.8,.4,1)}
+.plans i.on .chk{transform:scale(1.18)}
+
+/* ── پیام موفقیت ── */
+.win.on .ring{animation:ringIn .7s cubic-bezier(.2,1.5,.3,1)}
+@keyframes ringIn{
+  0%  {opacity:0;transform:scale(.3) rotate(-90deg)}
+  60% {opacity:1;transform:scale(1.12) rotate(6deg)}
+  100%{opacity:1;transform:none}
+}
+
+/* ── و همه‌ی این‌ها، وقتی نباید، نیستند ── */
+body.fx0 .tile:after,
+body.fx0 .total:after,
+body.fx0 .total:before,
+body.fx0 .go:before,
+body.fx0 .tile.hot:before{animation:none;display:none}
+body.fx0 .grid.first .tile,
+body.fx0 .sheet.on .head,
+body.fx0 .sheet.on #sField,
+body.fx0 .sheet.on .total,
+body.fx0 .sheet.on .go,
+body.fx0 .sheet.on .sheet:before{animation:none}
+@media (prefers-reduced-motion:reduce){
+  .grid.first .tile,.tile:after,.tile.hot:before,.total:after,.total:before,
+  .go:before,.sheet:before,.sheet.on .head,.sheet.on #sField,.sheet.on .total,
+  .sheet.on .go,.sheet.on .go.alt,.sheet.on .head .orb,
+  .plans i.on,.vols i.on,.plans i.on:after,.vols i.on:after,.win.on .ring{
+    animation:none!important;transform:none!important}
+  .sheet:before{transform:scaleX(1)!important}
+}
 </style>
 CSS;
 }
