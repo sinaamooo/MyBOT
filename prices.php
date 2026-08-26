@@ -514,7 +514,7 @@ function pxRatesText($fresh = false) {
         $sym = strtoupper(trim((string)$sym));
         $usd = ($sym === 'USDT') ? 1.0 : (float)($p[$sym . '/USDT'] ?? 0);
         if ($usd <= 0) continue;
-        $t .= pxEm('price', '💵') . ' <b>' . h($sym) . "</b>\n";
+        $t .= pxEm('conv', '💵') . ' <b>' . h($sym) . "</b>\n";
         $t .= '<blockquote>' . pxToman($usd * $irt) . ' ' . h(pxT('toman')) .
               "\n$" . pxNum($usd) . '</blockquote>';
     }
@@ -524,7 +524,7 @@ function pxRatesText($fresh = false) {
 
 /** متن زیر کارت یک ارز */
 function pxCoinCaption($sym, $usd, $irt, $chg, $hi, $lo, $n = 1) {
-    $t  = pxEm('coin', '🪙') . ' <b>' . h(pxT('coin_head', ['n' => pxNum($n), 'sym' => $sym])) . "</b>\n\n";
+    $t  = pxEm('conv', '🪙') . ' <b>' . h(pxT('coin_head', ['n' => pxNum($n), 'sym' => $sym])) . "</b>\n\n";
     $t .= '<blockquote>' . pxEm('usd', '💵') . ' ' . pxNum($usd) . '</blockquote>' . "\n";
     $t .= '<blockquote>' . pxEm('toman', '💰') . ' ' . pxToman($irt) . '</blockquote>' . "\n";
     $t .= '<blockquote>' . pxEm('chg', '📈') . ' ' . ($chg >= 0 ? '+' : '−') .
@@ -1308,7 +1308,7 @@ function pxHeadEmoji($key, $fallback = '') {
     if (in_array($key, ['gold', 'gold24', 'ounce', 'coin', 'nim', 'rob'], true))
         return pxEm('gold', $fallback !== '' ? $fallback : '🥇');
     if ($key === 'usd') return pxEm('usd', $fallback !== '' ? $fallback : '💵');
-    return $fallback !== '' ? $fallback : pxEm('coin', '🪙');
+    return $fallback !== '' ? $fallback : pxEm('conv', '🪙');
 }
 
 /** کپشن تبدیل */
