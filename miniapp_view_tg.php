@@ -39,7 +39,8 @@ function maViewTg($a, $boot) {
     ]);
 }
 
-function maTplTg() {
+/** قالب مشترک هر دو مینی‌اپ — رنگ‌ها از تم هر کدام می‌آید */
+function maTplApp() {
     return <<<'HTML'
 <!doctype html>
 <html lang="fa" dir="rtl">
@@ -418,6 +419,18 @@ body.is-admin .dock b[data-p="adm"]{display:flex}
 .field input:focus,.field textarea:focus{border-color:var(--c1);
   box-shadow:0 0 0 3px color-mix(in srgb,var(--c1) 18%,transparent)}
 .field .hint{font-size:10.5px;color:var(--dim);margin-top:6px;line-height:1.7}
+/* ═══ انتخاب حجم (مینی‌اپ کانفیگ) ═══ */
+.vols{display:grid;grid-template-columns:repeat(auto-fill,minmax(98px,1fr));gap:8px;margin-top:5px}
+.vols i{display:flex;flex-direction:column;align-items:center;gap:2px;padding:11px 5px;cursor:pointer;
+  font-style:normal;border-radius:15px;border:1px solid var(--line);background:rgba(255,255,255,.035);
+  transition:border-color .16s,background .16s}
+.vols i:active{transform:scale(.96)}
+.vols i b{font-size:12.5px;font-weight:800;color:var(--ink)}
+.vols i u{font-size:11.5px;text-decoration:none;color:var(--c2);font-weight:800}
+.vols i s{font-size:9.5px;text-decoration:none;color:var(--dim)}
+.vols i.on{border-color:color-mix(in srgb,var(--c1) 70%,transparent);
+  background:linear-gradient(120deg,color-mix(in srgb,var(--c1) 22%,transparent),transparent)}
+
 /* ═══ انتخاب بسته — ردیف کامل با تیک، مثل اپ‌های گیفت ═══ */
 .lbl{font-size:10.5px;font-weight:800;letter-spacing:1.1px;color:var(--dim);margin:14px 0 9px}
 .plans{display:grid;gap:9px}
@@ -741,7 +754,7 @@ $('meNote').textContent  = B.note || '';
 document.title = B.title;
 
 /* ── وضعیت ── */
-var S = { page:'home', cat:'', q:'', item:null, qty:1, busy:false, bal:0, nodes:[], me:null };
+var S = { page:'home', cat:'', q:'', item:null, qty:1, vol:0, busy:false, bal:0, nodes:[], me:null };
 
 /* ── سرور ── */
 function api(action, extra, ok, bad){
@@ -949,7 +962,9 @@ function tileHtml(i, n){
            '<h3>' + esc(i.name) + '</h3>' +
            (i.desc ? '<p>' + esc(i.desc) + '</p>' : '') +
            '<div class="foot"><div class="cost"><b>' +
-             (i.stale ? '—' : fa(i.price)) + '</b><i>' + esc(B.currency) +
+             (i.stale ? '—'
+               : (i.ask === 'volume' && i.vols && i.vols.length
+                    ? 'از ' + fa(i.vols[0].price) : fa(i.price))) + '</b><i>' + esc(B.currency) +
              (i.unit && ['qty','qty_wallet','qty_username'].indexOf(i.ask) >= 0 ? ' / ' + esc(i.unit) : '') + '</i></div>' +
              '<div class="plus">+</div></div>' +
          '</div>';
@@ -1149,6 +1164,7 @@ function open(id){
   S.item = it;
   S.qty  = (it.ask === 'qty' || it.ask === 'qty_wallet' || it.ask === 'qty_username')
              ? Math.max(1, it.min || 1) : 1;
+  S.vol  = (it.ask === 'volume' && it.vols && it.vols.length) ? it.vols[0].mb : 0;
 
   $('sOrb').textContent  = it.emoji || '💠';
   $('sName').textContent = it.name;
@@ -1184,6 +1200,22 @@ function open(id){
                 (isCoin ? ' · قیمت هر ' + esc(it.unit || 'واحد') + ': ' + fa(it.price) + ' ' + esc(B.currency) : '') +
               '</div></div>';
   }
+  // 📦 حجم دلخواه — فقط حجم‌هایی که واقعا در مخزن هست
+  if (it.ask === 'volume'){
+    var vs = it.vols || [];
+    if (!vs.length){
+      html += '<div class="field"><label>📦 حجم سرویس</label>' +
+              '<div class="hint">الان هیچ حجمی در مخزن موجود نیست. کمی بعد دوباره سر بزنید.</div></div>';
+    } else {
+      html += '<div class="lbl">📦 حجم سرویس</div><div class="vols" id="fVols">' +
+              vs.map(function(v){
+                return '<i class="' + (v.mb === S.vol ? 'on' : '') + '" data-v="' + v.mb + '">' +
+                       '<b>' + esc(v.label) + '</b><u>' + fa(v.price) + '</u>' +
+                       '<s>' + fa(v.n) + ' موجود</s></i>';
+              }).join('') + '</div>' +
+              '<div class="field"><div class="hint">فقط حجم‌های رند: ۵۰۰ مگابایت، یا گیگابایت کامل.</div></div>';
+    }
+  }
   // تعداد دلخواه استارز: هم تعداد می‌خواهد هم آیدی گیرنده
   if (it.ask === 'qty_username'){
     html += '<div class="field"><label>📎 آیدی تلگرام گیرنده</label>' +
@@ -1217,6 +1249,17 @@ function open(id){
   }
   f.innerHTML = html;
 
+  if (it.ask === 'volume'){
+    f.addEventListener('click', function(ev){
+      var el = ev.target.closest ? ev.target.closest('i[data-v]') : null;
+      if (!el) return;
+      S.vol = Number(el.getAttribute('data-v')) || 0;
+      var all = f.querySelectorAll('i[data-v]');
+      for (var k = 0; k < all.length; k++)
+        all[k].classList.toggle('on', Number(all[k].getAttribute('data-v')) === S.vol);
+      tap(); total();
+    });
+  }
   if (hasQty){
     f.addEventListener('click', function(ev){
       var el = ev.target.closest ? ev.target.closest('i[data-q]') : null;
@@ -1231,7 +1274,8 @@ function open(id){
   }
   total();
 
-  if (it.stale){ $('sGo').disabled = true; $('sWal').disabled = true; }
+  var noVol = it.ask === 'volume' && !(it.vols && it.vols.length);
+  if (it.stale || noVol){ $('sGo').disabled = true; $('sWal').disabled = true; }
 
   $('scrim').classList.add('on');
   $('sheet').classList.add('on');
@@ -1280,6 +1324,11 @@ function sum(){
   var it = S.item; if (!it) return 0;
   if (it.ask === 'qty' || it.ask === 'qty_wallet' || it.ask === 'qty_username')
     return Math.round(it.price * Math.max(0, S.qty));
+  if (it.ask === 'volume'){
+    var vs = it.vols || [];
+    for (var i = 0; i < vs.length; i++) if (vs[i].mb === S.vol) return vs[i].price;
+    return 0;
+  }
   return it.price;
 }
 function total(){
@@ -1289,7 +1338,8 @@ function total(){
 function walletState(){
   var it = S.item; if (!it) return;
   var t = sum(), enough = S.bal >= t;
-  $('sWal').disabled = !enough || !!it.stale;
+  var noVol = it.ask === 'volume' && !(it.vols && it.vols.length);
+  $('sWal').disabled = !enough || !!it.stale || noVol;
   $('sWalNote').innerHTML = enough
     ? '👛 موجودی شما: <b>' + fa(S.bal) + '</b> ' + esc(B.currency) +
       ' · بعد از پرداخت: <b>' + fa(S.bal - t) + '</b>'
@@ -1315,6 +1365,12 @@ function validate(){
     if (!S.qty || S.qty < (it.min || 1)) { toast('حداقل مقدار ' + fa(it.min || 1) + ' است.'); return null; }
     if (it.max > 0 && S.qty > it.max)    { toast('حداکثر مقدار ' + fa(it.max) + ' است.'); return null; }
   }
+  if (it.ask === 'volume'){
+    if (!S.vol){ toast('یک حجم انتخاب کنید.'); return null; }
+    if (S.vol !== 500 && S.vol % 1024 !== 0){
+      toast('حجم باید رند باشد: ۵۰۰ مگابایت یا گیگابایت کامل.'); return null;
+    }
+  }
   if (['username','wallet','qty_wallet','qty_username','text'].indexOf(it.ask) >= 0 && !fv){
     toast('لطفا فیلد بالا را پر کنید.'); return null;
   }
@@ -1333,7 +1389,7 @@ function send(payMode, btn){
   btn.textContent = U.sending;
   tap('medium');
 
-  api('order', { item: it.id, qty: S.qty, field: fv, seen_price: it.price, pay: payMode },
+  api('order', { item: it.id, qty: S.qty, volume: S.vol, field: fv, seen_price: it.price, pay: payMode },
     function(j){
       S.busy = false;
       btn.disabled = false; btn.textContent = old;
@@ -1517,3 +1573,6 @@ go('home', true);
 </html>
 HTML;
 }
+
+/** نام قدیمی، برای سازگاری */
+function maTplTg() { return maTplApp(); }
