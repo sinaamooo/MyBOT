@@ -12,11 +12,63 @@ define('ADMIN_PASSWORD', 'admin123456');
 define('MEMBERSHIP_LIB_ONLY', true);
 require_once __DIR__ . '/bot_master_membership.php';
 
+// کوکی نشست: نه در دسترس جاوااسکریپت، نه فرستاده‌شده از سایت دیگر،
+// و روی HTTPS فقط رمزنگاری‌شده. بدون این‌ها یک لینک بیرونی یا یک XSS
+// می‌توانست نشستِ مدیر را بدزدد.
+session_set_cookie_params([
+    'lifetime' => 0,
+    'path'     => '/',
+    'httponly' => true,
+    'samesite' => 'Strict',
+    'secure'   => (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off'),
+]);
+session_name('mybot_panel');
 session_start();
 
 // ------------------------------------------------------------
 // 🔐 ورود
 // ------------------------------------------------------------
+
+/**
+ * 🛡 سد حمله‌ی امتحان‌کردنِ رمز
+ *
+ * قبلا فقط ۴۰۰ میلی‌ثانیه تاخیر بود؛ یعنی ۱۵۰ رمز در دقیقه، و رمزی که
+ * در فهرست‌های رایج باشد ظرف چند ثانیه پیدا می‌شد. حالا بعد از ۶ تلاش
+ * ناموفق، آن IP یک ربع بیرون می‌ماند.
+ */
+define('PANEL_MAX_TRIES', 6);
+define('PANEL_LOCK_SECONDS', 900);
+define('PANEL_IDLE_SECONDS', 7200);
+
+function panelIp() {
+    // خودِ IP ذخیره نمی‌شود، فقط اثر انگشتش
+    return substr(hash('sha256', (string)($_SERVER['REMOTE_ADDR'] ?? '0')), 0, 24);
+}
+
+/** چند ثانیه دیگر قفل است؟ ۰ یعنی باز است */
+function panelLockLeft() {
+    $r = load('panel_lock')[panelIp()] ?? null;
+    if (!is_array($r) || (int)($r['n'] ?? 0) < PANEL_MAX_TRIES) return 0;
+    $left = PANEL_LOCK_SECONDS - (time() - (int)($r['at'] ?? 0));
+    return $left > 0 ? $left : 0;
+}
+
+function panelNoteFail() {
+    $k = panelIp();
+    mutate('panel_lock', function (&$a) use ($k) {
+        $r = $a[$k] ?? ['n' => 0, 'at' => 0];
+        if (time() - (int)$r['at'] > PANEL_LOCK_SECONDS) $r = ['n' => 0, 'at' => 0];
+        $r['n'] = (int)$r['n'] + 1;
+        $r['at'] = time();
+        $a[$k] = $r;
+        foreach ($a as $kk => $vv) if (time() - (int)($vv['at'] ?? 0) > 86400) unset($a[$kk]);
+    });
+}
+
+function panelClearFails() {
+    $k = panelIp();
+    mutate('panel_lock', function (&$a) use ($k) { unset($a[$k]); });
+}
 
 function renderLogin($error) { ?>
 <!DOCTYPE html><html lang="fa" dir="rtl"><head>
@@ -47,17 +99,36 @@ if (isset($_GET['logout'])) {
     header('Location: ' . strtok($_SERVER['REQUEST_URI'], '?')); exit;
 }
 
+// نشستِ رهاشده تا ابد باز نمی‌ماند
+if (!empty($_SESSION['logged_in'])) {
+    $seen = (int)($_SESSION['seen'] ?? 0);
+    if ($seen > 0 && time() - $seen > PANEL_IDLE_SECONDS) {
+        $_SESSION = []; session_destroy(); session_start();
+    } else {
+        $_SESSION['seen'] = time();
+    }
+}
+
 if (empty($_SESSION['logged_in'])) {
     $err = '';
-    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['password'])) {
+    $left = panelLockLeft();
+    if ($left > 0) {
+        $err = 'به‌خاطر تلاش‌های ناموفق، ورود تا ' . ceil($left / 60) . ' دقیقه دیگر بسته است.';
+    } elseif (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['password'])) {
         if (hash_equals(ADMIN_PASSWORD, (string)$_POST['password'])) {
+            panelClearFails();
             session_regenerate_id(true);
             $_SESSION['logged_in'] = true;
+            $_SESSION['seen'] = time();
             $_SESSION['csrf'] = bin2hex(random_bytes(16));
             header('Location: ' . strtok($_SERVER['REQUEST_URI'], '?')); exit;
         }
+        panelNoteFail();
         usleep(400000);
-        $err = 'رمز عبور اشتباه است.';
+        $left = panelLockLeft();
+        $err = $left > 0
+            ? 'رمز اشتباه بود. ورود تا ' . ceil($left / 60) . ' دقیقه دیگر بسته شد.'
+            : 'رمز عبور اشتباه است.';
     }
     renderLogin($err); exit;
 }
@@ -2438,6 +2509,10 @@ def join_gate(user_id):
         <input type="hidden" name="action" value="auto_wipe">
         <button class="btn r">🗑 پاک کردن عبارت بازیابی</button>
       </form>
+      <?php endif; ?>
+    </div>
+  </div>
+
 <?php else: ?>
   <div class="card"><h2>⚙️ تنظیمات عمومی</h2><div class="body">
     <form method="post">
@@ -2661,8 +2736,6 @@ def join_gate(user_id):
       <?php endforeach; ?>
     </div>
   </div></div>
-
-<?php endif; ?>
 
 </div>
 

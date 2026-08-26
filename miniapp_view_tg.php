@@ -92,19 +92,27 @@ body.fx0 #stars{display:none}
 
 .wrap{position:relative;z-index:5;max-width:600px;margin:0 auto;padding:0 15px calc(112px + var(--safe))}
 
-/* ═══ سربرگ ═══ */
-.top{display:flex;align-items:center;gap:11px;padding:16px 2px 14px}
-.ava{width:44px;height:44px;border-radius:15px;flex:0 0 auto;display:grid;place-items:center;overflow:hidden;
+/* ═══ سربرگ ═══ نوار بالا مثل اپ‌های گیفت: چهره، سلام، موجودی، و یک دکمه‌ی کار */
+.top{display:flex;align-items:center;gap:11px;margin:14px 0 4px;padding:11px 12px;border-radius:22px;
+  border:1px solid var(--line);background:var(--pane)}
+.ava{width:46px;height:46px;border-radius:50%;flex:0 0 auto;display:grid;place-items:center;overflow:hidden;
   font-weight:900;font-size:18px;color:#0B0616;
-  background:linear-gradient(135deg,var(--c1),var(--c2))}
+  background:linear-gradient(135deg,var(--c1),var(--c2));
+  box-shadow:0 0 0 2px var(--pane),0 0 0 4px color-mix(in srgb,var(--c2) 55%,transparent)}
 .ava img{width:100%;height:100%;object-fit:cover}
-body.glow-on .ava{box-shadow:0 8px 22px -8px var(--c1)}
 .who{flex:1;min-width:0}
-.who h1{margin:0;font-size:16px;font-weight:900;letter-spacing:-.3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.who p{margin:2px 0 0;font-size:11.5px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.chipbal{flex:0 0 auto;display:flex;align-items:center;gap:6px;padding:8px 12px;border-radius:14px;
-  border:1px solid var(--line);background:rgba(255,255,255,.06);font-size:12.5px;font-weight:800;cursor:pointer}
+.who h1{margin:0;font-size:14.5px;font-weight:800;letter-spacing:-.2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chipbal{display:inline-flex;align-items:center;gap:6px;margin-top:6px;padding:5px 6px 5px 10px;border-radius:12px;
+  border:1px solid var(--line);background:rgba(255,255,255,.05);font-size:12.5px;font-weight:900;cursor:pointer}
 .chipbal em{font-style:normal;font-size:9.5px;color:var(--dim);font-weight:600}
+.chipbal b{width:20px;height:20px;border-radius:7px;display:grid;place-items:center;font-size:14px;line-height:1;
+  color:#0B0616;background:linear-gradient(135deg,var(--c2),var(--c1))}
+.cta{flex:0 0 auto;padding:11px 14px;border:0;border-radius:15px;cursor:pointer;
+  font-family:inherit;font-size:12px;font-weight:800;color:#0B0616;
+  background:linear-gradient(135deg,var(--c1),var(--c2))}
+.cta:active{transform:scale(.96)}
+body.glow-on .cta{box-shadow:0 8px 22px -12px var(--c1)}
+.wsub{margin:0 0 10px;font-size:11.5px;color:var(--dim);text-align:center}
 
 /* ═══ صفحه‌ها ═══ */
 .pg{display:none;animation:pgIn .3s cubic-bezier(.2,.9,.3,1)}
@@ -113,7 +121,8 @@ body.glow-on .ava{box-shadow:0 8px 22px -8px var(--c1)}
 @media (prefers-reduced-motion:reduce){ .pg{animation:none} }
 
 .sect{display:flex;align-items:baseline;justify-content:space-between;margin:20px 2px 11px}
-.sect h2{margin:0;font-size:14.5px;font-weight:900;display:flex;align-items:center;gap:7px}
+.sect h2{margin:0;font-size:11.5px;font-weight:800;letter-spacing:1.2px;color:var(--dim);
+  display:flex;align-items:center;gap:8px}
 .sect h2 s{text-decoration:none;width:5px;height:16px;border-radius:3px;
   background:linear-gradient(180deg,var(--c2),var(--c1))}
 .sect a{font-size:11.5px;color:var(--c2);font-weight:700;cursor:pointer}
@@ -380,6 +389,26 @@ body.fx0 .dock{backdrop-filter:none;-webkit-backdrop-filter:none;background:#100
 .field input:focus,.field textarea:focus{border-color:var(--c1);
   box-shadow:0 0 0 3px color-mix(in srgb,var(--c1) 18%,transparent)}
 .field .hint{font-size:10.5px;color:var(--dim);margin-top:6px;line-height:1.7}
+/* ═══ انتخاب بسته — ردیف کامل با تیک، مثل اپ‌های گیفت ═══ */
+.lbl{font-size:10.5px;font-weight:800;letter-spacing:1.1px;color:var(--dim);margin:14px 0 9px}
+.plans{display:grid;gap:9px}
+.plans i{display:flex;align-items:center;gap:12px;padding:13px 14px;border-radius:18px;cursor:pointer;
+  font-style:normal;border:1px solid var(--line);background:rgba(255,255,255,.035);
+  transition:border-color .18s,background .18s}
+.plans i:active{transform:scale(.985)}
+.plans i .pg{width:38px;height:38px;flex:0 0 auto;border-radius:13px;display:grid;place-items:center;font-size:20px;
+  text-decoration:none;
+  background:linear-gradient(140deg,color-mix(in srgb,var(--c1) 40%,transparent),color-mix(in srgb,var(--c2) 24%,transparent));
+  border:1px solid rgba(255,255,255,.13)}
+.plans i b{flex:1;min-width:0;font-size:13.5px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.plans i u{flex:0 0 auto;text-decoration:none;font-size:12px;font-weight:800;color:var(--c2)}
+.plans i .chk{width:22px;height:22px;flex:0 0 auto;border-radius:7px;border:1.5px solid var(--line);
+  display:grid;place-items:center;font-size:13px;font-style:normal;color:transparent}
+.plans i.on{border-color:color-mix(in srgb,var(--c1) 70%,transparent);
+  background:linear-gradient(120deg,color-mix(in srgb,var(--c1) 20%,transparent),transparent)}
+.plans i.on .chk{border-color:transparent;color:#0B0616;
+  background:linear-gradient(135deg,var(--c1),var(--c2))}
+
 .step{display:flex;align-items:center;gap:10px}
 .step button{width:46px;height:46px;flex:0 0 auto;border-radius:15px;border:1px solid var(--line);
   background:rgba(255,255,255,.06);color:var(--ink);font-size:21px;font-weight:700;cursor:pointer;transition:.16s}
@@ -442,8 +471,11 @@ body.glow-on .go{box-shadow:0 14px 34px -16px var(--c1)}
 <div class="wrap">
   <div class="top">
     <div class="ava" id="ava">★</div>
-    <div class="who"><h1 id="ttl">—</h1><p id="sub">—</p></div>
-    <div class="chipbal" id="balChip"><span id="balTop">…</span><em id="curTop"></em></div>
+    <div class="who">
+      <h1 id="ttl">—</h1>
+      <div class="chipbal" id="balChip"><b>+</b><span id="balTop">…</span><em id="curTop"></em></div>
+    </div>
+    <button class="cta" id="topCta">＋ شارژ</button>
   </div>
 
   <!-- ══ خانه ══ -->
@@ -473,6 +505,7 @@ body.glow-on .go{box-shadow:0 14px 34px -16px var(--c1)}
         </svg>
       </div>
       <h2 id="wcTtl">—</h2>
+      <p class="wsub" id="sub"></p>
       <p id="hero"></p>
     </div>
 
@@ -665,6 +698,7 @@ $('ratesTtl').textContent= U.rates_ttl;
 $('ordTtl').textContent  = U.orders_ttl;
 $('topTtl').textContent  = U.topup;
 $('topGo').textContent   = U.topup_do;
+$('topCta').textContent  = U.topup_btn;
 $('goShop').textContent  = U.see_all;
 $('goShop2').textContent = U.see_all;
 $('meNote').textContent  = B.note || '';
@@ -812,7 +846,7 @@ api('me', {}, function(j){
   S.me = j;
   setBal(j.balance);
   var nm = (j.name || '').trim();
-  if (nm) $('ttl').textContent = nm;
+  if (nm) $('ttl').textContent = U.hi.replace('{name}', nm);
   $('meName').textContent = nm || B.title;
   $('meUser').textContent = j.uname ? '@' + j.uname : '';
   $('meId').textContent   = 'ID: ' + (j.uid || '');
@@ -1057,6 +1091,7 @@ function prettyCard(v){
 
 /* ── میان‌برها ── */
 $('hTop').onclick   = function(){ tap(); go('me'); };
+$('topCta').onclick = function(){ tap(); go('me'); };
 $('hShop').onclick  = function(){ tap(); go('shop'); };
 $('goShop').onclick = function(){ tap(); S.cat=''; drawTabs(); applyFilter(); go('shop'); };
 $('goShop2').onclick= $('goShop').onclick;
@@ -1090,21 +1125,25 @@ function open(id){
   var hasQty = it.ask === 'qty' || it.ask === 'qty_wallet' || it.ask === 'qty_username';
   if (hasQty){
     var isCoin = it.ask === 'qty_wallet';
-    html += '<div class="field"><label>' + (isCoin ? '🔢 مقدار' : '🔢 تعداد') +
-              (it.unit ? ' (' + esc(it.unit) + ')' : '') + '</label>' +
-            '<div class="step">' +
-              '<button type="button" data-d="-1">−</button>' +
-              '<input id="fQty" type="text" inputmode="numeric" value="' + S.qty + '">' +
-              '<button type="button" data-d="1">+</button>' +
+    // بسته‌های آماده با تیک، بعد کادر مقدار دلخواه — به‌جای دکمه‌های ±
+    // که برای «۵۰۰ استارز» یعنی چهارصد و پنجاه بار زدن.
+    html += '<div class="lbl">' + esc(U.plans) + '</div><div class="plans" id="fPlans">' +
+              planRows(it).map(function(q){
+                return '<i data-q="' + q + '"' + (q === S.qty ? ' class="on"' : '') + '>' +
+                       '<s class="pg">' + esc(it.emoji || '💠') + '</s>' +
+                       '<b>' + fa(q) + (it.unit ? ' ' + esc(it.unit) : '') + '</b>' +
+                       '<u>' + fa(Math.round(it.price * q)) + ' ' + esc(B.currency) + '</u>' +
+                       '<em class="chk">✓</em></i>';
+              }).join('') +
             '</div>' +
-            '<div class="quick">' +
-              (isCoin ? [1,5,10,50].map(function(m){ return '<i data-s="' + m + '">' + fa(m) + '</i>'; }).join('')
-                      : [1,5,10,50,100].map(function(m){ return '<i data-m="' + m + '">×' + fa(m) + '</i>'; }).join('')) +
-            '</div>' +
-            '<div class="hint">حداقل ' + fa(it.min || 1) +
-              (it.max > 0 ? ' · حداکثر ' + fa(it.max) : '') +
-              (isCoin ? ' · قیمت هر ' + esc(it.unit || 'واحد') + ': ' + fa(it.price) + ' ' + esc(B.currency) : '') +
-            '</div></div>';
+            '<div class="lbl">' + esc(U.custom.replace('{min}', fa(it.min || 1))) + '</div>' +
+            '<div class="field">' +
+              '<input id="fQty" type="text" inputmode="' + (isCoin ? 'decimal' : 'numeric') +
+                '" value="' + S.qty + '">' +
+              '<div class="hint">حداقل ' + fa(it.min || 1) +
+                (it.max > 0 ? ' · حداکثر ' + fa(it.max) : '') +
+                (isCoin ? ' · قیمت هر ' + esc(it.unit || 'واحد') + ': ' + fa(it.price) + ' ' + esc(B.currency) : '') +
+              '</div></div>';
   }
   // تعداد دلخواه استارز: هم تعداد می‌خواهد هم آیدی گیرنده
   if (it.ask === 'qty_username'){
@@ -1141,10 +1180,10 @@ function open(id){
 
   if (hasQty){
     f.addEventListener('click', function(ev){
-      var b = ev.target;
-      if (b.hasAttribute && b.hasAttribute('data-d')){ setQty(S.qty + Number(b.getAttribute('data-d'))); tap(); }
-      if (b.hasAttribute && b.hasAttribute('data-m')){ setQty(S.qty * Number(b.getAttribute('data-m'))); tap(); }
-      if (b.hasAttribute && b.hasAttribute('data-s')){ setQty(Number(b.getAttribute('data-s'))); tap(); }
+      var el = ev.target.closest ? ev.target.closest('i[data-q]') : null;
+      if (!el) return;
+      setQty(Number(el.getAttribute('data-q')));
+      tap();
     });
     $('fQty').addEventListener('input', function(){
       var raw = digits(this.value) || this.value.replace(/[^\d.]/g,'');
@@ -1173,7 +1212,29 @@ function setQty(v, typing){
   S.qty = v;
   var qi = $('fQty');
   if (qi && !typing) qi.value = v;
+  markPlan();
   total();
+}
+
+/* بسته‌های پیشنهادی یک محصول — از حداقلش ساخته می‌شوند */
+function planRows(it){
+  var min = Math.max(1, Number(it.min) || 1);
+  var out = [], mults = [1, 2, 5, 10];
+  for (var i = 0; i < mults.length; i++){
+    var q = min * mults[i];
+    if (it.max > 0 && q > it.max) break;
+    out.push(q);
+  }
+  return out;
+}
+
+/* تیک روی همان بسته‌ای که مقدارش انتخاب شده */
+function markPlan(){
+  var box = $('fPlans');
+  if (!box) return;
+  var all = box.querySelectorAll('i[data-q]');
+  for (var i = 0; i < all.length; i++)
+    all[i].classList.toggle('on', Number(all[i].getAttribute('data-q')) === S.qty);
 }
 
 function sum(){

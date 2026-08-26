@@ -95,7 +95,9 @@ body.fx0 .mesh{display:none}
 .wrap{position:relative;z-index:6;max-width:600px;margin:0 auto;padding:0 14px calc(104px + var(--safe))}
 
 /* ═══ نوار بالا — مثل هدر یک دستگاه ═══ */
-.bar{display:flex;align-items:center;gap:11px;padding:15px 2px 13px}
+.bar{display:flex;align-items:center;gap:11px;margin:13px 0 4px;padding:10px 11px;
+  border:1px solid var(--edge);background:var(--pane);
+  clip-path:polygon(14px 0,100% 0,100% calc(100% - 14px),calc(100% - 14px) 100%,0 100%,0 14px)}
 .sig{width:42px;height:42px;flex:0 0 auto;position:relative;display:grid;place-items:center;overflow:hidden;
   font-weight:900;font-size:17px;color:#04120C;
   background:linear-gradient(135deg,var(--c1),var(--c2));
@@ -109,9 +111,17 @@ body.fx0 .mesh{display:none}
   box-shadow:0 0 0 3px color-mix(in srgb,var(--c1) 20%,transparent)}
 body.fx2 .dot{animation:blink 2.1s ease-in-out infinite}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
-.credit{flex:0 0 auto;padding:8px 12px;font-size:12.5px;font-weight:900;font-family:var(--mono);cursor:pointer;
+.credit{display:inline-flex;align-items:center;gap:6px;margin-top:6px;padding:4px 5px 4px 9px;
+  font-size:12px;font-weight:900;font-family:var(--mono);cursor:pointer;
   border:1px solid var(--line);background:rgba(0,255,156,.06);color:var(--c1);
   clip-path:polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px)}
+.credit b{width:19px;height:19px;display:grid;place-items:center;font-size:13px;line-height:1;
+  color:#04120C;background:var(--c1)}
+.cta2{flex:0 0 auto;padding:10px 13px;border:0;cursor:pointer;font-family:inherit;font-size:11.5px;font-weight:800;
+  color:#04120C;background:linear-gradient(135deg,var(--c1),var(--c2));
+  clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px)}
+.cta2:active{transform:translateY(1px)}
+.bsub{margin:0 0 10px;font-size:11px;color:var(--dim);text-align:center}
 
 /* ═══ صفحه‌ها ═══ */
 .pg{display:none;animation:pgIn .28s cubic-bezier(.2,.9,.3,1)}
@@ -120,7 +130,8 @@ body.fx2 .dot{animation:blink 2.1s ease-in-out infinite}
 @media (prefers-reduced-motion:reduce){ .pg{animation:none} }
 
 .hdr{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:20px 0 11px}
-.hdr h2{margin:0;font-size:13.5px;font-weight:900;letter-spacing:.2px;display:flex;align-items:center;gap:8px}
+.hdr h2{margin:0;font-size:11px;font-weight:800;letter-spacing:1.3px;color:var(--dim);
+  display:flex;align-items:center;gap:8px}
 .hdr h2:before{content:"";width:14px;height:2px;background:var(--c1)}
 .hdr a{font-size:11px;color:var(--c2);font-weight:800;cursor:pointer;font-family:var(--mono)}
 
@@ -382,6 +393,23 @@ body.fx0 .rail{backdrop-filter:none;-webkit-backdrop-filter:none;background:#050
 .in textarea{min-height:78px;resize:vertical;font-size:12.5px}
 .in input:focus,.in textarea:focus{border-color:var(--c1)}
 .in .tip{font-size:10.5px;color:var(--dim);margin-top:6px;line-height:1.75}
+/* ═══ انتخاب بسته — ردیف کامل با تیک ═══ */
+.lbl2{font-size:10px;font-weight:800;letter-spacing:1.2px;color:var(--dim);margin:13px 0 8px}
+.plans{display:grid;gap:8px}
+.plans i{display:flex;align-items:center;gap:11px;padding:12px 13px;cursor:pointer;font-style:normal;
+  border:1px solid var(--edge);background:rgba(255,255,255,.025);transition:border-color .18s,background .18s;
+  clip-path:polygon(0 0,100% 0,100% calc(100% - 11px),calc(100% - 11px) 100%,0 100%)}
+.plans i:active{transform:scale(.985)}
+.plans i .pg{width:36px;height:36px;flex:0 0 auto;display:grid;place-items:center;font-size:19px;text-decoration:none;
+  border:1px solid var(--line);background:rgba(0,255,156,.07);
+  clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px)}
+.plans i b{flex:1;min-width:0;font-size:13px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.plans i u{flex:0 0 auto;text-decoration:none;font-family:var(--mono);font-size:12px;font-weight:800;color:var(--c1)}
+.plans i .chk{width:21px;height:21px;flex:0 0 auto;border:1.5px solid var(--edge);
+  display:grid;place-items:center;font-size:12px;font-style:normal;color:transparent}
+.plans i.on{border-color:var(--c1);background:rgba(0,255,156,.08)}
+.plans i.on .chk{border-color:transparent;color:#04120C;background:var(--c1)}
+
 .pm{display:flex;align-items:center;gap:9px}
 .pm button{width:44px;height:44px;flex:0 0 auto;border:1px solid var(--edge);background:rgba(255,255,255,.04);
   color:var(--ink);font-size:20px;font-weight:700;cursor:pointer;transition:.16s}
@@ -456,8 +484,11 @@ body.glow-on .act{box-shadow:0 12px 30px -16px var(--c1)}
 <div class="wrap">
   <div class="bar">
     <div class="sig" id="sig">🛡</div>
-    <div class="idn"><h1 id="ttl">—</h1><p><span class="dot"></span><span id="sub">—</span></p></div>
-    <div class="credit" id="credTop">…</div>
+    <div class="idn">
+      <h1 id="ttl">—</h1>
+      <div class="credit" id="credTop"><b>+</b><span id="credVal">…</span></div>
+    </div>
+    <button class="cta2" id="topCta">＋ اعتبار</button>
   </div>
 
   <!-- ══ خانه ══ -->
@@ -488,6 +519,7 @@ body.glow-on .act{box-shadow:0 12px 30px -16px var(--c1)}
         </svg>
       </div>
       <h2 id="wcTtl">—</h2>
+      <p class="bsub"><span class="dot"></span> <span id="sub"></span></p>
       <p id="hero"></p>
     </div>
 
@@ -647,6 +679,7 @@ $('ratesTtl').textContent = U.rates_ttl;
 $('ordTtl').textContent = U.orders_ttl;
 $('topTtl').textContent = U.topup;
 $('topGo').textContent  = U.topup_do;
+$('topCta').textContent = U.topup_btn;
 $('goShop').textContent = U.see_all;
 $('goShop2').textContent= U.see_all;
 $('meNote').textContent = B.note || '';
@@ -684,7 +717,7 @@ function warn(m, good){
 function setBal(v){
   S.bal = Number(v) || 0;
   $('bal').textContent     = fa(S.bal);
-  $('credTop').textContent = fa(S.bal);
+  $('credVal').textContent = fa(S.bal);
   if (S.item) walletState();
 }
 
@@ -782,7 +815,7 @@ api('me', {}, function(j){
   S.me = j;
   setBal(j.balance);
   var nm = (j.name || '').trim();
-  if (nm) $('ttl').textContent = nm;
+  if (nm) $('ttl').textContent = U.hi.replace('{name}', nm);
   $('meName').textContent = nm || B.title;
   $('meUser').textContent = j.uname ? '@' + j.uname : '';
   $('meId').textContent   = 'ID ' + (j.uid || '');
@@ -1020,6 +1053,7 @@ $('hShop').onclick   = function(){ tap(); go('Shop'); };
 $('goShop').onclick  = function(){ tap(); S.cat=''; drawFilt(); applyFilter(); go('Shop'); };
 $('goShop2').onclick = $('goShop').onclick;
 $('credTop').onclick = function(){ tap(); go('Me'); };
+$('topCta').onclick  = function(){ tap(); go('Me'); };
 $('lnkOrd').onclick  = function(){ tap(); go('Ord'); };
 $('lnkShop').onclick = function(){ tap(); go('Shop'); };
 $('lnkBot').onclick  = function(){ if (TG) { try{ TG.close(); }catch(e){} } };
@@ -1050,21 +1084,23 @@ function open(id){
   var hasQty = it.ask === 'qty' || it.ask === 'qty_wallet' || it.ask === 'qty_username';
   if (hasQty){
     var isCoin = it.ask === 'qty_wallet';
-    html += '<div class="in"><label>' + (isCoin ? '🔢 مقدار' : '🔢 تعداد') +
-              (it.unit ? ' (' + esc(it.unit) + ')' : '') + '</label>' +
-            '<div class="pm">' +
-              '<button type="button" data-d="-1">−</button>' +
-              '<input id="fQty" type="text" inputmode="numeric" value="' + S.qty + '">' +
-              '<button type="button" data-d="1">+</button>' +
+    html += '<div class="lbl2">' + esc(U.plans) + '</div><div class="plans" id="fPlans">' +
+              planRows(it).map(function(q){
+                return '<i data-q="' + q + '"' + (q === S.qty ? ' class="on"' : '') + '>' +
+                       '<s class="pg">' + esc(it.emoji || '⬢') + '</s>' +
+                       '<b>' + fa(q) + (it.unit ? ' ' + esc(it.unit) : '') + '</b>' +
+                       '<u>' + fa(Math.round(it.price * q)) + '</u>' +
+                       '<em class="chk">✓</em></i>';
+              }).join('') +
             '</div>' +
-            '<div class="quick2">' +
-              (isCoin ? [1,5,10,50].map(function(m){ return '<i data-s="' + m + '">' + m + '</i>'; }).join('')
-                      : [1,2,5,10,50].map(function(m){ return '<i data-m="' + m + '">×' + m + '</i>'; }).join('')) +
-            '</div>' +
-            '<div class="tip">حداقل ' + fa(it.min || 1) +
-              (it.max > 0 ? ' · حداکثر ' + fa(it.max) : '') +
-              (isCoin ? ' · قیمت هر ' + esc(it.unit || 'واحد') + ': ' + fa(it.price) + ' ' + esc(B.currency) : '') +
-            '</div></div>';
+            '<div class="lbl2">' + esc(U.custom.replace('{min}', fa(it.min || 1))) + '</div>' +
+            '<div class="in">' +
+              '<input id="fQty" type="text" inputmode="' + (isCoin ? 'decimal' : 'numeric') +
+                '" value="' + S.qty + '">' +
+              '<div class="tip">حداقل ' + fa(it.min || 1) +
+                (it.max > 0 ? ' · حداکثر ' + fa(it.max) : '') +
+                (isCoin ? ' · قیمت هر ' + esc(it.unit || 'واحد') + ': ' + fa(it.price) + ' ' + esc(B.currency) : '') +
+              '</div></div>';
   }
   if (it.ask === 'qty_username'){
     html += '<div class="in"><label>📎 آیدی تلگرام گیرنده</label>' +
@@ -1124,10 +1160,10 @@ function open(id){
   }
   if (hasQty){
     f.addEventListener('click', function(ev){
-      var b = ev.target;
-      if (b.hasAttribute && b.hasAttribute('data-d')){ setQty(S.qty + Number(b.getAttribute('data-d'))); tap(); }
-      if (b.hasAttribute && b.hasAttribute('data-m')){ setQty(S.qty * Number(b.getAttribute('data-m'))); tap(); }
-      if (b.hasAttribute && b.hasAttribute('data-s')){ setQty(Number(b.getAttribute('data-s'))); tap(); }
+      var el = ev.target.closest ? ev.target.closest('i[data-q]') : null;
+      if (!el) return;
+      setQty(Number(el.getAttribute('data-q')));
+      tap();
     });
     $('fQty').addEventListener('input', function(){
       var raw = digits(this.value) || this.value.replace(/[^\d.]/g,'');
@@ -1155,7 +1191,28 @@ function setQty(v, typing){
   S.qty = v;
   var qi = $('fQty');
   if (qi && !typing) qi.value = v;
+  markPlan();
   total();
+}
+
+/* بسته‌های پیشنهادی، از حداقلِ خود محصول */
+function planRows(it){
+  var min = Math.max(1, Number(it.min) || 1);
+  var out = [], mults = [1, 2, 5, 10];
+  for (var i = 0; i < mults.length; i++){
+    var q = min * mults[i];
+    if (it.max > 0 && q > it.max) break;
+    out.push(q);
+  }
+  return out;
+}
+
+function markPlan(){
+  var box = $('fPlans');
+  if (!box) return;
+  var all = box.querySelectorAll('i[data-q]');
+  for (var i = 0; i < all.length; i++)
+    all[i].classList.toggle('on', Number(all[i].getAttribute('data-q')) === S.qty);
 }
 
 function sum(){

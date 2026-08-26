@@ -225,6 +225,21 @@ function pxRate($sym, $fresh = false) {
     return $usd * $irt * (1 + $m / 100);
 }
 
+/**
+ * نرخ خام یک ارز به تومان — بدون هیچ سودی.
+ * مینی‌اپ سود خودش را جدا سوار می‌کند، پس اینجا نباید دوبار حساب شود.
+ */
+function pxRawToman($sym, $fresh = false) {
+    $sym = strtoupper(trim((string)$sym));
+    if ($sym === '') return 0.0;
+    if (empty(pxVal('on'))) return 0.0;
+    $irt = pxUsdtIrt($fresh);
+    if ($irt <= 0) return 0.0;
+    if ($sym === 'USDT') return $irt;
+    $usd = pxPair($sym . '/USDT', $fresh);
+    return $usd > 0 ? $usd * $irt : 0.0;
+}
+
 function pxReady() { return !empty(pxVal('on')) && pxUsdtIrt() > 0; }
 
 // ============================================================

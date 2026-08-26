@@ -225,6 +225,11 @@ function maDefaultTg() {
             'copy'       => 'کپی شماره کارت',
             'copied'     => 'کپی شد ✓',
             'see_all'    => 'همه',
+            'hi'         => 'سلام {name} 👋',
+            'plans'      => 'انتخاب بسته',
+            'custom'     => 'یا مقدار دلخواه (حداقل {min})',
+            'buy_now'    => 'خرید',
+            'topup_btn'  => '＋ شارژ',
         ],
 
         // 💠 دکمه‌های شیشه‌ای فاکتور داخل ربات — متن و رنگ هردو قابل ویرایش
@@ -425,6 +430,11 @@ function maDefaultCfg() {
             'copy'       => 'کپی شماره کارت',
             'copied'     => 'کپی شد ✓',
             'see_all'    => 'همه',
+            'hi'         => 'سلام {name} 👋',
+            'plans'      => 'انتخاب بسته',
+            'custom'     => 'یا مقدار دلخواه (حداقل {min})',
+            'buy_now'    => 'خرید',
+            'topup_btn'  => '＋ شارژ',
         ],
 
         'glass' => [
@@ -674,6 +684,20 @@ function maRate($which, $fresh = false) {
     $url  = (string)($r[$which . '_url'] ?? '');
     $path = (string)($r[$which . '_path'] ?? '');
     if ($url === '') return 0.0;
+
+    // 💹 موتور قیمت مرکزی، اگر روشن باشد، حرف اول را می‌زند — تا قیمتی که
+    // در گروه نشان داده می‌شود با قیمتی که در مینی‌اپ فروخته می‌شود یکی باشد.
+    if (function_exists('pxRawToman')) {
+        $raw = pxRawToman($which, $fresh);
+        if ($raw > 0) {
+            $v = $raw * (1 + ((float)($r['margin'] ?? 0) / 100));
+            $v = maRound($v, (float)($r['round'] ?? 0));
+            maCachePut('rate_' . $which, $v);
+            maCachePut('ratesrc_' . $which, 'swap');
+            maCachePut('rateerr_' . $which, '');
+            return $v;
+        }
+    }
 
     $ck = 'rate_' . $which;
     if (!$fresh) {
