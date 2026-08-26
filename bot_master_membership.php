@@ -7001,16 +7001,85 @@ function masterHandle($update) {
         $html = msgHtml($msg);
         if (trim($html) === '') return;
         clearState($uid);
-        $sent = 0; $fail = 0;
-        foreach (load('users') as $u2) {
-            if (!empty($u2['banned'])) continue;
-            $r = sendMsg(BOT_TOKEN, $u2['telegram_id'], $html);
-            if (!empty($r['ok'])) $sent++; else $fail++;
-            usleep(50000);
-        }
-        sendMsg(BOT_TOKEN, $chatId, "📢 موفق: {$sent} | ناموفق: {$fail}");
+        [$n, $err] = bcQueue($html);
+        sendMsg(BOT_TOKEN, $chatId, $n > 0
+            ? "📢 <b>پیام همگانی در صف قرار گرفت</b>\n\n" .
+              "👥 گیرنده: <b>" . number_format($n) . "</b> نفر\n" .
+              "⏳ در پس‌زمینه فرستاده می‌شود؛ گزارشش را همین‌جا می‌گیرید.\n\n" .
+              "می‌توانید ربات را ببندید — ادامه‌اش خودکار پیش می‌رود."
+            : "⚠️ " . h($err ?: 'کسی برای فرستادن نیست.'));
         return;
     }
+}
+
+/**
+ * 📢 پیام همگانی — صف، نه حلقه.
+ *
+ * قبلا همان‌جا داخل درخواستِ وبهوک روی همه‌ی کاربرها حلقه می‌زد و
+ * بین هرکدام ۵۰ میلی‌ثانیه می‌خوابید. با هزار کاربر یعنی دست‌کم
+ * ۵۰ ثانیه خواب به‌علاوه‌ی هزار تماس شبکه — بیشتر از مهلتِ وبهوک.
+ * تلگرام درخواست را می‌کشت، همان آپدیت را دوباره می‌فرستاد، و
+ * پیام همگانی از اول شروع می‌شد: هرکس که گرفته بود، دوباره می‌گرفت.
+ *
+ * حالا فهرست گیرنده‌ها یک‌جا ذخیره می‌شود و صف در پس‌زمینه دسته‌دسته
+ * پیش می‌رود — همان جایی که بقیه‌ی کارهای پس‌زمینه انجام می‌شوند.
+ */
+function bcQueue($html, $botIds = null) {
+    $ids = [];
+    foreach (load('users') as $u) {
+        if (!empty($u['banned'])) continue;
+        $t = (int)($u['telegram_id'] ?? 0);
+        if ($t > 0) $ids[] = $t;
+    }
+    $ids = array_values(array_unique($ids));
+    if (!$ids) return [0, 'هیچ کاربری نیست.'];
+
+    mutate('broadcast', function (&$b) use ($html, $ids) {
+        $b = ['text' => $html, 'ids' => $ids, 'i' => 0,
+              'sent' => 0, 'fail' => 0, 'at' => time(), 'done' => false];
+    });
+    return [count($ids), ''];
+}
+
+/** یک دسته از صف را می‌فرستد. برگشت: چند نفر در این دسته */
+function bcTick($limit = 25) {
+    $b = load('broadcast');
+    if (!$b || !empty($b['done']) || empty($b['ids'])) return 0;
+
+    $text = (string)($b['text'] ?? '');
+    $i    = (int)($b['i'] ?? 0);
+    $ids  = (array)$b['ids'];
+    if ($text === '' || $i >= count($ids)) { bcFinish(); return 0; }
+
+    $sent = 0; $fail = 0; $n = 0;
+    for (; $i < count($ids) && $n < $limit; $i++, $n++) {
+        $r = sendMsg(BOT_TOKEN, $ids[$i], $text);
+        if (!empty($r['ok'])) $sent++; else $fail++;
+        usleep(40000);                       // ~۲۵ پیام در ثانیه، زیر سقف تلگرام
+    }
+
+    $fin = false;
+    mutate('broadcast', function (&$x) use ($i, $sent, $fail, &$fin) {
+        if (!is_array($x) || empty($x['ids'])) return;
+        $x['i']    = $i;
+        $x['sent'] = (int)($x['sent'] ?? 0) + $sent;
+        $x['fail'] = (int)($x['fail'] ?? 0) + $fail;
+        if ($i >= count($x['ids'])) { $x['done'] = true; $fin = true; }
+    });
+    if ($fin) bcFinish();
+    return $n;
+}
+
+/** گزارش پایان به ادمین، یک بار */
+function bcFinish() {
+    $b = load('broadcast');
+    if (!$b) return;
+    if (!empty($b['told'])) return;
+    mutate('broadcast', function (&$x) { if (is_array($x)) $x['told'] = true; });
+    sendMsg(BOT_TOKEN, ADMIN_ID,
+        "📢 <b>پیام همگانی تمام شد</b>\n\n" .
+        '✅ رسید: <b>' . number_format((int)($b['sent'] ?? 0)) . "</b>\n" .
+        '❌ نرسید: <b>' . number_format((int)($b['fail'] ?? 0)) . '</b>');
 }
 
 /**
@@ -7754,7 +7823,8 @@ if (isset($_GET['cron'])) {
          ' · miniapp: ' . maAutoQueue(10) .
          ' · stock: ' . maStockQueue(10) .
          ' · rates: ' . count(axRatesRefresh()) .
-         ' · archive: ' . (ordersArchive() + maOrdersArchive());
+         ' · archive: ' . (ordersArchive() + maOrdersArchive()) .
+         ' · broadcast: ' . bcTick(120);
     exit;
 }
 
@@ -7768,6 +7838,7 @@ $qLast = @filemtime($qMark) ?: 0;
 if (time() - $qLast >= 60) {
     @touch($qMark);
     gmTick(5);        // قرعه‌های رسیده — بدون cron هم کشیده می‌شوند
+    bcTick(20);       // یک دسته از پیام همگانی — بدون cron هم تمام می‌شود
     maAutoQueue(2);   // تحویل خودکارِ معطل‌مانده — بدون نیاز به cron هم پیش می‌رود
     maStockQueue(2);  // سفارش‌هایی که منتظر شارژ مخزن مانده‌اند
 }
