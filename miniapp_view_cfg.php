@@ -351,6 +351,35 @@ body.fx2 .shieldwrap svg{animation:hover 4.2s ease-in-out infinite}
   background-size:200% 100%;animation:gsh 1.3s linear infinite}
 @keyframes gsh{to{background-position:-200% 0}}
 
+/* ═══ 👑 صفحه‌ی مدیریت ═══ */
+.adm{display:none}
+body.is-admin .adm{display:block}
+.arow{display:flex;align-items:center;gap:11px;padding:12px;margin-bottom:8px;cursor:pointer;
+  border:1px solid var(--edge);background:var(--pane);
+  clip-path:polygon(0 0,100% 0,100% calc(100% - 11px),calc(100% - 11px) 100%,0 100%)}
+.arow .e{width:36px;height:36px;flex:0 0 auto;display:grid;place-items:center;font-size:18px;
+  border:1px solid var(--edge);background:rgba(255,255,255,.03)}
+.arow .m{flex:1;min-width:0}
+.arow .m b{display:block;font-size:12px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.arow .m span{display:block;font-size:9.5px;color:var(--dim);margin-top:3px}
+.arow .p{flex:0 0 auto;font-family:var(--mono);font-size:11.5px;font-weight:800;color:var(--c1)}
+.arow.off{opacity:.5}
+.aform .in{margin-bottom:11px}
+.aform label{display:block;font-size:10.5px;font-weight:800;color:var(--dim);margin-bottom:6px}
+.aform input,.aform select,.aform textarea{width:100%;padding:12px;border:1px solid var(--edge);
+  background:rgba(255,255,255,.03);color:var(--ink);font-family:inherit;font-size:13px;outline:none;
+  clip-path:polygon(9px 0,100% 0,100% calc(100% - 9px),calc(100% - 9px) 100%,0 100%,0 9px)}
+.aform textarea{min-height:62px;resize:vertical;font-size:12.5px}
+.aform select{appearance:none}
+.a2{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.aswitch{display:flex;align-items:center;justify-content:space-between;padding:12px;cursor:pointer;
+  border:1px solid var(--edge);background:rgba(255,255,255,.03);font-size:12px;font-weight:700}
+.aswitch i{width:42px;height:24px;background:rgba(255,255,255,.1);position:relative;transition:.2s}
+.aswitch i:after{content:"";position:absolute;top:3px;right:3px;width:18px;height:18px;
+  background:#fff;transition:.2s}
+.aswitch.on i{background:var(--c1)}
+.aswitch.on i:after{right:21px}
+
 /* ═══ نوار پایین — تمام‌عرض با نشانگر لغزان ═══ */
 .rail{position:fixed;left:0;right:0;bottom:0;z-index:30;display:flex;
   padding:6px 6px calc(6px + var(--safe));
@@ -359,9 +388,8 @@ body.fx2 .shieldwrap svg{animation:hover 4.2s ease-in-out infinite}
 body.fx0 .rail{backdrop-filter:none;-webkit-backdrop-filter:none;background:#050D0B}
 .rail:before{content:"";position:absolute;top:-1px;right:0;height:2px;width:25%;background:var(--c1);
   transform:translateX(0);transition:transform .3s cubic-bezier(.2,.9,.3,1)}
-.rail.p1:before{transform:translateX(-100%)}
-.rail.p2:before{transform:translateX(-200%)}
-.rail.p3:before{transform:translateX(-300%)}
+.rail b[data-n="4"]{display:none}
+body.is-admin .rail b[data-n="4"]{display:flex}
 @media (prefers-reduced-motion:reduce){ .rail:before{transition:none} }
 .rail b{flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center;gap:4px;
   padding:8px 2px;cursor:pointer;color:var(--dim);font-size:9.5px;font-weight:800;transition:color .16s}
@@ -580,6 +608,12 @@ body.glow-on .act{box-shadow:0 12px 30px -16px var(--c1)}
       <div class="hintbox" id="meNote" style="margin-top:11px"></div>
     </div>
   </section>
+
+  <!-- ══ 👑 مدیریت ══ -->
+  <section class="pg adm" id="pgAdm">
+    <div class="hdr"><h2>مدیریت محصول‌ها</h2><a id="admNew">➕ تازه</a></div>
+    <div id="admList"><div class="none"><div>▤</div>در حال خواندن…</div></div>
+  </section>
 </div>
 
 <nav class="rail" id="rail"></nav>
@@ -763,7 +797,8 @@ var PAGES = [
   { id:'Home', ico:'home',   name:U.nav_home },
   { id:'Shop', ico:'layers', name:U.nav_shop },
   { id:'Ord',  ico:'bill',   name:U.nav_orders },
-  { id:'Me',   ico:'user',   name:U.nav_me }
+  { id:'Me',   ico:'user',   name:U.nav_me },
+  { id:'Adm',  ico:'lock',   name:'مدیریت' }
 ];
 (function drawRail(){
   var h = '';
@@ -784,10 +819,24 @@ function go(n, silent){
     TABS[i].classList.toggle('on', i === n);
     $('pg' + PAGES[i].id).classList.toggle('on', i === n);
   }
-  var r = $('rail');
-  r.className = 'rail' + (n ? ' p' + n : '');
+  // نشانگر بالای نوار: عرضش به تعداد تب‌های دیده‌شده بستگی دارد،
+  // چون تب مدیریت فقط برای مدیر ظاهر می‌شود.
+  var vis = TABS.filter(function(t){ return t.offsetParent !== null; });
+  var idx = vis.indexOf(TABS[n]);
+  var bar = $('rail');
+  if (vis.length && idx >= 0) {
+    bar.style.setProperty('--barw', (100 / vis.length) + '%');
+    bar.style.width = '';
+  }
+  var w = vis.length ? (100 / vis.length) : 25;
+  bar.style.cssText = '';
+  var st = document.getElementById('railbar') || (function(){
+    var e = document.createElement('style'); e.id = 'railbar'; document.head.appendChild(e); return e;
+  })();
+  st.textContent = '.rail:before{width:' + w + '%;transform:translateX(' + (-100 * Math.max(0, idx)) + '%)}';
   window.scrollTo({ top:0, behavior: silent ? 'auto' : 'smooth' });
   if (PAGES[n].id === 'Ord') drawOrders();
+  if (PAGES[n].id === 'Adm' && !ADM.items.length) admLoad();
   backBtn();
 }
 $('rail').addEventListener('click', function(ev){
@@ -799,13 +848,13 @@ $('rail').addEventListener('click', function(ev){
 function backBtn(){
   if (!TG || !TG.BackButton) return;
   try {
-    if (S.item || S.page !== 'Home') TG.BackButton.show();
+    if (S.item || ADM.mode || S.page !== 'Home') TG.BackButton.show();
     else TG.BackButton.hide();
   } catch(e){}
 }
 if (TG && TG.BackButton){
   try { TG.BackButton.onClick(function(){
-    if (S.item) { shut(); return; }
+    if (S.item || ADM.mode) { shut(); return; }
     if (S.page !== 'Home') go(0);
   }); } catch(e){}
 }
@@ -826,6 +875,7 @@ api('me', {}, function(j){
     im.onload = function(){ var b = $(id); b.textContent = ''; b.appendChild(im); };
     im.src = j.photo;
   });
+  if (j.admin) document.body.classList.add('is-admin');
   if (S.page === 'Ord') drawOrders();
 }, function(j){
   setBal(0);
@@ -1246,6 +1296,7 @@ function shut(){
   $('mask').classList.remove('on');
   $('term').classList.remove('on');
   S.item = null;
+  ADM.mode = false;
   backBtn();
 }
 $('mask').onclick = shut;
@@ -1311,11 +1362,147 @@ function send(payMode, btn){
       warn((j && j.message) ? j.message : 'ثبت سفارش انجام نشد.');
     });
 }
-$('tWal').onclick = function(){ send('wallet', this); };
-$('tGo').onclick  = function(){ send('',       this); };
+$('tWal').onclick = function(){ if (ADM.mode) { admSave(); return; } send('wallet', this); };
+$('tGo').onclick  = function(){ if (ADM.mode) { admDel();  return; } send('',       this); };
 
 $('oGo').onclick   = function(){ if (TG) { try{ TG.close(); }catch(e){} } else location.reload(); };
 $('oBack').onclick = function(){ $('ok').classList.remove('on'); tap(); go('Shop'); };
+
+/* ══ 👑 مدیریت محصول‌ها — فقط وقتی سرور بگوید این کاربر مدیر است ══
+   سرور هم مستقل بررسی می‌کند؛ این کلاس فقط برای نمایش است و
+   اگر کسی دستکاری‌اش کند، API با ۴۰۴ جوابش می‌دهد. */
+var ADM = { items: [], cats: [], asks: {}, edit: null };
+
+function admLoad(){
+  api('adm_cats', {}, function(j){ ADM.cats = j.cats || []; }, function(){});
+  api('adm_items', {}, function(j){
+    ADM.items = j.items || [];
+    ADM.asks  = j.asks || {};
+    admDraw();
+  }, function(j){
+    $('admList').innerHTML = '<div class="none"><div>▤</div>' + esc((j && j.message) ? j.message : 'خوانده نشد') + '</div>';
+  });
+}
+
+function admDraw(){
+  var box = $('admList');
+  if (!ADM.items.length){ box.innerHTML = '<div class="none"><div>▤</div>هنوز محصولی نیست.</div>'; return; }
+  var h = '';
+  ADM.items.forEach(function(i){
+    h += '<div class="arow' + (i.on ? '' : ' off') + '" data-id="' + esc(i.id) + '">' +
+           '<span class="e">' + esc(i.emoji || '⬢') + '</span>' +
+           '<span class="m"><b>' + esc(i.name) + '</b><span>' +
+             esc(i.cat || 'بدون دسته') + ' · ' + esc(ADM.asks[i.ask] || i.ask) +
+             (i.live ? ' · نرخ زنده' : '') + '</span></span>' +
+           '<span class="p">' + fa(i.final) + '</span>' +
+         '</div>';
+  });
+  box.innerHTML = h;
+}
+
+$('admList').addEventListener('click', function(ev){
+  var el = ev.target.closest ? ev.target.closest('.arow') : null;
+  if (!el) return;
+  var id = el.getAttribute('data-id');
+  for (var i = 0; i < ADM.items.length; i++)
+    if (ADM.items[i].id === id) { admOpen(ADM.items[i]); return; }
+});
+
+$('admNew').onclick = function(){
+  tap();
+  admOpen({ id:'', name:'', emoji:'⬢', desc:'', badge:'', price:0, unit:'',
+            cat:(ADM.cats[0] ? ADM.cats[0].id : ''), ask:'none', min:1, max:1, order:99, on:1 });
+};
+
+/* فرم ویرایش، داخل همان شیت خرید */
+function admOpen(it){
+  ADM.edit = JSON.parse(JSON.stringify(it));
+  var e = ADM.edit;
+
+  $('tIco').textContent  = e.emoji || '⬢';
+  $('tName').textContent = e.id ? 'ویرایش محصول' : 'محصول تازه';
+  $('tDesc').textContent = e.id ? e.id : 'شناسه خودکار ساخته می‌شود';
+
+  var opts = '';
+  ADM.cats.forEach(function(c){
+    opts += '<option value="' + esc(c.id) + '"' + (c.id === e.cat ? ' selected' : '') + '>' +
+            esc(c.name) + '</option>';
+  });
+  var asks = '';
+  Object.keys(ADM.asks).forEach(function(k){
+    asks += '<option value="' + esc(k) + '"' + (k === e.ask ? ' selected' : '') + '>' +
+            esc(ADM.asks[k]) + '</option>';
+  });
+
+  $('tField').innerHTML =
+    '<div class="aform">' +
+      '<div class="in"><label>نام</label><input id="aName" maxlength="80" value="' + esc(e.name) + '"></div>' +
+      '<div class="a2">' +
+        '<div class="in"><label>ایموجی</label><input id="aEmoji" maxlength="8" value="' + esc(e.emoji) + '"></div>' +
+        '<div class="in"><label>برچسب</label><input id="aBadge" maxlength="20" value="' + esc(e.badge) + '"></div>' +
+      '</div>' +
+      '<div class="in"><label>توضیح</label><textarea id="aDesc" maxlength="300">' + esc(e.desc) + '</textarea></div>' +
+      '<div class="a2">' +
+        '<div class="in"><label>قیمت (پایه)</label><input id="aPrice" inputmode="numeric" value="' + e.price + '"></div>' +
+        '<div class="in"><label>واحد</label><input id="aUnit" maxlength="20" value="' + esc(e.unit) + '"></div>' +
+      '</div>' +
+      '<div class="in"><label>دسته</label><select id="aCat">' + opts + '</select></div>' +
+      '<div class="in"><label>از کاربر چه بپرسد</label><select id="aAsk">' + asks + '</select></div>' +
+      '<div class="a2">' +
+        '<div class="in"><label>حداقل</label><input id="aMin" inputmode="numeric" value="' + e.min + '"></div>' +
+        '<div class="in"><label>حداکثر (۰ = بی‌نهایت)</label><input id="aMax" inputmode="numeric" value="' + e.max + '"></div>' +
+      '</div>' +
+      '<div class="in"><label>ترتیب</label><input id="aOrder" inputmode="numeric" value="' + e.order + '"></div>' +
+      '<div class="aswitch' + (e.on ? ' on' : '') + '" id="aOn"><span>نمایش در فروشگاه</span><i></i></div>' +
+    '</div>';
+
+  $('aOn').onclick = function(){ this.classList.toggle('on'); tap(); };
+
+  $('tSum').textContent = e.id ? 'ذخیره تغییرات' : 'افزودن محصول';
+  $('tWal').textContent = '💾 ذخیره';
+  $('tWal').disabled = false;
+  $('tGo').textContent = e.id ? '🗑 حذف محصول' : 'انصراف';
+  $('tGo').disabled = false;
+  $('tWalNote').innerHTML = 'قیمت پایه است؛ سود و نرخ زنده روی آن اعمال می‌شود.';
+
+  ADM.mode = true;
+  $('mask').classList.add('on');
+  $('term').classList.add('on');
+  backBtn();
+}
+
+function admSave(){
+  var g = function(id){ var el = $(id); return el ? el.value : ''; };
+  var it = {
+    id: ADM.edit.id,
+    name: g('aName'), emoji: g('aEmoji'), desc: g('aDesc'), badge: g('aBadge'),
+    unit: g('aUnit'), cat: g('aCat'), ask: g('aAsk'),
+    price: Number(digits(g('aPrice'))) || 0,
+    min:   Number(digits(g('aMin')))   || 0,
+    max:   Number(digits(g('aMax')))   || 0,
+    order: Number(digits(g('aOrder'))) || 99,
+    on: $('aOn').classList.contains('on') ? 1 : 0
+  };
+  if (!it.name.trim()){ warn('نام محصول را بنویسید.'); return; }
+
+  $('tWal').disabled = true;
+  api('adm_item_save', { item: it }, function(){
+    $('tWal').disabled = false;
+    shut();
+    warn(it.id ? 'ذخیره شد ✓' : 'محصول اضافه شد ✓', true);
+    admLoad();
+  }, function(j){
+    $('tWal').disabled = false;
+    warn((j && j.message) ? j.message : 'ذخیره نشد.');
+  });
+}
+
+function admDel(){
+  if (!ADM.edit || !ADM.edit.id) { shut(); return; }
+  api('adm_item_del', { id: ADM.edit.id }, function(){
+    shut(); warn('حذف شد ✓', true); admLoad();
+  }, function(j){ warn((j && j.message) ? j.message : 'حذف نشد.'); });
+}
 
 drawFilt();
 buildDeck();

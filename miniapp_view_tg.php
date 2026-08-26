@@ -351,6 +351,33 @@ body.glow-on .orb{box-shadow:0 10px 24px -13px var(--c1)}
   background-size:200% 100%;animation:sh 1.3s linear infinite}
 @keyframes sh{to{background-position:-200% 0}}
 
+/* ═══ 👑 صفحه‌ی مدیریت — فقط برای مدیر ═══ */
+.adm{display:none}
+body.is-admin .adm{display:block}
+.arow{display:flex;align-items:center;gap:11px;padding:12px 13px;border-radius:16px;margin-bottom:8px;
+  border:1px solid var(--line);background:var(--pane);cursor:pointer}
+.arow .e{width:38px;height:38px;flex:0 0 auto;border-radius:13px;display:grid;place-items:center;font-size:19px;
+  background:rgba(255,255,255,.06);border:1px solid var(--line)}
+.arow .m{flex:1;min-width:0}
+.arow .m b{display:block;font-size:12.5px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.arow .m span{display:block;font-size:10px;color:var(--dim);margin-top:3px}
+.arow .p{flex:0 0 auto;font-size:11.5px;font-weight:800;color:var(--c2)}
+.arow.off{opacity:.5}
+.aform .field{margin-bottom:11px}
+.aform label{display:block;font-size:11px;font-weight:800;color:var(--dim);margin-bottom:6px}
+.aform input,.aform select,.aform textarea{width:100%;padding:12px;border-radius:14px;border:1px solid var(--line);
+  background:rgba(255,255,255,.05);color:var(--ink);font-family:inherit;font-size:13.5px;outline:none}
+.aform textarea{min-height:64px;resize:vertical;font-size:12.5px}
+.aform select{appearance:none}
+.a2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.aswitch{display:flex;align-items:center;justify-content:space-between;padding:12px 13px;border-radius:14px;
+  border:1px solid var(--line);background:rgba(255,255,255,.04);font-size:12.5px;font-weight:700;cursor:pointer}
+.aswitch i{width:44px;height:25px;border-radius:13px;background:rgba(255,255,255,.12);position:relative;transition:.2s}
+.aswitch i:after{content:"";position:absolute;top:3px;right:3px;width:19px;height:19px;border-radius:50%;
+  background:#fff;transition:.2s}
+.aswitch.on i{background:linear-gradient(135deg,var(--c1),var(--c2))}
+.aswitch.on i:after{right:22px}
+
 /* ═══ جزیره‌ی پایین ═══ */
 .dock{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(11px + var(--safe));z-index:30;
   width:min(94vw,420px);display:flex;gap:3px;padding:7px;border-radius:26px;
@@ -363,6 +390,8 @@ body.fx0 .dock{backdrop-filter:none;-webkit-backdrop-filter:none;background:#100
   font-size:9.5px;font-weight:800;transition:color .16s,background .16s}
 .dock b span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dock b.on{color:#0B0616;background:linear-gradient(135deg,var(--c1),var(--c2))}
+.dock b[data-p="adm"]{display:none}
+body.is-admin .dock b[data-p="adm"]{display:flex}
 
 /* ═══ شیت خرید ═══ */
 .scrim{position:fixed;inset:0;z-index:40;background:rgba(4,2,10,.74);backdrop-filter:blur(7px);
@@ -567,6 +596,13 @@ body.glow-on .go{box-shadow:0 14px 34px -16px var(--c1)}
       <div class="link" id="lnkBot"><s>🤖</s><em>بازگشت به ربات</em><s>‹</s></div>
       <div class="walbox" id="meNote" style="margin-top:12px"></div>
     </div>
+  </section>
+
+  <!-- ══ 👑 مدیریت (فقط مدیر) ══ -->
+  <section class="pg adm" id="pgAdm">
+    <div class="sect"><h2><s></s><span>مدیریت محصول‌ها</span></h2>
+      <a id="admNew">➕ تازه</a></div>
+    <div id="admList"><div class="void"><div>👑</div>در حال خواندن…</div></div>
   </section>
 </div>
 
@@ -794,10 +830,11 @@ function icoFor(c){
 
 /* ── جزیره‌ی پایین ── */
 var PAGES = [
-  { id:'home',  ico:'home', name:U.nav_home },
-  { id:'shop',  ico:'grid', name:U.nav_shop },
-  { id:'ord',   ico:'bill', name:U.nav_orders },
-  { id:'me',    ico:'user', name:U.nav_me }
+  { id:'home',  ico:'home',  name:U.nav_home },
+  { id:'shop',  ico:'grid',  name:U.nav_shop },
+  { id:'ord',   ico:'bill',  name:U.nav_orders },
+  { id:'me',    ico:'user',  name:U.nav_me },
+  { id:'adm',   ico:'crown', name:'مدیریت' }
 ];
 (function drawDock(){
   var h = '';
@@ -818,6 +855,7 @@ function go(page, silent){
   }
   window.scrollTo({ top:0, behavior: silent ? 'auto' : 'smooth' });
   if (page === 'ord') drawOrders();
+  if (page === 'adm' && !ADM.items.length) admLoad();
   backBtn();
 }
 $('dock').addEventListener('click', function(ev){
@@ -830,13 +868,13 @@ $('dock').addEventListener('click', function(ev){
 function backBtn(){
   if (!TG || !TG.BackButton) return;
   try {
-    if (S.item || S.page !== 'home') TG.BackButton.show();
+    if (S.item || ADM.mode || S.page !== 'home') TG.BackButton.show();
     else TG.BackButton.hide();
   } catch(e){}
 }
 if (TG && TG.BackButton){
   try { TG.BackButton.onClick(function(){
-    if (S.item) { shut(); return; }
+    if (S.item || ADM.mode) { shut(); return; }
     if (S.page !== 'home') go('home');
   }); } catch(e){}
 }
@@ -860,6 +898,7 @@ api('me', {}, function(j){
     im.onload = function(){ var b = $(id); b.textContent = ''; b.appendChild(im); };
     im.src = j.photo;
   });
+  if (j.admin) document.body.classList.add('is-admin');
   if (S.page === 'ord') drawOrders();
 }, function(j){
   setBal(0);
@@ -1262,6 +1301,7 @@ function shut(){
   $('scrim').classList.remove('on');
   $('sheet').classList.remove('on');
   S.item = null;
+  ADM.mode = false;
   backBtn();
 }
 $('scrim').onclick = shut;
@@ -1323,11 +1363,147 @@ function send(payMode, btn){
       toast((j && j.message) ? j.message : 'ثبت سفارش انجام نشد.');
     });
 }
-$('sWal').onclick = function(){ send('wallet', this); };
-$('sGo').onclick  = function(){ send('',       this); };
+$('sWal').onclick = function(){ if (ADM.mode) { admSave(); return; } send('wallet', this); };
+$('sGo').onclick  = function(){ if (ADM.mode) { admDel();  return; } send('',       this); };
 
 $('wGo').onclick   = function(){ if (TG) { try{ TG.close(); }catch(e){} } else location.reload(); };
 $('wBack').onclick = function(){ $('win').classList.remove('on'); tap(); go('shop'); };
+
+/* ══ 👑 مدیریت محصول‌ها — فقط وقتی سرور بگوید این کاربر مدیر است ══
+   سرور هم مستقل بررسی می‌کند؛ این کلاس فقط برای نمایش است و
+   اگر کسی دستکاری‌اش کند، API با ۴۰۴ جوابش می‌دهد. */
+var ADM = { items: [], cats: [], asks: {}, edit: null };
+
+function admLoad(){
+  api('adm_cats', {}, function(j){ ADM.cats = j.cats || []; }, function(){});
+  api('adm_items', {}, function(j){
+    ADM.items = j.items || [];
+    ADM.asks  = j.asks || {};
+    admDraw();
+  }, function(j){
+    $('admList').innerHTML = '<div class="void"><div>👑</div>' + esc((j && j.message) ? j.message : 'خوانده نشد') + '</div>';
+  });
+}
+
+function admDraw(){
+  var box = $('admList');
+  if (!ADM.items.length){ box.innerHTML = '<div class="void"><div>👑</div>هنوز محصولی نیست.</div>'; return; }
+  var h = '';
+  ADM.items.forEach(function(i){
+    h += '<div class="arow' + (i.on ? '' : ' off') + '" data-id="' + esc(i.id) + '">' +
+           '<span class="e">' + esc(i.emoji || '💠') + '</span>' +
+           '<span class="m"><b>' + esc(i.name) + '</b><span>' +
+             esc(i.cat || 'بدون دسته') + ' · ' + esc(ADM.asks[i.ask] || i.ask) +
+             (i.live ? ' · نرخ زنده' : '') + '</span></span>' +
+           '<span class="p">' + fa(i.final) + '</span>' +
+         '</div>';
+  });
+  box.innerHTML = h;
+}
+
+$('admList').addEventListener('click', function(ev){
+  var el = ev.target.closest ? ev.target.closest('.arow') : null;
+  if (!el) return;
+  var id = el.getAttribute('data-id');
+  for (var i = 0; i < ADM.items.length; i++)
+    if (ADM.items[i].id === id) { admOpen(ADM.items[i]); return; }
+});
+
+$('admNew').onclick = function(){
+  tap();
+  admOpen({ id:'', name:'', emoji:'💠', desc:'', badge:'', price:0, unit:'',
+            cat:(ADM.cats[0] ? ADM.cats[0].id : ''), ask:'none', min:1, max:1, order:99, on:1 });
+};
+
+/* فرم ویرایش، داخل همان شیت خرید */
+function admOpen(it){
+  ADM.edit = JSON.parse(JSON.stringify(it));
+  var e = ADM.edit;
+
+  $('sOrb').textContent  = e.emoji || '💠';
+  $('sName').textContent = e.id ? 'ویرایش محصول' : 'محصول تازه';
+  $('sDesc').textContent = e.id ? e.id : 'شناسه خودکار ساخته می‌شود';
+
+  var opts = '';
+  ADM.cats.forEach(function(c){
+    opts += '<option value="' + esc(c.id) + '"' + (c.id === e.cat ? ' selected' : '') + '>' +
+            esc(c.name) + '</option>';
+  });
+  var asks = '';
+  Object.keys(ADM.asks).forEach(function(k){
+    asks += '<option value="' + esc(k) + '"' + (k === e.ask ? ' selected' : '') + '>' +
+            esc(ADM.asks[k]) + '</option>';
+  });
+
+  $('sField').innerHTML =
+    '<div class="aform">' +
+      '<div class="field"><label>نام</label><input id="aName" maxlength="80" value="' + esc(e.name) + '"></div>' +
+      '<div class="a2">' +
+        '<div class="field"><label>ایموجی</label><input id="aEmoji" maxlength="8" value="' + esc(e.emoji) + '"></div>' +
+        '<div class="field"><label>برچسب</label><input id="aBadge" maxlength="20" value="' + esc(e.badge) + '"></div>' +
+      '</div>' +
+      '<div class="field"><label>توضیح</label><textarea id="aDesc" maxlength="300">' + esc(e.desc) + '</textarea></div>' +
+      '<div class="a2">' +
+        '<div class="field"><label>قیمت (پایه)</label><input id="aPrice" inputmode="numeric" value="' + e.price + '"></div>' +
+        '<div class="field"><label>واحد</label><input id="aUnit" maxlength="20" value="' + esc(e.unit) + '"></div>' +
+      '</div>' +
+      '<div class="field"><label>دسته</label><select id="aCat">' + opts + '</select></div>' +
+      '<div class="field"><label>از کاربر چه بپرسد</label><select id="aAsk">' + asks + '</select></div>' +
+      '<div class="a2">' +
+        '<div class="field"><label>حداقل</label><input id="aMin" inputmode="numeric" value="' + e.min + '"></div>' +
+        '<div class="field"><label>حداکثر (۰ = بی‌نهایت)</label><input id="aMax" inputmode="numeric" value="' + e.max + '"></div>' +
+      '</div>' +
+      '<div class="field"><label>ترتیب</label><input id="aOrder" inputmode="numeric" value="' + e.order + '"></div>' +
+      '<div class="aswitch' + (e.on ? ' on' : '') + '" id="aOn"><span>نمایش در فروشگاه</span><i></i></div>' +
+    '</div>';
+
+  $('aOn').onclick = function(){ this.classList.toggle('on'); tap(); };
+
+  $('sTotal').textContent = e.id ? 'ذخیره تغییرات' : 'افزودن محصول';
+  $('sWal').textContent = '💾 ذخیره';
+  $('sWal').disabled = false;
+  $('sGo').textContent = e.id ? '🗑 حذف محصول' : 'انصراف';
+  $('sGo').disabled = false;
+  $('sWalNote').innerHTML = 'قیمت پایه است؛ سود و نرخ زنده روی آن اعمال می‌شود.';
+
+  ADM.mode = true;
+  $('scrim').classList.add('on');
+  $('sheet').classList.add('on');
+  backBtn();
+}
+
+function admSave(){
+  var g = function(id){ var el = $(id); return el ? el.value : ''; };
+  var it = {
+    id: ADM.edit.id,
+    name: g('aName'), emoji: g('aEmoji'), desc: g('aDesc'), badge: g('aBadge'),
+    unit: g('aUnit'), cat: g('aCat'), ask: g('aAsk'),
+    price: Number(digits(g('aPrice'))) || 0,
+    min:   Number(digits(g('aMin')))   || 0,
+    max:   Number(digits(g('aMax')))   || 0,
+    order: Number(digits(g('aOrder'))) || 99,
+    on: $('aOn').classList.contains('on') ? 1 : 0
+  };
+  if (!it.name.trim()){ toast('نام محصول را بنویسید.'); return; }
+
+  $('sWal').disabled = true;
+  api('adm_item_save', { item: it }, function(){
+    $('sWal').disabled = false;
+    shut();
+    toast(it.id ? 'ذخیره شد ✓' : 'محصول اضافه شد ✓', true);
+    admLoad();
+  }, function(j){
+    $('sWal').disabled = false;
+    toast((j && j.message) ? j.message : 'ذخیره نشد.');
+  });
+}
+
+function admDel(){
+  if (!ADM.edit || !ADM.edit.id) { shut(); return; }
+  api('adm_item_del', { id: ADM.edit.id }, function(){
+    shut(); toast('حذف شد ✓', true); admLoad();
+  }, function(j){ toast((j && j.message) ? j.message : 'حذف نشد.'); });
+}
 
 drawTabs();
 buildGrid();

@@ -1746,6 +1746,11 @@ function maBoot($key, $a) {
     ];
 }
 
+/** ثبت در دفترچه‌ی افزونه، اگر بود */
+function axLogIf($what, $detail = '') {
+    if (function_exists('axLog')) axLog($what, $detail);
+}
+
 function maApiUrl() {
     $b = maBaseUrl();
     if ($b === '') return '';
@@ -1891,6 +1896,7 @@ function maApi() {
             'ok' => true,
             'balance' => (float)($u['balance'] ?? 0),
             'uid'  => $uid,
+            'admin'=> ($uid === ADMIN_ID) ? 1 : 0,
             'name' => trim((string)($user['first_name'] ?? '') . ' ' . (string)($user['last_name'] ?? '')),
             'uname'=> $uname,
             'photo'=> (string)($user['photo_url'] ?? ''),
@@ -1984,6 +1990,123 @@ function maApi() {
                   'card' => (string)$t['card'], 'holder' => (string)$t['name'],
                   'message' => 'درخواست شارژ ثبت شد. فاکتور و شماره کارت داخل ربات برایتان فرستاده شد؛ ' .
                                'بعد از واریز، دکمه «ارسال رسید» را بزنید.']);
+    }
+
+    // ---- 👑 مدیریت محصول‌ها، از داخل خودِ مینی‌اپ ----
+    // برای هرکس جز مدیر، این مسیرها انگار اصلا وجود ندارند.
+    if (str_starts_with($action, 'adm_item') || $action === 'adm_cats') {
+        if ($uid !== ADMIN_ID) maApiOut(['ok' => false, 'error' => 'not_found'], 404);
+
+        if ($action === 'adm_cats') {
+            maApiOut(['ok' => true, 'cats' => array_map(fn($c) => [
+                'id' => (string)$c['id'], 'name' => (string)$c['name'],
+                'emoji' => (string)($c['emoji'] ?? ''), 'on' => !empty($c['on']) ? 1 : 0,
+            ], (array)($a['cats'] ?? []))]);
+        }
+
+        if ($action === 'adm_items') {
+            $out = [];
+            foreach ((array)($a['items'] ?? []) as $i) {
+                if (!is_array($i) || empty($i['id'])) continue;
+                $out[] = [
+                    'id' => (string)$i['id'], 'cat' => (string)($i['cat'] ?? ''),
+                    'emoji' => (string)($i['emoji'] ?? ''), 'name' => (string)($i['name'] ?? ''),
+                    'desc' => (string)($i['desc'] ?? ''), 'badge' => (string)($i['badge'] ?? ''),
+                    'price' => (float)($i['price'] ?? 0), 'unit' => (string)($i['unit'] ?? ''),
+                    'ask' => (string)($i['ask'] ?? 'none'),
+                    'min' => (float)($i['min'] ?? 1), 'max' => (float)($i['max'] ?? 1),
+                    'order' => (int)($i['order'] ?? 99), 'on' => !empty($i['on']) ? 1 : 0,
+                    'live' => maIsLive($i) ? 1 : 0,
+                    'final' => maItemPrice($i),
+                ];
+            }
+            maApiOut(['ok' => true, 'items' => $out, 'asks' => maAskLabels()]);
+        }
+
+        if ($action === 'adm_item_del') {
+            $id = (string)($body['id'] ?? '');
+            if ($id === '') maApiOut(['ok' => false, 'error' => 'bad_id'], 400);
+            $found = false;
+            maSet($key, function (&$app) use ($id, &$found) {
+                $out = [];
+                foreach ((array)($app['items'] ?? []) as $i) {
+                    if ((string)($i['id'] ?? '') === $id) { $found = true; continue; }
+                    $out[] = $i;
+                }
+                $app['items'] = array_values($out);
+            });
+            if (!$found) maApiOut(['ok' => false, 'error' => 'not_found'], 404);
+            axLogIf('miniapp_item_del', $key . ' ' . $id);
+            maApiOut(['ok' => true]);
+        }
+
+        if ($action === 'adm_item_save') {
+            $in = is_array($body['item'] ?? null) ? $body['item'] : [];
+
+            $name = trim((string)($in['name'] ?? ''));
+            if ($name === '' || mb_strlen($name) > 80)
+                maApiOut(['ok' => false, 'error' => 'bad_name', 'message' => 'نام باید بین ۱ تا ۸۰ نویسه باشد.'], 400);
+
+            $ask = (string)($in['ask'] ?? 'none');
+            if (!array_key_exists($ask, maAskLabels()))
+                maApiOut(['ok' => false, 'error' => 'bad_ask', 'message' => 'نوع سوال معتبر نیست.'], 400);
+
+            $price = maNum($in['price'] ?? 0);
+            if ($price < 0 || $price > 1e12)
+                maApiOut(['ok' => false, 'error' => 'bad_price', 'message' => 'قیمت معتبر نیست.'], 400);
+
+            $min = maNum($in['min'] ?? 1);
+            $max = maNum($in['max'] ?? 1);
+            if ($min < 0 || $max < 0 || ($max > 0 && $max < $min))
+                maApiOut(['ok' => false, 'error' => 'bad_range', 'message' => 'حداقل نباید از حداکثر بیشتر باشد.'], 400);
+
+            $cat = (string)($in['cat'] ?? '');
+            $catOk = $cat === '';
+            foreach ((array)($a['cats'] ?? []) as $c) if ((string)$c['id'] === $cat) $catOk = true;
+            if (!$catOk) maApiOut(['ok' => false, 'error' => 'bad_cat', 'message' => 'دسته پیدا نشد.'], 400);
+
+            $id = trim((string)($in['id'] ?? ''));
+            $isNew = ($id === '');
+            if ($isNew) {
+                $id = 'x_' . base_convert((string)time(), 10, 36) . bin2hex(random_bytes(2));
+            } elseif (!preg_match('/^[A-Za-z0-9_]{2,40}$/', $id)) {
+                maApiOut(['ok' => false, 'error' => 'bad_id'], 400);
+            }
+
+            $row = [
+                'id'    => $id,
+                'cat'   => $cat,
+                'emoji' => mb_substr(trim((string)($in['emoji'] ?? '')), 0, 8),
+                'name'  => $name,
+                'desc'  => mb_substr(trim((string)($in['desc'] ?? '')), 0, 300),
+                'badge' => mb_substr(trim((string)($in['badge'] ?? '')), 0, 20),
+                'price' => $price,
+                'unit'  => mb_substr(trim((string)($in['unit'] ?? '')), 0, 20),
+                'ask'   => $ask,
+                'min'   => $min,
+                'max'   => $max,
+                'order' => max(0, min(999, (int)maNum($in['order'] ?? 99))),
+                'on'    => !empty($in['on']),
+            ];
+
+            maSet($key, function (&$app) use ($row, $isNew) {
+                $items = (array)($app['items'] ?? []);
+                if (!$isNew) {
+                    foreach ($items as $k2 => $i) {
+                        if ((string)($i['id'] ?? '') !== $row['id']) continue;
+                        // فیلدهای فنی (auto، stars، rate_key…) دست‌نخورده می‌مانند —
+                        // این صفحه فقط ظاهر و قیمت را عوض می‌کند.
+                        $items[$k2] = array_replace($i, $row);
+                        $app['items'] = array_values($items);
+                        return;
+                    }
+                }
+                $items[] = $row;
+                $app['items'] = array_values($items);
+            });
+            axLogIf('miniapp_item_save', $key . ' ' . $id . ' ' . $name);
+            maApiOut(['ok' => true, 'id' => $id, 'created' => $isNew]);
+        }
     }
 
     // ---- ثبت سفارش ----
