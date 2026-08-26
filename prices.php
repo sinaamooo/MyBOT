@@ -85,6 +85,9 @@ function pxDefaults() {
             'on' => 1,
             'w'  => 1080,
             'h'  => 620,
+            // مسیر فونت — خالی یعنی خودش بگردد و پیدا کند
+            'font'      => '',
+            'font_bold' => '',
         ],
 
         // ✏️ متن‌ها — همه قابل ویرایش
@@ -545,18 +548,60 @@ function pxKeyboard() {
 // ============================================================
 
 /** فونتی که حتما روی سرور هست */
+/**
+ * فونتِ کارت.
+ *
+ * قبلا فقط چهار مسیرِ ثابت را نگاه می‌کرد؛ روی هاست اشتراکی هیچ‌کدام
+ * نبود و کارت بی‌صدا تبدیل می‌شد به متنِ خالی. حالا:
+ *
+ *   ۱) فونتی که خودتان در پنل داده‌اید (یا به ربات فرستاده‌اید)
+ *   ۲) کنار همین فایل، در پوشه‌ی fonts/
+ *   ۳) مسیرهای معمولِ لینوکس و ویندوز
+ *   ۴) جست‌وجوی واقعی در پوشه‌های فونتِ سیستم — هر ttf که پیدا شد
+ */
 function pxFont($bold = true) {
     static $cache = [];
     $k = $bold ? 'b' : 'r';
     if (isset($cache[$k])) return $cache[$k];
-    $try = $bold
-        ? ['/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
-           '/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf',
-           __DIR__ . '/fonts/Roboto-Bold.ttf', 'C:\\Windows\\Fonts\\arialbd.ttf']
-        : ['/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
-           '/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf',
-           __DIR__ . '/fonts/Roboto-Regular.ttf', 'C:\\Windows\\Fonts\\arial.ttf'];
-    foreach ($try as $f) if (is_file($f)) return $cache[$k] = $f;
+
+    $set = trim((string)pxVal('card.font' . ($bold ? '_bold' : ''), ''));
+    if ($set !== '' && is_file($set)) return $cache[$k] = $set;
+    // یک فونت هم بهتر از هیچ: اگر فقط یکی داده شده، برای هر دو حالت
+    $any = trim((string)pxVal('card.font_bold', '')) ?: trim((string)pxVal('card.font', ''));
+    if ($any !== '' && is_file($any)) return $cache[$k] = $any;
+
+    $names = $bold
+        ? ['DejaVuSans-Bold.ttf', 'LiberationSans-Bold.ttf', 'Roboto-Bold.ttf',
+           'Vazirmatn-Bold.ttf', 'arialbd.ttf', 'FreeSansBold.ttf', 'NotoSans-Bold.ttf']
+        : ['DejaVuSans.ttf', 'LiberationSans-Regular.ttf', 'Roboto-Regular.ttf',
+           'Vazirmatn-Regular.ttf', 'arial.ttf', 'FreeSans.ttf', 'NotoSans-Regular.ttf'];
+
+    $dirs = [
+        rtrim(DATA_DIR, '/') . '/fonts',          // فونتی که به ربات فرستاده‌اید
+        __DIR__ . '/fonts',
+        '/usr/share/fonts/truetype/dejavu',
+        '/usr/share/fonts/truetype/liberation',
+        '/usr/share/fonts/truetype/freefont',
+        '/usr/share/fonts/dejavu',
+        '/usr/share/fonts/TTF',
+        '/usr/local/share/fonts',
+        'C:\\Windows\\Fonts',
+    ];
+    foreach ($dirs as $d) foreach ($names as $n)
+        if (is_file($d . '/' . $n)) return $cache[$k] = $d . '/' . $n;
+
+    // هنوز نه؟ هر ttf ای که در این پوشه‌ها باشد بهتر از هیچ است
+    foreach ($dirs as $d) {
+        if (!is_dir($d)) continue;
+        $g = glob($d . '/*.[tT][tT][fF]') ?: [];
+        if ($g) return $cache[$k] = $g[0];
+    }
+    // آخرین تیر: کل درختِ فونتِ سیستم، یک‌بار و با سقف
+    foreach (['/usr/share/fonts', '/usr/local/share/fonts', DATA_DIR] as $root) {
+        if (!is_dir($root)) continue;
+        $g = glob($root . '/*/*.[tT][tT][fF]') ?: [];
+        if ($g) return $cache[$k] = $g[0];
+    }
     return $cache[$k] = '';
 }
 
@@ -564,6 +609,17 @@ function pxCardReady() {
     return function_exists('imagecreatetruecolor')
         && function_exists('imagettftext')
         && pxFont(true) !== '';
+}
+
+/** چرا کارت ساخته نمی‌شود؟ رشته‌ی خالی یعنی مشکلی نیست. */
+function pxCardWhy() {
+    if (!function_exists('imagecreatetruecolor'))
+        return 'افزونه‌ی GD روی سرور نصب نیست. از پشتیبانی هاست بخواهید gd را روشن کند.';
+    if (!function_exists('imagettftext'))
+        return 'GD هست ولی بدون FreeType، پس نمی‌تواند متن بنویسد. از هاست بخواهید gd را با freetype بسازد.';
+    if (pxFont(true) === '')
+        return 'هیچ فونتی روی سرور پیدا نشد. یک فایل .ttf برای ربات بفرستید تا همین‌جا ذخیره‌اش کند.';
+    return '';
 }
 
 /** #RRGGBB → [r,g,b] */
@@ -820,6 +876,16 @@ function pxDeliver($chatId, $png, $caption, $markup = null, $replyTo = null) {
 /** کارت بساز، ولی اگر GD سرِ راه مرد، کل پیام را نکش */
 function pxTryCard(callable $fn) {
     if (empty(pxVal('card.on'))) return null;
+
+    // کارت روشن است ولی سرور نمی‌تواند بسازدش؟ یک‌بار به ادمین بگو چرا،
+    // وگرنه فقط متنِ خالی می‌رود و کسی نمی‌فهمد چه شده.
+    if (($why = pxCardWhy()) !== '') {
+        if (function_exists('adminAlertOnce'))
+            adminAlertOnce('px_nocard',
+                "🖼 <b>کارت قیمت ساخته نمی‌شود</b>\n\n" . h($why) .
+                "\n\nپنل ← 💹 قیمت ← 🖼 کارت گرافیکی");
+        return null;
+    }
     try {
         return $fn();
     } catch (Throwable $e) {
@@ -1146,7 +1212,8 @@ function pxAdminHome($chatId, $msgId = null) {
         [btnCb('📊 درصد سود', 'pxm', 'admin'), btnCb('⏱ ثانیه کش', 'pxttl', 'admin')],
         [btnCb('🗣 کلمه‌ها', 'pxw_home', 'admin'), btnCb('✏️ متن‌ها', 'pxt_home', 'admin')],
         [btnCb('✨ ایموجی پریمیوم', 'pxe_home', 'admin'), btnCb('🔘 دکمه‌ها', 'pxb_home', 'admin')],
-        [btnCb(!empty($c['card']['on']) ? '🖼 کارت: روشن' : '🖼 کارت: خاموش', 'pxc', 'info')],
+        [btnCb(!empty($c['card']['on']) ? '🖼 کارت: روشن' : '🖼 کارت: خاموش', 'pxc', 'info'),
+         btnCb('🔤 فونت کارت', 'pxcard', 'admin')],
         [btnCb('🥇 طلا، دلار، سکه', 'pxa_home', 'admin'),
          btnCb('🔎 کلیدهای API', 'pxkeys', 'confirm')],
         [btnCb('👀 پیش‌نمایش پریمیوم', 'pxprev_prem', 'confirm'),
@@ -1304,6 +1371,34 @@ function pxAdminAssets($chatId, $msgId) {
     editMsg(BOT_TOKEN, $chatId, $msgId, mb_substr($t, 0, 3800), inlineKb($rows));
 }
 
+/** 🖼 کارت گرافیکی — چرا می‌سازد یا نمی‌سازد، و فونتش از کجاست */
+function pxAdminCard($chatId, $msgId) {
+    $why = pxCardWhy();
+    $t  = "🖼 <b>کارت گرافیکی قیمت</b>\n\n";
+    $t .= 'وضعیت: ' . (!empty(pxVal('card.on')) ? '✅ روشن' : '❌ خاموش') . "\n";
+    $t .= 'GD: ' . (function_exists('imagecreatetruecolor') ? '✅ هست' : '🔴 نیست') . "\n";
+    $t .= 'نوشتن متن (FreeType): ' . (function_exists('imagettftext') ? '✅ هست' : '🔴 نیست') . "\n";
+    $f = pxFont(true);
+    $t .= 'فونت: ' . ($f !== '' ? '✅ <code>' . h($f) . '</code>' : '🔴 پیدا نشد') . "\n\n";
+
+    if ($why !== '') {
+        $t .= "⚠️ <b>به همین دلیل به‌جای کارت، متن فرستاده می‌شود:</b>\n" . h($why) . "\n\n";
+    } else {
+        $t .= "همه‌چیز آماده است. با دکمه‌ی پایین یک نمونه ببینید.\n\n";
+    }
+    $t .= "💡 اگر فونت پیدا نشد، کافی است یک فایل <code>.ttf</code> برای ربات بفرستید.";
+
+    $rows = [
+        [btnCb(!empty(pxVal('card.on')) ? '✅ کارت روشن است' : '❌ کارت خاموش است', 'pxc', 'info')],
+        [btnCb('🔤 فرستادن فونت', 'pxfont', 'admin')],
+    ];
+    if (trim((string)pxVal('card.font_bold', '')) !== '' || trim((string)pxVal('card.font', '')) !== '')
+        $rows[] = [btnCb('🧹 پاک کردن فونتِ دستی', 'pxfontclr', 'danger')];
+    $rows[] = [btnCb('👀 نمونه‌ی کارت', 'pxprev_card', 'confirm')];
+    $rows[] = [btnCb(UT('back'), 'px_home', 'nav')];
+    editMsg(BOT_TOKEN, $chatId, $msgId, $t, inlineKb($rows));
+}
+
 /** 🩺 تشخیص — دقیقا بگو کدام منبع زنده است و هر قیمت از کجا آمده */
 function pxAdminDiag($chatId) {
     $main = pxFetch();
@@ -1367,6 +1462,18 @@ function pxAdminCallback($data, $chatId, $msgId, $cbId) {
         }
         return true;
     }
+    if ($data === 'pxprev_card') {
+        answerCb(BOT_TOKEN, $cbId);
+        if (($why = pxCardWhy()) !== '') {
+            sendMsg(BOT_TOKEN, $chatId, "🔴 <b>نمی‌شود ساخت</b>\n\n" . h($why));
+            return true;
+        }
+        $png = pxTryCard(fn() => pxAssetCard('نمونه', '💠', 1234567, 'تومان', 2.5,
+                                             ['3B82F6', '1E3A8A'], pxSeries(1234567, 2.5, 110)));
+        if ($png === null) sendMsg(BOT_TOKEN, $chatId, "🔴 ساخت کارت شکست خورد.");
+        else pxSendPhoto($chatId, $png, "👆 کارت‌ها همین شکلی می‌روند.");
+        return true;
+    }
     if ($data === 'pxprev_prem' || $data === 'pxprev_star') {
         answerCb(BOT_TOKEN, $cbId);
         $t = $data === 'pxprev_prem' ? pxPremiumText(true) : pxStarsText(1, true);
@@ -1375,6 +1482,25 @@ function pxAdminCallback($data, $chatId, $msgId, $cbId) {
     }
 
     if ($data === 'pxdiag') { answerCb(BOT_TOKEN, $cbId, '🩺'); pxAdminDiag($chatId); return true; }
+
+    if ($data === 'pxcard') { answerCb(BOT_TOKEN, $cbId); pxAdminCard($chatId, $msgId); return true; }
+    if ($data === 'pxfont') {
+        answerCb(BOT_TOKEN, $cbId);
+        setState(ADMIN_ID, 'px_font', []);
+        sendMsg(BOT_TOKEN, $chatId,
+            "🔤 <b>فرستادن فونت</b>\n\n" .
+            "یک فایل <code>.ttf</code> همین‌جا بفرستید (به‌شکل فایل، نه عکس).\n" .
+            "همان‌جا ذخیره می‌شود و کارت‌ها از همان لحظه ساخته می‌شوند.\n\n" .
+            "💡 فونت DejaVu Sans یا Roboto یا Vazirmatn هرکدام خوب است.",
+            inlineKb([[btnCb('انصراف', 'pxcard', 'cancel')]]));
+        return true;
+    }
+    if ($data === 'pxfontclr') {
+        pxSet(function (&$c) { $c['card']['font'] = ''; $c['card']['font_bold'] = ''; });
+        answerCb(BOT_TOKEN, $cbId, '🧹');
+        pxAdminCard($chatId, $msgId);
+        return true;
+    }
 
     if ($data === 'pxtdemo') {
         pxSet(function (&$c) {
@@ -1539,6 +1665,57 @@ function pxStateHandle($action, $msg, $uid, $chatId) {
         maCachePut('px_cool', 0);
         return $done();
     }
+    if ($action === 'px_font') {
+        $doc = $msg['document'] ?? null;
+        if (!$doc) {
+            sendMsg(BOT_TOKEN, $chatId, "⚠️ فایل فونت را به‌شکل <b>فایل</b> بفرستید، نه عکس.");
+            return true;
+        }
+        $name = (string)($doc['file_name'] ?? 'font.ttf');
+        if (!preg_match('/\.(ttf|otf)$/i', $name)) {
+            sendMsg(BOT_TOKEN, $chatId, "⚠️ فقط <code>.ttf</code> یا <code>.otf</code>.");
+            return true;
+        }
+        if ((int)($doc['file_size'] ?? 0) > 12 * 1024 * 1024) {
+            sendMsg(BOT_TOKEN, $chatId, "⚠️ فایل خیلی بزرگ است (بیشتر از ۱۲ مگابایت).");
+            return true;
+        }
+        $r = tg(BOT_TOKEN, 'getFile', ['file_id' => (string)$doc['file_id']]);
+        $path = (string)($r['result']['file_path'] ?? '');
+        if (empty($r['ok']) || $path === '') {
+            sendMsg(BOT_TOKEN, $chatId, "⚠️ فایل از تلگرام گرفته نشد. دوباره بفرستید.");
+            return true;
+        }
+        [$bytes, $err] = maHttpRaw(TG_API_BASE . '/file/bot' . BOT_TOKEN . '/' . $path, 30);
+        if (!is_string($bytes) || strlen($bytes) < 1000) {
+            sendMsg(BOT_TOKEN, $chatId, "⚠️ دانلود فونت نشد: <code>" . h((string)$err) . '</code>');
+            return true;
+        }
+        $dir = rtrim(DATA_DIR, '/') . '/fonts';
+        if (!is_dir($dir)) @mkdir($dir, 0755, true);
+        $dst = $dir . '/' . preg_replace('/[^A-Za-z0-9._-]/', '_', $name);
+        if (@file_put_contents($dst, $bytes) === false) {
+            sendMsg(BOT_TOKEN, $chatId, "⚠️ نوشتن فایل نشد. پوشه‌ی داده اجازه‌ی نوشتن ندارد.");
+            return true;
+        }
+        pxSet(function (&$c) use ($dst) { $c['card']['font'] = $dst; $c['card']['font_bold'] = $dst; });
+
+        clearState($uid);
+        if (($why = pxCardWhy()) !== '') {
+            sendMsg(BOT_TOKEN, $chatId, "فونت ذخیره شد ولی هنوز کارت ساخته نمی‌شود:\n" . h($why), $back);
+            return true;
+        }
+        $png = pxTryCard(fn() => pxAssetCard('نمونه', '💠', 1234567, 'تومان', 2.5,
+                                             ['3B82F6', '1E3A8A'], pxSeries(1234567, 2.5, 110)));
+        if ($png !== null) {
+            pxSendPhoto($chatId, $png, "✅ فونت نشست. کارت‌ها از حالا همین شکلی می‌روند.");
+            sendMsg(BOT_TOKEN, $chatId, '👆', $back);
+        } else {
+            sendMsg(BOT_TOKEN, $chatId, "فونت ذخیره شد ولی ساخت نمونه شکست خورد.", $back);
+        }
+        return true;
+    }
+
     if ($action === 'px_alturl' || $action === 'px_fxurl') {
         $urls = pxUrlList($text);
         if ($text !== '' && !$blank && !$urls) {

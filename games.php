@@ -39,6 +39,10 @@ function gmDefaults() {
         'expire'    => 900,         // بازی بی‌حریف بعد از این مدت باطل می‌شود
         'send_tax'  => 10,          // درصد مالیات انتقال الماس
 
+        // ✨ ایموجی پرمیومِ دکمه‌ها — خودکار از متنی که می‌فرستید برداشته
+        //    می‌شود، چون برچسب دکمه جای HTML نیست.
+        'icons'     => [],
+
         'texts' => [
             // ── چالش ──
             'duel_open'  => "{emoji} <b>چالش {stake} الماسی</b>\n\n" .
@@ -101,6 +105,7 @@ function gmDefaults() {
             'gone'       => "این بازی تمام شده.",
             'cancelled'  => "❌ <b>بازی لغو شد</b>\n\nشرط برگشت.",
             'group_only' => "🎮 بازی فقط داخل گروه کار می‌کند.",
+            'already'    => "تو که خودت داخل این بازی هستی — منتظر حریف بمان.",
         ],
     ];
 }
@@ -134,6 +139,30 @@ function gmT($slug, $vars = []) {
 }
 
 function gmOn() { return !empty(gmVal('on')); }
+
+/**
+ * متن‌هایی که روی دکمه می‌نشینند، نه داخل پیام.
+ *
+ * تلگرام داخل برچسبِ دکمه HTML نمی‌پذیرد؛ اگر <tg-emoji…> بفرستی،
+ * همان رشته‌ی خام روی دکمه چاپ می‌شود. پس برای این‌ها متن ساده نگه
+ * می‌داریم و ایموجی پرمیوم را جدا، در icons، به‌شکل شناسه.
+ */
+function gmBtnKeys() {
+    return ['duel_join', 'duel_cancel', 'rand_join',
+            'lbl_prize', 'lbl_wbal', 'lbl_lbal',
+            'bal_btn', 'send_bal', 'send_bal2'];
+}
+
+function gmIsBtn($k) { return in_array($k, gmBtnKeys(), true); }
+
+/** یک دکمه‌ی شیشه‌ای از روی متنِ ذخیره‌شده + ایموجی پرمیومش */
+function gmBtn($key, $vars, $data, $style = null) {
+    $b = ['text' => gmT($key, $vars), 'callback_data' => $data];
+    if ($style) $b['style'] = $style;
+    $ic = trim((string)gmVal('icons.' . $key, ''));
+    if ($ic !== '') $b['icon_custom_emoji_id'] = $ic;
+    return $b;
+}
 
 /** عددها همیشه فارسی و سه‌رقم‌سه‌رقم */
 function gmNum($n) {
@@ -315,10 +344,10 @@ function gmText($g) {
  */
 function gmKb($g) {
     if ($g['status'] === 'open') {
-        $join = $g['kind'] === 'duel' ? gmT('duel_join') : gmT('rand_join');
+        $jk = $g['kind'] === 'duel' ? 'duel_join' : 'rand_join';
         return inlineKb([[
-            ['text' => $join, 'callback_data' => 'gmj_' . $g['id'], 'style' => 'success'],
-            ['text' => gmT('duel_cancel'), 'callback_data' => 'gmc_' . $g['id'], 'style' => 'danger'],
+            gmBtn($jk, [], 'gmj_' . $g['id'], 'success'),
+            gmBtn('duel_cancel', [], 'gmc_' . $g['id'], 'danger'),
         ]]);
     }
     if ($g['kind'] !== 'duel' || $g['status'] !== 'playing') return null;
@@ -337,7 +366,7 @@ function gmKb($g) {
         }
         $rows[] = $line;
     }
-    $rows[] = [['text' => gmT('duel_cancel'), 'callback_data' => 'gmc_' . $g['id'], 'style' => 'danger']];
+    $rows[] = [gmBtn('duel_cancel', [], 'gmc_' . $g['id'], 'danger')];
     return inlineKb($rows);
 }
 
@@ -364,9 +393,9 @@ function gmShow($g, $replyTo = null) {
 function gmResultKb($prize, $wBal, $lBal) {
     return inlineKb([
         [['text' => gmNum($prize), 'callback_data' => 'gmnop', 'style' => 'success'],
-         ['text' => gmT('lbl_prize'), 'callback_data' => 'gmnop', 'style' => 'success']],
+         gmBtn('lbl_prize', [], 'gmnop', 'success')],
         [['text' => gmNum($lBal), 'callback_data' => 'gmnop', 'style' => 'danger'],
-         ['text' => gmT('lbl_lbal'), 'callback_data' => 'gmnop', 'style' => 'danger']],
+         gmBtn('lbl_lbal', [], 'gmnop', 'danger')],
     ]);
 }
 
@@ -508,8 +537,7 @@ function gmHandleText($text, $uid, $chatId, $name, $uname = '', $replyTo = null,
         if ($w === '' || mb_strtolower($raw) !== mb_strtolower($w)) continue;
         $pts = gmPoints($uid);
         sendMsg(BOT_TOKEN, $chatId, gmT('bal_head', ['emoji' => gmEmoji(), 'points' => gmNum($pts)]),
-            inlineKb([[['text' => gmT('bal_btn', ['points' => gmNum($pts)]),
-                        'callback_data' => 'gmnop', 'style' => 'primary']]]), $extra);
+            inlineKb([[gmBtn('bal_btn', ['points' => gmNum($pts)], 'gmnop', 'primary')]]), $extra);
         return true;
     }
 
@@ -531,8 +559,11 @@ function gmHandleText($text, $uid, $chatId, $name, $uname = '', $replyTo = null,
         sendMsg(BOT_TOKEN, $chatId, gmT('bad_stake', ['min' => gmNum($min), 'max' => gmNum($max)]), null, $extra);
         return true;
     }
-    if (gmOpenOf($uid, $chatId)) {
-        sendMsg(BOT_TOKEN, $chatId, gmT('busy'), null, $extra);
+    if ($old = gmOpenOf($uid, $chatId)) {
+        // فقط «یک بازی باز داری» گفتن بن‌بست است؛ دکمه‌ی لغوِ همان بازی
+        // را کنارش می‌گذاریم تا بشود همان‌جا رهایش کرد.
+        sendMsg(BOT_TOKEN, $chatId, gmT('busy'),
+            inlineKb([[gmBtn('duel_cancel', [], 'gmc_' . $old['id'], 'danger')]]), $extra);
         return true;
     }
     if (!gmAdd($uid, -$stake, $name, $uname)) {
@@ -595,9 +626,9 @@ function gmTransfer($amount, $uid, $chatId, $name, $uname, $replyTo, $msg) {
         'amount' => gmNum($amount), 'tax' => gmNum($tax), 'total' => gmNum($total),
     ]), inlineKb([
         [['text' => gmNum(gmPoints($uid)), 'callback_data' => 'gmnop', 'style' => 'primary'],
-         ['text' => gmT('send_bal'), 'callback_data' => 'gmnop', 'style' => 'primary']],
+         gmBtn('send_bal', [], 'gmnop', 'primary')],
         [['text' => gmNum(gmPoints($toId)), 'callback_data' => 'gmnop', 'style' => 'success'],
-         ['text' => gmT('send_bal2'), 'callback_data' => 'gmnop', 'style' => 'success']],
+         gmBtn('send_bal2', [], 'gmnop', 'success')],
     ]), $extra);
 
     if (function_exists('chGame'))
@@ -637,7 +668,12 @@ function gmCallback($data, $uid, $chatId, $msgId, $cbId, $from = []) {
 
     // ✅ پیوستن
     if ($act === 'j') {
-        if (isset($g['players'][(string)$uid])) { answerCb(BOT_TOKEN, $cbId, '✅', false); return true; }
+        if (isset($g['players'][(string)$uid])) {
+            // سازنده روی بازیِ خودش می‌زند و هیچ اتفاقی نمی‌افتد — از بیرون
+            // مثل این است که دکمه خراب است. پس صریح بگو منتظر حریفی.
+            answerCb(BOT_TOKEN, $cbId, strip_tags(gmT('already')), true);
+            return true;
+        }
         if ($g['kind'] === 'duel' && count($g['players']) >= 2) {
             answerCb(BOT_TOKEN, $cbId, gmT('gone'), true); return true;
         }
@@ -760,7 +796,7 @@ function gmLabels() {
         'busy'      => 'بازی باز داری',    'not_yours' => 'مال تو نیست',
         'not_turn'  => 'نوبت تو نیست',     'taken' => 'خانه پر است',
         'gone'      => 'بازی تمام شده',    'cancelled' => 'بازی لغو شد',
-        'group_only'=> 'فقط داخل گروه',
+        'group_only'=> 'فقط داخل گروه', 'already' => 'خودت داخل بازی هستی',
     ];
 }
 
@@ -848,9 +884,12 @@ function gmAdminCallback($data, $chatId, $msgId, $cbId) {
         $cur = (string)gmVal($path . $k, '');
         sendMsg(BOT_TOKEN, $chatId,
             "✏️ <b>" . h(gmLabel($k)) . "</b> را بفرستید.\n\n" .
-            ($act === 'gm_text'
-                ? "جای‌گذاری‌ها: " . implode(' ', array_map(fn($x) => '<code>{' . $x . '}</code>', gmVars($k))) . "\n\n"
-                : "چند کلمه را با ویرگول جدا کنید.\n\n") .
+            ($act !== 'gm_text'
+                ? "چند کلمه را با ویرگول جدا کنید.\n\n"
+                : (gmIsBtn($k)
+                    ? "🔘 این یکی روی <b>دکمه</b> می‌نشیند، پس متنِ ساده باشد.\n" .
+                      "✨ ایموجی پرمیوم را جلوی متن بگذارید — خودش برداشته و درست روی دکمه گذاشته می‌شود.\n\n"
+                    : "جای‌گذاری‌ها: " . implode(' ', array_map(fn($x) => '<code>{' . $x . '}</code>', gmVars($k))) . "\n\n")) .
             "الان:\n" . ($act === 'gm_text' ? $cur : '<code>' . h($cur) . '</code>'),
             inlineKb([[btnCb('انصراف', 'gm_home', 'cancel')]]));
         return true;
@@ -913,8 +952,31 @@ function gmStateHandle($action, $msg, $uid, $chatId) {
     }
     if ($action === 'gm_text') {
         $k = (string)($sd['k'] ?? '');
+        if ($k === '') { sendMsg(BOT_TOKEN, $chatId, "⚠️ چیزی برای ذخیره نیست."); return true; }
+
+        if (gmIsBtn($k)) {
+            // برچسب دکمه HTML نمی‌پذیرد. پس متنِ ساده ذخیره می‌شود و
+            // ایموجی پرمیوم جدا، به‌شکل شناسه — همان‌طور که خودِ تلگرام
+            // برای دکمه می‌خواهد.
+            if ($text === '') { sendMsg(BOT_TOKEN, $chatId, "⚠️ متن خالی نمی‌شود."); return true; }
+            $ids  = function_exists('customEmojiIds') ? customEmojiIds($msg) : [];
+            $icon = $ids ? (string)$ids[0] : '';
+            gmSet(function (&$c) use ($k, $text, $icon) {
+                $c['texts'][$k] = $text;
+                if (!isset($c['icons']) || !is_array($c['icons'])) $c['icons'] = [];
+                $c['icons'][$k] = $icon;          // نبود؟ یعنی برداشته شود
+            });
+            clearState($uid);
+            sendMsg(BOT_TOKEN, $chatId,
+                "✅ ذخیره شد" . ($icon !== '' ? " — ایموجی پرمیوم هم روی دکمه نشست." : '.') .
+                "\n\nاین‌طور دیده می‌شود:",
+                inlineKb([[gmBtn($k, ['points' => gmNum(12345)], 'gmnop', 'primary')]]));
+            sendMsg(BOT_TOKEN, $chatId, '👆', $back);
+            return true;
+        }
+
         $html = msgHtml($msg);
-        if ($k === '' || trim($html) === '') { sendMsg(BOT_TOKEN, $chatId, "⚠️ متن خالی نمی‌شود."); return true; }
+        if (trim($html) === '') { sendMsg(BOT_TOKEN, $chatId, "⚠️ متن خالی نمی‌شود."); return true; }
         gmSet(function (&$c) use ($k, $html) { $c['texts'][$k] = $html; });
         clearState($uid);
         sendMsg(BOT_TOKEN, $chatId, "✅ ذخیره شد. پیش‌نمایش:");

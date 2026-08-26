@@ -627,11 +627,23 @@ function axPrice($itemId, $basePrice, $category = '') {
         if ($fixed !== null && (float)$fixed > 0) return (float)$fixed;
     }
 
+    return axPriceMargin($base, $category);
+}
+
+/**
+ * فقط درصد سودِ دسته — بدون قیمت دستی.
+ *
+ * برای سرویس‌هایی که نرخشان زنده است (استارز، پریمیوم، گیفت، تون…)
+ * قیمت دستی معنی ندارد و اگر بنشیند، عددِ مینی‌اپ با عددِ گروه فرق
+ * می‌کند. سود اما باید کار کند، پس همان تکه جدا شد.
+ */
+function axPriceMargin($basePrice, $category = '') {
+    $base = (float)$basePrice;
+    if (empty(axVal('pricing.on'))) return $base;
     $marg = axCfg()['pricing']['margin'] ?? [];
     $m = $marg[axSku($category)] ?? null;
     if ($m === null) $m = $marg['_all'] ?? null;
     if ($m !== null && (float)$m != 0.0) $base = $base * (1 + ((float)$m / 100));
-
     return $base;
 }
 

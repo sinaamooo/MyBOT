@@ -887,12 +887,17 @@ function maLivePrice($item) {
         }
     }
 
-    // ۲) ⭐️ استارز — اول قیمت لحظه‌ای فرگمنت، بعد نرخ دستی
+    // ۲) ⭐️ استارز
+    //
+    // عددی که اینجا درمی‌آید باید مو‌به‌مو همان چیزی باشد که در گروه
+    // نوشته می‌شود. پس نه گِردِ پله‌ای (که ۱۴۸٬۱۴۷ را می‌کرد ۱۴۹٬۰۰۰)
+    // و نه نرخِ دستیِ کهنه — که ۲٬۹۶۳ تومانی را ۱٬۹۰۰ می‌فروخت و
+    // هر سفارش یعنی ضرر. نرخ که نیامد، این سرویس فعلا فروختنی نیست.
     $st = (float)($item['stars'] ?? 0);
     if ($st > 0) {
         if (function_exists('pxStars') && !empty(pxVal('on'))) {
             $d = pxStars($st);
-            if ($d && $d['irt'] > 0) return maRound($d['irt'], (float)($c['stars']['round'] ?? 0));
+            return ($d && $d['irt'] > 0) ? maMoney($d['irt']) : null;
         }
         if (!empty($c['stars']['on'])) {
             $p = (float)($c['stars']['price'] ?? 0);
@@ -904,8 +909,7 @@ function maLivePrice($item) {
     $pm = (int)($item['premium'] ?? 0);
     if ($pm > 0 && function_exists('pxPremiumRows') && !empty(pxVal('on'))) {
         $rows = pxPremiumRows();
-        if (isset($rows[$pm]) && $rows[$pm]['irt'] > 0)
-            return maRound($rows[$pm]['irt'], (float)($c['stars']['round'] ?? 0));
+        return (isset($rows[$pm]) && $rows[$pm]['irt'] > 0) ? maMoney($rows[$pm]['irt']) : null;
     }
 
     // ۳) نرخ ارز (تون/ترون) — قیمت هر واحد
@@ -929,8 +933,17 @@ function maLivePrice($item) {
 function maItemPrice($item) {
     $live = maLivePrice($item);
     $base = $live !== null ? (float)$live : (float)($item['price'] ?? 0);
-    if (function_exists('axPrice'))
-        $base = (float)axPrice((string)($item['id'] ?? ''), $base, (string)($item['cat'] ?? ''));
+
+    if (function_exists('axPrice')) {
+        // 🔒 سرویسی که نرخش زنده است، «قیمت دستی» نمی‌پذیرد.
+        //
+        // وگرنه یک عددِ قدیمی در پنل، قیمت لحظه‌ای فرگمنت را کنار
+        // می‌زد و مینی‌اپ ۹۵٬۰۰۰ نشان می‌داد در حالی که گروه
+        // ۱۴۸٬۱۴۷ می‌گفت. سود دسته‌ای سرِ جایش می‌ماند.
+        $base = ($live !== null && maNeedsLive($item))
+            ? (float)axPriceMargin($base, (string)($item['cat'] ?? ''))
+            : (float)axPrice((string)($item['id'] ?? ''), $base, (string)($item['cat'] ?? ''));
+    }
     // تومانِ کامل — تا قیمتِ روی صفحه و مبلغِ کسرشده یکی باشند
     return maMoney($base);
 }

@@ -4557,7 +4557,11 @@ function masterHandle($update) {
         if ($data === 'cancel') {
             clearState($uid);
             answerCb(BOT_TOKEN, $cbId, 'لغو شد');
-            if ($msgId) editMsg(BOT_TOKEN, $chatId, $msgId, "❌ لغو شد.");
+            // پیامِ «❌ لغو شد.» بن‌بست بود: کاربر می‌ماند با یک پیام مرده.
+            // حالا همان پیام برمی‌گردد به صفحه‌ی اول، تا بشود بی‌مکث کار
+            // بعدی را شروع کرد.
+            if ($msgId) { delMsg(BOT_TOKEN, $chatId, $msgId); slotClear($uid); }
+            showHome($uid, $chatId, $fname);
             return;
         }
 
