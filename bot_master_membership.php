@@ -8124,9 +8124,39 @@ if (isset($_GET['cron'])) {
  * هم‌زمان بفرستد، فقط یکی‌شان رد می‌شود.
  * فقط چند صد شناسه‌ی آخر نگه داشته می‌شود تا فایل کوچک بماند.
  */
+/**
+ * همان محافظ، ولی روی خودِ پیام.
+ *
+ * update_id بعد از ست کردن دوباره‌ی وبهوک می‌تواند عوض شود و همان پیام
+ * با شناسه‌ی تازه دوباره برسد. ولی «شماره‌ی پیام در همان چت» هیچ‌وقت
+ * عوض نمی‌شود — پس این لایه آن حالت را هم می‌گیرد.
+ */
+function seenMessage($update) {
+    foreach (['message', 'edited_message', 'callback_query'] as $k) {
+        if (!isset($update[$k])) continue;
+        $m = ($k === 'callback_query') ? ($update[$k]['message'] ?? null) : $update[$k];
+        $chat = $m['chat']['id'] ?? null;
+        $mid  = $m['message_id'] ?? null;
+        if ($chat === null || $mid === null) continue;
+        // برای دکمه‌ها، خودِ کلیک شناسه‌ی جدا دارد؛ پیام یکی است ولی
+        // کلیک‌ها باید همه پردازش شوند، پس شناسه‌ی کلیک را هم می‌آوریم
+        $extra = ($k === 'callback_query') ? ('c' . ($update[$k]['id'] ?? '')) : '';
+        return seenKey('m' . $chat . '_' . $mid . '_' . $extra);
+    }
+    return true;
+}
+
 function seenUpdate($id) {
     $id = (int)$id;
     if ($id <= 0) return true;
+    return seenKey('u' . $id);
+}
+
+/** ادعای اتمی یک کلید — true یعنی تازه است */
+function seenKey($key) {
+    $key = preg_replace('/[^A-Za-z0-9_-]/', '', (string)$key);
+    if ($key === '') return true;
+    $id  = $key;
 
     $dir = DATA_DIR . '/.upd';
     if (!is_dir($dir)) @mkdir($dir, 0755, true);
@@ -8229,9 +8259,13 @@ http_response_code(200);
 // دو سد گذاشته شده: اول همین‌جا شناسه‌ی آپدیت را «می‌گیریم» (اتمی، با
 // قفل، پس دو درخواست هم‌زمان هم هر دو رد نمی‌شوند)، بعد پایین‌تر جواب
 // را می‌بندیم تا تلگرام اصلا منتظر نماند.
-if (is_array($update) && isset($update['update_id']) && !seenUpdate((int)$update['update_id'])) {
-    echo json_encode(['ok' => true]);
-    exit;
+// دو لایه: شناسه‌ی آپدیت، و شماره‌ی خودِ پیام. لایه‌ی دوم حالتی را
+// می‌گیرد که وبهوک از نو ست شده و تلگرام همان پیام را با شناسه‌ی تازه
+// دوباره فرستاده.
+if (is_array($update)) {
+    $dupe = (isset($update['update_id']) && !seenUpdate((int)$update['update_id']))
+         || !seenMessage($update);
+    if ($dupe) { echo json_encode(['ok' => true]); exit; }
 }
 
 // 📮 جواب تلگرام همین‌جا بسته می‌شود و بقیه‌ی کار در پس‌زمینه ادامه

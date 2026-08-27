@@ -65,8 +65,7 @@ function gmDefaults() {
                             "<blockquote>👤 سازنده: {host}\n" .
                             "👥 شرکت‌کننده: <b>{count}</b>\n" .
                             "🏆 جایزه‌ی برنده: <b>{prize}</b> الماس\n" .
-                            "🧾 مالیات: <b>{tax}</b> الماس</blockquote>\n\n" .
-                            "⏳ تا قرعه: <b>{left}</b> ثانیه",
+                            "🧾 مالیات: <b>{tax}</b> الماس</blockquote>",
             'rand_win'   => "🎉 <b>نتیجه بازی مشخص شد</b>\n\n" .
                             "<blockquote>🏆 کاربر برنده: <code>{winner}</code>\n" .
                             "❌ کاربر بازنده: <code>{loser}</code></blockquote>",
@@ -489,7 +488,12 @@ function gmDraw($g) {
             $x['ends']   = time() + max(3, (int)gmVal('wait', 8));
             return true;
         });
-        gmShow(gmGet($g['id']) ?: $g);
+        // ⚠️ فقط همان پیامِ موجود به‌روز می‌شود. اگر شناسه‌ی پیام را
+        // نداشته باشیم هیچ پیام تازه‌ای نمی‌فرستیم — وگرنه هر بار که
+        // قرعه بی‌حریف می‌ماند یک پیام تازه در گروه می‌نشست و گروه
+        // پر از «بازی ۱۰۰ الماسی» می‌شد.
+        $gg = gmGet($g['id']) ?: $g;
+        if ((int)($gg['msg'] ?? 0) > 0) gmShow($gg);
         return;
     }
 
