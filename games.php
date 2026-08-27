@@ -106,6 +106,7 @@ function gmDefaults() {
             'cancelled'  => "❌ <b>بازی لغو شد</b>\n\nشرط برگشت.",
             'group_only' => "🎮 بازی فقط داخل گروه کار می‌کند.",
             'already'    => "تو که خودت داخل این بازی هستی — منتظر حریف بمان.",
+            'open_max'   => "⛔️ شما <b>{n}</b> بازی باز دارید.\n\nاول همان‌ها تمام یا لغو شوند، بعد بازی تازه بسازید.",
         ],
     ];
 }
@@ -165,7 +166,14 @@ function gmDigitIds() {
     return $d;
 }
 
-/** عدد → رشته‌ی ایموجیِ رقم‌ها */
+/**
+ * عدد → رشته‌ی ایموجیِ رقم‌ها
+ *
+ * ⚠️ رقم‌های ایموجی «خنثی» حساب می‌شوند، پس داخل یک پیام فارسی
+ * (راست‌به‌چپ) برعکس چیده می‌شدند و ۵۰ به شکل ۰۵ دیده می‌شد.
+ * برای همین کل عدد داخل یک «جداساز چپ‌به‌راست» پیچیده می‌شود
+ * (U+2066 … U+2069) تا همیشه از چپ به راست خوانده شود.
+ */
 function gmBigNum($n) {
     $ids = gmDigitIds();
     $s = preg_replace('/\D+/', '', (string)number_format((float)$n, 0, '.', ''));
@@ -177,7 +185,7 @@ function gmBigNum($n) {
               ? '<tg-emoji emoji-id="' . $ids[$c] . '">' . $keycap . '</tg-emoji>'
               : $keycap;
     }
-    return $out;
+    return "\u{2066}" . $out . "\u{2069}";
 }
 
 /**
@@ -599,9 +607,20 @@ function gmHandleText($text, $uid, $chatId, $name, $uname = '', $replyTo = null,
         sendMsg(BOT_TOKEN, $chatId, gmT('bad_stake', ['min' => gmNum($min), 'max' => gmNum($max)]), null, $extra);
         return true;
     }
-    // 🎲 هرچند بازی که الماس داشته باشی. تنها سقف، خودِ الماس است —
-    //    چون شرطِ هر بازی همان لحظه از موجودی کم می‌شود، کسی نمی‌تواند
-    //    بیشتر از دارایی‌اش بازی باز کند.
+    // 🔢 سقف بازی‌های بازِ هر نفر — بدون این، گروه پر می‌شد از پیام‌های
+    //    بازیِ نیمه‌کاره. شرط هر بازی هم که همان لحظه کم می‌شود، پس
+    //    این سقف فقط جلوی شلوغی را می‌گیرد نه جلوی خرج کردن را.
+    $max = max(1, (int)gmVal('open_max', 2));
+    $mine = 0;
+    foreach (gmAll() as $og) {
+        if ((int)($og['host'] ?? 0) !== (int)$uid) continue;
+        if (in_array($og['status'] ?? '', ['open', 'playing'], true)) $mine++;
+    }
+    if ($mine >= $max) {
+        sendMsg(BOT_TOKEN, $chatId, gmT('open_max', ['n' => gmNum($mine)]), null, $extra);
+        return true;
+    }
+
     if (!gmAdd($uid, -$stake, $name, $uname)) {
         sendMsg(BOT_TOKEN, $chatId,
             gmT('low', ['points' => gmNum(gmPoints($uid)), 'need' => gmNum($stake)]), null, $extra);
@@ -835,6 +854,7 @@ function gmAdminHome($chatId, $msgId = null) {
         [btnCb('🗣 کلمه‌ها', 'gmaw_home', 'admin'), btnCb('✏️ متن‌ها', 'gmat_home', 'admin')],
         [btnCb('🔢 ایموجی عددها', 'gmadig', 'admin'),
          btnCb(!empty(gmVal('duel_board')) ? '⭕ چالش: صفحه دوز' : '⚡ چالش: نتیجه‌ی فوری', 'gmaduel', 'info')],
+        [btnCb('🔢 سقف بازی باز: ' . gmNum((int)gmVal('open_max', 2)), 'gmaopen', 'admin')],
         [btnCb('🧹 بستن بازی‌های باز', 'gmaclose', 'danger')],
         [btnCb(UT('back'), 'adm_home', 'nav')],
     ];
@@ -885,6 +905,7 @@ function gmLabels() {
         'not_turn'  => 'نوبت تو نیست',     'taken' => 'خانه پر است',
         'gone'      => 'بازی تمام شده',    'cancelled' => 'بازی لغو شد',
         'group_only'=> 'فقط داخل گروه', 'already' => 'خودت داخل بازی هستی',
+        'open_max'  => 'سقف بازی باز',
     ];
 }
 
@@ -943,6 +964,15 @@ function gmAdminCallback($data, $chatId, $msgId, $cbId) {
             if (in_array($g['status'], ['open', 'playing'], true)) { gmRefund($g, gmT('cancelled')); $n++; }
         answerCb(BOT_TOKEN, $cbId, "🧹 {$n} بازی بسته شد", true);
         gmAdminHome($chatId, $msgId);
+        return true;
+    }
+    if ($data === 'gmaopen') {
+        answerCb(BOT_TOKEN, $cbId);
+        setState(ADMIN_ID, 'gm_openmax', []);
+        sendMsg(BOT_TOKEN, $chatId,
+            "🔢 هر نفر هم‌زمان چند بازیِ باز داشته باشد؟\n\nالان: <b>" .
+            gmNum((int)gmVal('open_max', 2)) . "</b>",
+            inlineKb([[btnUI('cancel', 'gm_home', 'cancel')]]));
         return true;
     }
     if ($data === 'gmadig') { answerCb(BOT_TOKEN, $cbId); gmAdminDigits($chatId, $msgId); return true; }
@@ -1026,6 +1056,15 @@ function gmStateHandle($action, $msg, $uid, $chatId) {
     $sd   = $st['data'] ?? [];
     $text = trim((string)($msg['text'] ?? ''));
     $back = inlineKb([[btnCb('🎮 بازی‌ها', 'gm_home', 'admin')]]);
+
+    if ($action === 'gm_openmax') {
+        $n = (int)str_replace([',', '،'], '', norm_fa_digits($text));
+        if ($n < 1 || $n > 50) { sendMsg(BOT_TOKEN, $chatId, "⚠️ بین ۱ تا ۵۰."); return true; }
+        gmSet(function (&$c) use ($n) { $c['open_max'] = $n; });
+        clearState($uid);
+        sendMsg(BOT_TOKEN, $chatId, '✅ سقف بازی باز: ' . gmNum($n), $back);
+        return true;
+    }
 
     if ($action === 'gm_digit') {
         $d = (string)($sd['d'] ?? '');
