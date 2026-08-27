@@ -400,14 +400,14 @@ function maDefaultCfg() {
         ],
 
         'theme' => [
-            'preset' => 'cyber',
-            'c1'  => '#00FF9C',
-            'c2'  => '#00B3FF',
-            'c3'  => '#FF2E97',
-            'bg'  => '#04070A',
+            'preset' => 'aurora',
+            'c1'  => '#8B5CF6',
+            'c2'  => '#6366F1',
+            'c3'  => '#22D3EE',
+            'bg'  => '#08090D',
             'glow' => 1,
-            'grain' => 1,
-            'fx'    => 2,
+            'grain' => 0,
+            'fx'    => 1,
         ],
 
         'ui' => [
@@ -586,6 +586,28 @@ function maDropOldTexts() {
         if ($cur === $old)
             maSet($k, function (&$a) { $a['ui']['topup_hint'] = ''; });
     }
+}
+
+/**
+ * 🔄 تمِ سبزِ قدیمیِ مینی‌اپ کانفیگ را کنار می‌گذارد تا تمِ تازه‌ی
+ * بنفش بنشیند. فقط وقتی که رنگ‌ها دقیقا همان پیش‌فرضِ قدیمی باشند —
+ * یعنی ادمین دستشان نزده. هر رنگی که خودتان انتخاب کرده باشید
+ * دست‌نخورده می‌ماند.
+ */
+function maDropOldTheme() {
+    $old = ['c1' => '#00FF9C', 'c2' => '#00B3FF', 'c3' => '#FF2E97', 'bg' => '#04070A'];
+    $th  = (array)(maGet('cfg')['theme'] ?? []);
+    foreach ($old as $k => $v)
+        if (strtoupper(trim((string)($th[$k] ?? ''))) !== $v) return false;
+
+    maSet('cfg', function (&$a) {
+        $d = maDefaultCfg()['theme'];
+        $a['theme'] = array_replace((array)($a['theme'] ?? []), [
+            'preset' => $d['preset'], 'c1' => $d['c1'], 'c2' => $d['c2'],
+            'c3' => $d['c3'], 'bg' => $d['bg'], 'grain' => $d['grain'], 'fx' => $d['fx'],
+        ]);
+    });
+    return true;
 }
 
 /** ویرایش پیکربندی یک مینی‌اپ */
@@ -3193,6 +3215,7 @@ function maPresetLabel($p) {
 /** 🎭 پالت‌های آماده */
 function maPalettes() {
     return [
+        'aurora'  => ['name' => '💜 بنفش پریمیوم', 'c1' => '#8B5CF6', 'c2' => '#6366F1', 'c3' => '#22D3EE', 'bg' => '#08090D'],
         'violet'  => ['name' => '🟣 بنفش کهکشانی', 'c1' => '#7C4DFF', 'c2' => '#00E5FF', 'c3' => '#FF3D9A', 'bg' => '#080512'],
         'neon'    => ['name' => '🟢 نئون سایبری',  'c1' => '#00FF9C', 'c2' => '#00B3FF', 'c3' => '#FF2E97', 'bg' => '#04070A'],
         'sunset'  => ['name' => '🟠 غروب آتشین',   'c1' => '#FF7A18', 'c2' => '#FFC24B', 'c3' => '#FF2D55', 'bg' => '#120703'],

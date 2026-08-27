@@ -8284,6 +8284,11 @@ function runBackgroundQueues() {
         @touch($mMark3);
         dropOldOrderText();
     }
+    $mMark4 = DATA_DIR . '/.migrated_v4';
+    if (!is_file($mMark4)) {
+        @touch($mMark4);
+        if (function_exists('maDropOldTheme')) maDropOldTheme();
+    }
 
     // 🗄 بایگانی سفارش‌ها — کم‌تکرار، چون خودش سنگین است
     $aMark = DATA_DIR . '/.archive_at';
