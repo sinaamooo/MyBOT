@@ -2563,8 +2563,40 @@ def join_gate(user_id):
         <button class="btn r">🗑 پاک کردن عبارت بازیابی</button>
       </form>
       <?php endif; ?>
+      <span class="badge <?= (int)$W['verified'] > 0 ? 'green' : 'amber' ?>">
+        <?= (int)$W['verified'] > 0 ? '✅ تایید شده ' . h(date('Y-m-d H:i', (int)$W['verified'])) : '⚠️ هنوز تایید نشده' ?></span>
+      <?php if ($bal !== null): ?><span class="badge gray">موجودی: <?= h($bal) ?> TON</span><?php endif; ?>
     </div>
-  </div>
+  </div></div>
+
+  <div class="card"><h2>📋 ترتیب راه‌اندازی امن</h2><div class="body">
+    <p class="muted" style="line-height:2.1">
+      ۱. یک ولت <b>تازه</b> بسازید و ۲۴ کلمه‌اش را جایی امن نگه دارید<br>
+      ۲. مقدار کمی TON داخلش بگذارید — مثلا ۱ تا ۲ تا<br>
+      ۳. همین بالا آدرس و عبارت بازیابی را بگذارید و <b>ذخیره</b> کنید<br>
+      ۴. <b>🧪 تایید مالکیت</b> را بزنید تا تیک سبز شود<br>
+      ۵. با <b>حالت آزمایشی روشن</b> یک خرید واقعی از مینی‌اپ بزنید — ربات در تلگرام
+         نشانتان می‌دهد چه تراکنشی ساخته و امضا شده، ولی چیزی نمی‌فرستد<br>
+      ۶. اگر مبلغ و مقصد درست بود، تیک آزمایشی را بردارید و <b>یک خرید خیلی کوچک</b> واقعی بزنید<br>
+      ۷. رسید که آمد، تمام است — از این به بعد بدون شما کار می‌کند
+    </p>
+  </div></div>
+
+  <div class="card"><h2>🩺 بررسی کامل — چه چیزی واقعا خودکار است؟</h2><div class="body">
+    <p class="muted" style="margin-bottom:14px"><b><?= $okN ?></b> از <b><?= count($AU) ?></b> مورد سرِ جایش است.
+      هر ⚠️ یعنی آن بخش منتظر شماست، نه اینکه خراب باشد.</p>
+    <div class="tgrid">
+      <?php foreach ($AU as $r): ?>
+        <div style="display:flex;gap:11px;align-items:flex-start">
+          <span style="font-size:16px;line-height:1.5"><?= $r['ok'] ? '✅' : '⚠️' ?></span>
+          <div><b style="font-size:13px"><?= h($r['name']) ?></b>
+            <?php if (trim((string)$r['why']) !== ''): ?>
+              <div class="muted" style="line-height:1.85"><?= h($r['why']) ?></div>
+            <?php endif; ?></div>
+        </div>
+      <?php endforeach; ?>
+    </div>
+  </div></div>
 
 <?php else: ?>
   <div class="card"><h2>⚙️ تنظیمات عمومی</h2><div class="body">
@@ -2754,41 +2786,7 @@ def join_gate(user_id):
       • پوشه <code>data_master/</code> شامل توکن ربات‌هاست؛ دسترسی عمومی به آن را ببندید
     </p>
   </div></div>
-      <?php endif; ?>
-      <span class="badge <?= (int)$W['verified'] > 0 ? 'green' : 'amber' ?>">
-        <?= (int)$W['verified'] > 0 ? '✅ تایید شده ' . h(date('Y-m-d H:i', (int)$W['verified'])) : '⚠️ هنوز تایید نشده' ?></span>
-      <?php if ($bal !== null): ?><span class="badge gray">موجودی: <?= h($bal) ?> TON</span><?php endif; ?>
-    </div>
-  </div></div>
-
-  <div class="card"><h2>📋 ترتیب راه‌اندازی امن</h2><div class="body">
-    <p class="muted" style="line-height:2.1">
-      ۱. یک ولت <b>تازه</b> بسازید و ۲۴ کلمه‌اش را جایی امن نگه دارید<br>
-      ۲. مقدار کمی TON داخلش بگذارید — مثلا ۱ تا ۲ تا<br>
-      ۳. همین بالا آدرس و عبارت بازیابی را بگذارید و <b>ذخیره</b> کنید<br>
-      ۴. <b>🧪 تایید مالکیت</b> را بزنید تا تیک سبز شود<br>
-      ۵. با <b>حالت آزمایشی روشن</b> یک خرید واقعی از مینی‌اپ بزنید — ربات در تلگرام
-         نشانتان می‌دهد چه تراکنشی ساخته و امضا شده، ولی چیزی نمی‌فرستد<br>
-      ۶. اگر مبلغ و مقصد درست بود، تیک آزمایشی را بردارید و <b>یک خرید خیلی کوچک</b> واقعی بزنید<br>
-      ۷. رسید که آمد، تمام است — از این به بعد بدون شما کار می‌کند
-    </p>
-  </div></div>
-
-  <div class="card"><h2>🩺 بررسی کامل — چه چیزی واقعا خودکار است؟</h2><div class="body">
-    <p class="muted" style="margin-bottom:14px"><b><?= $okN ?></b> از <b><?= count($AU) ?></b> مورد سرِ جایش است.
-      هر ⚠️ یعنی آن بخش منتظر شماست، نه اینکه خراب باشد.</p>
-    <div class="tgrid">
-      <?php foreach ($AU as $r): ?>
-        <div style="display:flex;gap:11px;align-items:flex-start">
-          <span style="font-size:16px;line-height:1.5"><?= $r['ok'] ? '✅' : '⚠️' ?></span>
-          <div><b style="font-size:13px"><?= h($r['name']) ?></b>
-            <?php if (trim((string)$r['why']) !== ''): ?>
-              <div class="muted" style="line-height:1.85"><?= h($r['why']) ?></div>
-            <?php endif; ?></div>
-        </div>
-      <?php endforeach; ?>
-    </div>
-  </div></div>
+<?php endif; ?>
 
 </div>
 

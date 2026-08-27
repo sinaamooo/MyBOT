@@ -150,8 +150,18 @@ function mutate($file, callable $fn) {
     $lockPath = dataPath($file) . '.lock';
     $dir = dirname($lockPath);
     if (!is_dir($dir)) @mkdir($dir, 0755, true);
-    $fp = fopen($lockPath, 'c');
-    if ($fp) flock($fp, LOCK_EX);
+    $fp = @fopen($lockPath, 'c');
+    if ($fp) {
+        flock($fp, LOCK_EX);
+    } else {
+        // بدون قفل، دو درخواست هم‌زمان می‌توانند روی هم بنویسند و یکی از
+        // دو تغییر گم شود — روی موجودی کاربر یعنی پول. پس صدایش را درمی‌آوریم.
+        static $warned = [];
+        if (empty($warned[$file])) {
+            $warned[$file] = true;
+            error_log('[shop-bot] قفل ساخته نشد (پوشه‌ی داده قابل نوشتن نیست؟): ' . $lockPath);
+        }
+    }
     // 🔑 همیشه تازه از دیسک — ممکن است درخواست دیگری همین الان نوشته باشد
     $data   = load($file, true);
     $result = $fn($data);
@@ -3559,6 +3569,7 @@ function admHome($chatId, $msgId = null) {
         [btnCb('🔧 راه‌اندازی خودکار', 'setup', 'confirm')],
         [btnCb('🌐 پنل وب', 'adm_web', 'info'),
          btnCb('🔒 تست نشتی داده', 'adm_leak', 'confirm')],
+        [btnCb('🩺 تست نوشتن روی دیسک', 'adm_wtest', 'confirm')],
         [btnCb(UT('home'), 'home', 'nav')],
     ];
     if ($msgId) editMsg(BOT_TOKEN, $chatId, $msgId, $text, inlineKb($rows));
@@ -3573,6 +3584,64 @@ function admHome($chatId, $msgId = null) {
  * به‌جای فرض کردن، واقعا از بیرون درخواست می‌دهیم و می‌بینیم فایل
  * برمی‌گردد یا نه. این تنها راه مطمئن است.
  */
+/**
+ * 🩺 تست نوشتن روی دیسک.
+ *
+ * اگر پوشه‌ی داده قابل نوشتن نباشد، ربات ظاهرا کار می‌کند ولی:
+ *   • جلوگیری از پیام تکراری کار نمی‌کند (همان پیام دوبار می‌رود)
+ *   • قفلِ نوشتن ساخته نمی‌شود و موجودی کاربر می‌تواند گم شود
+ * این تست همان سه کاری را می‌کند که ربات واقعا لازم دارد.
+ */
+function admWriteTest($chatId) {
+    $d = rtrim(DATA_DIR, '/');
+    $t = "🩺 <b>تست نوشتن روی دیسک</b>\n\n";
+    $t .= '📁 پوشه: <code>' . h($d) . "</code>\n";
+    $t .= (is_dir($d) ? '✅' : '🔴') . " پوشه هست\n";
+    $t .= (is_writable($d) ? '✅' : '🔴') . " قابل نوشتن است\n\n";
+
+    // ۱) ساخت فایل معمولی
+    $f1 = $d . '/.wtest';
+    $ok1 = @file_put_contents($f1, 'x') !== false;
+    $t .= ($ok1 ? '✅' : '🔴') . " نوشتن فایل\n";
+    @unlink($f1);
+
+    // ۲) قفل — همان چیزی که جلوی گم شدن موجودی را می‌گیرد
+    $f2 = $d . '/.wtest.lock';
+    $fp = @fopen($f2, 'c');
+    $ok2 = ($fp !== false) && flock($fp, LOCK_EX);
+    if ($fp) { @flock($fp, LOCK_UN); @fclose($fp); }
+    @unlink($f2);
+    $t .= ($ok2 ? '✅' : '🔴') . " قفل انحصاری (flock)\n";
+
+    // ۳) ادعای اتمی — همان چیزی که جلوی پیام تکراری را می‌گیرد
+    $dir = $d . '/.upd';
+    if (!is_dir($dir)) @mkdir($dir, 0755, true);
+    $f3 = $dir . '/.wtest';
+    @unlink($f3);
+    $h1 = @fopen($f3, 'x');
+    $h2 = @fopen($f3, 'x');     // این یکی باید شکست بخورد
+    $ok3 = ($h1 !== false) && ($h2 === false);
+    if ($h1) fclose($h1);
+    if ($h2) fclose($h2);
+    @unlink($f3);
+    $t .= ($ok3 ? '✅' : '🔴') . " جلوگیری از پیام تکراری\n";
+
+    $n = count(glob($dir . '/*') ?: []);
+    $t .= "\n📊 نشانه‌های ثبت‌شده‌ی آپدیت: <b>" . $n . "</b>\n";
+
+    if ($ok1 && $ok2 && $ok3) {
+        $t .= "\n✅ <b>همه‌چیز سالم است.</b>\n";
+        $t .= 'اگر باز پیام تکراری دیدید، یعنی وبهوک دوبار ثبت شده — ' .
+              "از پنل ← ربات‌های اپلودر ← «وبهوک ربات مادر» یک بار دوباره ست کنید.";
+    } else {
+        $t .= "\n🔴 <b>پوشه‌ی داده قابل نوشتن نیست.</b>\n";
+        $t .= "در cPanel → File Manager روی پوشه‌ی <code>data_master</code> راست‌کلیک کنید،\n" .
+              "Change Permissions را بزنید و دسترسی را روی <b>755</b> (یا اگر نشد ۷۷۵) بگذارید.\n\n" .
+              "تا این درست نشود، پیام تکراری و گم شدن موجودی ادامه دارد.";
+    }
+    sendMsg(BOT_TOKEN, $chatId, $t);
+}
+
 function admLeakTest($chatId) {
     $base = function_exists('maBaseUrl') ? maBaseUrl() : '';
     if ($base === '') {
@@ -6107,6 +6176,11 @@ function masterHandle($update) {
         }
 
         if ($data === 'adm_wallets') { answerCb(BOT_TOKEN, $cbId); admPay($chatId, $msgId); return; }
+        if ($data === 'adm_wtest') {
+            answerCb(BOT_TOKEN, $cbId);
+            admWriteTest($chatId);
+            return;
+        }
         if ($data === 'adm_leak') {
             answerCb(BOT_TOKEN, $cbId, '🔒 در حال تست…');
             admLeakTest($chatId);
@@ -8051,17 +8125,33 @@ if (isset($_GET['cron'])) {
  * فقط چند صد شناسه‌ی آخر نگه داشته می‌شود تا فایل کوچک بماند.
  */
 function seenUpdate($id) {
+    $id = (int)$id;
     if ($id <= 0) return true;
-    $fresh = false;
-    mutate('seen_updates', function (&$a) use ($id, &$fresh) {
-        $ids = (array)($a['ids'] ?? []);
-        if (in_array($id, $ids, true)) return;      // تکراری است
-        $ids[] = $id;
-        if (count($ids) > 400) $ids = array_slice($ids, -300);
-        $a['ids'] = array_values($ids);
-        $fresh = true;
-    });
-    return $fresh;
+
+    $dir = DATA_DIR . '/.upd';
+    if (!is_dir($dir)) @mkdir($dir, 0755, true);
+
+    // fopen با حالت 'x' یعنی «بساز، ولی اگر هست شکست بخور» — این کار در
+    // خود فایل‌سیستم اتمی انجام می‌شود، پس دو درخواست هم‌زمان هم هرگز
+    // هر دو موفق نمی‌شوند. برخلاف نوشتن در فایل JSON، اینجا اگر نوشتن
+    // ممکن نباشد خودمان می‌فهمیم و بی‌صدا از کنارش رد نمی‌شویم.
+    $f = $dir . '/' . $id;
+    $h = @fopen($f, 'x');
+    if ($h === false) {
+        // یا قبلا آمده (تکراری)، یا اصلا نمی‌شود نوشت
+        if (is_file($f)) return false;              // تکراری — رد کن
+        error_log('[shop-bot] پوشه‌ی .upd قابل نوشتن نیست: ' . $dir);
+        return true;                                // نمی‌توانیم بفهمیم؛ ربات نباید بخوابد
+    }
+    fclose($h);
+
+    // خانه‌تکانی — نشانه‌های کهنه‌تر از یک ساعت به درد نمی‌خورند
+    if (mt_rand(1, 50) === 1) {
+        $now = time();
+        foreach ((glob($dir . '/*') ?: []) as $old)
+            if ($now - (int)@filemtime($old) > 3600) @unlink($old);
+    }
+    return true;
 }
 
 /**

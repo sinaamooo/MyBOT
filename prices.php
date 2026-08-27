@@ -561,9 +561,10 @@ function pxStarsText($n = 1, $fresh = false) {
         foreach ($packs as $p) {
             $d = pxStars($p);
             if (!$d) continue;
+            // فهرست بسته‌ها فقط ستاره و عدد — ایموجی تومان و تون اینجا
+            // شلوغش می‌کرد، در حالی که بالاتر یک بار گفته شده عددها چیستند
             $lines[] = pxEm('star', '✨') . ' <b>' . number_format($p) . '</b> — ' .
-                       pxEm('toman', '💰') . ' ' . pxToman($d['irt']) . ' · ' .
-                       pxEm('ton', '💎') . ' ' . pxNum($d['ton']);
+                       pxToman($d['irt']);
         }
         $t .= implode("\n", $lines) . '</blockquote>' . "\n";
     }
