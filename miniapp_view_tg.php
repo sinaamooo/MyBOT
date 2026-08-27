@@ -191,7 +191,7 @@ __SKIN__
   <div id="sField"></div>
   <div class="total"><span>مبلغ قابل پرداخت</span><b id="sTotal">۰</b></div>
   <button class="go" id="sWal">پرداخت از کیف پول</button>
-  <button class="go alt" id="sGo">روش‌های دیگر پرداخت</button>
+  <button class="go alt" id="sGo">شارژ حساب</button>
   <div class="walbox" id="sWalNote"></div>
   <button class="ghost" id="sNo">بستن</button>
 </div>
@@ -296,7 +296,7 @@ $('curTop').textContent= B.currency;
 $('balLbl').textContent= U.balance;
 $('q').placeholder     = U.search;
 $('sWal').textContent  = U.pay_wallet;
-$('sGo').textContent   = U.pay_other;
+$('sGo').textContent   = U.topup_btn || 'شارژ حساب';
 $('sNo').textContent   = U.close;
 $('wTtl').textContent  = U.done;
 $('wSub').textContent  = U.done_sub;
@@ -729,7 +729,7 @@ function open(id){
   $('sOrb').textContent  = it.emoji || '💠';
   $('sName').textContent = it.name;
   $('sDesc').textContent = it.desc || '';
-  $('sGo').disabled  = false; $('sGo').textContent  = U.pay_other;
+  $('sGo').disabled  = false; $('sGo').textContent  = U.topup_btn || 'شارژ حساب';
   $('sWal').disabled = false; $('sWal').textContent = U.pay_wallet;
 
   var f = $('sField'), html = '';
@@ -900,6 +900,8 @@ function walletState(){
   var t = sum(), enough = S.bal >= t;
   var noVol = it.ask === 'volume' && !(it.vols && it.vols.length);
   $('sWal').disabled = !enough || !!it.stale || noVol;
+  // دکمه‌ی شارژ فقط وقتی به‌دردی می‌خورد که موجودی کم باشد
+  $('sGo').style.display = enough ? 'none' : '';
   $('sWalNote').innerHTML = enough
     ? '👛 موجودی شما: <b>' + fa(S.bal) + '</b> ' + esc(B.currency) +
       ' · بعد از پرداخت: <b>' + fa(S.bal - t) + '</b>'
@@ -975,12 +977,22 @@ function send(payMode, btn){
           if (pb) pb.textContent = fa(j.price);
         }
       }
-      if (j && j.error === 'no_balance'){ shut(); }
+      if (j && j.error === 'no_balance'){
+        if (typeof j.balance === 'number') { S.bal = j.balance; setBal(j.balance); }
+        walletState();
+        toast((j && j.message) ? j.message : U.low_bal);
+        go('me');                        // بخش شارژ همان‌جاست
+        return;
+      }
       toast((j && j.message) ? j.message : 'ثبت سفارش انجام نشد.');
     });
 }
 $('sWal').onclick = function(){ if (ADM.mode) { admSave(); return; } send('wallet', this); };
-$('sGo').onclick  = function(){ if (ADM.mode) { admDel();  return; } send('',       this); };
+$('sGo').onclick  = function(){
+  if (ADM.mode) { admDel(); return; }
+  // خرید همیشه از موجودی انجام می‌شود؛ این دکمه فقط می‌برد به شارژ
+  shut(); tap(); go('me');
+};
 
 $('wGo').onclick   = function(){ if (TG) { try{ TG.close(); }catch(e){} } else location.reload(); };
 $('wBack').onclick = function(){ $('win').classList.remove('on'); tap(); go('shop'); };

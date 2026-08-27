@@ -645,6 +645,9 @@ function defaultConfig() {
             'orders_head'  => "📊 <b>سفارش‌های شما</b>\n",
             'referral'     => "👥 <b>زیر مجموعه گیری</b>\n\nبا دعوت دوستان خود <b>{percent}%</b> از هر خرید آن‌ها را دریافت کنید.\n\n🔗 لینک اختصاصی شما:\n{link}\n\n👥 تعداد زیرمجموعه: <b>{referrals}</b>\n💵 درآمد شما: <b>{ref_earned}</b> تومان",
             'topup'        => "➕ <b>افزایش موجودی</b>\n\nمبلغ مورد نظر را به تومان وارد کنید (فقط عدد):",
+            // ✅ پیامی که بعد از تایید شارژ به کاربر می‌رسد.
+            // ایموجی پریمیوم و <blockquote> هم می‌شود گذاشت.
+            'topup_ok'     => "✅ <b>حساب شما شارژ شد</b>\n\n<blockquote>➕ مبلغ: <b>{amount}</b> تومان\n💰 موجودی: <b>{balance}</b> تومان</blockquote>",
             'buy_empty'    => "🛒 در حال حاضر محصولی برای فروش موجود نیست.",
             'buy_head'     => "🛒 <b>محصولات</b>\n\nیکی از محصولات زیر را انتخاب کنید:\n",
             'pay_info'     => "💳 <b>اطلاعات پرداخت</b>\n\n{title}\nمبلغ: <b>{amount} {currency}</b>\nروش: {method}\n\n💠 مقصد پرداخت:\n<code>{wallet}</code>\n\n🧾 شناسه سفارش: <code>{id}</code>\n\n⚠️ بعد از واریز، دکمه «ارسال رسید» را بزنید.",
@@ -3361,8 +3364,9 @@ function completeApprovedOrder($order) {
     if (($order['type'] ?? '') === 'topup') {
         $uidT = $order['user_id'];
         $balT = (float)(getUser($uidT)['balance'] ?? 0);
-        $t = "✅ کیف پول شما <b>" . fmtNum($order['amount']) . "</b> تومان شارژ شد.\n" .
-             "💰 موجودی جدید: <b>" . fmtNum($balT) . "</b> تومان";
+        $t = T('topup_ok', ['amount' => fmtNum($order['amount']), 'balance' => fmtNum($balT)]);
+        if (trim($t) === '')     // اگر ادمین متن را خالی کرد، ربات لال نماند
+            $t = '✅ حساب شما <b>' . fmtNum($order['amount']) . '</b> تومان شارژ شد.';
 
         // 🛒 سفارش نیمه‌تمام داشت و حالا پول کافی است → همین حالا خودکار ثبتش کن
         $pend = getUser($uidT)['pending'] ?? null;
@@ -4028,7 +4032,7 @@ function textLabels() {
         'pay_info' => '💳 اطلاعات پرداخت', 'receipt_ask' => '🧾 درخواست رسید',
         'receipt_ok' => '✅ رسید ثبت شد', 'approved' => '✅ تایید سفارش',
         'rejected' => '❌ رد سفارش', 'no_balance' => '❌ موجودی کم',
-        'banned' => '🚫 کاربر مسدود',
+        'banned' => '🚫 کاربر مسدود', 'topup_ok' => '✅ متن شارژ شدن حساب',
         'flow_link' => '🔗 سوال لینک کانال', 'flow_link_bad' => '🔗 لینک نامعتبر',
         'flow_qty' => '👥 سوال تعداد', 'flow_qty_bad' => '👥 تعداد نامعتبر',
         'flow_speed' => '⚡️ سوال سرعت', 'flow_rate' => '💰 نمایش نرخ',
@@ -8109,6 +8113,7 @@ function runBackgroundQueues() {
     if (!is_file($mMark)) {
         @touch($mMark);
         if (function_exists('pxDropOldDemo')) pxDropOldDemo();
+        if (function_exists('maDropOldTexts')) maDropOldTexts();
     }
 
     // 🗄 بایگانی سفارش‌ها — کم‌تکرار، چون خودش سنگین است

@@ -218,7 +218,7 @@ function maDefaultTg() {
             'pay_other'  => 'روش‌های دیگر پرداخت',
             'low_bal'    => 'موجودی کافی نیست',
             'paid_ok'    => 'پرداخت شد',
-            'topup_hint' => 'برای شارژ کیف پول، داخل ربات «افزایش موجودی» را بزنید.',
+            'topup_hint' => 'برای شارژ، دکمه‌ی «شارژ حساب» را بزنید — همین‌جا انجام می‌شود.',
             // 🆕 صفحه‌های تازه
             'nav_home'   => 'خانه',
             'nav_shop'   => 'فروشگاه',
@@ -425,7 +425,7 @@ function maDefaultCfg() {
             'pay_other'  => 'روش‌های دیگر پرداخت',
             'low_bal'    => 'موجودی کافی نیست',
             'paid_ok'    => 'پرداخت شد',
-            'topup_hint' => 'برای شارژ کیف پول، داخل ربات «افزایش موجودی» را بزنید.',
+            'topup_hint' => 'برای شارژ، دکمه‌ی «شارژ حساب» را بزنید — همین‌جا انجام می‌شود.',
             // 🆕 صفحه‌های تازه
             'nav_home'   => 'خانه',
             'nav_shop'   => 'پلن‌ها',
@@ -569,6 +569,23 @@ function maGet($key) {
         $a['items'][$i] = array_replace($byId[$id], is_array($it) ? $it : []);
     }
     return $a;
+}
+
+/**
+ * 🔄 متن‌های راهنمای قدیمی که دیگر درست نیستند.
+ *
+ * «برای شارژ داخل ربات …» وقتی نوشته شده بود که خرید داخل ربات تمام
+ * می‌شد. حالا همه‌چیز داخل مینی‌اپ است، پس آن راهنما آدرس غلط می‌دهد.
+ * فقط متنی که دقیقا برابر همان پیش‌فرضِ قدیمی است پاک می‌شود تا
+ * پیش‌فرضِ تازه جایش بنشیند؛ متنی که ادمین خودش نوشته دست نمی‌خورد.
+ */
+function maDropOldTexts() {
+    $old = 'برای شارژ کیف پول، داخل ربات «افزایش موجودی» را بزنید.';
+    foreach (maKeys() as $k) {
+        $cur = trim((string)(maGet($k)['ui']['topup_hint'] ?? ''));
+        if ($cur === $old)
+            maSet($k, function (&$a) { $a['ui']['topup_hint'] = ''; });
+    }
 }
 
 /** ویرایش پیکربندی یک مینی‌اپ */
@@ -1188,6 +1205,11 @@ class MaOrder
      * اگر کال‌بک چیزی برگرداند، همان برمی‌گردد — این برای «قفل گرفتن» لازم است:
      * تابع می‌تواند false برگرداند تا بگوید شرط برقرار نبود.
      */
+    /** سفارشی که هیچ‌وقت پرداخت نشد و نگه داشتنش فایده‌ای ندارد */
+    public static function remove($id) {
+        mutate('ma_orders', function (&$a) use ($id) { unset($a[(string)$id]); });
+    }
+
     public static function set($id, callable $fn) {
         return mutate('ma_orders', function (&$a) use ($id, $fn) {
             if (!isset($a[$id])) return false;
@@ -2420,34 +2442,38 @@ function maApi() {
 
         $oid = MaOrder::create($key, $uid, $uname, $item, $qty, $total, $field);
 
-        // 👛 پرداخت مستقیم از کیف پول، بدون خروج از مینی‌اپ
-        if (($body['pay'] ?? '') === 'wallet') {
-            [$paid, $perr] = maPayFromWallet($oid, $uid);
-            if ($paid) {
-                $o = MaOrder::get($oid);
-                $bal = (float)(getUser($uid)['balance'] ?? 0);
-                maApiOut([
-                    'ok' => true, 'order' => $oid, 'total' => $total, 'paid' => true,
-                    'balance' => $bal,
-                    'done' => ($o['status'] === MaOrder::DONE),
-                    'message' => ($o['status'] === MaOrder::DONE)
-                        ? 'پرداخت شد و سفارش انجام شد ✅'
-                        : 'پرداخت از کیف پول انجام شد. سفارش در حال پردازش است.',
-                ]);
-            }
-            // موجودی کافی نبود — فاکتور می‌رود داخل ربات تا شارژ کند
-            $o = MaOrder::get($oid);
-            sendMsg(BOT_TOKEN, $uid, maInvoiceText($o), maInvoiceKb($o));
-            maApiOut(['ok' => false, 'error' => 'no_balance', 'order' => $oid,
-                      'message' => $perr . ' فاکتور داخل ربات فرستاده شد.'], 402);
+        // 👛 پرداخت همیشه از کیف پول و همیشه داخل خود مینی‌اپ.
+        //
+        // قبلا فاکتور داخل ربات فرستاده می‌شد و کاربر باید از مینی‌اپ
+        // بیرون می‌آمد. حالا خرید همان‌جا تمام می‌شود: پول کم می‌شود،
+        // رسید همان‌جا نشان داده می‌شود، و هیچ پیامی به ربات نمی‌رود.
+        [$paid, $perr] = maPayFromWallet($oid, $uid);
+
+        if (!$paid) {
+            // موجودی کم بود — سفارشِ نیمه‌کاره را نگه نمی‌داریم
+            $need = max(0.0, (float)$total - (float)(getUser($uid)['balance'] ?? 0));
+            MaOrder::remove($oid);
+            maApiOut([
+                'ok' => false, 'error' => 'no_balance',
+                'balance' => (float)(getUser($uid)['balance'] ?? 0),
+                'need'    => $need,
+                'total'   => (float)$total,
+                'message' => trim($perr) !== ''
+                    ? $perr
+                    : 'موجودی کافی نیست. ' . maMoney($need) . ' تومان کم دارید.',
+            ], 402);
         }
 
-        // فاکتور را داخل خود ربات می‌فرستیم — پرداخت آنجا انجام می‌شود
-        $o = MaOrder::get($oid);
-        sendMsg(BOT_TOKEN, $uid, maInvoiceText($o), maInvoiceKb($o));
-
-        maApiOut(['ok' => true, 'order' => $oid, 'total' => $total,
-                  'message' => maUT($key, 'done_sub')]);
+        $o   = MaOrder::get($oid);
+        $bal = (float)(getUser($uid)['balance'] ?? 0);
+        maApiOut([
+            'ok' => true, 'order' => $oid, 'total' => $total, 'paid' => true,
+            'balance' => $bal,
+            'done' => ($o['status'] === MaOrder::DONE),
+            'message' => ($o['status'] === MaOrder::DONE)
+                ? maUT($key, 'done_sub')
+                : 'پرداخت انجام شد. سفارش در حال پردازش است.',
+        ]);
     }
 
     maApiOut(['ok' => false, 'error' => 'unknown_action'], 400);
