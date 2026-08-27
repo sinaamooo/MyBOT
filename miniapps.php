@@ -3871,7 +3871,7 @@ function maAdmFulfillOp($chatId, $msgId, $op) {
          btnCb('💠 مسیر مقدار', 'maadm_ffo_' . $op . '|val_path', 'admin')],
         [btnCb('⚠️ مسیر خطا', 'maadm_ffo_' . $op . '|err_path', 'admin')],
         [btnCb('1️⃣ مسیر مرحله‌ی اول', 'maadm_ffo_' . $op . '|pre_path', 'admin'),
-         btnCb('📮 متد', 'maadm_ffo_' . $op . '|pre_method', 'admin')],
+         btnCb('📮 متد مرحله‌ی اول', 'maadm_ffo_' . $op . '|pre_method', 'admin')],
         [btnCb('1️⃣ بدنه‌ی مرحله‌ی اول', 'maadm_ffo_' . $op . '|pre_body', 'admin'),
          btnCb('🔗 نقشه', 'maadm_ffo_' . $op . '|pre_map', 'admin')],
         [btnCb('🔎 تست مرحله‌ی اول (بی‌خطر)', 'maadm_ffpre_' . $op, 'confirm')],
