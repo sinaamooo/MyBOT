@@ -27,8 +27,9 @@ function gmDefaults() {
     return [
         'on'        => false,
         // چالش به‌صورت پیش‌فرض همان لحظه‌ی پیوستنِ نفر دوم نتیجه می‌دهد.
-        // اگر روزی صفحه‌ی دوز را خواستید، این را روشن کنید.
-        'duel_board' => false,
+        // 🎯 صفحه‌ی دوز: نفر دوم که پیوست، به‌جای اعلام درجای نتیجه، یک
+        //    جدول ۹ خانه‌ای باز می‌شود و دو نفر نوبتی بازی می‌کنند.
+        'duel_board' => true,
         // 🔢 هر نفر هم‌زمان چند بازیِ باز داشته باشد
         'open_max'  => 2,
         // ⏰ بازیِ بی‌حریف بعد از چند ثانیه خودکار لغو و شرط برگردانده شود
@@ -57,7 +58,7 @@ function gmDefaults() {
                             "🧾 مالیات:\n{tax_big}</blockquote>\n\n" .
                             "برای شروع بازی، نفر دوم روی پیوستن بزند.",
             'duel_turn'  => "{emoji} <b>چالش {stake} الماسی</b>\n\n" .
-                            "<blockquote>🔵 {p1}\n🟢 {p2}\n" .
+                            "<blockquote>🟢 {p1}\n🔴 {p2}\n" .
                             "🏆 جایزه: <b>{prize}</b> الماس</blockquote>\n\n" .
                             "نوبت: {turn}",
             'duel_win'   => "🎉 <b>نتیجه بازی مشخص شد</b>\n\n" .
@@ -80,7 +81,7 @@ function gmDefaults() {
             'rand_join'  => "🎲 شرکت در بازی",
 
             // ── دکمه‌های نتیجه ──
-            'lbl_prize'  => "🏆 جایزه برنده",
+            'bal_pop'    => "💎 موجودی {name}: {points} الماس",
             'lbl_wbal'   => "💎 موجودی برنده",
             'lbl_lbal'   => "❌ موجودی بازنده",
 
@@ -116,6 +117,7 @@ function gmDefaults() {
             'already'    => "تو که خودت داخل این بازی هستی — منتظر حریف بمان.",
             'open_max'   => "⛔️ شما <b>{n}</b> بازی باز دارید.\n\nاول همان‌ها تمام یا لغو شوند، بعد بازی تازه بسازید.",
             'expired'    => "⏳ <b>کسی وارد نشد</b>\n\nشرط به سازنده برگشت.",
+            'idle'       => "⏳ <b>بازی نیمه‌کاره ماند</b>\n\nکسی نوبتش را نزد؛ شرط هر دو نفر برگشت.",
             'lbl_cancel_duel' => "چالش لغو شد",
             'lbl_cancel_rand' => "بازی لغو شد",
         ],
@@ -217,7 +219,7 @@ function gmBigNum($n) {
  */
 function gmBtnKeys() {
     return ['duel_join', 'duel_cancel', 'rand_join',
-            'lbl_prize', 'lbl_wbal', 'lbl_lbal',
+            'lbl_wbal', 'lbl_lbal',
             'lbl_cancel_duel', 'lbl_cancel_rand',
             'bal_btn', 'send_bal', 'send_bal2'];
 }
@@ -254,11 +256,14 @@ function gmBtn($key, $vars, $data, $style = null) {
     return $b;
 }
 
-/** عددها همیشه فارسی و سه‌رقم‌سه‌رقم */
+/**
+ * عددها سه‌رقم‌سه‌رقم و با رقمِ انگلیسی.
+ *
+ * رقمِ فارسی روی دکمه‌های شیشه‌ای بد می‌نشست و در کنار عددهای درشتِ
+ * ایموجی هم ناجور بود؛ حالا همه‌جای بازی یک‌شکل است.
+ */
 function gmNum($n) {
-    $s = number_format((float)$n, 0, '.', '٬');
-    return strtr($s, ['0'=>'۰','1'=>'۱','2'=>'۲','3'=>'۳','4'=>'۴',
-                      '5'=>'۵','6'=>'۶','7'=>'۷','8'=>'۸','9'=>'۹']);
+    return number_format((float)$n, 0, '.', ',');
 }
 
 // ============================================================
@@ -464,10 +469,10 @@ function gmKb($g) {
         for ($c = 0; $c < 3; $c++) {
             $i = $r * 3 + $c;
             $v = (int)$g['board'][$i];
-            $b = ['text' => $v === 0 ? '·' : ($v === 1 ? '🔵' : '🟢'),
+            $b = ['text' => $v === 0 ? '·' : ($v === 1 ? '🟢' : '🔴'),
                   'callback_data' => 'gmm_' . $g['id'] . '_' . $i];
-            if ($v === 1) $b['style'] = 'primary';    // بازیکن اول — آبی
-            if ($v === 2) $b['style'] = 'success';    // بازیکن دوم — سبز
+            if ($v === 1) $b['style'] = 'success';    // بازیکن اول — سبز
+            if ($v === 2) $b['style'] = 'danger';     // بازیکن دوم — قرمز
             $line[] = $b;
         }
         $rows[] = $line;
@@ -493,16 +498,16 @@ function gmShow($g, $replyTo = null) {
 }
 
 /**
- * 🏁 پیام نتیجه — چهار دکمه‌ی شیشه‌ای، دوتا بالا دوتا پایین.
- * راست‌ها برچسب‌اند و چپ‌ها عدد، دقیقا مثل کارت نتیجه‌ی خود بازی.
+ * 🏁 پیام نتیجه — دو دکمه، زیر هم.
+ *
+ * جایزه و شرط قبلا هم روی دکمه بودند هم داخل متن، و فقط جا می‌گرفتند.
+ * حالا فقط موجودی برنده و بازنده می‌ماند و عددش روی دکمه نیست: هرکس
+ * بزند، موجودی همان لحظه داخل یک پنجره‌ی کوچک بالا می‌آید.
  */
-function gmResultKb($prize, $wBal, $lBal) {
-    return inlineKb([
-        [['text' => gmNum($prize), 'callback_data' => 'gmnop', 'style' => 'success'],
-         gmBtn('lbl_prize', [], 'gmnop', 'success')],
-        [['text' => gmNum($lBal), 'callback_data' => 'gmnop', 'style' => 'danger'],
-         gmBtn('lbl_lbal', [], 'gmnop', 'danger')],
-    ]);
+function gmResultKb($winnerId, $loserId) {
+    $rows = [[gmBtn('lbl_wbal', [], 'gmb_' . (int)$winnerId, 'success')]];
+    if ((int)$loserId) $rows[] = [gmBtn('lbl_lbal', [], 'gmb_' . (int)$loserId, 'danger')];
+    return inlineKb($rows);
 }
 
 // ============================================================
@@ -531,7 +536,7 @@ function gmFinish($g, $winnerId, $loserId) {
         'tax'    => gmNum($tax),
         'stake'  => gmNum($g['stake']),
     ]);
-    $kb = gmResultKb($prize, gmPoints($winnerId), $loserId ? gmPoints($loserId) : 0);
+    $kb = gmResultKb($winnerId, $loserId);
 
     if ((int)$g['msg']) editMsg(BOT_TOKEN, $g['chat'], (int)$g['msg'], $text, $kb);
     else                sendMsg(BOT_TOKEN, $g['chat'], $text, $kb);
@@ -587,6 +592,15 @@ function gmTick($limit = 20) {
 
     foreach (gmAll() as $g) {
         if ($done >= $limit) break;
+        // 🪑 دوزی که وسطش رها شده. حالا که صفحه‌ی دوز روشن است، یک نفر
+        //    می‌تواند بپیوندد و برود؛ بدون این، بازی تا ابد «در حال بازی»
+        //    می‌ماند و جای هر دو نفر را از سقفِ بازی باز اشغال می‌کند.
+        if (($g['status'] ?? '') === 'playing') {
+            $idle = (int)($g['moved'] ?? $g['created'] ?? 0);
+            if ($idle > 0 && ($now - $idle) >= $exp) { gmRefund($g, gmT('idle')); $done++; }
+            continue;
+        }
+
         if (($g['status'] ?? '') !== 'open') continue;
 
         // ⏰ بی‌حریف مانده و مهلتش تمام شده؟ لغو و شرط برگردد.
@@ -639,12 +653,11 @@ function gmDraw($g) {
             $x['ends']   = time() + max(3, (int)gmVal('wait', 8));
             return true;
         });
-        // ⚠️ فقط همان پیامِ موجود به‌روز می‌شود. اگر شناسه‌ی پیام را
-        // نداشته باشیم هیچ پیام تازه‌ای نمی‌فرستیم — وگرنه هر بار که
-        // قرعه بی‌حریف می‌ماند یک پیام تازه در گروه می‌نشست و گروه
-        // پر از «بازی ۱۰۰ الماسی» می‌شد.
-        $gg = gmGet($g['id']) ?: $g;
-        if ((int)($gg['msg'] ?? 0) > 0) gmShow($gg);
+        // ⚠️ اینجا هیچ پیامی فرستاده یا ویرایش نمی‌شود. متنِ قرعه از
+        // مهلتش چیزی نمی‌گوید، پس با هر بار مسلح شدن دقیقا همان متن
+        // دوباره ساخته می‌شد؛ تلگرام «تغییری نکرده» می‌گفت و یک پیامِ
+        // تکراری در گروه می‌نشست. شمارِ شرکت‌کننده‌ها هم که موقع
+        // پیوستنِ هر نفر تازه می‌شود.
         return;
     }
 
@@ -738,7 +751,41 @@ function gmHandleText($text, $uid, $chatId, $name, $uname = '', $replyTo = null,
     $thread = (int)($msg['message_thread_id'] ?? 0);
     $g = gmCreate($kind, $stake, $uid, $chatId, $name, $uname, $thread);
     gmShow($g, $replyTo);
+    gmPruneMsgs($uid, $chatId);
     return true;
+}
+
+/**
+ * 🧹 گروه شلوغ نشود.
+ *
+ * هر کاربر فقط تازه‌ترین پیام‌های بازی‌اش در این گروه بماند و بقیه پاک
+ * شوند. سقف همان سقفِ بازی باز است، پس کسی که دو چالش می‌سازد،
+ * پیام‌های قبلی‌اش خودشان می‌روند.
+ *
+ * پاک کردن ممکن است نگیرد (ربات ادمین نباشد، یا پیام از ۴۸ ساعت
+ * گذشته باشد). اشکالی ندارد — شناسه را صفر می‌کنیم تا دفعه‌ی بعد
+ * دوباره سراغش نرویم.
+ */
+function gmPruneMsgs($uid, $chat, $keep = null) {
+    $keep = $keep === null ? max(1, (int)gmVal('open_max', 2)) : max(0, (int)$keep);
+
+    $mine = [];
+    foreach (gmAll() as $g) {
+        if ((int)($g['host'] ?? 0) !== (int)$uid) continue;
+        if ((string)($g['chat'] ?? '') !== (string)$chat) continue;
+        if ((int)($g['msg'] ?? 0) <= 0) continue;
+        $mine[] = $g;
+    }
+    if (count($mine) <= $keep) return 0;
+
+    usort($mine, fn($a, $b) => (int)($b['created'] ?? 0) <=> (int)($a['created'] ?? 0));
+    $gone = 0;
+    foreach (array_slice($mine, $keep) as $g) {
+        delMsg(BOT_TOKEN, $g['chat'], (int)$g['msg']);
+        gmSetGame($g['id'], function (&$x) { $x['msg'] = 0; return true; });
+        $gone++;
+    }
+    return $gone;
 }
 
 // ============================================================
@@ -802,6 +849,18 @@ function gmCallback($data, $uid, $chatId, $msgId, $cbId, $from = []) {
     if (!str_starts_with((string)$data, 'gm')) return false;
     if ($data === 'gmnop') { answerCb(BOT_TOKEN, $cbId); return true; }
 
+    // 💎 دکمه‌های موجودی روی پیام نتیجه — عدد روی دکمه نیست، همین‌جا و
+    //    همین لحظه از انبار خوانده می‌شود تا کهنه نباشد.
+    if (preg_match('/^gmb_(\d+)$/', (string)$data, $bm)) {
+        $who = (int)$bm[1];
+        $u   = function_exists('dmUser') ? dmUser($who) : null;
+        answerCb(BOT_TOKEN, $cbId, gmT('bal_pop', [
+            'name'   => trim((string)($u['name'] ?? '')) !== '' ? (string)$u['name'] : (string)$who,
+            'points' => gmNum(gmPoints($who)),
+        ]), true);
+        return true;
+    }
+
     // پیشوندهای پنل، جای دیگری رسیدگی می‌شوند
     if (str_starts_with($data, 'gma')) return false;
 
@@ -863,7 +922,9 @@ function gmCallback($data, $uid, $chatId, $msgId, $cbId, $from = []) {
             if (isset($x['players'][(string)$uid])) return false;
             if ($x['kind'] === 'duel' && count($x['players']) >= 2) return false;
             $x['players'][(string)$uid] = ['id' => (int)$uid, 'name' => $name, 'uname' => $uname];
-            if ($x['kind'] === 'duel') { $x['status'] = 'playing'; $x['turn'] = (int)$x['host']; }
+            if ($x['kind'] === 'duel') {
+                $x['status'] = 'playing'; $x['turn'] = (int)$x['host']; $x['moved'] = time();
+            }
             $joined = true;
             return true;
         });
@@ -913,6 +974,7 @@ function gmCallback($data, $uid, $chatId, $msgId, $cbId, $from = []) {
         if ((int)$x['board'][$cell] !== 0)  return false;
         $x['board'][$cell] = $mark;
         $x['turn'] = (int)$next;
+        $x['moved'] = time();
         $moved = true;
         return true;
     });
@@ -1007,7 +1069,7 @@ function gmLabels() {
         'duel_join' => 'دکمه پیوستن',     'duel_cancel' => 'دکمه لغو',
         'rand_open' => 'قرعه — پیام باز', 'rand_win' => 'قرعه — نتیجه',
         'rand_none' => 'قرعه — بی‌شرکت‌کننده', 'rand_join' => 'دکمه شرکت در بازی',
-        'lbl_prize' => 'برچسب جایزه برنده', 'lbl_wbal' => 'برچسب موجودی برنده',
+        'bal_pop'   => 'پنجره‌ی موجودی (نتیجه)', 'lbl_wbal' => 'برچسب موجودی برنده',
         'lbl_lbal'  => 'برچسب موجودی بازنده',
         'bal_head'  => 'موجودی — متن',     'bal_btn' => 'موجودی — دکمه',
         'send_ok'   => 'انتقال — موفق',    'send_bal' => 'انتقال — برچسب فرستنده',
@@ -1020,6 +1082,7 @@ function gmLabels() {
         'group_only'=> 'فقط داخل گروه', 'already' => 'خودت داخل بازی هستی',
         'open_max'  => 'سقف بازی باز',
         'expired'   => 'بی‌حریف — مهلت تمام شد',
+        'idle'      => 'بازی نیمه‌کاره (رهاشده)',
         'lbl_cancel_duel' => 'دکمه‌ی «چالش لغو شد»',
         'lbl_cancel_rand' => 'دکمه‌ی «بازی لغو شد»',
     ];
@@ -1169,6 +1232,7 @@ function gmVars($k) {
     if (str_starts_with($k, 'send_ok'))   return ['from', 'to', 'amount', 'tax', 'total', 'fbal', 'tbal'];
     if ($k === 'low')                     return ['points', 'need'];
     if ($k === 'bad_stake')               return ['min', 'max'];
+    if ($k === 'bal_pop')                 return ['name', 'points'];
     if ($k === 'send_how')                return ['word'];
     if ($k === 'duel_how' || $k === 'rand_how') return ['word', 'min', 'max'];
     return [];

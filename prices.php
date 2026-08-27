@@ -24,7 +24,14 @@ function pxDefaults() {
         // منبع قیمت
         'api' => 'https://swapwallet.app/api/v1/market/prices',
         'key' => 'apikey-h8T5ufE73fILlDudXnPJp6CRYV9PSMKviBB0SxCXCAOzSFneGcBHaUa19am2kTIU',
-        'ttl' => 15,          // ثانیه — قیمت لحظه‌ای یعنی کش کوتاه
+        // ⏱ عمر کشِ قیمت.
+        //
+        // ۱۵ ثانیه بود و همین کندش می‌کرد: کارتِ قیمت با خودِ عدد کلید
+        // می‌خورد، پس هر بار که عدد تکان می‌خورد کارت از نو ساخته و از
+        // نو آپلود می‌شد — نزدیک یک ثانیه برای هر نفر. با یک دقیقه، در
+        // هر دقیقه فقط نفر اول هزینه می‌دهد و بقیه همان تصویر را با
+        // شناسه‌ی فایل می‌گیرند. قیمت تومانی هم در یک دقیقه کهنه نمی‌شود.
+        'ttl' => 60,
 
         // 📡 منبع دوم: طلا، سکه و پول کشورها (API اصلی فقط ارز دیجیتال دارد)
         // چند آدرس، با خط جدا. هرکدام جواب داد، همان استفاده می‌شود — پس
@@ -55,6 +62,7 @@ function pxDefaults() {
             'chg'    => '6050900104431278847',   // 📈 جلوی درصد تغییرات
             'conv'   => '4931934645626341248',   // 💱 سرِ قالب تبدیل
 
+            'frag'  => '4902715076873553054',   // 🔻 چسبیده به «Fragment» پایین قالب
             'card'  => '5343902037438391058',
             'price' => '5841359408952513916',
             'prem'  => '5899945812296731931',
@@ -214,7 +222,7 @@ function pxWarm() {
 
 /** آیا الان کشِ قیمت کهنه است؟ (تا بدانیم بعدا تازه‌سازی لازم است) */
 function pxStale() {
-    if (maCacheGet('px_pairs', (int)pxVal('ttl', 120)) === null) return true;
+    if (maCacheGet('px_pairs', max(15, (int)pxVal('ttl', 60))) === null) return true;
     if (trim((string)pxVal('alt_url', '')) !== ''
         && maCacheGet('px_alt', max(30, (int)pxVal('alt_ttl', 300))) === null) return true;
     return false;
@@ -306,16 +314,40 @@ function pxFetch($fresh = false) {
  * کارت‌ها «۰٪» نشان می‌دادند. حالا خودمان هر نیم‌ساعت یک نقطه ذخیره
  * می‌کنیم و درصد را نسبت به ۲۴ ساعت پیش حساب می‌کنیم.
  *
- * فایل کوچک می‌ماند: حداکثر یک نقطه در نیم‌ساعت و فقط ۵۰ ساعت اخیر.
+ * فایل کوچک می‌ماند: دو ساعت اخیر دقیقه‌به‌دقیقه، کهنه‌ترها ۱۰ دقیقه‌ای.
  */
-if (!defined('PX_HIST_STEP')) define('PX_HIST_STEP', 600);     // ۱۰ دقیقه
+if (!defined('PX_HIST_STEP')) define('PX_HIST_STEP', 60);      // هر دقیقه یک نقطه
 if (!defined('PX_HIST_KEEP')) define('PX_HIST_KEEP', 180000);  // ۵۰ ساعت
+if (!defined('PX_HIST_FINE')) define('PX_HIST_FINE', 7200);    // ۲ ساعتِ اخیر، دقیقه‌به‌دقیقه
+if (!defined('PX_HIST_COARSE')) define('PX_HIST_COARSE', 600); // کهنه‌ترها، ۱۰ دقیقه‌ای
+
+/**
+ * تاریخچه را کوچک نگه می‌دارد.
+ *
+ * دقیقه‌به‌دقیقه ثبت کردن یعنی ۵۰ ساعت می‌شود ۳۰۰۰ نقطه برای هر جفت —
+ * فایل بی‌خود بزرگ می‌شود. پس دو ساعت اخیر کامل می‌ماند (که درصد هر
+ * دقیقه تازه شود) و قدیمی‌ترها به یکی در هر ۱۰ دقیقه نازک می‌شوند.
+ */
+function pxHistThin($pts, $now) {
+    $out = [];
+    $lastCoarse = 0;
+    foreach ($pts as $p) {
+        if (!is_array($p) || count($p) < 2) continue;
+        $t = (int)$p[0];
+        if ($now - $t > PX_HIST_KEEP) continue;
+        if ($now - $t <= PX_HIST_FINE) { $out[] = $p; continue; }
+        if ($t - $lastCoarse < PX_HIST_COARSE) continue;
+        $lastCoarse = $t;
+        $out[] = $p;
+    }
+    return count($out) > 260 ? array_slice($out, -260) : $out;
+}
 
 function pxHistNote($prices) {
     if (!$prices) return;
     $now = time();
 
-    // اگر همین نیم‌ساعت ثبت شده، دوباره ننویس — نوشتن روی دیسک ارزان نیست
+    // اگر همین دقیقه ثبت شده، دوباره ننویس — نوشتن روی دیسک ارزان نیست
     $mark = DATA_DIR . '/.hist_at';
     if ($now - (@filemtime($mark) ?: 0) < PX_HIST_STEP) return;
     @touch($mark);
@@ -327,11 +359,7 @@ function pxHistNote($prices) {
             if (!str_contains((string)$pair, '/')) continue;
             $pts = (array)($h[$pair] ?? []);
             $pts[] = [$now, $v];
-            // فقط بازه‌ی مفید بماند
-            $pts = array_values(array_filter($pts,
-                fn($p) => is_array($p) && ($now - (int)$p[0]) <= PX_HIST_KEEP));
-            if (count($pts) > 120) $pts = array_slice($pts, -120);
-            $h[$pair] = $pts;
+            $h[$pair] = array_values(pxHistThin($pts, $now));
         }
     });
 }
@@ -552,9 +580,19 @@ function pxPremiumText($fresh = false) {
         $t .= pxEm('prem', '💎') . ' <b>' . h($label) . "</b>\n";
         $t .= pxQuote($d['irt'], $d['usd'], $d['ton'], true) . "\n";
     }
-    $t .= pxEm('card', '🔻') . ' <b>' . h(pxT('foot')) . "</b>\n";
+    $t .= pxFootLine();
     $t .= pxDateLine();
     return $t;
+}
+
+/**
+ * امضای پایین قالب — ایموجی فرگمنت، بعدش خودِ کلمه.
+ *
+ * هیچ چیز جلوتر از ایموجی نمی‌نشیند: خطِ خودش است و از همان ایموجی
+ * شروع می‌شود.
+ */
+function pxFootLine() {
+    return pxEm('frag', '🔻') . ' <b>' . h(pxT('foot')) . "</b>\n";
 }
 
 /** تاریخ — با ایموجی پرمیوم، داخل نقل‌قول خودش */
@@ -642,7 +680,7 @@ function pxStarsText($n = 1, $fresh = false) {
         $t .= implode("\n", $lines) . '</blockquote>' . "\n";
     }
 
-    $t .= pxEm('card', '🔻') . ' <b>' . h(pxT('foot')) . "</b>\n";
+    $t .= pxFootLine();
     $t .= pxDateLine();
     return $t;
 }
@@ -1063,10 +1101,6 @@ function pxPhotoIdOf($resp) {
 }
 
 function pxSendPhoto($chatId, $bytes, $caption, $markup = null, $replyTo = null, $cacheKey = '') {
-    if (function_exists('__tgHook'))
-        return __tgHook(BOT_TOKEN, 'sendPhoto',
-            ['chat_id' => $chatId, 'caption' => $caption, 'photo_len' => strlen((string)$bytes)]);
-
     // ⚡ اگر همین کارت قبلا آپلود شده، فقط شناسه‌اش را می‌فرستیم
     if ($cacheKey !== '') {
         $fid = (string)(maCacheGet(pxPhotoIdKey($cacheKey), 86400) ?? '');
@@ -1079,6 +1113,20 @@ function pxSendPhoto($chatId, $bytes, $caption, $markup = null, $replyTo = null,
 
     if (!is_string($bytes) || strlen($bytes) < 100)
         return ['ok' => false, 'description' => 'تصویر ساخته نشد'];
+
+    // 🧪 در تست، آپلود واقعی انجام نمی‌شود — ولی همه‌ی مسیرِ بالا، یعنی
+    //    همان جایی که شناسه‌ی فایل دوباره استفاده می‌شود، واقعا اجرا
+    //    شده است. قبلا این قلاب اول تابع بود و آن مسیر هیچ‌وقت تست
+    //    نمی‌شد.
+    if (function_exists('__tgHook')) {
+        $out = __tgHook(BOT_TOKEN, 'sendPhoto',
+            ['chat_id' => $chatId, 'caption' => $caption, 'photo_len' => strlen((string)$bytes)]);
+        if ($cacheKey !== '' && !empty($out['ok'])) {
+            $fid = pxPhotoIdOf($out);
+            if ($fid !== '') maCachePut(pxPhotoIdKey($cacheKey), $fid);
+        }
+        return $out;
+    }
 
     // فایل موقت را کنار داده‌های خود ربات می‌سازیم، نه در /tmp سیستم.
     // روی هاست‌های اشتراکی /tmp اغلب قابل نوشتن نیست و آن‌وقت عکس
@@ -1627,6 +1675,7 @@ function pxLabels() {
         'prem_full'  => '📝 قالب کامل پیام پریمیوم',
         'star_full'  => '📝 قالب کامل پیام استارز',
         // ایموجی‌ها
+        'frag'  => '🔻 ایموجی فرگمنت (پایین قالب)',
         'card'  => 'ایموجی سرتیتر',
         'price' => 'ایموجی قیمت',
         'prem'  => 'ایموجی پریمیوم',

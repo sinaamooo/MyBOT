@@ -326,8 +326,17 @@ function editMsg($token, $chatId, $msgId, $text, $markup = null) {
         $data['reply_markup'] = json_encode(stripStyles($markup));
         $res = tg($token, 'editMessageText', $data);
     }
-    if (empty($res['ok'])) sendMsg($token, $chatId, $text, $markup);
+    // ⚠️ اگر ویرایش نگرفت، پیام تازه می‌فرستیم — ولی نه برای هر خطایی.
+    //    «message is not modified» یعنی همان متن از قبل آنجاست، پس هیچ
+    //    کاری لازم نیست؛ پیام تازه فقط گروه را دو برابر شلوغ می‌کرد.
+    if (empty($res['ok']) && !isNotModified($res)) sendMsg($token, $chatId, $text, $markup);
     return $res;
+}
+
+/** تلگرام می‌گوید متن عوض نشده؟ یعنی همان چیزی که می‌خواستیم، همان‌جاست. */
+function isNotModified($res) {
+    $d = strtolower((string)($res['description'] ?? ''));
+    return $d !== '' && str_contains($d, 'not modified');
 }
 
 /** فقط دکمه‌های زیر پیام را عوض می‌کند — متن دست نمی‌خورد */
@@ -8358,6 +8367,19 @@ function runBackgroundQueues() {
     if (!is_file($mMark5)) {
         @touch($mMark5);
         if (function_exists('gmDropDoubleIcons')) gmDropDoubleIcons();
+    }
+
+    $mMark6 = DATA_DIR . '/.migrated_v6';
+    if (!is_file($mMark6)) {
+        @touch($mMark6);
+        // ⏳ فاصله‌ی گرفتن الماس ۵ دقیقه شد. تنظیمِ روی سرور هنوز ۲۵
+        //    دقیقه بود، پس یک بار به پیش‌فرض برمی‌گردد.
+        if (function_exists('dmSet')) dmSet(function (&$c) { $c['cooldown'] = 300; });
+        // 🎯 صفحه‌ی دوز روشن شود؛ روی سرور خاموش مانده بود.
+        if (function_exists('gmSet')) gmSet(function (&$c) { $c['duel_board'] = true; });
+        // ⏱ کشِ قیمت زیر یک دقیقه یعنی کارتِ قیمت مدام از نو آپلود شود.
+        if (function_exists('pxSet'))
+            pxSet(function (&$c) { if ((int)($c['ttl'] ?? 0) < 60) $c['ttl'] = 60; });
     }
 
     // 🗄 بایگانی سفارش‌ها — کم‌تکرار، چون خودش سنگین است
