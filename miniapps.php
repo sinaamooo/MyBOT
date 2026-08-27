@@ -1690,6 +1690,21 @@ function maAutoFulfill($orderId, $manual = false) {
         return [false, $msg];
     }
 
+    // ✅ از این خط به بعد، سفارش روی پنل ثبت شده است.
+    //
+    // هر شکستی که بعد از این بیفتد نباید تلاش دوباره را راه بیندازد —
+    // چون تلاش دوباره یعنی یک سفارش دیگر روی پنل و یک بار دیگر پول.
+    // پس همین‌جا علامتش می‌زنیم و صف خودکار دیگر سراغش نمی‌رود.
+    $ref = '';
+    if (!empty($cfgOp['id_path'])) {
+        $v = maJsonPath($resp, (string)$cfgOp['id_path']);
+        if (is_scalar($v)) $ref = (string)$v;
+    }
+    MaOrder::set($orderId, function (&$x) use ($ref) {
+        $x['placed'] = time();
+        if ($ref !== '') $x['provider_ref'] = $ref;
+    });
+
     // 👛 اگر پنل تراکنش امضانشده داده، همین‌جا امضا و ارسالش می‌کنیم
     if (function_exists('axWalletHandle')) {
         [$wok, $winfo] = axWalletHandle($resp, $orderId);
@@ -1701,12 +1716,6 @@ function maAutoFulfill($orderId, $manual = false) {
             return [false, $winfo];
         }
         if ($winfo !== '') MaOrder::set($orderId, function (&$x) use ($winfo) { $x['ton_tx'] = $winfo; });
-    }
-
-    $ref = '';
-    if (!empty($cfgOp['id_path'])) {
-        $v = maJsonPath($resp, (string)$cfgOp['id_path']);
-        if (is_scalar($v)) $ref = (string)$v;
     }
 
     MaOrder::set($orderId, function (&$x) use ($ref) {
@@ -1755,6 +1764,19 @@ function maAutoFailNotice($orderId, $err) {
     $t .= '🔑 <code>' . h($o['id']) . "</code>\n";
     $t .= '🔁 تلاش ' . $n . ' از ' . $max . "\n\n";
     $t .= '❌ ' . h($err) . "\n\n";
+    if (!empty($o['placed'])) {
+        $t .= "⚠️ <b>سفارش روی پنل ثبت شده است</b>" .
+              (trim((string)($o['provider_ref'] ?? '')) !== ''
+                ? ' — کد پنل: <code>' . h((string)$o['provider_ref']) . '</code>' : '') . "\n" .
+              "پس تلاش خودکار متوقف شد؛ وگرنه یک سفارش دیگر ثبت می‌شد و دو بار پول می‌رفت.\n" .
+              "اول روی پنل ببینید چه شده، بعد یکی را انتخاب کنید:";
+        sendMsg(BOT_TOKEN, ADMIN_ID, $t, inlineKb([
+            [btnCb('✅ انجام شد، ببندش', 'madone_' . $o['id'], 'confirm')],
+            [btnCb('📤 تحویل دستی', 'madlv_' . $o['id'], 'link')],
+            [btnCb('💰 برگشت پول به کاربر', 'marefund_' . $o['id'], 'reject')],
+        ]));
+        return;
+    }
     $t .= ($n < $max
         ? 'خودکار دوباره تلاش می‌شود. می‌توانید همین حالا هم دستی اقدام کنید:'
         : '<b>تلاش خودکار تمام شد</b> — پول کاربر گرفته شده و سفارش تحویل نشده. یکی را انتخاب کنید:');
@@ -1787,6 +1809,10 @@ function maAutoQueue($limit = 5) {
 
         $tries = (int)($o['tries'] ?? 0);
         if ($tries >= $max) continue;
+
+        // 🚫 روی پنل ثبت شده و بعدش جایی گیر کرده؟ تلاش دوباره یعنی
+        //    سفارش دوم و پول دوم. این یکی دستِ ادمین است.
+        if (!empty($o['placed'])) continue;
 
         // قفل رهاشده (اجرای قبلی وسط کار مرد) بعد از ۵ دقیقه آزاد می‌شود
         $sending = (int)($o['sending'] ?? 0);
@@ -3028,6 +3054,32 @@ function maCallback($data, $uid, $chatId, $msgId, $cbId, $isAdmin) {
         if (!$ok) sendMsg(BOT_TOKEN, $chatId, "❌ باز هم نشد:\n<code>" . h($msg) . '</code>',
             inlineKb([[btnCb('📤 تحویل دستی', 'madlv_' . $id, 'link')],
                       [btnCb('💰 برگشت پول', 'marefund_' . $id, 'reject')]]));
+        return true;
+    }
+
+    // ---------- ✅ روی پنل انجام شده، همین‌جا ببندش ----------
+    //
+    // برای سفارشی که روی پنل ثبت شده ولی مرحله‌ی بعدش گیر کرده. «تلاش
+    // دوباره» اینجا غلط است چون سفارش دوم می‌سازد؛ ادمین روی پنل نگاه
+    // می‌کند و اگر انجام شده بود، با این دکمه فقط سفارش را می‌بندد.
+    if (str_starts_with($data, 'madone_')) {
+        if (!$isAdmin) { answerCb(BOT_TOKEN, $cbId, '🔒', true); return true; }
+        $id = substr($data, 7);
+        $o  = MaOrder::get($id);
+        if (!$o) { answerCb(BOT_TOKEN, $cbId, 'پیدا نشد', true); return true; }
+        if ($o['status'] === MaOrder::DONE) { answerCb(BOT_TOKEN, $cbId, 'از قبل بسته است.', true); return true; }
+        MaOrder::set($id, function (&$x) {
+            $x['status'] = MaOrder::DONE;
+            $x['sending'] = 0;
+            $x['last_error'] = '';
+            $x['delivered_at'] = nowStr();
+        });
+        answerCb(BOT_TOKEN, $cbId, '✅ بسته شد');
+        $o2 = MaOrder::get($id);
+        maTellUser($o2, "✅ <b>سفارش شما انجام شد</b>\n\n" .
+                        '📦 ' . h(maOrderTitle($o2)) . "\n" .
+                        '🔑 <code>' . h($id) . '</code>');
+        sendMsg(BOT_TOKEN, $chatId, '✅ سفارش <code>' . h($id) . '</code> بسته شد و به کاربر خبر رفت.');
         return true;
     }
 
