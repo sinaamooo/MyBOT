@@ -667,6 +667,26 @@ function maJsonPath($data, $path) {
     return $data;
 }
 
+/**
+ * همه‌ی مسیرهای یک پاسخ JSON، به‌شکل «a.b.c».
+ * برای وقتی که ادمین نمی‌داند کدام فیلد را در «نقشه» بنویسد.
+ */
+function maJsonPaths($data, $prefix = '', $depth = 0) {
+    $out = [];
+    if (!is_array($data) || $depth > 4) return $out;
+    foreach ($data as $k => $v) {
+        $path = $prefix === '' ? (string)$k : $prefix . '.' . $k;
+        if (is_array($v)) {
+            $out = array_merge($out, maJsonPaths($v, $path, $depth + 1));
+            if (!$v) $out[] = $path;
+        } else {
+            $out[] = $path . ' = ' . mb_substr(is_bool($v) ? ($v ? 'true' : 'false') : (string)$v, 0, 30);
+        }
+        if (count($out) > 60) break;
+    }
+    return $out;
+}
+
 /** «1,234.5» یا «۱۲۳۴» → 1234.5 */
 function maNum($v) {
     if (is_int($v) || is_float($v)) return (float)$v;
@@ -1403,12 +1423,70 @@ function maFillTpl($tpl, $vars) {
 }
 
 /** یک عملیات روی پنل فروش — برگشت: [پاسخ, خطا] */
-function maFulfillCall($op, $vars = []) {
+/**
+ * 🔗 نقشه‌ی «از پاسخِ مرحله‌ی اول چه چیزی بردار».
+ *
+ * هر خط یا هر تکه‌ی جداشده با ویرگول: <code>نام={مسیر در JSON}</code>
+ * مثال: <code>recipient=found.recipient</code> یعنی مقدارِ
+ * found.recipient از پاسخ برداشته شود و بعد در بدنه‌ی مرحله‌ی دوم با
+ * {recipient} صدا زده شود.
+ */
+function maParseMap($raw) {
+    $out = [];
+    foreach (preg_split('/[\r\n,]+/', (string)$raw) as $line) {
+        $line = trim($line);
+        if ($line === '' || !str_contains($line, '=')) continue;
+        [$k, $v] = explode('=', $line, 2);
+        $k = trim($k); $v = trim($v);
+        if ($k !== '' && $v !== '') $out[$k] = $v;
+    }
+    return $out;
+}
+
+/**
+ * مرحله‌ی مقدماتی یک عملیات.
+ *
+ * بعضی پنل‌ها یک تماس بس نیستند: برای خرید استارز اول باید گیرنده را
+ * جستجو کنی (recipient) و شناسه‌ای که برمی‌گرداند را در خودِ خرید
+ * بفرستی. اینجا آن مرحله انجام می‌شود و هرچه در «نقشه» خواسته شده از
+ * پاسخش درمی‌آید و به متغیرهای مرحله‌ی دوم اضافه می‌شود.
+ *
+ * برگشت: [متغیرهای تازه, خطا, پاسخ خام]
+ */
+function maFulfillPre($op, $vars) {
+    $f     = maCfg()['fulfill'] ?? [];
+    $cfgOp = $f['ops'][$op] ?? [];
+    $pre   = trim((string)($cfgOp['pre_path'] ?? ''));
+    if ($pre === '') return [[], '', null];
+
+    $sub = [
+        'path'     => $pre,
+        'method'   => $cfgOp['pre_method'] ?? 'POST',
+        'body'     => $cfgOp['pre_body'] ?? '',
+        'err_path' => $cfgOp['err_path'] ?? '',
+    ];
+    [$resp, $err] = maFulfillRaw($sub, $vars);
+    if (!$resp) return [[], 'مرحله‌ی اول نرفت: ' . $err, null];
+    if (!maFulfillOk($resp, $sub))
+        return [[], 'مرحله‌ی اول رد شد: ' . maFulfillErr($resp, $sub), $resp];
+
+    $map = maParseMap($cfgOp['pre_map'] ?? '');
+    if (!$map) return [[], '', $resp];
+
+    $got = [];
+    foreach ($map as $name => $path) {
+        $v = maJsonPath($resp, $path);
+        if ($v === null || is_array($v))
+            return [[], 'در پاسخِ مرحله‌ی اول، «' . $path . '» پیدا نشد', $resp];
+        $got[$name] = is_bool($v) ? ($v ? 'true' : 'false') : (string)$v;
+    }
+    return [$got, '', $resp];
+}
+
+/** یک تماسِ خام با پنل، از روی تعریفِ یک عملیات */
+function maFulfillRaw(array $cfgOp, array $vars) {
     $f = maCfg()['fulfill'] ?? [];
     if (trim((string)($f['base'] ?? '')) === '') return [null, 'آدرس پنل ثبت نشده'];
-
-    $cfgOp = $f['ops'][$op] ?? null;
-    if (!is_array($cfgOp)) return [null, 'عملیات «' . $op . '» تعریف نشده'];
 
     $path = maFillTpl($cfgOp['path'] ?? '', $vars);
     $url  = rtrim((string)$f['base'], '/') . '/' . ltrim($path, '/');
@@ -1434,7 +1512,31 @@ function maFulfillCall($op, $vars = []) {
             break;
     }
 
+    // 🚧 متغیری که پر نشده، نباید خام برود.
+    //
+    // اگر {recipient} در بدنه باشد ولی مرحله‌ی اولی که پرش کند تعریف
+    // نشده باشد، همان رشته‌ی «{recipient}» به پنل می‌رفت و پنل یا خطای
+    // گنگ می‌داد یا بدتر، قبولش می‌کرد. حالا همین‌جا می‌ایستد و می‌گوید
+    // کدام متغیر جا مانده.
+    if (preg_match('/\{([a-z_][a-z0-9_]*)\}/i', $url . ' ' . $body, $mm))
+        return [null, 'متغیر {' . $mm[1] . '} پر نشد — یا در «نقشه‌ی مرحله‌ی اول» تعریفش کنید یا از بدنه برش دارید'];
+
     return maHttp($url, $method, $headers, $body, (int)($f['timeout'] ?? 20));
+}
+
+/**
+ * یک عملیات کامل: اگر مرحله‌ی مقدماتی داشته باشد اول آن، بعد خودش.
+ */
+function maFulfillCall($op, $vars = []) {
+    $f     = maCfg()['fulfill'] ?? [];
+    $cfgOp = $f['ops'][$op] ?? null;
+    if (!is_array($cfgOp)) return [null, 'عملیات «' . $op . '» تعریف نشده'];
+
+    [$more, $err] = maFulfillPre($op, $vars);
+    if ($err !== '') return [null, $err];
+    if ($more) $vars = array_merge($vars, $more);
+
+    return maFulfillRaw($cfgOp, $vars);
 }
 
 /** آیا این پاسخ یعنی موفقیت؟ */
@@ -3709,7 +3811,8 @@ function maAdmFulfill($chatId, $msgId) {
     }
     if ($pend) $text .= "\n⚠️ <b>{$pend}</b> سفارش پرداخت‌شده تحویل نشده است.";
 
-    $text .= "\n\n💡 اول آدرس و کلید را بدهید، بعد «🔌 تست موجودی» را بزنید.";
+    $text .= "\n\n💡 آدرس و کلید را بدهید، بعد مستندات را بخوانید و مسیرِ هر عملیات را انتخاب کنید.\n" .
+             "«🔌 تست موجودی» اختیاری است — بعضی پنل‌ها اصلا مسیر موجودی ندارند و این هیچ ربطی به تحویل ندارد.";
 
     $rows = [
         [btnCb(!empty($f['on']) ? '❌ خاموش کن' : '✅ روشن کن', 'maadm_fftog', 'info')],
@@ -3743,6 +3846,15 @@ function maAdmFulfillOp($chatId, $msgId, $op) {
     $text .= "مسیر شناسه سفارش: <code>" . h($o['id_path'] ?? '—') . "</code>\n";
     $text .= "مسیر مقدار: <code>" . h($o['val_path'] ?? '—') . "</code>\n";
     $text .= "مسیر خطا: <code>" . h($o['err_path'] ?? '—') . "</code>\n\n";
+
+    $pre = trim((string)($o['pre_path'] ?? ''));
+    $text .= "<b>مرحله‌ی اول</b> " . ($pre !== '' ? '✅' : '— ندارد') . "\n";
+    if ($pre !== '') {
+        $text .= "مسیر: <code>" . h(($o['pre_method'] ?? 'POST') . ' ' . $pre) . "</code>\n";
+        $text .= "بدنه: <code>" . h($o['pre_body'] ?: '(خالی)') . "</code>\n";
+        $text .= "نقشه: <code>" . h($o['pre_map'] ?: '(خالی)') . "</code>\n";
+    }
+    $text .= "\n";
     $text .= "<b>متغیرهای قابل استفاده در مسیر و بدنه:</b>\n";
     $text .= "<code>{username}</code> آیدی گیرنده (بدون @)\n";
     $text .= "<code>{qty}</code> مقدار (تعداد استارز یا ماه پریمیوم)\n";
@@ -3758,6 +3870,11 @@ function maAdmFulfillOp($chatId, $msgId, $op) {
         [btnCb('🧾 مسیر شناسه', 'maadm_ffo_' . $op . '|id_path', 'admin'),
          btnCb('💠 مسیر مقدار', 'maadm_ffo_' . $op . '|val_path', 'admin')],
         [btnCb('⚠️ مسیر خطا', 'maadm_ffo_' . $op . '|err_path', 'admin')],
+        [btnCb('1️⃣ مسیر مرحله‌ی اول', 'maadm_ffo_' . $op . '|pre_path', 'admin'),
+         btnCb('📮 متد', 'maadm_ffo_' . $op . '|pre_method', 'admin')],
+        [btnCb('1️⃣ بدنه‌ی مرحله‌ی اول', 'maadm_ffo_' . $op . '|pre_body', 'admin'),
+         btnCb('🔗 نقشه', 'maadm_ffo_' . $op . '|pre_map', 'admin')],
+        [btnCb('🔎 تست مرحله‌ی اول (بی‌خطر)', 'maadm_ffpre_' . $op, 'confirm')],
         [btnCb(UT('back'), 'maadm_fulfill', 'nav')],
     ];
     editMsg(BOT_TOKEN, $chatId, $msgId, $text, inlineKb($rows));
@@ -4019,8 +4136,11 @@ function maAdmFulfillTest($chatId) {
         $t  = "❌ <b>اتصال ناموفق</b>\n\n" . h($err) . "\n\n";
         if ($is404) {
             $t .= "مسیر فعلی: <code>" . h(($f['ops']['balance']['method'] ?? 'GET') . ' ' . $path) . "</code>\n\n";
-            $t .= "۴۰۴ یعنی این مسیر روی پنل وجود ندارد — کلید API مشکلی ندارد.\n" .
-                  "مسیر درست را از مستندات انتخاب کنید 👇";
+            $t .= "۴۰۴ یعنی این مسیر روی پنل وجود ندارد — کلید API مشکلی ندارد.\n\n" .
+                  "ℹ️ <b>این تست جلوی تحویل خودکار را نمی‌گیرد.</b> «موجودی» فقط برای همین " .
+                  "دکمه است؛ استارز و پریمیوم با عملیاتِ خودشان کار می‌کنند. بعضی پنل‌ها " .
+                  "اصلا مسیر موجودی ندارند — می‌توانید ردش کنید.\n\n" .
+                  "اگر پنلتان دارد، از مستندات انتخابش کنید 👇";
         } else {
             $t .= "اگر «۴۰۱» یا «۴۰۳» است، کلید API یا نوع احراز هویت درست نیست.";
         }
@@ -4031,6 +4151,7 @@ function maAdmFulfillTest($chatId) {
             if (is_array($spec) && $spec) $rows[] = [btnCb('🎯 انتخاب مسیر موجودی از مستندات', 'maadm_spick_balance', 'confirm')];
             else                          $rows[] = [btnCb('📖 اول مستندات را بخوان', 'maadm_spec', 'confirm')];
         }
+        if ($is404) $rows[] = [btnCb('⭐️ برو سراغ عملیات استارز', 'maadm_ffop_stars', 'admin')];
         $rows[] = [btnCb('🤖 تحویل خودکار', 'maadm_fulfill', 'nav')];
         sendMsg(BOT_TOKEN, $chatId, $t, inlineKb($rows));
         return;
@@ -4290,6 +4411,24 @@ function maAdminCallback($data, $uid, $chatId, $msgId, $cbId) {
             ($hints[$field] ?? '') . "\n\nالان: <code>" . h(mb_substr((string)$cur, 0, 120)) . '</code>');
         return true;
     }
+    if (preg_match('/^maadm_ffpre_([a-z]+)$/', $data, $pm)) {
+        answerCb(BOT_TOKEN, $cbId);
+        $o = maCfg()['fulfill']['ops'][$pm[1]] ?? [];
+        if (trim((string)($o['pre_path'] ?? '')) === '') {
+            sendMsg(BOT_TOKEN, $chatId,
+                "⚠️ برای این عملیات مرحله‌ی اولی تعریف نشده.\n\n" .
+                "اگر پنلتان قبل از خرید، گیرنده را جستجو می‌کند، مسیرش را در " .
+                "«1️⃣ مسیر مرحله‌ی اول» بگذارید.");
+            return true;
+        }
+        maAskState($uid, $chatId, 'ma_ffpre', ['op' => $pm[1]],
+            '🔎 <b>تست مرحله‌ی اول</b>',
+            "یک آیدی تلگرام بفرستید (بدون @) تا همان جستجو انجام شود.\n\n" .
+            "این تست <b>چیزی نمی‌خرد و پولی خرج نمی‌کند</b> — فقط پاسخِ پنل را " .
+            "نشانتان می‌دهد تا ببینید کدام فیلد را باید در «نقشه» بگذارید.");
+        return true;
+    }
+
     if (preg_match('/^maadm_ffo_([a-z]+)\|([a-z_]+)$/', $data, $fm)) {
         [$all, $op2, $field] = $fm;
         $cur = maCfg()['fulfill']['ops'][$op2][$field] ?? '';
@@ -4301,6 +4440,15 @@ function maAdminCallback($data, $uid, $chatId, $msgId, $cbId) {
             'id_path'  => "مسیر شناسه سفارش در پاسخ، مثل <code>data.order_id</code>",
             'val_path' => "مسیر مقدار در پاسخ، مثل <code>balance</code>",
             'err_path' => "مسیر پیام خطا، مثل <code>message</code>",
+            'pre_path'  => "بعضی پنل‌ها دو مرحله‌ای‌اند: اول گیرنده را جستجو می‌کنند، بعد می‌فروشند.\n" .
+                           "مسیر مرحله‌ی اول، مثل <code>/v1/fragment/stars/recipient/</code>\n" .
+                           "برای برداشتنش <code>-</code> بفرستید.",
+            'pre_method'=> "<code>GET</code> یا <code>POST</code> برای مرحله‌ی اول",
+            'pre_body'  => "بدنه‌ی مرحله‌ی اول. مثال:\n<code>{\"username\":\"{username}\"}</code>",
+            'pre_map'   => "از پاسخِ مرحله‌ی اول چه چیزی برداشته شود.\n" .
+                           "هر خط: <code>نام=مسیر</code>\n" .
+                           "مثال: <code>recipient=found.recipient</code>\n" .
+                           "بعد در بدنه‌ی مرحله‌ی دوم با <code>{recipient}</code> صدایش می‌زنید.",
         ];
         maAskState($uid, $chatId, 'ma_ffop', ['op' => $op2, 'f' => $field], '✏️ مقدار جدید:',
             ($hints[$field] ?? '') . "\n\nالان: <code>" . h(mb_substr((string)$cur, 0, 200)) . '</code>');
@@ -4693,10 +4841,43 @@ function maAdminState($action, $sd, $msg, $uid, $chatId, $plain, $ids) {
             inlineKb([[btnCb('🤖 تحویل خودکار', 'maadm_fulfill', 'admin')]]));
         return true;
     }
+    if ($action === 'ma_ffpre') {
+        $op2 = (string)($sd['op'] ?? '');
+        $u   = ltrim(trim($plain), '@');
+        if ($u === '') { sendMsg(BOT_TOKEN, $chatId, '⚠️ یک آیدی بفرستید.'); return true; }
+        clearState($uid);
+        $back = inlineKb([[btnCb('⚙️ برگرد به عملیات', 'maadm_ffop_' . $op2, 'admin')]]);
+
+        [$got, $err, $resp] = maFulfillPre($op2, [
+            'username' => $u, 'user' => $u, 'field' => $u,
+            'qty' => 50, 'amount' => 50, 'gift' => '', 'order' => 'test', 'user_id' => '0',
+        ]);
+
+        $t = "🔎 <b>پاسخِ مرحله‌ی اول</b>\n\n";
+        if ($resp === null) {
+            $t .= "❌ پنل جواب نداد.\n<code>" . h(mb_substr($err, 0, 300)) . "</code>";
+            sendMsg(BOT_TOKEN, $chatId, $t, $back);
+            return true;
+        }
+        $t .= "<code>" . h(mb_substr(json_encode($resp, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT), 0, 1400)) . "</code>\n\n";
+        if ($err !== '') {
+            $t .= "⚠️ " . h($err) . "\n\n";
+            $t .= "مسیرهایی که در این پاسخ هست:\n<code>" .
+                  h(implode("\n", array_slice(maJsonPaths($resp), 0, 25))) . "</code>\n\n" .
+                  "یکی از این‌ها را در «🔗 نقشه» بگذارید.";
+        } else {
+            $t .= "✅ برداشته شد:\n";
+            foreach ($got as $k2 => $v2) $t .= '<code>{' . h($k2) . '}</code> = <code>' . h(mb_substr($v2, 0, 60)) . "</code>\n";
+            if (!$got) $t .= "<i>نقشه خالی است — اگر چیزی از این پاسخ لازم دارید، در «🔗 نقشه» بنویسید.</i>\n";
+        }
+        sendMsg(BOT_TOKEN, $chatId, mb_substr($t, 0, 3900), $back);
+        return true;
+    }
+
     if ($action === 'ma_ffop') {
         $op2 = (string)($sd['op'] ?? '');
         $f   = (string)($sd['f'] ?? '');
-        if ($f === 'method') {
+        if ($f === 'method' || $f === 'pre_method') {
             $v = strtoupper(trim($plain));
             if (!in_array($v, ['GET', 'POST'], true)) {
                 sendMsg(BOT_TOKEN, $chatId, '⚠️ فقط GET یا POST.'); return true;
@@ -4704,7 +4885,7 @@ function maAdminState($action, $sd, $msg, $uid, $chatId, $plain, $ids) {
         } else {
             $v = $dash ? '' : $plain;
             // قالب خودش JSON معتبر نیست ({qty} جای عدد است)؛ پس با مقدار نمونه پرش می‌کنیم
-            if ($f === 'body' && $v !== '') {
+            if (($f === 'body' || $f === 'pre_body') && $v !== '') {
                 $probe = maFillTpl($v, ['username' => 'test', 'user' => 'test', 'qty' => 1,
                                         'amount' => 1, 'gift' => 'g1', 'order' => 'ma_1',
                                         'user_id' => '1', 'field' => 'test']);
