@@ -722,10 +722,32 @@ function maCachePut($key, $value) {
 // ---------- نرخ ارز ----------
 
 /** نرخ یک ارز به تومان (با سود و گرد کردن) — 0 یعنی در دسترس نیست */
+/**
+ * 🐇 حالت «بی‌شبکه».
+ *
+ * وقتی روشن باشد، هیچ قیمتی از اینترنت گرفته نمی‌شود و هرچه در کش
+ * هست — حتی کهنه — همان برگردانده می‌شود.
+ *
+ * برای صفحه‌ی مینی‌اپ است: کاربری که مینی‌اپ را باز می‌کند نباید پشت
+ * پنج تماس شبکه (۱.۳ ثانیه) منتظر بماند. صفحه با قیمت کش‌شده فوری
+ * می‌آید و تازه‌سازی بعد از بسته شدن جواب انجام می‌شود.
+ */
+function maNoNet($on = null) {
+    static $flag = false;
+    if ($on !== null) $flag = (bool)$on;
+    return $flag;
+}
+
 function maRate($which, $fresh = false) {
     $r = maCfg()['rates'] ?? [];
     if (empty($r['on'])) return 0.0;
     $which = strtolower($which);
+
+    // در حالت بی‌شبکه، هرچه در کش هست کافی است
+    if (maNoNet()) {
+        $c = maCacheGet('rate_' . $which, 0);
+        if ($c !== null && (float)$c > 0) return (float)$c;
+    }
     $url  = (string)($r[$which . '_url'] ?? '');
     $path = (string)($r[$which . '_path'] ?? '');
     if ($url === '') return 0.0;

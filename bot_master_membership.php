@@ -7971,12 +7971,34 @@ if (isset($_GET['ipn'])) {
 }
 
 // 🚀 صفحه مینی‌اپ‌ها
+//
+// ⚡ این صفحه هیچ‌وقت پشت شبکه نمی‌ماند. قبلا هر بار که کش قیمت تمام
+//    می‌شد، کاربرِ بعدی که مینی‌اپ را باز می‌کرد ۱.۳ ثانیه (پنج تماس
+//    پشت‌سرهم به صرافی‌ها) منتظر می‌ماند. حالا صفحه با قیمت کش‌شده
+//    فوری می‌آید و تازه‌سازی بعد از بسته شدن جواب انجام می‌شود — پس
+//    کاربر بعدی هم قیمت تازه دارد و هیچ‌کس معطل نمی‌شود.
 if (isset($_GET['app'])) {
+    $needFresh = false;
+    if (function_exists('maNoNet')) {
+        $needFresh = (maCacheGet('px_pairs', (int)(pxVal('ttl', 120))) === null);
+        maNoNet(true);
+    }
+
     try { maServe((string)$_GET['app']); }
     catch (Throwable $e) {
         error_log('[miniapp] ' . $e->getMessage());
         http_response_code(500);
         echo 'server error';
+    }
+
+    // جواب رفت؛ حالا اگر قیمت کهنه بود، برای دفعه‌ی بعد تازه‌اش کن
+    if ($needFresh && function_exists('maNoNet')) {
+        closeRequest('');
+        maNoNet(false);
+        try {
+            if (function_exists('pxFetch'))        pxFetch(true);
+            if (function_exists('axRatesRefresh')) axRatesRefresh();
+        } catch (Throwable $e) { error_log('[miniapp-warm] ' . $e->getMessage()); }
     }
     exit;
 }
@@ -8017,42 +8039,110 @@ if (isset($_GET['cron'])) {
     exit;
 }
 
-processDeleteQueue(20);
-
-// 💠 بررسی واریز رمزارز تماس شبکه دارد. روی هر درخواست اجرا کردنش یعنی
-//    هر کلیکِ هر کاربر پشت چند تماس بلاکچین معطل بماند. هر ۲۰ ثانیه کافی
-//    است — cron هم جدا و پرشمارتر همین کار را می‌کند.
-$gMark = DATA_DIR . '/.gw_at';
-if (time() - (@filemtime($gMark) ?: 0) >= 20) {
-    @touch($gMark);
-    gwPoll(10);
-}
-// 🐢 صف‌های پس‌زمینه فقط هر یک دقیقه یک‌بار، نه روی هر پیام.
-// روی هر درخواست اجرا کردنشان یعنی خواندن و پیمایش همه‌ی سفارش‌ها
-// پیش از جواب دادن به کاربر — که ربات را کند می‌کند.
-$qMark = DATA_DIR . '/.queue_at';
-$qLast = @filemtime($qMark) ?: 0;
-if (time() - $qLast >= 60) {
-    @touch($qMark);
-    gmTick(5);        // قرعه‌های رسیده — بدون cron هم کشیده می‌شوند
-    bcTick(20);       // یک دسته از پیام همگانی — بدون cron هم تمام می‌شود
-    maAutoQueue(2);   // تحویل خودکارِ معطل‌مانده — بدون نیاز به cron هم پیش می‌رود
-    maStockQueue(2);  // سفارش‌هایی که منتظر شارژ مخزن مانده‌اند
+/**
+ * 🔁 گرفتن شناسه‌ی آپدیت — اگر قبلا دیده شده باشد false برمی‌گرداند.
+ *
+ * اتمی است: با قفل انجام می‌شود، پس اگر تلگرام دو نسخه‌ی یک آپدیت را
+ * هم‌زمان بفرستد، فقط یکی‌شان رد می‌شود.
+ * فقط چند صد شناسه‌ی آخر نگه داشته می‌شود تا فایل کوچک بماند.
+ */
+function seenUpdate($id) {
+    if ($id <= 0) return true;
+    $fresh = false;
+    mutate('seen_updates', function (&$a) use ($id, &$fresh) {
+        $ids = (array)($a['ids'] ?? []);
+        if (in_array($id, $ids, true)) return;      // تکراری است
+        $ids[] = $id;
+        if (count($ids) > 400) $ids = array_slice($ids, -300);
+        $a['ids'] = array_values($ids);
+        $fresh = true;
+    });
+    return $fresh;
 }
 
-// 🗄 بایگانی سفارش‌ها — کم‌تکرار، چون خودش سنگین است. بدون این، فایل
-//    سفارش‌ها بزرگ می‌شود و کم‌کم هر ثبت سفارش کند می‌شود.
-$aMark = DATA_DIR . '/.archive_at';
-if (time() - (@filemtime($aMark) ?: 0) >= 3600) {
-    @touch($aMark);
-    ordersArchive(0, 800);
-    maOrdersArchive(0, 800);
+/**
+ * 📮 جواب را می‌فرستد و اتصال را می‌بندد، ولی اسکریپت ادامه می‌دهد.
+ *
+ * روی php-fpm با fastcgi_finish_request، و روی بقیه با بستن بافر و
+ * دادن Content-Length تا مرورگر/تلگرام بداند دیگر چیزی نمی‌آید.
+ */
+function closeRequest($body = '') {
+    ignore_user_abort(true);
+    if (!headers_sent()) {
+        header('Content-Type: application/json');
+        header('Content-Length: ' . strlen($body));
+        header('Connection: close');
+    }
+    echo $body;
+
+    if (function_exists('fastcgi_finish_request')) { fastcgi_finish_request(); return; }
+    if (function_exists('litespeed_finish_request')) { litespeed_finish_request(); return; }
+
+    // مسیر عمومی: همه‌ی بافرها را خالی کن
+    while (ob_get_level() > 0) @ob_end_flush();
+    @flush();
+}
+
+/** کارهای پس‌زمینه — بعد از جواب دادن به کاربر اجرا می‌شوند */
+function runBackgroundQueues() {
+    processDeleteQueue(20);
+
+    // 💠 بررسی واریز رمزارز تماس شبکه دارد — هر ۲۰ ثانیه کافی است.
+    $gMark = DATA_DIR . '/.gw_at';
+    if (time() - (@filemtime($gMark) ?: 0) >= 20) {
+        @touch($gMark);
+        gwPoll(10);
+    }
+
+    // 🐢 صف‌های سنگین‌تر فقط هر یک دقیقه یک‌بار
+    $qMark = DATA_DIR . '/.queue_at';
+    if (time() - (@filemtime($qMark) ?: 0) >= 60) {
+        @touch($qMark);
+        gmTick(5);        // قرعه‌های رسیده — بدون cron هم کشیده می‌شوند
+        bcTick(20);       // یک دسته از پیام همگانی — بدون cron هم تمام می‌شود
+        maAutoQueue(2);   // تحویل خودکارِ معطل‌مانده
+        maStockQueue(2);  // سفارش‌هایی که منتظر شارژ مخزن مانده‌اند
+    }
+
+    // 🔄 مهاجرت‌های یک‌باره — نشانه‌شان روی دیسک می‌ماند، پس فقط یک بار
+    $mMark = DATA_DIR . '/.migrated_v2';
+    if (!is_file($mMark)) {
+        @touch($mMark);
+        if (function_exists('pxDropOldDemo')) pxDropOldDemo();
+    }
+
+    // 🗄 بایگانی سفارش‌ها — کم‌تکرار، چون خودش سنگین است
+    $aMark = DATA_DIR . '/.archive_at';
+    if (time() - (@filemtime($aMark) ?: 0) >= 3600) {
+        @touch($aMark);
+        ordersArchive(0, 800);
+        maOrdersArchive(0, 800);
+    }
 }
 
 $raw = file_get_contents('php://input');
 $update = json_decode($raw, true);
 
 http_response_code(200);
+
+// 🔁 هر آپدیت فقط یک بار.
+//
+// تلگرام تا وقتی جواب ۲۰۰ نگیرد همان آپدیت را دوباره می‌فرستد. ساختن
+// قالب قیمت چند تماس شبکه و یک رندر گرافیکی دارد؛ اگر از مهلت تلگرام
+// بگذرد، تلگرام دوباره می‌فرستد و کاربر همان پیام را دوبار می‌بیند.
+//
+// دو سد گذاشته شده: اول همین‌جا شناسه‌ی آپدیت را «می‌گیریم» (اتمی، با
+// قفل، پس دو درخواست هم‌زمان هم هر دو رد نمی‌شوند)، بعد پایین‌تر جواب
+// را می‌بندیم تا تلگرام اصلا منتظر نماند.
+if (is_array($update) && isset($update['update_id']) && !seenUpdate((int)$update['update_id'])) {
+    echo json_encode(['ok' => true]);
+    exit;
+}
+
+// 📮 جواب تلگرام همین‌جا بسته می‌شود و بقیه‌ی کار در پس‌زمینه ادامه
+//    می‌یابد. تلگرام دیگر منتظر رندر و ارسال نمی‌ماند، پس نه مهلتش تمام
+//    می‌شود و نه آپدیت را دوباره می‌فرستد.
+closeRequest(json_encode(['ok' => true]));
 
 if (is_array($update)) {
     $botId = $_GET['bot'] ?? null;
@@ -8064,4 +8154,5 @@ if (is_array($update)) {
     }
 }
 
-echo json_encode(['ok' => true]);
+// کارهای پس‌زمینه بعد از جواب دادن به کاربر انجام می‌شوند
+runBackgroundQueues();

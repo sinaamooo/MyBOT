@@ -59,6 +59,7 @@ function pxDefaults() {
             'price' => '5841359408952513916',
             'prem'  => '5899945812296731931',
             'star'  => '4936468614967460670',
+            'ton'   => '5899945812296731931',   // 💎 جلوی قیمت تونی
             'coin'  => '5271878966347601947',
             'chart' => '5902331842723319210',
         ],
@@ -189,6 +190,13 @@ function pxFetch($fresh = false) {
 
     $c = pxCfg();
     $ck = 'px_pairs';
+
+    // 🐇 حالت بی‌شبکه (صفحه‌ی مینی‌اپ): کشِ کهنه هم قبول، تماس شبکه نه
+    if (function_exists('maNoNet') && maNoNet()) {
+        $any = maCacheGet($ck, 0);
+        if (is_array($any) && $any) return $mem = $any;
+    }
+
     if (!$fresh) {
         $hit = maCacheGet($ck, (int)$c['ttl']);
         if (is_array($hit)) return $mem = $hit;
@@ -232,7 +240,63 @@ function pxFetch($fresh = false) {
     maCachePut('px_err', '');
     maCachePut('px_cool', 0);
     maCachePut($ck, $out);
+    pxHistNote($out);
     return $mem = $out;
+}
+
+/**
+ * 📈 تاریخچه‌ی قیمت — برای درصد تغییر واقعی.
+ *
+ * API فقط قیمتِ همین لحظه می‌دهد و درصد تغییر ندارد، برای همین همه‌ی
+ * کارت‌ها «۰٪» نشان می‌دادند. حالا خودمان هر نیم‌ساعت یک نقطه ذخیره
+ * می‌کنیم و درصد را نسبت به ۲۴ ساعت پیش حساب می‌کنیم.
+ *
+ * فایل کوچک می‌ماند: حداکثر یک نقطه در نیم‌ساعت و فقط ۵۰ ساعت اخیر.
+ */
+if (!defined('PX_HIST_STEP')) define('PX_HIST_STEP', 1800);    // نیم ساعت
+if (!defined('PX_HIST_KEEP')) define('PX_HIST_KEEP', 180000);  // ۵۰ ساعت
+
+function pxHistNote($prices) {
+    if (!$prices) return;
+    $now = time();
+
+    // اگر همین نیم‌ساعت ثبت شده، دوباره ننویس — نوشتن روی دیسک ارزان نیست
+    $mark = DATA_DIR . '/.hist_at';
+    if ($now - (@filemtime($mark) ?: 0) < PX_HIST_STEP) return;
+    @touch($mark);
+
+    mutate('px_hist', function (&$h) use ($prices, $now) {
+        foreach ($prices as $pair => $v) {
+            $v = (float)$v;
+            if ($v <= 0) continue;                       // درصدها و صفرها به درد تاریخچه نمی‌خورند
+            if (!str_contains((string)$pair, '/')) continue;
+            $pts = (array)($h[$pair] ?? []);
+            $pts[] = [$now, $v];
+            // فقط بازه‌ی مفید بماند
+            $pts = array_values(array_filter($pts,
+                fn($p) => is_array($p) && ($now - (int)$p[0]) <= PX_HIST_KEEP));
+            if (count($pts) > 120) $pts = array_slice($pts, -120);
+            $h[$pair] = $pts;
+        }
+    });
+}
+
+/** قیمت همین جفت‌ارز در حدود ۲۴ ساعت پیش — یا null اگر نداریم */
+function pxHistAgo($pair, $seconds = 86400) {
+    $pts = (array)(load('px_hist')[strtoupper((string)$pair)] ?? []);
+    if (!$pts) return null;      // یک نقطه‌ی کهنه هم برای حساب کردن بس است
+
+    $target = time() - $seconds;
+    $best = null; $bestGap = PHP_INT_MAX;
+    foreach ($pts as $p) {
+        if (!is_array($p) || count($p) < 2) continue;
+        $gap = abs((int)$p[0] - $target);
+        if ($gap < $bestGap) { $bestGap = $gap; $best = (float)$p[1]; }
+    }
+    // نقطه‌ای که پیدا شد باید واقعا کهنه باشد، وگرنه درصد بی‌معنی می‌شود
+    if ($best === null || $best <= 0) return null;
+    if ($bestGap > $seconds * 0.75) return null;
+    return $best;
 }
 
 /** آخرین خطای موتور قیمت — برای صفحه‌ی وضعیت */
@@ -386,12 +450,17 @@ function pxToman($v) { return number_format(round((float)$v)); }
 // ============================================================
 
 /** سه‌خطی تومان/دلار/تون داخل نقل‌قول */
+/**
+ * یک ردیف قیمت — دقیقا به همان شکلی که در قالب تبدیل پسندیده شد:
+ * هر مقدار ایموجی پریمیوم خودش را دارد و هیچ واژه‌ی فارسی
+ * («تومان»، «دلار»، «تون») کنارش نوشته نمی‌شود — ایموجی خودش می‌گوید
+ * عدد مالِ چیست.
+ */
 function pxQuote($irt, $usd, $ton, $expandable = false) {
-    $e = pxEm('price', '💵');
     $t  = '<blockquote' . ($expandable ? ' expandable' : '') . '>';
-    $t .= $e . ' ' . pxToman($irt) . ' ' . h(pxT('toman')) . "\n";
-    $t .= $e . ' ' . pxNum($usd) . ' ' . h(pxT('dollar'));
-    if ($ton !== null) $t .= "\n" . $e . ' ' . pxNum($ton) . ' ' . h(pxT('ton'));
+    $t .= pxEm('usd', '💵') . ' ' . pxNum($usd) . "\n";
+    $t .= pxEm('toman', '💰') . ' ' . pxToman($irt);
+    if ($ton !== null) $t .= "\n" . pxEm('ton', '💎') . ' ' . pxNum($ton);
     $t .= '</blockquote>';
     return $t;
 }
@@ -493,8 +562,8 @@ function pxStarsText($n = 1, $fresh = false) {
             $d = pxStars($p);
             if (!$d) continue;
             $lines[] = pxEm('star', '✨') . ' <b>' . number_format($p) . '</b> — ' .
-                       pxToman($d['irt']) . ' ' . h(pxT('toman')) . ' · ' .
-                       pxNum($d['ton']) . ' ' . h(pxT('ton'));
+                       pxEm('toman', '💰') . ' ' . pxToman($d['irt']) . ' · ' .
+                       pxEm('ton', '💎') . ' ' . pxNum($d['ton']);
         }
         $t .= implode("\n", $lines) . '</blockquote>' . "\n";
     }
@@ -1269,9 +1338,21 @@ function pxHandleText($text, $chatId, $replyTo = null) {
 /** درصد تغییر ۲۴ ساعت، اگر API بدهد */
 function pxChangeOf($pair) {
     $p = pxFetch();
-    $base = explode('/', strtoupper((string)$pair))[0];
+    $pair = strtoupper((string)$pair);
+    $base = explode('/', $pair)[0];
+
+    // ۱) اگر خود API درصد داد، همان معتبرترین است
     foreach ([$pair . '/CHANGE24', $base . '/CHANGE24', $base . '/CHG', $base . '/CHANGE'] as $k) {
-        if (isset($p[$k])) return (float)$p[$k];
+        if (isset($p[$k]) && (float)$p[$k] != 0.0) return (float)$p[$k];
+    }
+
+    // ۲) وگرنه از تاریخچه‌ی خودمان حساب کن — این همان چیزی است که
+    //    نمی‌گذارد همه‌ی کارت‌ها همیشه «۰٪» بمانند
+    $now = (float)($p[$pair] ?? 0);
+    $old = pxHistAgo($pair);
+    if ($now > 0 && $old !== null && $old > 0) {
+        $pct = (($now - $old) / $old) * 100;
+        if (abs($pct) < 200) return round($pct, 2);      // جهش‌های بی‌معنی را نپذیر
     }
     return 0.0;
 }
@@ -1460,8 +1541,14 @@ function pxAdminList($chatId, $msgId, $kind) {
     editMsg(BOT_TOKEN, $chatId, $msgId, mb_substr($t, 0, 3900), inlineKb($rows));
 }
 
-/** نمونه‌ی آماده‌ی قالب کامل — تا از صفر شروع نکنید */
-function pxDemoTpl($which) {
+/**
+ * قالب‌های قدیمیِ نمونه — با واژه‌های فارسی کنار عددها.
+ * اگر ادمین دقیقا همین‌ها را ذخیره کرده باشد (یعنی دست‌نخورده از دکمه‌ی
+ * «نمونه‌ی آماده» آمده)، خودمان کنارشان می‌گذاریم تا قالب خودکارِ تازه
+ * — که ایموجی پریمیوم دارد و واژه‌ی فارسی ندارد — کار کند.
+ * قالبی که خود ادمین نوشته باشد هیچ‌وقت دست نمی‌خورد.
+ */
+function pxOldDemoTpl($which) {
     if ($which === 'prem') {
         return "⭐️ <b>تلگرام پریمیوم</b>\n\n" .
                "<blockquote>💎 <b>۳ ماهه</b>\n{3irt} تومان · {3ton} تون</blockquote>\n" .
@@ -1473,6 +1560,45 @@ function pxDemoTpl($which) {
            "<blockquote>💵 <b>{irt}</b> تومان\n💎 {ton} تون</blockquote>\n\n" .
            "<blockquote expandable>{packs}</blockquote>\n" .
            "💵 دلار: <b>{usdt}</b> تومان\n🕓 <code>{date}</code>";
+}
+
+/**
+ * نمونه‌ی آماده‌ی قالب کامل — همان شکلی که پسندیده شد:
+ * هر مقدار داخل quote با ایموجی پریمیوم خودش، بدون واژه‌ی فارسی.
+ */
+function pxDemoTpl($which) {
+    $usd   = pxEm('usd', '💵');
+    $toman = pxEm('toman', '💰');
+    $ton   = pxEm('ton', '💎');
+    $date  = pxEm('date', '🕓');
+
+    if ($which === 'prem') {
+        $t = pxEm('prem', '⭐️') . " <b>Telegram Premium</b>\n\n";
+        foreach ([3, 6, 12] as $m) {
+            $t .= '<blockquote>' . pxEm('prem', '💎') . " <b>{$m} months</b>\n" .
+                  $usd   . ' {' . $m . "usd}\n" .
+                  $toman . ' {' . $m . "irt}\n" .
+                  $ton   . ' {' . $m . 'ton}</blockquote>' . "\n";
+        }
+        return $t . '<blockquote>' . $date . " {date}</blockquote>";
+    }
+
+    return pxEm('star', '⭐️') . " <b>{n} STARS</b>\n\n" .
+           '<blockquote>' . $usd . " {usd}\n" . $toman . " {irt}\n" . $ton . " {ton}</blockquote>\n" .
+           "<blockquote expandable>{packs}</blockquote>\n" .
+           '<blockquote>' . $date . ' {date}</blockquote>';
+}
+
+/**
+ * قالب کاملی که دقیقا برابر نمونه‌ی قدیمی است را پاک می‌کند.
+ * یک بار اجرا می‌شود و اثرش می‌ماند.
+ */
+function pxDropOldDemo() {
+    foreach (['prem' => 'prem_full', 'star' => 'star_full'] as $which => $key) {
+        $cur = trim((string)pxT($key));
+        if ($cur !== '' && $cur === trim(pxOldDemoTpl($which)))
+            pxSet(function (&$c) use ($key) { $c['texts'][$key] = ''; });
+    }
 }
 
 /** دکمه‌های زیر پیام قیمت */

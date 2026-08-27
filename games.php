@@ -97,7 +97,6 @@ function gmDefaults() {
             'off'        => "🎮 بازی فعلا خاموش است.",
             'low'        => "❌ الماس کافی نداری.\n💎 موجودی تو: <b>{points}</b> · لازم: <b>{need}</b>",
             'bad_stake'  => "❌ شرط باید بین <b>{min}</b> و <b>{max}</b> الماس باشد.",
-            'busy'       => "⏳ یک بازی باز داری. اول همان را تمام کن یا لغو کن.",
             'not_yours'  => "این بازی مال تو نیست.",
             'not_turn'   => "نوبت تو نیست.",
             'taken'      => "این خانه پر است.",
@@ -223,16 +222,6 @@ function gmPut($g) {
                     && ($now - (int)($v['created'] ?? 0)) > 86400) unset($a[$k]);
         }
     });
-}
-
-/** بازی بازِ همین کاربر در همین گروه */
-function gmOpenOf($uid, $chat) {
-    foreach (gmAll() as $g) {
-        if ((int)$g['host'] !== (int)$uid) continue;
-        if ((string)$g['chat'] !== (string)$chat) continue;
-        if (in_array($g['status'], ['open', 'playing'], true)) return $g;
-    }
-    return null;
 }
 
 // ============================================================
@@ -555,13 +544,9 @@ function gmHandleText($text, $uid, $chatId, $name, $uname = '', $replyTo = null,
         sendMsg(BOT_TOKEN, $chatId, gmT('bad_stake', ['min' => gmNum($min), 'max' => gmNum($max)]), null, $extra);
         return true;
     }
-    if ($old = gmOpenOf($uid, $chatId)) {
-        // فقط «یک بازی باز داری» گفتن بن‌بست است؛ دکمه‌ی لغوِ همان بازی
-        // را کنارش می‌گذاریم تا بشود همان‌جا رهایش کرد.
-        sendMsg(BOT_TOKEN, $chatId, gmT('busy'),
-            inlineKb([[gmBtn('duel_cancel', [], 'gmc_' . $old['id'], 'danger')]]), $extra);
-        return true;
-    }
+    // 🎲 هرچند بازی که الماس داشته باشی. تنها سقف، خودِ الماس است —
+    //    چون شرطِ هر بازی همان لحظه از موجودی کم می‌شود، کسی نمی‌تواند
+    //    بیشتر از دارایی‌اش بازی باز کند.
     if (!gmAdd($uid, -$stake, $name, $uname)) {
         sendMsg(BOT_TOKEN, $chatId,
             gmT('low', ['points' => gmNum(gmPoints($uid)), 'need' => gmNum($stake)]), null, $extra);
@@ -800,7 +785,7 @@ function gmLabels() {
         'send_bal2' => 'انتقال — برچسب گیرنده', 'send_how' => 'انتقال — راهنما',
         'send_self' => 'انتقال — به خودت', 'off' => 'پیام خاموش بودن',
         'low'       => 'الماس کافی نیست',  'bad_stake' => 'شرط نامعتبر',
-        'busy'      => 'بازی باز داری',    'not_yours' => 'مال تو نیست',
+        'not_yours' => 'مال تو نیست',
         'not_turn'  => 'نوبت تو نیست',     'taken' => 'خانه پر است',
         'gone'      => 'بازی تمام شده',    'cancelled' => 'بازی لغو شد',
         'group_only'=> 'فقط داخل گروه', 'already' => 'خودت داخل بازی هستی',
