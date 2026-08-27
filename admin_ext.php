@@ -2266,8 +2266,11 @@ function axWalletHome($chatId, $msgId) {
     $t .= "📊 خرج امروز: <b>" . h(nanoToTon($spent)) . "</b> TON\n";
 
     axShow($chatId, $msgId, $t, [
-        [btnCb((!empty($w['on']) ? '🟢 روشن' : '🔴 خاموش'), 'axwtog', 'admin'),
-         btnCb((!empty($w['dry']) ? '🧪 آزمایشی' : '🚀 واقعی'), 'axwdry', 'admin')],
+        // 🔘 برچسبِ دکمه، کاری که می‌کند — نه وضعیتی که هست.
+        //    وضعیت بالاتر در خودِ متن نوشته شده؛ دکمه‌ای که «واقعی»
+        //    می‌نوشت شبیه برچسب بود و معلوم نبود اصلا زدنی است.
+        [btnCb(!empty($w['on']) ? '🔴 خاموشش کن' : '🟢 روشنش کن', 'axwtog', 'admin'),
+         btnCb(!empty($w['dry']) ? '🚀 برو حالت واقعی' : '🧪 برو حالت آزمایشی', 'axwdry', 'admin')],
         [btnCb('🔑 عبارت بازیابی', 'axwmn', 'admin'), btnCb('📍 آدرس ولت', 'axwad', 'admin')],
         [btnCb('🔒 رمز عبارت (اگر دارد)', 'axwpw', 'admin')],
         [btnCb('🔢 نسخه: ' . h((string)$w['version']), 'axwver', 'admin'),
