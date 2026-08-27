@@ -650,7 +650,15 @@ function defaultConfig() {
             'orders_empty' => "📊 هنوز سفارشی ثبت نکرده‌اید.",
             'track_ask'    => "<b>پیگیری سفارش</b>\n\nکد پیگیری سفارش خود را بفرستید.\n<i>نمونه:</i> <code>or_tjwodm15a1a3</code>",
             'track_bad'    => "سفارشی با کد <code>{code}</code> پیدا نشد.\n\nکد پیگیری را از پیام ثبت سفارش کپی کنید.",
-            'order_done'   => "{head}\n\nمحصول: <b>{product}</b>\n{link_line}{qty_line}{speed_line}{perday_line}{eta_line}مبلغ: <b>{amount} {currency}</b>\nکد پیگیری: <code>{code}</code>\nوضعیت: <b>{status}</b>\n{content}\n{note}",
+            // ✅ پیام ثبت سفارش — فقط ایموجی پریمیوم، هیچ ایموجی معمولی.
+            // در پنل ← متن‌ها ← «✅ پیام ثبت سفارش» قابل ویرایش است.
+            'order_done'   => "<tg-emoji emoji-id=\"5899945812296731931\">✅</tg-emoji> {head}\n\n" .
+                              "<blockquote>محصول: <b>{product}</b>\n" .
+                              "{link_line}{qty_line}{speed_line}{perday_line}{eta_line}" .
+                              "<tg-emoji emoji-id=\"5965097893491642896\">💰</tg-emoji> مبلغ: <b>{amount} {currency}</b>\n" .
+                              "وضعیت: <b>{status}</b></blockquote>\n" .
+                              "<blockquote><tg-emoji emoji-id=\"5413879192267805083\">🧾</tg-emoji> کد پیگیری: <code>{code}</code></blockquote>\n" .
+                              "{content}\n{note}",
             'order_status' => "<b>وضعیت سفارش</b>\n\nکد پیگیری: <code>{code}</code>\nوضعیت: <b>{status}</b>\n\n<b>{product}</b>\n{link_line}{qty_line}{perday_line}{eta_line}{progress}\nمبلغ: <b>{amount} {currency}</b>\nثبت: {created}\n{approved_line}\n{hint}",
             'orders_head'  => "📊 <b>سفارش‌های شما</b>\n",
             'referral'     => "👥 <b>زیر مجموعه گیری</b>\n\nبا دعوت دوستان خود <b>{percent}%</b> از هر خرید آن‌ها را دریافت کنید.\n\n🔗 لینک اختصاصی شما:\n{link}\n\n👥 تعداد زیرمجموعه: <b>{referrals}</b>\n💵 درآمد شما: <b>{ref_earned}</b> تومان",
@@ -8151,6 +8159,22 @@ if (isset($_GET['cron'])) {
  * با شناسه‌ی تازه دوباره برسد. ولی «شماره‌ی پیام در همان چت» هیچ‌وقت
  * عوض نمی‌شود — پس این لایه آن حالت را هم می‌گیرد.
  */
+/**
+ * 🔄 «پیام ثبت سفارش» قدیمی که ایموجی معمولی داشت را کنار می‌گذارد تا
+ * پیش‌فرضِ تازه — که فقط ایموجی پریمیوم دارد — جایش بنشیند.
+ * متنی که خود ادمین نوشته باشد دست نمی‌خورد.
+ */
+function dropOldOrderText() {
+    $old = "{head}\n\nمحصول: <b>{product}</b>\n{link_line}{qty_line}{speed_line}" .
+           "{perday_line}{eta_line}مبلغ: <b>{amount} {currency}</b>\n" .
+           "کد پیگیری: <code>{code}</code>\nوضعیت: <b>{status}</b>\n{content}\n{note}";
+    $cur = (string)(cfg()['texts']['order_done'] ?? '');
+    // 🔑 کلید باید کاملا حذف شود، نه خالی. متنِ خالی در ادغام روی
+    //    پیش‌فرض می‌نشیند و پیام ثبت سفارش کلا خالی می‌شد.
+    if (trim($cur) !== '' && trim($cur) === trim($old))
+        cfgSet(function (&$c) { unset($c['texts']['order_done']); });
+}
+
 function seenMessage($update) {
     foreach (['message', 'edited_message', 'callback_query'] as $k) {
         if (!isset($update[$k])) continue;
@@ -8254,6 +8278,11 @@ function runBackgroundQueues() {
         @touch($mMark);
         if (function_exists('pxDropOldDemo')) pxDropOldDemo();
         if (function_exists('maDropOldTexts')) maDropOldTexts();
+    }
+    $mMark3 = DATA_DIR . '/.migrated_v3';
+    if (!is_file($mMark3)) {
+        @touch($mMark3);
+        dropOldOrderText();
     }
 
     // 🗄 بایگانی سفارش‌ها — کم‌تکرار، چون خودش سنگین است

@@ -256,16 +256,35 @@ function pxFetch($fresh = false) {
     // بعضی پاسخ‌ها داخل result بسته‌بندی می‌شوند
     $rows = (isset($j['result']) && is_array($j['result'])) ? $j['result'] : $j;
 
+    $num = function ($v) {
+        if (!is_scalar($v)) return null;
+        $raw = str_replace([',', '،', '٬', ' '], '', norm_fa_digits((string)$v));
+        return is_numeric($raw) ? (float)$raw : null;
+    };
+
     $out = [];
     foreach ($rows as $k => $v) {
         if (!is_string($k) || !str_contains($k, '/')) continue;
-        if (!is_scalar($v)) continue;
-        // درصد تغییر می‌تواند منفی باشد؛ فیلترِ «بزرگ‌تر از صفر» همه‌ی
-        // ریزش‌ها را دور می‌ریخت و کارت‌ها همیشه ۰٪ نشان می‌دادند.
-        $raw = norm_fa_digits((string)$v);
-        $raw = str_replace([',', '،', '٬', ' '], '', $raw);
-        if (!is_numeric($raw)) continue;
-        $out[strtoupper($k)] = (float)$raw;
+        $K = strtoupper($k);
+
+        // حالت ساده: مقدار خودِ قیمت است
+        $n = $num($v);
+        if ($n !== null) { $out[$K] = $n; continue; }
+
+        // 🔎 حالت تودرتو: بعضی APIها به‌جای یک عدد، یک شیء می‌دهند
+        // {"price":…, "change24h":…}. قبلا این‌ها کامل دور ریخته می‌شدند
+        // و هم قیمت و هم درصد گم می‌شد.
+        if (!is_array($v)) continue;
+        foreach (['price', 'last', 'value', 'p', 'close', 'rate'] as $pk) {
+            if (isset($v[$pk]) && ($n = $num($v[$pk])) !== null) { $out[$K] = $n; break; }
+        }
+        foreach (['change24h', 'change_24h', 'changePercent', 'change_percent',
+                  'percentChange', 'percent', 'change', 'chg', 'dp'] as $ck) {
+            if (isset($v[$ck]) && ($c = $num($v[$ck])) !== null) {
+                $out[explode('/', $K)[0] . '/CHANGE24'] = $c;
+                break;
+            }
+        }
     }
     if (!$out) {
         maCachePut('px_err', 'پاسخ آمد ولی هیچ جفت‌ارزی نداشت');
@@ -289,7 +308,7 @@ function pxFetch($fresh = false) {
  *
  * فایل کوچک می‌ماند: حداکثر یک نقطه در نیم‌ساعت و فقط ۵۰ ساعت اخیر.
  */
-if (!defined('PX_HIST_STEP')) define('PX_HIST_STEP', 1800);    // نیم ساعت
+if (!defined('PX_HIST_STEP')) define('PX_HIST_STEP', 600);     // ۱۰ دقیقه
 if (!defined('PX_HIST_KEEP')) define('PX_HIST_KEEP', 180000);  // ۵۰ ساعت
 
 function pxHistNote($prices) {
@@ -317,22 +336,40 @@ function pxHistNote($prices) {
     });
 }
 
-/** قیمت همین جفت‌ارز در حدود ۲۴ ساعت پیش — یا null اگر نداریم */
+/**
+ * قیمتِ گذشته برای حساب کردن درصد.
+ *
+ * ایده‌آل ۲۴ ساعت پیش است، ولی ربات که تازه راه افتاده هنوز آن‌قدر
+ * تاریخچه ندارد و درصدها روی صفر می‌ماندند. پس نزدیک‌ترین نقطه به ۲۴
+ * ساعت را برمی‌داریم و اگر نبود، قدیمی‌ترین نقطه‌ای که دست‌کم
+ * PX_HIST_MIN ثانیه عمر دارد — یعنی درصدِ واقعیِ همان بازه.
+ */
+if (!defined('PX_HIST_MIN')) define('PX_HIST_MIN', 1500);   // ۲۵ دقیقه
+
 function pxHistAgo($pair, $seconds = 86400) {
     $pts = (array)(load('px_hist')[strtoupper((string)$pair)] ?? []);
-    if (!$pts) return null;      // یک نقطه‌ی کهنه هم برای حساب کردن بس است
+    if (!$pts) return null;
 
-    $target = time() - $seconds;
+    $now = time();
+    $target = $now - $seconds;
+
     $best = null; $bestGap = PHP_INT_MAX;
+    $oldest = null; $oldestT = PHP_INT_MAX;
     foreach ($pts as $p) {
         if (!is_array($p) || count($p) < 2) continue;
-        $gap = abs((int)$p[0] - $target);
-        if ($gap < $bestGap) { $bestGap = $gap; $best = (float)$p[1]; }
+        $t = (int)$p[0]; $v = (float)$p[1];
+        if ($v <= 0) continue;
+        $gap = abs($t - $target);
+        if ($gap < $bestGap) { $bestGap = $gap; $best = $v; }
+        if ($t < $oldestT)   { $oldestT = $t;   $oldest = $v; }
     }
-    // نقطه‌ای که پیدا شد باید واقعا کهنه باشد، وگرنه درصد بی‌معنی می‌شود
-    if ($best === null || $best <= 0) return null;
-    if ($bestGap > $seconds * 0.75) return null;
-    return $best;
+
+    // نقطه‌ای نزدیک ۲۴ ساعت داریم؟ همان بهترین است
+    if ($best !== null && $bestGap <= $seconds * 0.75) return $best;
+
+    // وگرنه قدیمی‌ترین نقطه، به شرطی که واقعا کهنه باشد
+    if ($oldest !== null && ($now - $oldestT) >= PX_HIST_MIN) return $oldest;
+    return null;
 }
 
 /** آخرین خطای موتور قیمت — برای صفحه‌ی وضعیت */
@@ -991,10 +1028,54 @@ function pxCard($symbol, $usd, $chgPct, $series = null) {
 }
 
 /** فرستادن عکس با کپشن — tg() فقط فرم ساده می‌فرستد، پس اینجا خودمان */
-function pxSendPhoto($chatId, $bytes, $caption, $markup = null, $replyTo = null) {
+/**
+ * 🚀 فرستادن کارت با شناسه‌ی فایلِ تلگرام.
+ *
+ * هر کارت حدود ۴۳ کیلوبایت است و تا حالا هر بار از نو آپلود می‌شد —
+ * روی هاستی که خط خوبی به تلگرام ندارد، همین آپلود چند ثانیه می‌شد و
+ * کاربر «کندی» حس می‌کرد.
+ *
+ * تلگرام بعد از اولین آپلود یک file_id می‌دهد. دفعه‌ی بعد همان تصویر
+ * را فقط با همان شناسه می‌فرستیم: هیچ بایتی آپلود نمی‌شود، فقط یک
+ * درخواست کوچک. تا وقتی قیمت عوض نشده، همه‌ی کاربرها همان کارت را
+ * می‌گیرند.
+ */
+function pxPhotoIdKey($cacheKey) { return 'pxfid_' . substr(md5((string)$cacheKey), 0, 16); }
+
+function pxSendPhotoById($chatId, $fileId, $caption, $markup = null, $replyTo = null) {
+    $post = [
+        'chat_id'    => $chatId,
+        'photo'      => $fileId,
+        'caption'    => mb_substr((string)$caption, 0, 1024),
+        'parse_mode' => 'HTML',
+    ];
+    if ($markup)  $post['reply_markup'] = is_string($markup) ? $markup : json_encode($markup);
+    if ($replyTo) $post['reply_to_message_id'] = $replyTo;
+    return tg(BOT_TOKEN, 'sendPhoto', $post, 20);
+}
+
+/** شناسه‌ی فایل را از پاسخ تلگرام درمی‌آورد */
+function pxPhotoIdOf($resp) {
+    $ph = $resp['result']['photo'] ?? null;
+    if (!is_array($ph) || !$ph) return '';
+    $last = $ph[count($ph) - 1] ?? [];
+    return (string)($last['file_id'] ?? '');
+}
+
+function pxSendPhoto($chatId, $bytes, $caption, $markup = null, $replyTo = null, $cacheKey = '') {
     if (function_exists('__tgHook'))
         return __tgHook(BOT_TOKEN, 'sendPhoto',
             ['chat_id' => $chatId, 'caption' => $caption, 'photo_len' => strlen((string)$bytes)]);
+
+    // ⚡ اگر همین کارت قبلا آپلود شده، فقط شناسه‌اش را می‌فرستیم
+    if ($cacheKey !== '') {
+        $fid = (string)(maCacheGet(pxPhotoIdKey($cacheKey), 86400) ?? '');
+        if ($fid !== '') {
+            $r = pxSendPhotoById($chatId, $fid, $caption, $markup, $replyTo);
+            if (!empty($r['ok'])) return $r;
+            maCachePut(pxPhotoIdKey($cacheKey), '');   // منقضی شده — از نو آپلود کن
+        }
+    }
 
     if (!is_string($bytes) || strlen($bytes) < 100)
         return ['ok' => false, 'description' => 'تصویر ساخته نشد'];
@@ -1038,7 +1119,14 @@ function pxSendPhoto($chatId, $bytes, $caption, $markup = null, $replyTo = null)
 
     if ($res === false) return ['ok' => false, 'description' => 'curl: ' . $err];
     $out = json_decode((string)$res, true);
-    return is_array($out) ? $out : ['ok' => false, 'description' => 'پاسخ نامعتبر تلگرام'];
+    if (!is_array($out)) return ['ok' => false, 'description' => 'پاسخ نامعتبر تلگرام'];
+
+    // شناسه را نگه دار تا دفعه‌ی بعد آپلود لازم نباشد
+    if ($cacheKey !== '' && !empty($out['ok'])) {
+        $fid = pxPhotoIdOf($out);
+        if ($fid !== '') maCachePut(pxPhotoIdKey($cacheKey), $fid);
+    }
+    return $out;
 }
 
 /**
@@ -1047,11 +1135,11 @@ function pxSendPhoto($chatId, $bytes, $caption, $markup = null, $replyTo = null)
  * قانون: کاربر نباید هیچ‌وقت دست خالی بماند. عکس نرفت؟ متن می‌رود.
  * و علتش یک بار در ساعت به مدیر گفته می‌شود تا خرابی ساکت نماند.
  */
-function pxDeliver($chatId, $png, $caption, $markup = null, $replyTo = null) {
+function pxDeliver($chatId, $png, $caption, $markup = null, $replyTo = null, $cacheKey = '') {
     $extra = $replyTo ? ['reply_to_message_id' => $replyTo] : [];
 
-    if ($png !== null) {
-        $r = pxSendPhoto($chatId, $png, $caption, $markup, $replyTo);
+    if ($png !== null || $cacheKey !== '') {
+        $r = pxSendPhoto($chatId, $png, $caption, $markup, $replyTo, $cacheKey);
         if (!empty($r['ok'])) return true;
 
         $why = (string)($r['description'] ?? 'نامشخص');
@@ -1315,11 +1403,15 @@ function pxHandleText($text, $chatId, $replyTo = null) {
             return true;
         }
         $chg = pxAssetChange($ak);
-        $png = pxCardCached('a|' . $ak . '|' . $price . '|' . $chg,
-                fn() => pxAssetCard($a['name'], $a['emoji'], $price, $a['unit'], $chg, $a['bg']));
+        $ck  = 'a|' . $ak . '|' . $price . '|' . $chg;
+        // کارت فقط وقتی ساخته می‌شود که شناسه‌ی فایلش را نداشته باشیم —
+        // وگرنه اصلا رندر هم لازم نیست
+        $png = (maCacheGet(pxPhotoIdKey($ck), 86400) ?? '') !== ''
+             ? null
+             : pxCardCached($ck, fn() => pxAssetCard($a['name'], $a['emoji'], $price, $a['unit'], $chg, $a['bg']));
         pxDeliver($chatId, $png,
             pxAssetCaption($a['name'], $price, $a['unit'], $chg, $a['emoji'] ?? '', $ak),
-            $kb, $replyTo);
+            $kb, $replyTo, $ck);
         return true;
     }
 
@@ -1390,9 +1482,11 @@ function pxHandleText($text, $chatId, $replyTo = null) {
     $cap = pxCoinCaption($sym, $usd, $usd * $irtRate, $chg, $hi, $lo);
 
     // قیمت تومانی روی کارت — چون مخاطب ایرانی است
-    $png = pxCardCached('c|' . $sym . '|' . round($usd * $irtRate) . '|' . $chg,
-            fn() => pxCoinCard($sym, $usd * $irtRate, 'تومان', $chg, $usd * $irtRate));
-    pxDeliver($chatId, $png, $cap, $kb, $replyTo);
+    $ck  = 'c|' . $sym . '|' . round($usd * $irtRate) . '|' . $chg;
+    $png = (maCacheGet(pxPhotoIdKey($ck), 86400) ?? '') !== ''
+         ? null
+         : pxCardCached($ck, fn() => pxCoinCard($sym, $usd * $irtRate, 'تومان', $chg, $usd * $irtRate));
+    pxDeliver($chatId, $png, $cap, $kb, $replyTo, $ck);
     return true;
 }
 
