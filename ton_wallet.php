@@ -942,12 +942,29 @@ function tonInternalMessage($msg) {
         $cell = TonCell::fromBits($b);
     }
 
-    // body: either — همیشه به شکل ref می‌گذاریم تا مطمئن باشیم جا می‌شود
-    $b->writeBit(1);
+    // body: either — اگر جا می‌شود همان‌جا داخل خودِ پیام، وگرنه ref.
+    //
+    // قبلا همیشه ref می‌شد. غلط نبود (هر دو شکل در TL-B مجازند) ولی برای
+    // بدنه‌ی خالی یک سلولِ بی‌مصرف می‌ساخت، کارمزد فوروارد را بالا می‌برد،
+    // و خروجی را با کتابخانه‌های استاندارد TON ناهم‌سان می‌کرد.
+    $bodyCell = $payload !== '' ? tonBocFromBase64($payload) : new TonCell();
     $refs = $cell->refs;
-    $cell = TonCell::fromBits($b);
-    foreach ($refs as $r) $cell->addRef($r);
-    $cell->addRef($payload !== '' ? tonBocFromBase64($payload) : new TonCell());
+
+    $fits = (strlen($b->bits) + 1 + strlen($bodyCell->bits)) <= 1023
+         && (count($refs) + count($bodyCell->refs)) <= 4;
+
+    if ($fits) {
+        $b->writeBit(0);                       // داخلِ خودِ پیام
+        $b->writeBits($bodyCell->bits);
+        $cell = TonCell::fromBits($b);
+        foreach ($refs as $r) $cell->addRef($r);
+        foreach ($bodyCell->refs as $r) $cell->addRef($r);
+    } else {
+        $b->writeBit(1);                       // به شکل ref
+        $cell = TonCell::fromBits($b);
+        foreach ($refs as $r) $cell->addRef($r);
+        $cell->addRef($bodyCell);
+    }
 
     return $cell;
 }
@@ -956,24 +973,77 @@ function tonInternalMessage($msg) {
  * پیام خارجی امضاشده برای ولت v4R2.
  * $messages: آرایه‌ای از خروجی tonInternalMessage
  */
+/**
+ * 🔏 بدنه‌ی امضاشده‌ی ولت W5 (v5R1).
+ *
+ * W5 با v3/v4 فرق بنیادی دارد:
+ *   • یک opcode سرِ پیام دارد: 0x7369676e، همان «sign»
+ *   • به‌جای «mode + رفرنسِ پیام» پشت سر هم، یک «فهرست اکشن» می‌سازد که
+ *     هر حلقه‌اش به حلقه‌ی قبلی رفرنس می‌دهد
+ *   • و امضا در <b>انتهای</b> بدنه می‌نشیند، نه ابتدایش
+ *
+ * چیدمان:
+ *   payload = op(32) | wallet_id(32) | valid_until(32) | seqno(32)
+ *             | 1 (out_actions هست) | 0 (اکشن دیگری نیست)
+ *             + رفرنس: فهرست اکشن‌ها
+ *   body    = بیت‌های payload + امضا(512) ، با همان رفرنس‌ها
+ */
+function tonSignedBodyV5($keys, $walletId, $seqno, $messages, $validUntil, $sendMode) {
+    // فهرست اکشن‌ها — از خالی شروع، هر پیام یک حلقه روی قبلی
+    $list = TonCell::fromBits(new TonBits());           // out_list_empty
+    foreach ($messages as $m) {
+        $ab = new TonBits();
+        $ab->writeUint(0x0ec3c86d, 32);                 // action_send_msg
+        $ab->writeUint($sendMode & 0xFF, 8);
+        $node = TonCell::fromBits($ab);
+        $node->addRef($list);                           // prev
+        $node->addRef($m);                              // out_msg
+        $list = $node;
+    }
+
+    $p = new TonBits();
+    $p->writeUint(0x7369676e, 32);                      // درخواست بیرونیِ امضاشده
+    $p->writeUint($walletId, 32);
+    $p->writeUint($validUntil, 32);
+    $p->writeUint($seqno, 32);
+    $p->writeBit(1);                                    // out_actions دارد
+    $p->writeBit(0);                                    // اکشن افزونه‌ای ندارد
+    $payload = TonCell::fromBits($p);
+    $payload->addRef($list);
+
+    [$cOk, $cWhy] = tonCryptoReady();
+    if (!$cOk) throw new Exception($cWhy);
+    $sig = sodium_crypto_sign_detached($payload->hash(), $keys['secret']);
+
+    // امضا در انتها — همان چیزی که قرارداد W5 انتظار دارد
+    $bb = new TonBits();
+    $bb->writeBits($payload->bits);
+    $bb->writeBytes($sig);
+    $body = TonCell::fromBits($bb);
+    foreach ($payload->refs as $r) $body->addRef($r);
+    return $body;
+}
+
 function tonSignedExternal($keys, $walletAddr, $seqno, $messages, $opts = []) {
     $subwallet  = (int)($opts['subwallet'] ?? 698983191);
     $version    = strtolower((string)($opts['version'] ?? 'v4r2'));
 
-    // ⚠️ W5 بدنه‌ی کاملا دیگری دارد: opcode جداگانه، فهرست اکشن به‌جای
-    //    جفتِ mode+ref، و امضا در انتها نه ابتدا. اگر اینجا مثل v4
-    //    بسازیمش، قرارداد ردش می‌کند و شبکه می‌گوید «external message
-    //    was not accepted» — بدون اینکه معلوم شود چرا. پس صریح می‌ایستیم.
-    if (str_starts_with($version, 'v5') || str_contains($version, 'w5'))
-        throw new Exception('ولت W5 (v5R1) هنوز پشتیبانی نمی‌شود — قالب پیامش با v4R2 فرق دارد. '
-                          . 'از همان عبارت بازیابی، آدرس v4R2 را بردارید.');
-
-    if (!str_starts_with($version, 'v3') && !str_starts_with($version, 'v4'))
+    if (!str_starts_with($version, 'v3') && !str_starts_with($version, 'v4')
+        && !str_starts_with($version, 'v5'))
         throw new Exception('نسخه‌ی ولت ناشناخته: ' . $version);
+    if (strpos($version, 'v3') === 0 && !isset($opts['subwallet'])) $subwallet = 698983191;
+
     $validUntil = (int)($opts['valid_until'] ?? (time() + 300));
     $sendMode   = (int)($opts['mode'] ?? 3);
-    $stateInit  = $opts['state'] ?? null;      // فقط اگر ولت هنوز روی شبکه نیست
-    if (strpos($version, 'v3') === 0 && !isset($opts['subwallet'])) $subwallet = 698983191;
+    $stateInit  = $opts['state'] ?? null;
+
+    if (str_starts_with($version, 'v5')) {
+        if (count($messages) > 255) throw new Exception('حداکثر ۲۵۵ پیام در هر تراکنش');
+        $wid  = (int)($opts['wallet_id'] ?? tonWalletId('v5r1',
+                      (int)($opts['wc'] ?? 0), (int)($opts['sub'] ?? 0)));
+        $body = tonSignedBodyV5($keys, $wid, $seqno, $messages, $validUntil, $sendMode);
+        return tonWrapExternal($walletAddr, $body, $stateInit);
+    }
 
     if (count($messages) > 4) throw new Exception('حداکثر ۴ پیام در هر تراکنش');
 
@@ -1000,7 +1070,11 @@ function tonSignedExternal($keys, $walletAddr, $seqno, $messages, $opts = []) {
     $body = TonCell::fromBits($bodyBits);
     foreach ($innerCell->refs as $r) $body->addRef($r);
 
-    // پوشش پیام خارجی
+    return tonWrapExternal($walletAddr, $body, $stateInit);
+}
+
+/** پوششِ پیام خارجی — برای هر نسخه‌ی ولت یکی است، فقط بدنه فرق دارد */
+function tonWrapExternal($walletAddr, TonCell $body, $stateInit = null) {
     $ext = new TonBits();
     $ext->writeBits('10');       // ext_in_msg_info$10
     $ext->writeBits('00');       // src: addr_none
@@ -1014,7 +1088,6 @@ function tonSignedExternal($keys, $walletAddr, $seqno, $messages, $opts = []) {
     $cell = TonCell::fromBits($ext);
     if ($stateInit instanceof TonCell) $cell->addRef($stateInit);
     $cell->addRef($body);
-
     return $cell;
 }
 

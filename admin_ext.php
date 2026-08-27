@@ -2154,8 +2154,13 @@ function axWalletSend($msgs, $note = '') {
         if ($ver !== (string)$w['version'])
             axSet(function (&$c) use ($ver) { $c['wallet']['version'] = $ver; });
 
-        $boc = tonSignedExternalB64($keys, (string)$w['address'], (int)($seqno ?? 0), $cells,
-                                    ['version' => $ver]);
+        // wallet_id و workchain هم از همان تایید می‌آیند — W5 برای هر
+        // workchain و هر subwallet شناسه‌ی جداگانه دارد.
+        $sopt = ['version' => $ver];
+        if (isset($v['wallet_id'])) $sopt['wallet_id'] = (int)$v['wallet_id'];
+        if (isset($v['wc']))        $sopt['wc']        = (int)$v['wc'];
+
+        $boc = tonSignedExternalB64($keys, (string)$w['address'], (int)($seqno ?? 0), $cells, $sopt);
 
         if ($dry) {
             $refund();
