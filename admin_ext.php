@@ -122,6 +122,14 @@ function axDefaults() {
                             "<blockquote expandable>❗️ تمامی سفارش‌ها بصورت آنی ثبت شده و بصورت سیستمی انجام می‌گیرند.\n" .
                             "پس از پرداخت، سفارش خودکار وارد صف تحویل می‌شود.</blockquote>\n\n" .
                             "👇 روش پرداخت را انتخاب کنید:",
+
+            // ✅ پیامی که بعد از تحویلِ خودکار برای خریدار می‌رود
+            'done_on' => true,
+            'done'    => "✅ <b>سفارش شما انجام شد</b>\n\n" .
+                         "<blockquote>📦 {item}\n" .
+                         "🎯 گیرنده: <code>{field}</code>\n" .
+                         "🔑 <code>{code}</code></blockquote>\n\n" .
+                         "🙏 از خرید شما سپاسگزاریم.",
         ],
 
         // ---------- 👛 خودکارسازی ولت TON ----------
@@ -427,6 +435,18 @@ function axManualToggle($itemId) {
 }
 
 /** جای‌گذاری مقدارها در قالب‌ها */
+/**
+ * ✅ متنِ «سفارش انجام شد» برای خریدار.
+ *
+ * اگر ادمین متن خودش را نوشته باشد همان می‌رود — با ایموجی پریمیوم و
+ * نقل‌قول. وگرنه پیامِ پیش‌فرض. {ref} کد سفارش روی پنل فروش است.
+ */
+function axDoneText($order, $ref = '') {
+    $tpl = trim((string)axVal('texts.done', ''));
+    if ($tpl === '' || empty(axVal('texts.done_on'))) return null;
+    return axFill($tpl, $order, ['{ref}' => h((string)$ref)]);
+}
+
 function axFill($tpl, $order, $more = []) {
     $u = function_exists('getUser') ? (getUser((int)($order['user_id'] ?? 0)) ?: []) : [];
     $uname = !empty($order['username']) ? '@' . ltrim((string)$order['username'], '@')
@@ -1105,11 +1125,15 @@ function axTextsHome($chatId, $msgId) {
     $t .= "📤 <b>دکمه اشتراک‌گذاری دعوت</b>: " . (!empty($l['share_on']) ? '🟢 روشن' : '🔴 خاموش') . "\n";
     $t .= "متن دکمه: <b>" . h((string)$l['share_btn']) . "</b>\n";
     $t .= "<i>با زدنش، تلگرام فهرست پیوی‌ها و گروه‌ها را باز می‌کند و کاربر\n" .
-          "با یک ضربه لینک دعوتش را همان‌جا می‌فرستد.</i>\n";
+          "با یک ضربه لینک دعوتش را همان‌جا می‌فرستد.</i>\n\n";
+    $t .= "✅ <b>متن «سفارش انجام شد»</b>: " .
+          (!empty(axVal('texts.done_on')) ? '🟢 سفارشی' : '⚪️ پیش‌فرض') . "\n";
 
     axShow($chatId, $msgId, $t, [
         [btnCb('🧾 متن تایید سفارش مینی‌اپ', 'axinv', 'admin')],
         [btnCb((!empty(axVal('texts.invoice_on')) ? '🟢 متن سفارشی روشن' : '⚪️ متن پیش‌فرض'), 'axinvtog', 'admin')],
+        [btnCb('✅ متن «سفارش انجام شد»', 'axdonetx', 'admin')],
+        [btnCb((!empty(axVal('texts.done_on')) ? '🟢 متن سفارشی روشن' : '⚪️ متن پیش‌فرض'), 'axdonetog', 'admin')],
         [btnCb('👥 متن دکمه عضوگیری', 'axtx_members_btn', 'admin')],
         [btnCb('📝 سربرگ منابع', 'axtx_members_head', 'admin')],
         [btnCb('💬 برچسب پیوی', 'axtx_members_pv', 'admin'),
@@ -1328,6 +1352,13 @@ function axCallback($data, $uid, $chatId, $msgId, $cbId, $isAdmin) {
         return true;
     }
 
+    if ($data === 'axdonetog') {
+        $now = axSet(function (&$c) { $c['texts']['done_on'] = empty($c['texts']['done_on']); return !empty($c['texts']['done_on']); });
+        $ack($now ? '🟢 متن سفارشی' : '⚪️ متن پیش‌فرض');
+        axTextsHome($chatId, $msgId);
+        return true;
+    }
+
     if ($data === 'axshtog') {
         $now = axSet(function (&$c) { $c['labels']['share_on'] = empty($c['labels']['share_on']); return !empty($c['labels']['share_on']); });
         $ack($now ? '🟢 روشن شد' : '🔴 خاموش شد');
@@ -1408,6 +1439,13 @@ function axCallback($data, $uid, $chatId, $msgId, $cbId, $isAdmin) {
         'axwapi'  => ['ax_w_api', "🌐 آدرس API شبکه را بفرستید.\n\nپیش‌فرض: <code>https://toncenter.com/api/v2</code>\n\nاگر کلید API دارید، بعد از آدرس یک فاصله و کلید را بگذارید."],
         'axwmax'  => ['ax_w_max', "🚧 سقف <b>هر تراکنش</b> به TON (فقط عدد).\n\nالان: <code>" . h((string)axVal('wallet.max_ton')) . "</code>"],
         'axwday'  => ['ax_w_day', "🚧 سقف <b>مجموع یک روز</b> به TON (فقط عدد).\n\nالان: <code>" . h((string)axVal('wallet.day_ton')) . "</code>"],
+        'axdonetx'=> ['ax_donetext', "✅ متنِ «سفارش انجام شد» را بفرستید.\n\n" .
+                                  "همین که بعد از تحویلِ خودکار برای خریدار می‌رود.\n" .
+                                  "ایموجی پریمیوم و نقل‌قول (quote) هرچه بگذارید عینا می‌ماند.\n\n" .
+                                  "کلیدها: <code>{item} {emoji} {qty} {unit} {field} {amount} {currency} {code} {ref} {user} {app} {date}</code>\n\n" .
+                                  "<code>{ref}</code> کد سفارش روی پنل فروش است.\n\n" .
+                                  "الان:\n" . (trim((string)axVal('texts.done','')) !== ''
+                                      ? axVal('texts.done') : '<i>پیش‌فرض</i>')],
         'axinv'   => ['ax_invoice',    "🧾 متن تایید سفارش مینی‌اپ‌ها را بفرستید.\n\nهمین‌جا می‌توانید ایموجی پریمیوم بگذارید و بخش‌ها را نقل‌قول (quote) کنید — عینا حفظ می‌شود.\n\nکلیدها: <code>{item} {qty} {unit} {field} {unit_price} {amount} {currency} {balance} {code} {app} {date}</code>"],
     ];
     if (isset($asks[$data])) {
@@ -1696,6 +1734,19 @@ function axStateHandle($action, $sd, $msg, $uid, $chatId) {
             $done("🚧 سقف روی <b>" . h($v) . "</b> TON تنظیم شد.", 'ax_wallet');
             return true;
         }
+
+        case 'ax_donetext':
+            if ($rich === '') { sendMsg(BOT_TOKEN, $chatId, "⚠️ متن خالی است."); return true; }
+            axSet(function (&$c) use ($rich) { $c['texts']['done'] = $rich; $c['texts']['done_on'] = true; });
+            clearState($uid);
+            sendMsg(BOT_TOKEN, $chatId, "✅ ذخیره و روشن شد. این‌طور دیده می‌شود:");
+            sendMsg(BOT_TOKEN, $chatId, axFill($rich, [
+                'item_name' => '۵۰ استارز', 'item_emoji' => '⭐️', 'qty' => 1, 'unit' => '',
+                'field' => '@whaleQT', 'total' => 149774, 'currency' => 'تومان',
+                'id' => 'ma_test1234', 'user_id' => 0, 'app' => 'tg',
+            ], ['{ref}' => 'FR-1234']),
+                inlineKb([[btnCb('✍️ متن‌ها', 'ax_texts', 'admin')]]));
+            return true;
 
         case 'ax_invoice':
             if ($rich === '') { sendMsg(BOT_TOKEN, $chatId, "⚠️ متن خالی است."); return true; }

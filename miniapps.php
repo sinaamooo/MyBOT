@@ -1623,6 +1623,26 @@ function maFulfillErr($resp, $cfgOp) {
     return 'خطای نامشخص';
 }
 
+/**
+ * ✅ پیامی که بعد از تحویل برای خریدار می‌رود.
+ *
+ * اگر ادمین متنِ خودش را نوشته باشد همان — با ایموجی پریمیوم و نقل‌قول.
+ * وگرنه همین پیامِ پیش‌فرض.
+ */
+function maDoneMsg($o, $ref = '') {
+    if (function_exists('axDoneText')) {
+        $t = axDoneText($o, $ref);
+        if (is_string($t) && trim($t) !== '') return $t;
+    }
+    return "✅ <b>سفارش شما انجام شد</b>\n\n" .
+           '📦 ' . h(maOrderTitle($o)) . "\n" .
+           ((float)($o['qty'] ?? 1) > 1 ? '🔢 ' . fmtNum($o['qty']) . ' ' . h((string)($o['unit'] ?? '')) . "\n" : '') .
+           (trim((string)($o['field'] ?? '')) !== '' ? '📎 ' . h((string)$o['field']) . "\n" : '') .
+           '🔑 <code>' . h((string)$o['id']) . "</code>\n" .
+           ($ref !== '' ? '🧾 کد پنل: <code>' . h($ref) . "</code>\n" : '') .
+           "\n🙏 از خرید شما سپاسگزاریم.";
+}
+
 /** سرویسِ یک سفارش، کدام عملیات خودکار را می‌خواهد؟ */
 function maAutoOp($o) {
     $i = maFindItem($o['app'], $o['item_id']);
@@ -1729,14 +1749,7 @@ function maAutoFulfill($orderId, $manual = false) {
 
     $o = MaOrder::get($orderId);
     if (function_exists('axReportOrder')) axReportOrder($o, 'done');
-    maTellUser($o,
-        "✅ <b>سفارش شما انجام شد</b>\n\n" .
-        '📦 ' . h(maOrderTitle($o)) . "\n" .
-        ((float)$o['qty'] > 1 ? '🔢 ' . fmtNum($o['qty']) . ' ' . h($o['unit']) . "\n" : '') .
-        (trim((string)$o['field']) !== '' ? '📎 ' . h($o['field']) . "\n" : '') .
-        '🔑 <code>' . h($o['id']) . "</code>\n" .
-        ($ref !== '' ? '🧾 کد پنل: <code>' . h($ref) . "</code>\n" : '') .
-        "\n🙏 از خرید شما سپاسگزاریم.");
+    maTellUser($o, maDoneMsg($o, $ref));
 
     sendMsg(BOT_TOKEN, ADMIN_ID,
         "🤖 <b>تحویل خودکار انجام شد</b>\n\n" .
@@ -3076,9 +3089,7 @@ function maCallback($data, $uid, $chatId, $msgId, $cbId, $isAdmin) {
         });
         answerCb(BOT_TOKEN, $cbId, '✅ بسته شد');
         $o2 = MaOrder::get($id);
-        maTellUser($o2, "✅ <b>سفارش شما انجام شد</b>\n\n" .
-                        '📦 ' . h(maOrderTitle($o2)) . "\n" .
-                        '🔑 <code>' . h($id) . '</code>');
+        maTellUser($o2, maDoneMsg($o2, (string)($o2['provider_ref'] ?? '')));
         sendMsg(BOT_TOKEN, $chatId, '✅ سفارش <code>' . h($id) . '</code> بسته شد و به کاربر خبر رفت.');
         return true;
     }
