@@ -8324,6 +8324,24 @@ function closeRequest($body = '') {
     @flush();
 }
 
+/**
+ * یک مهاجرت، فقط یک بار — ولی نشانه‌اش بعد از انجام شدن گذاشته می‌شود.
+ *
+ * هر مهاجرت نشانه‌ی خودش را دارد، پس شکستِ یکی بقیه را از کار نمی‌اندازد.
+ */
+function migrateOnce($key, callable $fn) {
+    $mark = DATA_DIR . '/.migrated_' . $key;
+    if (is_file($mark)) return false;
+    try {
+        $fn();
+    } catch (Throwable $e) {
+        error_log('[shop-bot] مهاجرت ' . $key . ' نگرفت: ' . $e->getMessage());
+        return false;                 // نشانه نمی‌گذاریم، دفعه‌ی بعد دوباره
+    }
+    @touch($mark);
+    return true;
+}
+
 /** کارهای پس‌زمینه — بعد از جواب دادن به کاربر اجرا می‌شوند */
 function runBackgroundQueues() {
     processDeleteQueue(20);
@@ -8345,42 +8363,35 @@ function runBackgroundQueues() {
         maStockQueue(2);  // سفارش‌هایی که منتظر شارژ مخزن مانده‌اند
     }
 
-    // 🔄 مهاجرت‌های یک‌باره — نشانه‌شان روی دیسک می‌ماند، پس فقط یک بار
-    $mMark = DATA_DIR . '/.migrated_v2';
-    if (!is_file($mMark)) {
-        @touch($mMark);
-        if (function_exists('pxDropOldDemo')) pxDropOldDemo();
+    // 🔄 مهاجرت‌های یک‌باره
+    //
+    // ⚠️ نشانه بعد از کار گذاشته می‌شود، نه قبلش. قبلا برعکس بود و اگر
+    //    اجرا وسطِ کار می‌ایستاد (مهلت اجرا، خطا)، نشانه سر جایش می‌ماند
+    //    و آن مهاجرت دیگر هیچ‌وقت اجرا نمی‌شد — بی‌صدا.
+    migrateOnce('v2', function () {
+        if (function_exists('pxDropOldDemo'))  pxDropOldDemo();
         if (function_exists('maDropOldTexts')) maDropOldTexts();
-    }
-    $mMark3 = DATA_DIR . '/.migrated_v3';
-    if (!is_file($mMark3)) {
-        @touch($mMark3);
-        dropOldOrderText();
-    }
-    $mMark4 = DATA_DIR . '/.migrated_v4';
-    if (!is_file($mMark4)) {
-        @touch($mMark4);
+    });
+    migrateOnce('v3', fn() => dropOldOrderText());
+    migrateOnce('v4', function () {
         if (function_exists('maDropOldTheme')) maDropOldTheme();
-    }
-
-    $mMark5 = DATA_DIR . '/.migrated_v5';
-    if (!is_file($mMark5)) {
-        @touch($mMark5);
+    });
+    migrateOnce('v5', function () {
         if (function_exists('gmDropDoubleIcons')) gmDropDoubleIcons();
-    }
-
-    $mMark6 = DATA_DIR . '/.migrated_v6';
-    if (!is_file($mMark6)) {
-        @touch($mMark6);
-        // ⏳ فاصله‌ی گرفتن الماس ۵ دقیقه شد. تنظیمِ روی سرور هنوز ۲۵
-        //    دقیقه بود، پس یک بار به پیش‌فرض برمی‌گردد.
+    });
+    // ⏳ فاصله‌ی گرفتن الماس ۵ دقیقه شد.
+    migrateOnce('v7_cooldown', function () {
         if (function_exists('dmSet')) dmSet(function (&$c) { $c['cooldown'] = 300; });
-        // 🎯 صفحه‌ی دوز روشن شود؛ روی سرور خاموش مانده بود.
+    });
+    // 🎯 صفحه‌ی دوز روشن شود؛ روی سرور خاموش مانده بود.
+    migrateOnce('v7_board', function () {
         if (function_exists('gmSet')) gmSet(function (&$c) { $c['duel_board'] = true; });
-        // ⏱ کشِ قیمت زیر یک دقیقه یعنی کارتِ قیمت مدام از نو آپلود شود.
+    });
+    // ⏱ کشِ قیمت زیر یک دقیقه یعنی کارتِ قیمت مدام از نو آپلود شود.
+    migrateOnce('v7_ttl', function () {
         if (function_exists('pxSet'))
             pxSet(function (&$c) { if ((int)($c['ttl'] ?? 0) < 60) $c['ttl'] = 60; });
-    }
+    });
 
     // 🗄 بایگانی سفارش‌ها — کم‌تکرار، چون خودش سنگین است
     $aMark = DATA_DIR . '/.archive_at';

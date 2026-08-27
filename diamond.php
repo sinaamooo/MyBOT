@@ -211,6 +211,36 @@ function dmIsWord($text) {
 }
 
 /**
+ * «۵ دقیقه» یا «300» یا «۱ ساعت» → ثانیه.
+ *
+ * پنل ثانیه می‌پرسید و آدم دقیقه فکر می‌کند: کسی که «۵» می‌نوشت،
+ * پنج ثانیه می‌گرفت نه پنج دقیقه — و بعد تعجب می‌کرد که چرا محدودیتی
+ * در کار نیست. حالا واحد هم می‌شود نوشت، و عددِ تنها همان ثانیه است.
+ */
+function dmSecs($text) {
+    $t = mb_strtolower(trim(norm_fa_digits((string)$text)));
+    if (!preg_match('/^([\d.,٬]+)\s*(.*)$/u', $t, $m)) return null;
+    $n = (float)str_replace([',', '٬'], '', $m[1]);
+    if ($n <= 0) return null;
+
+    $unit = trim($m[2]);
+    if ($unit === '') return (int)round($n);
+    if (preg_match('/^(ث|ثانیه|s|sec|secs|second|seconds)$/u', $unit)) return (int)round($n);
+    if (preg_match('/^(د|دق|دقیقه|m|min|mins|minute|minutes)$/u', $unit)) return (int)round($n * 60);
+    if (preg_match('/^(س|ساعت|h|hr|hour|hours)$/u', $unit)) return (int)round($n * 3600);
+    return null;
+}
+
+/** ثانیه → متنی که آدم می‌خواند: «۵ دقیقه» */
+function dmDur($secs) {
+    $s = max(0, (int)$secs);
+    if ($s >= 3600 && $s % 3600 === 0) return ($s / 3600) . ' ساعت';
+    if ($s >= 60   && $s % 60 === 0)   return ($s / 60) . ' دقیقه';
+    if ($s >= 60) return intdiv($s, 60) . ' دقیقه و ' . ($s % 60) . ' ثانیه';
+    return $s . ' ثانیه';
+}
+
+/**
  * یک الماس ثبت می‌کند.
  * برگشت: [متن پاسخ, آیا امتیاز گرفت]
  */
@@ -452,7 +482,7 @@ function dmAdminHome($chatId, $msgId = null) {
     $t .= 'وضعیت: ' . (!empty($c['on']) ? '✅ روشن' : '❌ خاموش') . "\n";
     $t .= 'کلمه: <code>' . h($c['word']) . '</code>' .
           (trim((string)$c['aliases']) !== '' ? ' · <code>' . h($c['aliases']) . '</code>' : '') . "\n";
-    $t .= '⏳ فاصله: <b>' . number_format((int)$c['cooldown']) . "</b> ثانیه\n";
+    $t .= '⏳ فاصله: <b>' . dmDur((int)$c['cooldown']) . "</b>\n";
     $t .= '🎁 جایزه پایه: <b>' . $c['base'] . '</b> · ضریب رشد: <b>' . $c['ratio'] . "</b>\n";
     $t .= '📍 جای بازی: ' . (!empty($c['group_only']) ? 'فقط گروه' : 'گروه و خصوصی') . "\n\n";
     $t .= "👥 بازیکن‌ها: <b>" . number_format($s['users']) . "</b>\n";
@@ -537,7 +567,9 @@ function dmAdminCallback($data, $chatId, $msgId, $cbId) {
     $asks = [
         'dmw'   => ['dm_word',  "💬 کلمه‌ی بازی را بفرستید (مثلا الماس):"],
         'dma'   => ['dm_alias', "➕ کلمه‌های دیگر را با ویرگول بفرستید (خط تیره = هیچ‌کدام):"],
-        'dmcd'  => ['dm_cd',    "⏳ چند ثانیه بین دو الماس فاصله باشد؟"],
+        'dmcd'  => ['dm_cd',    "⏳ فاصله‌ی بین دو الماس چقدر باشد؟\n\n" .
+                                "مثال: <code>5 دقیقه</code>\n" .
+                                "عددِ تنها ثانیه حساب می‌شود: <code>300</code>"],
         'dmb'   => ['dm_base',  "🎁 جایزه‌ی پایه در سطح ۱ (مثلا ۵۶٫۷۴):"],
         'dmr'   => ['dm_ratio', "📈 ضریب رشد جایزه با هر سطح (مثلا ۱٫۲۳۳۶):"],
         'dmmin' => ['dm_min',   "🔢 کف جایزه (کمترین عددی که ممکن است بگیرد):"],
@@ -691,9 +723,12 @@ function dmStateHandle($action, $msg, $uid, $chatId) {
         return $done();
     }
     if ($action === 'dm_cd') {
-        if ($num < 5 || $num > 86400) return $bad('بین ۵ تا ۸۶۴۰۰ ثانیه.');
-        dmSet(function (&$c) use ($num) { $c['cooldown'] = (int)$num; });
-        return $done();
+        $sec = dmSecs($text);
+        if ($sec === null || $sec < 5 || $sec > 86400)
+            return $bad("بین ۵ ثانیه تا ۲۴ ساعت.\n\n" .
+                        "واحد هم می‌شود نوشت: <code>5 دقیقه</code>");
+        dmSet(function (&$c) use ($sec) { $c['cooldown'] = $sec; });
+        return $done('✅ فاصله‌ی بین دو الماس: <b>' . dmDur($sec) . '</b>');
     }
     if ($action === 'dm_base') {
         if ($num < 1 || $num > 1000000) return $bad('بین ۱ تا ۱۰۰۰۰۰۰.');
