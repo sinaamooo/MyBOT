@@ -26,6 +26,17 @@ function dmDefaults() {
         'ratio'      => 1.2336,      // رشد جایزه با هر سطح
         'min'        => 20,          // کف جایزه
         'cap'        => 1000000000,  // سقف جایزه — جلوی عددهای نجومی
+
+        // 🎁 هدیه: با خرج کردن الماس، یک محصول مینی‌اپ رایگان می‌گیرد.
+        //    مثلا «۱۰۰٬۰۰۰ الماس = ۵۰ استارز رایگان».
+        'gift' => [
+            'on'    => false,
+            'cost'  => 100000,      // چند الماس خرج می‌شود
+            'app'   => 'tg',        // کدام مینی‌اپ
+            'item'  => 'i_star_50', // کدام محصول
+            'word'  => 'هدیه',      // کاربر چه بنویسد
+            'limit' => 0,           // چند بار برای هر نفر (۰ = بی‌نهایت)
+        ],
         'group_only' => 1,           // فقط در گروه
         'top_n'      => 10,
 
@@ -47,6 +58,10 @@ function dmDefaults() {
             'swap_ok'  => "✅ <b>{n}</b> الماس به <b>{toman}</b> تومان تبدیل شد.\n💰 موجودی کیف پول: <b>{bal}</b> تومان",
             'swap_low' => "❌ حداقل <b>{min}</b> الماس لازم است. الماس تو: <b>{points}</b>",
             'swap_off' => "🔒 تبدیل الماس به کیف پول فعلا بسته است.",
+            'gift_ok'  => "🎁 <b>هدیه‌ات ثبت شد!</b>\n\n<blockquote>🛍 {item}\n💎 خرج شد: <b>{cost}</b> الماس\n✨ الماس باقی‌مانده: <b>{points}</b></blockquote>\n\n🧾 کد پیگیری: <code>{code}</code>",
+            'gift_low' => "❌ برای این هدیه <b>{cost}</b> الماس لازم است.\n💎 الماس تو: <b>{points}</b>",
+            'gift_off' => "🔒 هدیه فعلا بسته است.",
+            'gift_had' => "🎁 سقف دریافت این هدیه برای تو پر شده است.",
         ],
     ];
 }
@@ -317,6 +332,70 @@ function dmSwap($uid) {
 }
 
 /**
+ * 🎁 هدیه — با خرج کردن الماس، یک محصول مینی‌اپ رایگان.
+ *
+ * سفارش دقیقا مثل خریدِ عادی ثبت می‌شود (همان تحویل خودکار، همان
+ * گزارش کانال)، فقط مبلغش صفر است و به‌جای پول، الماس کم می‌شود.
+ */
+function dmGift($uid, $name, $uname = '') {
+    $g = (array)dmVal('gift', []);
+    if (empty($g['on'])) return dmT('gift_off');
+    if (!class_exists('MaOrder') || !function_exists('maMarkPaid')) return dmT('gift_off');
+
+    $cost = max(1, (float)($g['cost'] ?? 0));
+    $app  = (string)($g['app'] ?? 'tg');
+    $item = dmGiftItem();
+    if (!$item) return dmT('gift_off');
+
+    // سقف دریافت برای هر نفر
+    $limit = (int)($g['limit'] ?? 0);
+    if ($limit > 0 && (int)(dmUser($uid)['gifts'] ?? 0) >= $limit) return dmT('gift_had');
+
+    $pts = (float)(dmUser($uid)['points'] ?? 0);
+    if ($pts < $cost)
+        return dmT('gift_low', ['cost' => number_format($cost), 'points' => number_format($pts)]);
+
+    // 🔒 کم کردن الماس و شمردن هدیه، در یک قفل — تا دو پیام هم‌زمان
+    //    نتوانند با یک موجودی دو هدیه بگیرند
+    $ok = dmUserSet($uid, function (&$x) use ($cost, $limit) {
+        if ((float)$x['points'] < $cost) return false;
+        if ($limit > 0 && (int)($x['gifts'] ?? 0) >= $limit) return false;
+        $x['points'] = (float)$x['points'] - $cost;
+        $x['gifts']  = (int)($x['gifts'] ?? 0) + 1;
+        return true;
+    });
+    if (!$ok) return dmT('gift_low',
+        ['cost' => number_format($cost), 'points' => number_format((float)(dmUser($uid)['points'] ?? 0))]);
+
+    // سفارش با مبلغ صفر — از اینجا به بعد دقیقا مسیر خرید عادی است:
+    // همان تحویل خودکار، همان گزارش کانال، همان پیام به کاربر.
+    $oid = MaOrder::create($app, $uid, $uname, $item, 1, 0.0, '');
+    try {
+        maMarkPaid($oid, 'diamond');
+    } catch (Throwable $e) {
+        error_log('[diamond-gift] ' . $e->getMessage());
+    }
+
+    return dmT('gift_ok', [
+        'item'   => (string)($item['name'] ?? '—'),
+        'cost'   => number_format($cost),
+        'points' => number_format((float)(dmUser($uid)['points'] ?? 0)),
+        'code'   => $oid,
+    ]);
+}
+
+/** محصولی که برای هدیه تنظیم شده — null یعنی تنظیم نشده یا خاموش است */
+function dmGiftItem() {
+    $g = (array)dmVal('gift', []);
+    if (!function_exists('maGet')) return null;
+    $app = (string)($g['app'] ?? 'tg');
+    $id  = (string)($g['item'] ?? '');
+    foreach ((array)(maGet($app)['items'] ?? []) as $i)
+        if ((string)($i['id'] ?? '') === $id) return $i;
+    return null;
+}
+
+/**
  * پیام گروه/خصوصی را می‌بیند.
  * برگشت true یعنی رسیدگی شد.
  */
@@ -349,6 +428,13 @@ function dmHandleText($text, $uid, $chatId, $name, $username = '', $replyTo = nu
     }
     if (in_array($t, ['تبدیل الماس', $word . ' به تومان', 'تبدیل امتیاز'], true)) {
         sendMsg(BOT_TOKEN, $chatId, dmSwap($uid), null, $extra);
+        return true;
+    }
+
+    // 🎁 گرفتن هدیه با الماس
+    $gw = mb_strtolower(trim((string)dmVal('gift.word', 'هدیه')));
+    if ($gw !== '' && $t === $gw) {
+        sendMsg(BOT_TOKEN, $chatId, dmGift($uid, $name, $username), null, $extra);
         return true;
     }
     return false;
@@ -385,10 +471,34 @@ function dmAdminHome($chatId, $msgId = null) {
         [btnCb('🔁 نرخ تبدیل', 'dmsw', 'admin'), btnCb('🔢 حداقل تبدیل', 'dmms', 'admin')],
         [btnCb('✏️ متن‌ها', 'dmt_home', 'admin'), btnCb('🏆 برترین‌ها', 'dmtop', 'confirm')],
         [btnCb('🎁 دادن الماس به کاربر', 'dmgive', 'admin')],
+        [btnCb('🛍 هدیه با الماس', 'dmgift', 'confirm')],
         [btnCb(UT('back'), 'adm_home', 'nav')],
     ];
     if ($msgId) editMsg(BOT_TOKEN, $chatId, $msgId, $t, inlineKb($rows));
     else sendMsg(BOT_TOKEN, $chatId, $t, inlineKb($rows));
+}
+
+/** نام فارسی هر متن — روی دکمه‌ها همین نشان داده می‌شود، نه کلید انگلیسی */
+function dmLabel($k) {
+    $m = [
+        'win'      => '💎 وقتی الماس می‌گیرد',
+        'levelup'  => '🎉 وقتی سطحش بالا می‌رود',
+        'wait'     => '⏳ وقتی هنوز زود است',
+        'private'  => '🔒 وقتی در خصوصی می‌نویسد',
+        'me'       => '👤 حساب الماس من',
+        'me_none'  => '👤 وقتی هنوز الماسی ندارد',
+        'top_head' => '🏆 سربرگ برترین‌ها',
+        'top_row'  => '🏆 هر ردیف برترین‌ها',
+        'top_none' => '🏆 وقتی کسی الماس ندارد',
+        'swap_ok'  => '✅ تبدیل الماس انجام شد',
+        'swap_low' => '❌ الماس برای تبدیل کم است',
+        'swap_off' => '🔒 تبدیل بسته است',
+        'gift_ok'  => '🎁 هدیه گرفته شد',
+        'gift_low' => '🎁 الماس برای هدیه کم است',
+        'gift_off' => '🎁 هدیه بسته است',
+        'gift_had' => '🎁 قبلا هدیه گرفته',
+    ];
+    return $m[$k] ?? $k;
 }
 
 function dmAdminTexts($chatId, $msgId) {
@@ -397,8 +507,9 @@ function dmAdminTexts($chatId, $msgId) {
           "<code>{level}</code> <code>{total}</code> <code>{progress}</code> <code>{m}</code> <code>{s}</code>\n\n";
     $rows = [];
     foreach ((array)dmVal('texts', []) as $k => $v) {
-        $t .= '• <b>' . h($k) . '</b>: <code>' . h(mb_substr(str_replace("\n", ' ', (string)$v), 0, 40)) . "</code>\n";
-        $rows[] = [btnCb($k, 'dmts_' . $k, 'admin')];
+        $t .= '• <b>' . h(dmLabel($k)) . '</b>\n   <code>' .
+              h(mb_substr(str_replace("\n", ' ', (string)$v), 0, 40)) . "</code>\n";
+        $rows[] = [btnCb(dmLabel($k), 'dmts_' . $k, 'admin')];
     }
     $rows[] = [btnCb(UT('back'), 'dm_home', 'nav')];
     editMsg(BOT_TOKEN, $chatId, $msgId, $t, inlineKb($rows));
@@ -441,17 +552,115 @@ function dmAdminCallback($data, $chatId, $msgId, $cbId) {
         sendMsg(BOT_TOKEN, $chatId, $ask, inlineKb([[btnUI('cancel', 'dm_home', 'cancel')]]));
         return true;
     }
+    // ── 🛍 هدیه با الماس ──
+    if ($data === 'dmgift') { answerCb(BOT_TOKEN, $cbId); dmAdminGift($chatId, $msgId); return true; }
+    if ($data === 'dmgx') {
+        dmSet(function (&$c) { $c['gift']['on'] = empty($c['gift']['on']); });
+        answerCb(BOT_TOKEN, $cbId, '✅'); dmAdminGift($chatId, $msgId); return true;
+    }
+    if ($data === 'dmgi' || str_starts_with($data, 'dmgi_')) {
+        answerCb(BOT_TOKEN, $cbId);
+        dmAdminGiftItems($chatId, $msgId, (int)substr($data, 5));
+        return true;
+    }
+    if (str_starts_with($data, 'dmgp_')) {
+        $rest = substr($data, 5);
+        [$app, $id] = array_pad(explode('_', $rest, 2), 2, '');
+        dmSet(function (&$c) use ($app, $id) { $c['gift']['app'] = $app; $c['gift']['item'] = $id; });
+        answerCb(BOT_TOKEN, $cbId, '✅ انتخاب شد');
+        dmAdminGift($chatId, $msgId);
+        return true;
+    }
+    if ($data === 'dmgc') {
+        answerCb(BOT_TOKEN, $cbId);
+        setState(ADMIN_ID, 'dm_gcost', []);
+        sendMsg(BOT_TOKEN, $chatId, "💎 چند الماس برای این هدیه کم شود؟\n\nمثال: <code>100000</code>",
+            inlineKb([[btnUI('cancel', 'dmgift', 'cancel')]]));
+        return true;
+    }
+    if ($data === 'dmgw') {
+        answerCb(BOT_TOKEN, $cbId);
+        setState(ADMIN_ID, 'dm_gword', []);
+        sendMsg(BOT_TOKEN, $chatId, "💬 کاربر چه کلمه‌ای بنویسد تا هدیه بگیرد؟\n\nمثال: <code>هدیه</code>",
+            inlineKb([[btnUI('cancel', 'dmgift', 'cancel')]]));
+        return true;
+    }
+    if ($data === 'dmgl') {
+        answerCb(BOT_TOKEN, $cbId);
+        setState(ADMIN_ID, 'dm_glimit', []);
+        sendMsg(BOT_TOKEN, $chatId, "🔢 هر نفر چند بار بتواند این هدیه را بگیرد؟\n\n<code>0</code> یعنی بی‌نهایت.",
+            inlineKb([[btnUI('cancel', 'dmgift', 'cancel')]]));
+        return true;
+    }
+
     if (str_starts_with($data, 'dmts_')) {
         $k = substr($data, 5);
         answerCb(BOT_TOKEN, $cbId);
         setState(ADMIN_ID, 'dm_text', ['k' => $k]);
         sendMsg(BOT_TOKEN, $chatId,
-            "✏️ متن تازه‌ی <b>" . h($k) . "</b> را بفرستید.\n\nالان:\n<code>" .
+            "✏️ متن تازه‌ی <b>" . h(dmLabel($k)) . "</b> را بفرستید.\n\n" .
+            "✨ ایموجی پریمیوم و <code>&lt;blockquote&gt;</code> هم می‌پذیرد.\n\nالان:\n<code>" .
             h(mb_substr((string)dmVal('texts.' . $k, ''), 0, 500)) . '</code>',
             inlineKb([[btnUI('cancel', 'dm_home', 'cancel')]]));
         return true;
     }
     return false;
+}
+
+/** 🛍 صفحه‌ی «هدیه با الماس» */
+function dmAdminGift($chatId, $msgId) {
+    $g    = (array)dmVal('gift', []);
+    $item = dmGiftItem();
+
+    $t  = "🛍 <b>هدیه با الماس</b>\n\n";
+    $t .= "کاربر با خرج کردن الماس، یک محصول را رایگان می‌گیرد.\n";
+    $t .= "سفارشش دقیقا مثل خرید عادی ثبت و تحویل می‌شود — فقط به‌جای پول، الماس کم می‌شود.\n\n";
+    $t .= 'وضعیت: ' . (!empty($g['on']) ? '✅ روشن' : '❌ خاموش') . "\n";
+    $t .= '💎 هزینه: <b>' . number_format((float)($g['cost'] ?? 0)) . "</b> الماس\n";
+    $t .= '🛍 محصول: ' . ($item
+            ? '<b>' . h((string)($item['name'] ?? '')) . '</b>'
+            : '<b>تنظیم نشده</b> — تا انتخاب نکنید کار نمی‌کند') . "\n";
+    $t .= '💬 کلمه: <code>' . h((string)($g['word'] ?? 'هدیه')) . "</code>\n";
+    $lim = (int)($g['limit'] ?? 0);
+    $t .= '🔢 سقف هر نفر: <b>' . ($lim > 0 ? $lim . ' بار' : 'بی‌نهایت') . "</b>\n";
+
+    if (!empty($g['on']) && $item)
+        $t .= "\n✅ کاربر در گروه بنویسد «<b>" . h((string)($g['word'] ?? 'هدیه')) . '</b>» تا ' .
+              h((string)($item['name'] ?? '')) . " را بگیرد.";
+
+    $rows = [
+        [btnCb(!empty($g['on']) ? '✅ روشن' : '❌ خاموش', 'dmgx', 'info')],
+        [btnCb('💎 هزینه (الماس)', 'dmgc', 'admin'), btnCb('🛍 انتخاب محصول', 'dmgi', 'admin')],
+        [btnCb('💬 کلمه', 'dmgw', 'admin'), btnCb('🔢 سقف هر نفر', 'dmgl', 'admin')],
+        [btnCb(UT('back'), 'dm_home', 'nav')],
+    ];
+    editMsg(BOT_TOKEN, $chatId, $msgId, $t, inlineKb($rows));
+}
+
+/** فهرست محصول‌های هر دو مینی‌اپ، برای انتخاب هدیه */
+function dmAdminGiftItems($chatId, $msgId, $page = 0) {
+    if (!function_exists('maKeys')) { editMsg(BOT_TOKEN, $chatId, $msgId, 'مینی‌اپ در دسترس نیست.'); return; }
+    $all = [];
+    foreach (maKeys() as $k)
+        foreach ((array)(maGet($k)['items'] ?? []) as $i)
+            if (!empty($i['on'])) $all[] = [$k, (string)($i['id'] ?? ''), (string)($i['name'] ?? '')];
+
+    $per   = 12;
+    $pages = max(1, (int)ceil(count($all) / $per));
+    $page  = max(0, min($page, $pages - 1));
+    $slice = array_slice($all, $page * $per, $per);
+
+    $t = "🛍 <b>محصول هدیه را انتخاب کنید</b>\n\nصفحه " . ($page + 1) . ' از ' . $pages;
+    $rows = [];
+    foreach ($slice as [$app, $id, $name])
+        $rows[] = [btnCb(($app === 'cfg' ? '🛡 ' : '💠 ') . mb_substr($name, 0, 28), 'dmgp_' . $app . '_' . $id, 'admin')];
+
+    $nav = [];
+    if ($page > 0)          $nav[] = btnCb('⬅️ قبلی', 'dmgi_' . ($page - 1), 'nav');
+    if ($page < $pages - 1) $nav[] = btnCb('بعدی ➡️', 'dmgi_' . ($page + 1), 'nav');
+    if ($nav) $rows[] = $nav;
+    $rows[] = [btnCb(UT('back'), 'dmgift', 'nav')];
+    editMsg(BOT_TOKEN, $chatId, $msgId, $t, inlineKb($rows));
 }
 
 function dmStateHandle($action, $msg, $uid, $chatId) {
@@ -511,6 +720,22 @@ function dmStateHandle($action, $msg, $uid, $chatId) {
         dmSet(function (&$c) use ($num) { $c['min_swap'] = $num; });
         return $done();
     }
+    if ($action === 'dm_gcost') {
+        if ($num < 1) return $bad('عدد معتبر بفرستید.');
+        dmSet(function (&$c) use ($num) { $c['gift']['cost'] = $num; });
+        return $done('✅ هزینه‌ی هدیه: ' . number_format($num) . ' الماس');
+    }
+    if ($action === 'dm_gword') {
+        if (mb_strlen($text) < 2 || mb_strlen($text) > 20) return $bad('کلمه باید بین ۲ تا ۲۰ نویسه باشد.');
+        dmSet(function (&$c) use ($text) { $c['gift']['word'] = $text; });
+        return $done('✅ کلمه‌ی هدیه: «' . h($text) . '»');
+    }
+    if ($action === 'dm_glimit') {
+        if ($num < 0 || $num > 10000) return $bad('بین ۰ تا ۱۰۰۰۰.');
+        dmSet(function (&$c) use ($num) { $c['gift']['limit'] = (int)$num; });
+        return $done($num > 0 ? '✅ هر نفر ' . (int)$num . ' بار' : '✅ بدون سقف');
+    }
+
     if ($action === 'dm_text') {
         $k = (string)($sd['k'] ?? '');
         if ($k === '' || $text === '') return $bad('متن خالی نمی‌شود.');

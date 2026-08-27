@@ -5240,7 +5240,9 @@ function masterHandle($update) {
             if (!$o || (int)$o['user_id'] !== $uid) { answerCb(BOT_TOKEN, $cbId, 'سفارش نامعتبر', true); return; }
             if ($o['status'] !== Order::PENDING) { answerCb(BOT_TOKEN, $cbId, 'قبلا ثبت شده', true); return; }
             answerCb(BOT_TOKEN, $cbId);
-            setState($uid, 'receipt', ['order' => $oid]);
+            // شناسه‌ی همین پیام را نگه می‌داریم تا وقتی رسید آمد، همین
+            // پیام به «رسید ثبت شد» تبدیل شود — نه پیام منوی بالاتر.
+            setState($uid, 'receipt', ['order' => $oid, 'ask_msg' => $msgId]);
 
             // درست همان پیامی که دکمه‌اش زده شد عوض می‌شود — یعنی فاکتورِ
             // پایین. قبلا سراغ «اسلات» می‌رفت و چون فاکتور در اسلات ثبت
@@ -6218,7 +6220,18 @@ function masterHandle($update) {
         $rt = $msg['message_id'] ?? null;
         if (gmHandleText($text, $uid, $chatId, $fname, $uname, $rt, false, $msg)) return;
         if (dmHandleText($text, $uid, $chatId, $fname, $uname, $rt, false)) return;
-        if (pxHandleText($text, $chatId, $rt)) return;
+
+        // 💹 قیمت: اول با کشِ موجود جواب بده، بعد کش را تازه کن.
+        // بدون این، هر بار که کش تمام می‌شد اولین نفر پشت تماس شبکه
+        // منتظر می‌ماند و تاخیر را حس می‌کرد.
+        $stale = function_exists('pxStale') ? pxStale() : false;
+        if (function_exists('pxNoNet')) pxNoNet(true);
+        $hit = pxHandleText($text, $chatId, $rt);
+        if (function_exists('pxNoNet')) pxNoNet(false);
+        if ($hit) {
+            if ($stale && function_exists('pxWarm')) pxWarm();
+            return;
+        }
         return;
     }
 
@@ -6679,7 +6692,14 @@ function masterHandle($update) {
             return;
         }
         clearState($uid);
-        panelShow($uid, $chatId, $o['type'] === 'topup' ? 'wallet' : 'shop', T('receipt_ok'));
+
+        // ✅ همان پیامِ «رسید را بفرستید» تبدیل می‌شود به «رسید ثبت شد».
+        // قبلا پیام منو ویرایش می‌شد و کاربر می‌دید یک پیام بی‌ربطِ بالاتر
+        // عوض شد، در حالی که درخواستِ رسید سرِ جایش مانده بود.
+        $askMid = (int)($sd['ask_msg'] ?? 0);
+        if ($askMid > 0) editMsg(BOT_TOKEN, $chatId, $askMid, T('receipt_ok'), null);
+        else             sendMsg(BOT_TOKEN, $chatId, T('receipt_ok'));
+
         notifyAdminOrder($oid);
         // 📡 و یک نسخه هم روی کانالِ همان جریان
         $fresh = Order::get($oid);

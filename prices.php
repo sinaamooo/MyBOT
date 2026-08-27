@@ -184,6 +184,42 @@ function pxEm($slug, $fallback = '💎') {
  * همه‌ی جفت‌ارزها را یک بار می‌گیرد و کوتاه کش می‌کند.
  * برگشت: ['BTC/USDT' => 78931.0, 'USDT/IRT' => 197529.0, …] یا [] اگر نشد.
  */
+/**
+ * 🐇 حالت «اول جواب بده، بعد تازه کن».
+ *
+ * وقتی روشن باشد هیچ قیمتی از اینترنت گرفته نمی‌شود و هرچه در کش هست —
+ * حتی کهنه — همان استفاده می‌شود.
+ *
+ * دلیلش: هر بار که کش تمام می‌شد، اولین کسی که «طلا» می‌نوشت پشت یک
+ * تماس شبکه‌ی ۲۱۶ میلی‌ثانیه‌ای می‌ماند و تاخیر را حس می‌کرد. حالا
+ * جواب با قیمت کش‌شده فوری می‌رود و تازه‌سازی بعدش انجام می‌شود، پس
+ * نفر بعدی قیمت تازه دارد و هیچ‌کس معطل نمی‌ماند.
+ */
+function pxNoNet($on = null) {
+    static $flag = false;
+    if ($on !== null) $flag = (bool)$on;
+    return $flag;
+}
+
+/** بعد از فرستادن جواب: هر منبعی که کهنه بود تازه شود */
+function pxWarm() {
+    pxNoNet(false);
+    try {
+        pxFetch(true);
+        if (trim((string)pxVal('alt_url', '')) !== '') pxAltFetch(true);
+    } catch (Throwable $e) {
+        error_log('[prices-warm] ' . $e->getMessage());
+    }
+}
+
+/** آیا الان کشِ قیمت کهنه است؟ (تا بدانیم بعدا تازه‌سازی لازم است) */
+function pxStale() {
+    if (maCacheGet('px_pairs', (int)pxVal('ttl', 120)) === null) return true;
+    if (trim((string)pxVal('alt_url', '')) !== ''
+        && maCacheGet('px_alt', max(30, (int)pxVal('alt_ttl', 300))) === null) return true;
+    return false;
+}
+
 function pxFetch($fresh = false) {
     static $mem = null;
     if (!$fresh && is_array($mem)) return $mem;        // در همین درخواست، یک بار
@@ -191,8 +227,8 @@ function pxFetch($fresh = false) {
     $c = pxCfg();
     $ck = 'px_pairs';
 
-    // 🐇 حالت بی‌شبکه (صفحه‌ی مینی‌اپ): کشِ کهنه هم قبول، تماس شبکه نه
-    if (function_exists('maNoNet') && maNoNet()) {
+    // 🐇 حالت بی‌شبکه: کشِ کهنه هم قبول، تماس شبکه نه
+    if (pxNoNet() || (function_exists('maNoNet') && maNoNet())) {
         $any = maCacheGet($ck, 0);
         if (is_array($any) && $any) return $mem = $any;
     }
@@ -1032,6 +1068,28 @@ function pxDeliver($chatId, $png, $caption, $markup = null, $replyTo = null) {
 }
 
 /** کارت بساز، ولی اگر GD سرِ راه مرد، کل پیام را نکش */
+/**
+ * همان pxTryCard، ولی نتیجه را کوتاه‌مدت نگه می‌دارد.
+ *
+ * ساختن هر کارت حدود ۷۰ میلی‌ثانیه است. وقتی چند نفر پشت سر هم در گروه
+ * «طلا» می‌نویسند، قیمت که عوض نشده — پس همان تصویر دوباره استفاده
+ * می‌شود و فقط نفر اول هزینه‌ی ساختن را می‌دهد.
+ */
+function pxCardCached($key, callable $fn) {
+    $ck = 'pxcard_' . substr(md5((string)$key), 0, 16);
+    $ttl = max(10, (int)pxVal('card_ttl', 90));
+
+    $hit = maCacheGet($ck, $ttl);
+    if (is_string($hit) && $hit !== '') {
+        $raw = base64_decode($hit, true);
+        if ($raw !== false && strlen($raw) > 100) return $raw;
+    }
+
+    $png = pxTryCard($fn);
+    if (is_string($png) && $png !== '') maCachePut($ck, base64_encode($png));
+    return $png;
+}
+
 function pxTryCard(callable $fn) {
     if (empty(pxVal('card.on'))) return null;
 
@@ -1257,7 +1315,8 @@ function pxHandleText($text, $chatId, $replyTo = null) {
             return true;
         }
         $chg = pxAssetChange($ak);
-        $png = pxTryCard(fn() => pxAssetCard($a['name'], $a['emoji'], $price, $a['unit'], $chg, $a['bg']));
+        $png = pxCardCached('a|' . $ak . '|' . $price . '|' . $chg,
+                fn() => pxAssetCard($a['name'], $a['emoji'], $price, $a['unit'], $chg, $a['bg']));
         pxDeliver($chatId, $png,
             pxAssetCaption($a['name'], $price, $a['unit'], $chg, $a['emoji'] ?? '', $ak),
             $kb, $replyTo);
@@ -1331,7 +1390,8 @@ function pxHandleText($text, $chatId, $replyTo = null) {
     $cap = pxCoinCaption($sym, $usd, $usd * $irtRate, $chg, $hi, $lo);
 
     // قیمت تومانی روی کارت — چون مخاطب ایرانی است
-    $png = pxTryCard(fn() => pxCoinCard($sym, $usd * $irtRate, 'تومان', $chg, $usd * $irtRate));
+    $png = pxCardCached('c|' . $sym . '|' . round($usd * $irtRate) . '|' . $chg,
+            fn() => pxCoinCard($sym, $usd * $irtRate, 'تومان', $chg, $usd * $irtRate));
     pxDeliver($chatId, $png, $cap, $kb, $replyTo);
     return true;
 }
@@ -2458,6 +2518,11 @@ function pxAltFetch($fresh = false) {
 
     $urls = pxUrlList(pxVal('alt_url', ''));
     if (!$urls) return $mem = [];
+
+    if (!$fresh && (pxNoNet() || (function_exists('maNoNet') && maNoNet()))) {
+        $any = maCacheGet('px_alt', 0);
+        if (is_array($any) && $any) return $mem = $any;
+    }
 
     $ttl = max(30, (int)pxVal('alt_ttl', 300));
     if (!$fresh) {
