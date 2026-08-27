@@ -109,6 +109,10 @@ function gmDefaults() {
             'gone'       => "این بازی تمام شده.",
             'cancelled'  => "❌ <b>بازی لغو شد</b>\n\nشرط برگشت.",
             'group_only' => "🎮 بازی فقط داخل گروه کار می‌کند.",
+            'duel_how'   => "🎮 برای ساختن چالش، شرط را هم بنویسید.\n\n" .
+                            "مثال: <code>{word} ۱۰۰</code>\n\nکمترین {min} و بیشترین {max} الماس.",
+            'rand_how'   => "🎲 برای ساختن قرعه، شرط را هم بنویسید.\n\n" .
+                            "مثال: <code>{word} ۱۰۰</code>\n\nکمترین {min} و بیشترین {max} الماس.",
             'already'    => "تو که خودت داخل این بازی هستی — منتظر حریف بمان.",
             'open_max'   => "⛔️ شما <b>{n}</b> بازی باز دارید.\n\nاول همان‌ها تمام یا لغو شوند، بعد بازی تازه بسازید.",
             'expired'    => "⏳ <b>کسی وارد نشد</b>\n\nشرط به سازنده برگشت.",
@@ -334,6 +338,24 @@ function gmParse($raw) {
             }
         }
     }
+    return null;
+}
+
+/**
+ * کاربر فقط کلمه را نوشته و عدد یادش رفته؟
+ *
+ * تا حالا هیچ اتفاقی نمی‌افتاد و از بیرون مثل خراب بودنِ ربات بود.
+ * برمی‌گرداند 'duel' یا 'rand' — یا null اگر اصلا کلمه‌ی بازی نباشد.
+ */
+function gmBareWord($raw) {
+    $t = mb_strtolower(trim(norm_fa_digits((string)$raw)));
+    $words = [
+        'duel' => gmWords(gmVal('word_duel', 'چالش')),
+        'rand' => gmWords(gmVal('word_rand', 'بازی')),
+    ];
+    foreach ($words as $kind => $list)
+        foreach ($list as $w)
+            if ($w !== '' && $t === mb_strtolower($w)) return $kind;
     return null;
 }
 
@@ -665,14 +687,30 @@ function gmHandleText($text, $uid, $chatId, $name, $uname = '', $replyTo = null,
         return true;
     }
 
+    $min = max(1, (float)gmVal('min', 10));
+    $max = max($min, (float)gmVal('max', 1e9));
+
     $p = gmParse($raw);
-    if (!$p) return false;
+    if (!$p) {
+        // 🎮 «چالش» خالی، بدون عدد. قبلا هیچ جوابی نمی‌گرفت و کاربر
+        //    فکر می‌کرد بازی خراب است. حالا می‌گوید عدد را هم بنویس.
+        //    اگر ادمین متنش را خالی کند، دوباره ساکت می‌شود.
+        $bare = gmBareWord($raw);
+        if ($bare === null) return false;
+        if ($isPrivate) { sendMsg(BOT_TOKEN, $chatId, gmT('group_only'), null, $extra); return true; }
+        $tip = gmT($bare === 'duel' ? 'duel_how' : 'rand_how', [
+            'word' => (string)gmWords(gmVal($bare === 'duel' ? 'word_duel' : 'word_rand',
+                                             $bare === 'duel' ? 'چالش' : 'بازی'))[0],
+            'min'  => gmNum($min), 'max' => gmNum($max),
+        ]);
+        if (trim($tip) === '') return false;
+        sendMsg(BOT_TOKEN, $chatId, $tip, null, $extra);
+        return true;
+    }
     [$kind, $stake] = $p;
 
     if ($isPrivate) { sendMsg(BOT_TOKEN, $chatId, gmT('group_only'), null, $extra); return true; }
 
-    $min = max(1, (float)gmVal('min', 10));
-    $max = max($min, (float)gmVal('max', 1e9));
     if ($stake < $min || $stake > $max) {
         sendMsg(BOT_TOKEN, $chatId, gmT('bad_stake', ['min' => gmNum($min), 'max' => gmNum($max)]), null, $extra);
         return true;
@@ -962,6 +1000,8 @@ function gmAdminDigits($chatId, $msgId) {
 
 function gmLabels() {
     return [
+        'duel_how'  => 'چالش — راهنمای بدون عدد',
+        'rand_how'  => 'قرعه — راهنمای بدون عدد',
         'duel_open' => 'چالش — پیام باز', 'duel_turn' => 'چالش — حین بازی',
         'duel_win'  => 'چالش — نتیجه',    'duel_draw' => 'چالش — مساوی',
         'duel_join' => 'دکمه پیوستن',     'duel_cancel' => 'دکمه لغو',
@@ -1130,6 +1170,7 @@ function gmVars($k) {
     if ($k === 'low')                     return ['points', 'need'];
     if ($k === 'bad_stake')               return ['min', 'max'];
     if ($k === 'send_how')                return ['word'];
+    if ($k === 'duel_how' || $k === 'rand_how') return ['word', 'min', 'max'];
     return [];
 }
 
