@@ -959,6 +959,17 @@ function tonInternalMessage($msg) {
 function tonSignedExternal($keys, $walletAddr, $seqno, $messages, $opts = []) {
     $subwallet  = (int)($opts['subwallet'] ?? 698983191);
     $version    = strtolower((string)($opts['version'] ?? 'v4r2'));
+
+    // ⚠️ W5 بدنه‌ی کاملا دیگری دارد: opcode جداگانه، فهرست اکشن به‌جای
+    //    جفتِ mode+ref، و امضا در انتها نه ابتدا. اگر اینجا مثل v4
+    //    بسازیمش، قرارداد ردش می‌کند و شبکه می‌گوید «external message
+    //    was not accepted» — بدون اینکه معلوم شود چرا. پس صریح می‌ایستیم.
+    if (str_starts_with($version, 'v5') || str_contains($version, 'w5'))
+        throw new Exception('ولت W5 (v5R1) هنوز پشتیبانی نمی‌شود — قالب پیامش با v4R2 فرق دارد. '
+                          . 'از همان عبارت بازیابی، آدرس v4R2 را بردارید.');
+
+    if (!str_starts_with($version, 'v3') && !str_starts_with($version, 'v4'))
+        throw new Exception('نسخه‌ی ولت ناشناخته: ' . $version);
     $validUntil = (int)($opts['valid_until'] ?? (time() + 300));
     $sendMode   = (int)($opts['mode'] ?? 3);
     $stateInit  = $opts['state'] ?? null;      // فقط اگر ولت هنوز روی شبکه نیست

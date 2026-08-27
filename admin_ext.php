@@ -2141,8 +2141,21 @@ function axWalletSend($msgs, $note = '') {
         $cells = [];
         foreach ($msgs as $m) $cells[] = tonInternalMessage($m);
 
+        // 🎯 نسخه‌ی واقعیِ ولت را از همان تاییدِ مالکیت برمی‌داریم.
+        //
+        // تایید، آدرس را با همه‌ی نسخه‌ها می‌سازد و می‌گوید کدام یکی جور
+        // درآمد. ولی این جواب دور ریخته می‌شد و امضا با نسخه‌ای انجام
+        // می‌شد که در تنظیمات نوشته شده بود. اگر آن دو فرق داشتند —
+        // مثلا ولت W5 بود و تنظیمات v4R2 — پیامِ امضاشده شکلِ اشتباهی
+        // داشت و شبکه ردش می‌کرد، بدون هیچ توضیحی.
+        $ver = trim((string)($v['version'] ?? '')) !== ''
+             ? (string)$v['version']
+             : (string)$w['version'];
+        if ($ver !== (string)$w['version'])
+            axSet(function (&$c) use ($ver) { $c['wallet']['version'] = $ver; });
+
         $boc = tonSignedExternalB64($keys, (string)$w['address'], (int)($seqno ?? 0), $cells,
-                                    ['version' => (string)$w['version']]);
+                                    ['version' => $ver]);
 
         if ($dry) {
             $refund();
@@ -2150,6 +2163,7 @@ function axWalletSend($msgs, $note = '') {
                            'مبلغ: ' . nanoToTon($sum) . " TON\n" .
                            'مقصد: ' . mb_substr($msgs[0]['address'], 0, 20) . "…\n" .
                            'seqno: ' . ($seqno === null ? '⚠️ از شبکه نیامد — ' . $sErr : (int)$seqno) . "\n" .
+                           'نسخه‌ی ولت: ' . $ver . ($ver !== (string)$w['version'] ? ' (از روی آدرس شناخته شد)' : '') . "\n" .
                            'اندازه BOC: ' . strlen($boc) . " بایت\n" .
                            'تایید مالکیت: ' . (!empty($v['ok']) ? '✅' : '⚠️ ' . ($v['error'] ?? '—')) . "\n\n" .
                            'برای فرستادن واقعی، «حالت آزمایشی» را خاموش کنید.'];
