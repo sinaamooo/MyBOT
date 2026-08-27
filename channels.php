@@ -28,15 +28,62 @@ if (!defined('CH_LIB')) define('CH_LIB', 1);
  * بشود جدا دنبال کرد.
  */
 function chStreams() {
-    return [
+    $out = [
         'topup'   => ['🧾 رسید شارژ حساب', 'رسیدهای شارژ کیف پول — از همین‌جا تایید کنید.'],
-        'mini_tg' => ['🌟 مینی‌اپ خدمات تلگرام', 'استارز، پریمیوم، گیفت، تون.'],
-        'mini_cfg'=> ['🛡 مینی‌اپ فروش کانفیگ', 'همه‌ی فروش‌های کانفیگ.'],
+    ];
+
+    // 🧵 هر دسته‌ی مینی‌اپ، تاپیک خودش.
+    //
+    // قبلا همه‌ی فروش‌های «خدمات تلگرام» در یک مقصد می‌افتادند — استارز
+    // و پریمیوم و گیفت و ارز قاطیِ هم. حالا هر دسته‌ای که در مینی‌اپ
+    // ساخته‌اید خودش یک جریان است، پس می‌شود لینکِ تاپیکِ خودش را داد و
+    // متنِ خودش را نوشت. دسته‌ی تازه هم که بسازید، همین‌جا پیدایش می‌شود.
+    foreach (chAppCats() as $k => [$label, $desc]) $out[$k] = [$label, $desc];
+
+    $out += [
+        'mini_tg' => ['🌟 خدمات تلگرام — بقیه', 'هر فروشِ این مینی‌اپ که دسته‌اش مقصد جدا ندارد.'],
+        'mini_cfg'=> ['🛡 کانفیگ — بقیه', 'هر فروشِ کانفیگ که دسته‌اش مقصد جدا ندارد.'],
         'mem_vip' => ['💎 ممبر ویژه', 'سفارش‌های ممبر ویژه.'],
         'mem_ok'  => ['✅ ممبر اخلاقی', 'سفارش‌های ممبر اخلاقی.'],
         'mem_no'  => ['🔞 ممبر غیراخلاقی', 'سفارش‌های ممبر غیراخلاقی.'],
         'buy'     => ['🛒 بقیه‌ی فروش‌ها', 'هر فروشی که در دسته‌های بالا نیفتد.'],
     ];
+    return $out;
+}
+
+/** کلیدِ جریانِ یک دسته — مثلا cat_tg_c_star */
+function chCatStream($app, $cat) {
+    return 'cat_' . preg_replace('/[^a-z0-9]+/i', '', (string)$app) . '_' . (string)$cat;
+}
+
+/**
+ * دسته‌های هر مینی‌اپ، به‌شکل جریانِ گزارش.
+ *
+ * یک بار در هر درخواست خوانده می‌شود؛ chStreams() جاهای زیادی صدا زده
+ * می‌شود و هر بار خواندنِ فایلِ مینی‌اپ‌ها بی‌خود است.
+ */
+function chAppCats() {
+    static $cache = null;
+    if ($cache !== null) return $cache;
+    $out = [];
+    if (!function_exists('maKeys') || !function_exists('maGet')) return $cache = $out;
+
+    $appIcon = ['tg' => '🌟', 'cfg' => '🛡'];
+    $appName = ['tg' => 'خدمات تلگرام', 'cfg' => 'کانفیگ'];
+    foreach (maKeys() as $app) {
+        $a = maGet($app);
+        foreach ((array)($a['cats'] ?? []) as $c) {
+            $cid = trim((string)($c['id'] ?? ''));
+            if ($cid === '') continue;
+            $emoji = trim((string)($c['emoji'] ?? '')) ?: ($appIcon[$app] ?? '🛒');
+            $name  = trim((string)($c['name'] ?? '')) ?: $cid;
+            $out[chCatStream($app, $cid)] = [
+                $emoji . ' ' . $name,
+                'دسته‌ی «' . $name . '» از ' . ($appName[$app] ?? $app) . '.',
+            ];
+        }
+    }
+    return $cache = $out;
 }
 
 /**
@@ -46,10 +93,19 @@ function chStreams() {
  * محصول — چون دسته‌بندیِ ممبر همان‌جا در نامش است. هرچه جا نیفتاد،
  * می‌رود در «بقیه‌ی فروش‌ها».
  */
-function chStreamFor($app, $productName = '') {
+function chStreamFor($app, $productName = '', $cat = '') {
     $app = strtolower(trim((string)$app));
-    if ($app === 'tg')  return 'mini_tg';
-    if ($app === 'cfg') return 'mini_cfg';
+    if ($app !== '') {
+        // دسته‌ی خودش مقصد دارد؟ همان. وگرنه سطلِ همان مینی‌اپ.
+        $cat = trim((string)$cat);
+        if ($cat !== '') {
+            $ck = chCatStream($app, $cat);
+            if (isset(chStreams()[$ck]) && chReady($ck)) return $ck;
+        }
+        if ($app === 'tg')  return 'mini_tg';
+        if ($app === 'cfg') return 'mini_cfg';
+        return 'buy';
+    }
 
     $n = chNormFa(mb_strtolower(trim((string)$productName)));
     if ($n !== '') {
@@ -208,12 +264,34 @@ function chWarn($stream, $why) {
         "پنل ← 📡 کانال‌های متصل — ربات باید در آن گروه ادمین باشد.");
 }
 
+/**
+ * 🔗 لینکِ پیش‌فرضِ دکمه‌ها — خودِ ربات.
+ *
+ * دکمه‌ی «ثبت سفارش» از اول در متنِ گزارش بود ولی لینکش خالی می‌ماند و
+ * دکمه‌ی بی‌لینک هم دور انداخته می‌شد؛ یعنی هیچ‌وقت دیده نمی‌شد. حالا
+ * اگر ادمین لینکی نگذارد، دکمه به خودِ ربات وصل می‌شود.
+ *
+ * <code>{bot}</code> هم هرجای لینک نوشته شود، نامِ ربات می‌نشیند.
+ */
+function chBotLink() {
+    static $u = null;
+    if ($u === null) $u = function_exists('botUsername') ? trim((string)botUsername()) : '';
+    return $u !== '' ? 'https://t.me/' . ltrim($u, '@') : '';
+}
+
+function chButtonUrl($b) {
+    $url = trim((string)($b['url'] ?? ''));
+    if ($url !== '') return str_replace('{bot}', ltrim(chBotLink() !== '' ? (string)botUsername() : '', '@'), $url);
+    // بدون لینک: اگر خودش را «ثبت سفارش» می‌داند، ببرش به ربات
+    return chBotLink();
+}
+
 function chKeyboard($s) {
     $rows = [];
     $line = [];
     foreach ((array)($s['buttons'] ?? []) as $b) {
         if (empty($b['on'])) continue;
-        $url = trim((string)($b['url'] ?? ''));
+        $url = chButtonUrl($b);
         $txt = trim((string)($b['text'] ?? ''));
         if ($url === '' || $txt === '') continue;
         $btn = ['text' => $txt, 'url' => $url];
@@ -269,8 +347,8 @@ function chTopupReceipt($order) {
  * یک فروش انجام شد — می‌رود روی کانالِ همان بخش.
  * $app: 'tg' یا 'cfg' برای مینی‌اپ‌ها، خالی برای محصول‌های خودِ ربات.
  */
-function chBuy($uid, $uname, $productName, $qty, $amount, $code, $extra = [], $app = '') {
-    $stream = chStreamFor($app, $productName);
+function chBuy($uid, $uname, $productName, $qty, $amount, $code, $extra = [], $app = '', $cat = '') {
+    $stream = chStreamFor($app, $productName, $cat);
     [$label] = chStreams()[$stream] ?? ['🛒 فروش'];
     // ایموجیِ سرِ برچسب را جدا می‌کنیم تا {icon} و {section} هرکدام جای خود
     $icon = '';
@@ -310,10 +388,12 @@ function chAdminHome($chatId, $msgId = null) {
                 : 'تنظیم نشده') . "\n";
         $rows[] = [btnCb($label, 'chs_' . $k, 'admin')];
     }
-    $t .= "\n💡 محصول‌های ربات بر اساس کلمه‌های داخل نامشان دسته‌بندی می‌شوند.";
+    $t .= "\n💡 دسته‌های مینی‌اپ خودشان اینجا می‌آیند؛ هر کدام تاپیک و متنِ خودش.\n";
+    $t .= "محصول‌های ربات بر اساس کلمه‌های داخل نامشان دسته‌بندی می‌شوند.";
     $rows[] = [btnCb('🗣 کلمه‌های دسته‌بندی ممبر', 'chwords', 'admin')];
     $rows[] = [btnCb(UT('back'), 'adm_home', 'nav')];
 
+    $t = mb_substr($t, 0, 3800);
     if ($msgId) editMsg(BOT_TOKEN, $chatId, $msgId, $t, inlineKb($rows));
     else sendMsg(BOT_TOKEN, $chatId, $t, inlineKb($rows));
 }
@@ -355,7 +435,14 @@ function chAdminStream($chatId, $msgId, $k) {
         [btnCb('✏️ متن گزارش', 'chm_' . $k, 'admin')],
     ];
     if ($k === 'topup') $rows[] = [btnCb(!empty($s['photo']) ? '🖼 عکس رسید: روشن' : '🖼 عکس رسید: خاموش', 'chp_' . $k, 'info')];
+    $t .= "\n\n<b>دکمه‌ها:</b>";
     foreach ((array)$s['buttons'] as $i => $b) {
+        $eff = chButtonUrl($b);
+        $t .= "\n" . (!empty($b['on']) ? '✅' : '❌') . ' ' . h(trim((string)$b['text']) ?: 'بی‌متن') . ' → ' .
+              ($eff !== ''
+                ? '<code>' . h(mb_substr($eff, 0, 60)) . '</code>' .
+                  (trim((string)($b['url'] ?? '')) === '' ? ' <i>(خودِ ربات)</i>' : '')
+                : '<i>لینک ندارد — دیده نمی‌شود</i>');
         $rows[] = [
             btnCb(!empty($b['on']) ? '✅' : '❌', 'chbx_' . $k . '_' . $i, 'info'),
             btnCb('✏️ ' . (trim((string)$b['text']) !== '' ? mb_substr($b['text'], 0, 12) : 'دکمه ' . ($i + 1)),
@@ -416,7 +503,7 @@ function chAdminCallback($data, $chatId, $msgId, $cbId) {
     }
 
     // روشن/خاموش کردن یک دکمه
-    if (preg_match('/^chbx_([a-z]+)_(\d+)$/', $data, $m)) {
+    if (preg_match('/^chbx_([a-z0-9_]+)_(\d+)$/', $data, $m)) {
         chSet($m[1], function (&$s) use ($m) {
             $i = (int)$m[2];
             if (isset($s['buttons'][$i])) $s['buttons'][$i]['on'] = empty($s['buttons'][$i]['on']) ? 1 : 0;
@@ -448,13 +535,17 @@ function chAdminCallback($data, $chatId, $msgId, $cbId) {
         sendMsg(BOT_TOKEN, $chatId, $ask . $more, inlineKb([[btnCb('انصراف', 'chs_' . $k, 'cancel')]]));
         return true;
     }
-    if (preg_match('/^chb([tu])_([a-z]+)_(\d+)$/', $data, $m)) {
+    if (preg_match('/^chb([tu])_([a-z0-9_]+)_(\d+)$/', $data, $m)) {
         $isText = $m[1] === 't';
         answerCb(BOT_TOKEN, $cbId);
         setState(ADMIN_ID, $isText ? 'ch_btntext' : 'ch_btnurl', ['k' => $m[2], 'i' => (int)$m[3]]);
         sendMsg(BOT_TOKEN, $chatId, $isText
             ? "✏️ متن دکمه را بفرستید.\n\n✨ ایموجی پرمیوم را جلوی متن بگذارید — خودش برداشته می‌شود."
-            : "🔗 لینک دکمه را بفرستید. برای پاک کردن <code>-</code> بفرستید.",
+            : "🔗 لینک دکمه را بفرستید.\n\n" .
+              "خالی بگذارید (<code>-</code>) تا خودکار به <b>خودِ ربات</b> وصل شود —\n" .
+              "همان چیزی که برای «ثبت سفارش» می‌خواهید.\n\n" .
+              "<code>{bot}</code> هرجای لینک، نامِ ربات می‌شود:\n" .
+              "<code>https://t.me/{bot}?start=shop</code>",
             inlineKb([[btnCb('انصراف', 'chs_' . $m[2], 'cancel')]]));
         return true;
     }
@@ -545,6 +636,13 @@ function chStateHandle($action, $msg, $uid, $chatId) {
         if ($text === '') { sendMsg(BOT_TOKEN, $chatId, "⚠️ متن خالی نمی‌شود."); return true; }
         $ids  = function_exists('customEmojiIds') ? customEmojiIds($msg) : [];
         $icon = $ids ? (string)$ids[0] : '';
+        // ایموجی پرمیوم جدا روی دکمه می‌نشیند؛ اگر نویسه‌اش داخل متن هم
+        // بماند، یک ایموجیِ معمولیِ اضافه جلویش دیده می‌شود.
+        if ($icon !== '' && function_exists('textWithoutCustomEmoji')) {
+            $clean = textWithoutCustomEmoji($msg);
+            if ($clean !== '') $text = $clean;
+        }
+        if ($text === '') { sendMsg(BOT_TOKEN, $chatId, "⚠️ متن خالی نمی‌شود."); return true; }
         chSet($k, function (&$s) use ($i, $text, $icon) {
             if (isset($s['buttons'][$i])) { $s['buttons'][$i]['text'] = $text; $s['buttons'][$i]['icon'] = $icon; }
         });
@@ -558,7 +656,11 @@ function chStateHandle($action, $msg, $uid, $chatId) {
         chSet($k, function (&$s) use ($i, $url) {
             if (isset($s['buttons'][$i])) $s['buttons'][$i]['url'] = $url;
         });
-        return $done();
+        $eff = chButtonUrl(chOf($k)['buttons'][$i] ?? []);
+        return $done($eff !== ''
+            ? "✅ دکمه به این آدرس می‌رود:\n<code>" . h($eff) . '</code>' .
+              ($blank ? "\n\n(خودِ ربات — چون لینکی ندادید)" : '')
+            : "✅ ذخیره شد.");
     }
     clearState($uid);
     return true;

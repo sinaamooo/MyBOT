@@ -2651,9 +2651,13 @@ function maMarkPaid($id, $payMethod) {
     if (function_exists('axReportOrder')) axReportOrder($o, 'paid');
 
     // 📡 و روی کانالِ «گزارش خرید»، اگر تنظیم شده باشد
-    if (function_exists('chBuy'))
+    if (function_exists('chBuy')) {
+        // دسته‌ی سرویس را هم می‌دهیم تا گزارش در تاپیکِ همان دسته بیفتد
+        $it  = maFindItem($o['app'], $o['item_id']);
+        $cat = (string)($it['cat'] ?? '');
         chBuy($o['user_id'], $o['username'] ?? '', maOrderTitle($o),
-              (float)($o['qty'] ?? 1), (float)$o['total'], $o['id'], [], (string)$o['app']);
+              (float)($o['qty'] ?? 1), (float)$o['total'], $o['id'], [], (string)$o['app'], $cat);
+    }
 
     // 🚚 زنجیره‌ی تحویل: مخزن → دستی → پنل خودکار → دست ادمین
     return maDeliver($o);
