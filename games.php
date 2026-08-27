@@ -176,23 +176,32 @@ function gmDigitIds() {
 /**
  * عدد → رشته‌ی ایموجیِ رقم‌ها
  *
- * ⚠️ رقم‌های ایموجی «خنثی» حساب می‌شوند، پس داخل یک پیام فارسی
- * (راست‌به‌چپ) برعکس چیده می‌شدند و ۵۰ به شکل ۰۵ دیده می‌شد.
- * برای همین کل عدد داخل یک «جداساز چپ‌به‌راست» پیچیده می‌شود
- * (U+2066 … U+2069) تا همیشه از چپ به راست خوانده شود.
+ * ⚠️ چرا برعکس می‌شد: تلگرام هر ایموجی پرمیوم را با یک «شیء» عوض
+ * می‌کند و شیء از نظر جهت‌دهی خنثی است. دو شیء کنار هم، داخل یک پیام
+ * راست‌به‌چپ، راست‌به‌چپ چیده می‌شوند — یعنی ۱۰ به شکل ۰۱ دیده می‌شود.
+ *
+ * پیچیدنِ کل عدد در جداسازِ چپ‌به‌راست (U+2066…U+2069) روی کلاینتی که
+ * جداساز را می‌فهمد جواب می‌دهد، ولی کلاینتی که نمی‌فهمد خودِ جداساز را
+ * هم خنثی حساب می‌کند و باز برعکس می‌شود. برای همین سه لایه گذاشته‌ایم
+ * و لایه‌ی اصلی، نشانه‌ی چپ‌به‌راست (U+200E) میان تک‌تک رقم‌هاست: آن
+ * یکی را هر کلاینتی می‌فهمد و رقم‌ها را از هم جدا نگه می‌دارد.
  */
 function gmBigNum($n) {
     $ids = gmDigitIds();
     $s = preg_replace('/\D+/', '', (string)number_format((float)$n, 0, '.', ''));
     if ($s === '') $s = '0';
-    $out = '';
+
+    $LRM = "\u{200E}";                 // «این‌جا چپ‌به‌راست است»
+    $out = $LRM;
     foreach (str_split($s) as $c) {
         $keycap = $c . "\u{FE0F}\u{20E3}";
-        $out .= ($ids[$c] ?? '') !== ''
+        $out .= (($ids[$c] ?? '') !== ''
               ? '<tg-emoji emoji-id="' . $ids[$c] . '">' . $keycap . '</tg-emoji>'
-              : $keycap;
+              : $keycap) . $LRM;
     }
-    return "\u{2066}" . $out . "\u{2069}";
+    // سه لایه، چون هر کلاینتی یکی‌شان را می‌فهمد: جداسازِ تازه (LRI/PDI)،
+    // جاسازیِ قدیمی (LRE/PDF) و نشانه‌ی چپ‌به‌راست میان تک‌تک رقم‌ها.
+    return "\u{2066}\u{202A}" . $out . "\u{202C}\u{2069}";
 }
 
 /**
@@ -205,10 +214,32 @@ function gmBigNum($n) {
 function gmBtnKeys() {
     return ['duel_join', 'duel_cancel', 'rand_join',
             'lbl_prize', 'lbl_wbal', 'lbl_lbal',
+            'lbl_cancel_duel', 'lbl_cancel_rand',
             'bal_btn', 'send_bal', 'send_bal2'];
 }
 
 function gmIsBtn($k) { return in_array($k, gmBtnKeys(), true); }
+
+/**
+ * برچسب‌هایی که پیش از این ذخیره شده‌اند، هنوز نویسه‌ی ایموجیِ پرمیوم را
+ * داخل خودشان دارند و روی دکمه یک ایموجیِ معمولیِ اضافه نشان می‌دهند.
+ * یک بار، همان ایموجیِ ابتدای متن برداشته می‌شود — فقط برای کلیدهایی
+ * که شناسه‌ی پرمیوم دارند، چون فقط آن‌ها دوتایی دیده می‌شوند.
+ */
+function gmDropDoubleIcons() {
+    gmSet(function (&$c) {
+        foreach ((array)($c['icons'] ?? []) as $k => $id) {
+            if (trim((string)$id) === '') continue;
+            $t = (string)($c['texts'][$k] ?? '');
+            if ($t === '') continue;
+            $clean = preg_replace(
+                '/^[\x{1F000}-\x{1FAFF}\x{2600}-\x{27BF}\x{2190}-\x{21FF}\x{2B00}-\x{2BFF}' .
+                '\x{FE0F}\x{20E3}\x{200D}0-9#*]+\s*/u', '', $t);
+            $clean = trim((string)$clean);
+            if ($clean !== '' && $clean !== $t) $c['texts'][$k] = $clean;
+        }
+    });
+}
 
 /** یک دکمه‌ی شیشه‌ای از روی متنِ ذخیره‌شده + ایموجی پرمیومش */
 function gmBtn($key, $vars, $data, $style = null) {
@@ -741,6 +772,10 @@ function gmCallback($data, $uid, $chatId, $msgId, $cbId, $from = []) {
     $g = gmGet($gid);
     if (!$g || !in_array($g['status'], ['open', 'playing'], true)) {
         answerCb(BOT_TOKEN, $cbId, gmT('gone'), true);
+        // پیامِ کهنه هنوز دکمه‌ی «پیوستن» دارد و از بیرون زنده به نظر
+        // می‌رسد. دکمه‌ها را با یک دکمه‌ی مرده عوض می‌کنیم تا معلوم شود
+        // این چالش تمام شده — نه اینکه کاربر بزند و هیچ اتفاقی نیفتد.
+        if ($msgId) editKb(BOT_TOKEN, $chatId, (int)$msgId, gmCancelKb($g ?: ['kind' => 'duel']));
         return true;
     }
 
@@ -1185,6 +1220,13 @@ function gmStateHandle($action, $msg, $uid, $chatId) {
             if ($text === '') { sendMsg(BOT_TOKEN, $chatId, "⚠️ متن خالی نمی‌شود."); return true; }
             $ids  = function_exists('customEmojiIds') ? customEmojiIds($msg) : [];
             $icon = $ids ? (string)$ids[0] : '';
+            // ایموجی پرمیوم جدا روی دکمه می‌نشیند؛ اگر نویسه‌اش داخل متن
+            // هم بماند، یک ایموجیِ معمولیِ اضافه درست جلوی آن دیده می‌شود.
+            if ($icon !== '' && function_exists('textWithoutCustomEmoji')) {
+                $clean = textWithoutCustomEmoji($msg);
+                if ($clean !== '') $text = $clean;
+            }
+            if ($text === '') { sendMsg(BOT_TOKEN, $chatId, "⚠️ متن خالی نمی‌شود."); return true; }
             gmSet(function (&$c) use ($k, $text, $icon) {
                 $c['texts'][$k] = $text;
                 if (!isset($c['icons']) || !is_array($c['icons'])) $c['icons'] = [];

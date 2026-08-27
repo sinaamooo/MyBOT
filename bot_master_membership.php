@@ -330,9 +330,42 @@ function editMsg($token, $chatId, $msgId, $text, $markup = null) {
     return $res;
 }
 
+/** فقط دکمه‌های زیر پیام را عوض می‌کند — متن دست نمی‌خورد */
+function editKb($token, $chatId, $msgId, $markup = null) {
+    $data = ['chat_id' => $chatId, 'message_id' => $msgId];
+    if ($markup) $data['reply_markup'] = is_string($markup) ? $markup : json_encode($markup);
+    $res = tg($token, 'editMessageReplyMarkup', $data);
+    if (empty($res['ok']) && $markup && !is_string($markup) && isStyleError($res)) {
+        $data['reply_markup'] = json_encode(stripStyles($markup));
+        $res = tg($token, 'editMessageReplyMarkup', $data);
+    }
+    return $res;
+}
+
+/**
+ * 🔔 پیام کوچکِ بالای صفحه (یا پنجره‌ی هشدار).
+ *
+ * ⚠️ تلگرام اینجا HTML نمی‌خواند و متن را هم بیشتر از ۲۰۰ نویسه
+ * نمی‌پذیرد. اگر متنِ ذخیره‌شده‌ی ادمین ایموجی پرمیوم یا نقل‌قول
+ * داشته باشد، یا خودِ تگ‌ها خام روی صفحه می‌افتند، یا درخواست رد
+ * می‌شود و هیچ چیزی بالا نمی‌آید. پس همین‌جا تمیزش می‌کنیم تا هیچ
+ * فراخوانی‌ای در بقیه‌ی فایل‌ها یادش نرود.
+ */
+function plainAlert($text) {
+    $t = (string)$text;
+    if ($t === '') return '';
+    $t = preg_replace('~<br\s*/?>|</(p|div|blockquote|pre)>~i', "\n", $t);
+    $t = strip_tags($t);
+    $t = html_entity_decode($t, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    $t = preg_replace("/[ \t]+/u", ' ', $t);
+    $t = preg_replace("/\n{3,}/u", "\n\n", $t);
+    $t = trim($t);
+    return mb_strlen($t, 'UTF-8') > 200 ? mb_substr($t, 0, 199, 'UTF-8') . '…' : $t;
+}
+
 function answerCb($token, $cbId, $text = '', $alert = false) {
     return tg($token, 'answerCallbackQuery', [
-        'callback_query_id' => $cbId, 'text' => $text,
+        'callback_query_id' => $cbId, 'text' => plainAlert($text),
         'show_alert' => $alert ? 'true' : 'false',
     ]);
 }
@@ -455,6 +488,37 @@ function customEmojiIds($msg) {
         if ($id !== '' && !in_array($id, $out, true)) $out[] = $id;
     }
     return $out;
+}
+
+/**
+ * متنِ پیام، بدون نویسه‌های ایموجیِ پرمیوم.
+ *
+ * برچسبِ دکمه HTML نمی‌پذیرد؛ ایموجی پرمیوم را باید جدا و به‌شکل
+ * شناسه فرستاد. ولی نویسه‌ی جایگزینِ همان ایموجی داخل متن می‌ماند و
+ * روی دکمه یک ایموجیِ معمولیِ اضافه، درست جلوی ایموجی پرمیوم، دیده
+ * می‌شود. اینجا آن نویسه‌ها برداشته می‌شوند.
+ *
+ * جاهای entity برحسب واحدهای UTF-16 شمرده می‌شوند، نه بایت و نه
+ * نویسه — پس برش هم باید همان‌جا انجام شود.
+ */
+function textWithoutCustomEmoji($msg) {
+    $text = (string)($msg['text'] ?? $msg['caption'] ?? '');
+    $cuts = [];
+    foreach (($msg['entities'] ?? $msg['caption_entities'] ?? []) as $e) {
+        if (($e['type'] ?? '') !== 'custom_emoji') continue;
+        $cuts[] = [(int)($e['offset'] ?? 0), (int)($e['length'] ?? 0)];
+    }
+    if (!$cuts) return trim($text);
+
+    usort($cuts, fn($a, $b) => $b[0] <=> $a[0]);        // از آخر به اول، تا جاها نلغزند
+    $u16 = mb_convert_encoding($text, 'UTF-16LE', 'UTF-8');
+    foreach ($cuts as [$off, $len]) {
+        $n = strlen($u16) >> 1;
+        if ($len <= 0 || $off < 0 || $off >= $n) continue;
+        $u16 = substr($u16, 0, $off * 2) . substr($u16, min($off + $len, $n) * 2);
+    }
+    $out = mb_convert_encoding($u16, 'UTF-8', 'UTF-16LE');
+    return trim(preg_replace('/\s{2,}/u', ' ', $out));
 }
 
 function extractFile($msg) {
@@ -8288,6 +8352,12 @@ function runBackgroundQueues() {
     if (!is_file($mMark4)) {
         @touch($mMark4);
         if (function_exists('maDropOldTheme')) maDropOldTheme();
+    }
+
+    $mMark5 = DATA_DIR . '/.migrated_v5';
+    if (!is_file($mMark5)) {
+        @touch($mMark5);
+        if (function_exists('gmDropDoubleIcons')) gmDropDoubleIcons();
     }
 
     // 🗄 بایگانی سفارش‌ها — کم‌تکرار، چون خودش سنگین است

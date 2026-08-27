@@ -738,8 +738,13 @@ function dmStateHandle($action, $msg, $uid, $chatId) {
 
     if ($action === 'dm_text') {
         $k = (string)($sd['k'] ?? '');
-        if ($k === '' || $text === '') return $bad('متن خالی نمی‌شود.');
-        dmSet(function (&$c) use ($k, $text) { $c['texts'][$k] = $text; });
+        if ($k === '') return $bad('متن خالی نمی‌شود.');
+        // ⚠️ متنِ خام ($text) ایموجی پرمیوم را نگه نمی‌دارد — تلگرام آن را
+        // به‌شکل entity کنار متن می‌فرستد، نه داخلش. پس همان HTML را
+        // ذخیره می‌کنیم تا ایموجی پرمیوم و نقل‌قول هر دو سر جایشان بمانند.
+        $html = function_exists('msgHtml') ? msgHtml($msg) : $text;
+        if (trim($html) === '') return $bad('متن خالی نمی‌شود.');
+        dmSet(function (&$c) use ($k, $html) { $c['texts'][$k] = $html; });
         return $done();
     }
     if ($action === 'dm_give') {
