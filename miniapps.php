@@ -721,7 +721,15 @@ function maHttp($url, $method = 'GET', $headersRaw = '', $body = '', $timeout = 
     if (strtoupper($method) === 'POST') {
         $opt[CURLOPT_POST] = true;
         $opt[CURLOPT_POSTFIELDS] = (string)$body;
-        if (!$headers) $headers[] = 'Content-Type: application/json';
+        // ⚠️ نوعِ محتوا باید همیشه برود.
+        //
+        // قبلا فقط وقتی اضافه می‌شد که هیچ هدر دیگری نبود. یعنی هر پنلی
+        // که کلید API را در هدر می‌خواهد (تقریبا همه)، بدنه‌ی JSONش
+        // بدون Content-Type می‌رفت؛ curl آن را فرم اعلام می‌کرد و سرور
+        // نمی‌توانست بخواندش — همان خطای ۴۲۲ که هیچ توضیحی هم نداشت.
+        $hasType = false;
+        foreach ($headers as $h) if (stripos($h, 'content-type:') === 0) { $hasType = true; break; }
+        if (!$hasType) $headers[] = 'Content-Type: application/json';
     }
     if ($headers) $opt[CURLOPT_HTTPHEADER] = $headers;
     curl_setopt_array($ch, $opt);
@@ -732,7 +740,12 @@ function maHttp($url, $method = 'GET', $headersRaw = '', $body = '', $timeout = 
     curl_close($ch);
 
     if ($res === false) return [null, 'اتصال برقرار نشد: ' . $err];
-    if ($code < 200 || $code >= 300) return [null, 'کد پاسخ ' . $code];
+    if ($code < 200 || $code >= 300) {
+        // بدنه‌ی خطا را دور نریز — همان‌جاست که سرور می‌گوید چه چیزی
+        // غلط بوده. ۴۲۲ مثلا دقیقا نامِ فیلدِ اشتباه را می‌نویسد.
+        $why = trim(preg_replace('/\s+/u', ' ', (string)$res));
+        return [null, 'کد پاسخ ' . $code . ($why !== '' ? ' — ' . mb_substr($why, 0, 400) : '')];
+    }
 
     $j = json_decode((string)$res, true);
     if (!is_array($j)) return [null, 'پاسخ JSON نبود: ' . mb_substr((string)$res, 0, 120)];
