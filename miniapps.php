@@ -1553,15 +1553,50 @@ function maFulfillCall($op, $vars = []) {
 }
 
 /** آیا این پاسخ یعنی موفقیت؟ */
+/**
+ * آیا این مقدار واقعا یک خطاست؟
+ *
+ * ⚠️ قبلا فقط رشته حساب می‌شد. ولی پنل‌های امروزی خطا را آرایه می‌دهند
+ * (<code>detail: [{loc, msg}]</code>). آن‌وقت خطا دیده نمی‌شد، سفارش
+ * «انجام شد» علامت می‌خورد و به مشتری هم می‌گفتیم تمام شد — در حالی که
+ * پنل هیچ کاری نکرده بود. یعنی پولِ رفته و کالای نرسیده.
+ */
+function maErrLooksReal($e) {
+    if (is_string($e)) {
+        $s = strtolower(trim($e));
+        return $s !== '' && !in_array($s, ['ok', 'success', 'none', 'null', 'false', '0'], true);
+    }
+    if (is_array($e)) return count($e) > 0;
+    if (is_bool($e))  return $e;
+    return false;
+}
+
+/** خطای پنل را یک خطِ خوانا می‌کند — چه رشته باشد چه آرایه */
+function maErrText($v) {
+    if (is_bool($v))   return $v ? 'خطا' : '';
+    if (is_string($v)) return trim($v);
+    if (is_scalar($v)) return trim((string)$v);
+    if (!is_array($v)) return '';
+
+    $parts = [];
+    foreach ($v as $k => $one) {
+        if (is_string($one)) { $parts[] = (is_string($k) ? $k . ': ' : '') . $one; continue; }
+        if (!is_array($one)) continue;
+        $msg = $one['msg'] ?? $one['message'] ?? $one['detail'] ?? null;
+        if (!is_string($msg)) continue;
+        $loc = (isset($one['loc']) && is_array($one['loc']))
+             ? implode('.', array_map('strval', $one['loc'])) : '';
+        $parts[] = ($loc !== '' ? $loc . ': ' : '') . $msg;
+    }
+    if ($parts) return implode(' · ', $parts);
+    return (string)json_encode($v, JSON_UNESCAPED_UNICODE);
+}
+
 function maFulfillOk($resp, $cfgOp) {
     if (!is_array($resp)) return false;
     // اگر پنل فیلد خطا پر کرده، شکست است
     $errPath = (string)($cfgOp['err_path'] ?? '');
-    if ($errPath !== '') {
-        $e = maJsonPath($resp, $errPath);
-        if (is_string($e) && trim($e) !== '' && strtolower(trim($e)) !== 'ok' && strtolower(trim($e)) !== 'success')
-            return false;
-    }
+    if ($errPath !== '' && maErrLooksReal(maJsonPath($resp, $errPath))) return false;
     // فیلدهای رایج «موفق بود؟»
     foreach (['ok', 'success', 'status'] as $k) {
         if (!array_key_exists($k, $resp)) continue;
@@ -1582,8 +1617,8 @@ function maFulfillErr($resp, $cfgOp) {
     if (!is_array($resp)) return 'پاسخ نامعتبر';
     foreach ([(string)($cfgOp['err_path'] ?? ''), 'message', 'error', 'detail', 'msg'] as $pth) {
         if ($pth === '') continue;
-        $v = maJsonPath($resp, $pth);
-        if (is_string($v) && trim($v) !== '') return mb_substr($v, 0, 200);
+        $t = maErrText(maJsonPath($resp, $pth));
+        if ($t !== '') return mb_substr($t, 0, 200);
     }
     return 'خطای نامشخص';
 }
