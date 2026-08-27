@@ -29,6 +29,10 @@ function gmDefaults() {
         // چالش به‌صورت پیش‌فرض همان لحظه‌ی پیوستنِ نفر دوم نتیجه می‌دهد.
         // اگر روزی صفحه‌ی دوز را خواستید، این را روشن کنید.
         'duel_board' => false,
+        // 🔢 هر نفر هم‌زمان چند بازیِ باز داشته باشد
+        'open_max'  => 2,
+        // ⏰ بازیِ بی‌حریف بعد از چند ثانیه خودکار لغو و شرط برگردانده شود
+        'expire'    => 180,
         'word_duel' => 'چالش',
         'word_rand' => 'بازی',
         'word_bal'  => 'موجودی',
@@ -107,6 +111,9 @@ function gmDefaults() {
             'group_only' => "🎮 بازی فقط داخل گروه کار می‌کند.",
             'already'    => "تو که خودت داخل این بازی هستی — منتظر حریف بمان.",
             'open_max'   => "⛔️ شما <b>{n}</b> بازی باز دارید.\n\nاول همان‌ها تمام یا لغو شوند، بعد بازی تازه بسازید.",
+            'expired'    => "⏳ <b>کسی وارد نشد</b>\n\nشرط به سازنده برگشت.",
+            'lbl_cancel_duel' => "چالش لغو شد",
+            'lbl_cancel_rand' => "بازی لغو شد",
         ],
     ];
 }
@@ -482,8 +489,18 @@ function gmFinish($g, $winnerId, $loserId) {
 function gmRefund($g, $why) {
     foreach ($g['players'] as $p) gmAdd((int)$p['id'], (float)$g['stake']);
     gmSetGame($g['id'], function (&$x) { $x['status'] = 'cancelled'; return true; });
-    if ((int)$g['msg']) editMsg(BOT_TOKEN, $g['chat'], (int)$g['msg'], $why, null);
-    else                sendMsg(BOT_TOKEN, $g['chat'], $why);
+
+    // دکمه‌های پیوستن/لغو برداشته می‌شوند و جایشان یک دکمه می‌نشیند که
+    // می‌گوید چه شد — تا پیام مرده و بی‌دکمه نماند.
+    $kb = gmCancelKb($g);
+    if ((int)$g['msg']) editMsg(BOT_TOKEN, $g['chat'], (int)$g['msg'], $why, $kb);
+    else                sendMsg(BOT_TOKEN, $g['chat'], $why, $kb);
+}
+
+/** تنها دکمه‌ی پیام لغوشده — «چالش لغو شد» یا «بازی لغو شد» */
+function gmCancelKb($g) {
+    $slug = (($g['kind'] ?? '') === 'duel') ? 'lbl_cancel_duel' : 'lbl_cancel_rand';
+    return inlineKb([[gmBtn($slug, [], 'gmnop', 'danger')]]);
 }
 
 /** سه‌تایی برنده؟ برگشت شماره‌ی بازیکن یا ۰ */
@@ -513,9 +530,23 @@ function gmBoardFull($b) {
 function gmTick($limit = 20) {
     $now  = time();
     $done = 0;
+    $exp  = max(30, (int)gmVal('expire', 180));
+
     foreach (gmAll() as $g) {
         if ($done >= $limit) break;
-        if (($g['status'] ?? '') !== 'open' || ($g['kind'] ?? '') !== 'rand') continue;
+        if (($g['status'] ?? '') !== 'open') continue;
+
+        // ⏰ بی‌حریف مانده و مهلتش تمام شده؟ لغو و شرط برگردد.
+        //    این هم برای چالش است هم برای قرعه — بازی بی‌صاحب در گروه نماند.
+        if (count($g['players'] ?? []) < 2
+            && (int)($g['created'] ?? 0) > 0
+            && ($now - (int)$g['created']) >= $exp) {
+            gmRefund($g, gmT('expired'));
+            $done++;
+            continue;
+        }
+
+        if (($g['kind'] ?? '') !== 'rand') continue;
         if ((int)$g['ends'] <= 0 || $now < (int)$g['ends']) continue;
         gmDraw($g);
         $done++;
@@ -542,6 +573,14 @@ function gmDraw($g) {
         // کسی نیامد؟ باطلش نمی‌کنیم — مهلت را از نو می‌گذاریم و همان‌جا
         // باز می‌ماند تا حریف پیدا شود. شرط هم دستِ کسی نمی‌ماند چون
         // بازی هنوز زنده است.
+        // مهلت کلی تمام شده؟ دیگر از نو مسلح نکن — لغو کن و شرط برگردد
+        $exp = max(30, (int)gmVal('expire', 180));
+        if ((int)($g['created'] ?? 0) > 0 && (time() - (int)$g['created']) >= $exp) {
+            gmSetGame($g['id'], function (&$x) { $x['status'] = 'open'; return true; });
+            gmRefund(gmGet($g['id']) ?: $g, gmT('expired'));
+            return;
+        }
+
         gmSetGame($g['id'], function (&$x) {
             $x['status'] = 'open';
             $x['ends']   = time() + max(3, (int)gmVal('wait', 8));
@@ -676,15 +715,13 @@ function gmTransfer($amount, $uid, $chatId, $name, $uname, $replyTo, $msg) {
     $from = ['id' => $uid, 'name' => $name, 'uname' => $uname];
     $dst  = ['id' => $toId, 'name' => $to['first_name'] ?? '', 'uname' => $to['username'] ?? ''];
 
+    // بدون دکمه — موجودی هر دو طرف با {fbal} و {tbal} داخل خودِ متن
+    // در دسترس است و دکمه‌ی شیشه‌ای اینجا فقط جا می‌گرفت.
     sendMsg(BOT_TOKEN, $chatId, gmT('send_ok', [
         'from' => gmName($from), 'to' => gmName($dst),
         'amount' => gmNum($amount), 'tax' => gmNum($tax), 'total' => gmNum($total),
-    ]), inlineKb([
-        [['text' => gmNum(gmPoints($uid)), 'callback_data' => 'gmnop', 'style' => 'primary'],
-         gmBtn('send_bal', [], 'gmnop', 'primary')],
-        [['text' => gmNum(gmPoints($toId)), 'callback_data' => 'gmnop', 'style' => 'success'],
-         gmBtn('send_bal2', [], 'gmnop', 'success')],
-    ]), $extra);
+        'fbal' => gmNum(gmPoints($uid)), 'tbal' => gmNum(gmPoints($toId)),
+    ]), null, $extra);
 
 }
 
@@ -854,7 +891,8 @@ function gmAdminHome($chatId, $msgId = null) {
         [btnCb('🗣 کلمه‌ها', 'gmaw_home', 'admin'), btnCb('✏️ متن‌ها', 'gmat_home', 'admin')],
         [btnCb('🔢 ایموجی عددها', 'gmadig', 'admin'),
          btnCb(!empty(gmVal('duel_board')) ? '⭕ چالش: صفحه دوز' : '⚡ چالش: نتیجه‌ی فوری', 'gmaduel', 'info')],
-        [btnCb('🔢 سقف بازی باز: ' . gmNum((int)gmVal('open_max', 2)), 'gmaopen', 'admin')],
+        [btnCb('🔢 سقف بازی باز: ' . gmNum((int)gmVal('open_max', 2)), 'gmaopen', 'admin'),
+         btnCb('⏰ مهلت بی‌حریف: ' . gmNum((int)gmVal('expire', 180)) . 'ث', 'gmaexp', 'admin')],
         [btnCb('🧹 بستن بازی‌های باز', 'gmaclose', 'danger')],
         [btnCb(UT('back'), 'adm_home', 'nav')],
     ];
@@ -906,6 +944,9 @@ function gmLabels() {
         'gone'      => 'بازی تمام شده',    'cancelled' => 'بازی لغو شد',
         'group_only'=> 'فقط داخل گروه', 'already' => 'خودت داخل بازی هستی',
         'open_max'  => 'سقف بازی باز',
+        'expired'   => 'بی‌حریف — مهلت تمام شد',
+        'lbl_cancel_duel' => 'دکمه‌ی «چالش لغو شد»',
+        'lbl_cancel_rand' => 'دکمه‌ی «بازی لغو شد»',
     ];
 }
 
@@ -975,6 +1016,16 @@ function gmAdminCallback($data, $chatId, $msgId, $cbId) {
             inlineKb([[btnUI('cancel', 'gm_home', 'cancel')]]));
         return true;
     }
+    if ($data === 'gmaexp') {
+        answerCb(BOT_TOKEN, $cbId);
+        setState(ADMIN_ID, 'gm_expire', []);
+        sendMsg(BOT_TOKEN, $chatId,
+            "⏰ بازیِ بی‌حریف بعد از چند ثانیه خودکار لغو شود؟\n\n" .
+            "شرط همان لحظه به سازنده برمی‌گردد.\nالان: <b>" .
+            gmNum((int)gmVal('expire', 180)) . "</b> ثانیه",
+            inlineKb([[btnUI('cancel', 'gm_home', 'cancel')]]));
+        return true;
+    }
     if ($data === 'gmadig') { answerCb(BOT_TOKEN, $cbId); gmAdminDigits($chatId, $msgId); return true; }
     if ($data === 'gmaduel') {
         gmSet(function (&$c) { $c['duel_board'] = empty($c['duel_board']); });
@@ -1040,7 +1091,7 @@ function gmVars($k) {
     if (str_starts_with($k, 'duel_open')) return ['emoji', 'stake', 'host', 'prize', 'tax'];
     if (str_starts_with($k, 'rand_open')) return ['emoji', 'stake', 'host', 'count', 'prize', 'tax', 'left'];
     if (str_starts_with($k, 'bal_'))      return ['emoji', 'points'];
-    if (str_starts_with($k, 'send_ok'))   return ['from', 'to', 'amount', 'tax', 'total'];
+    if (str_starts_with($k, 'send_ok'))   return ['from', 'to', 'amount', 'tax', 'total', 'fbal', 'tbal'];
     if ($k === 'low')                     return ['points', 'need'];
     if ($k === 'bad_stake')               return ['min', 'max'];
     if ($k === 'send_how')                return ['word'];
@@ -1056,6 +1107,15 @@ function gmStateHandle($action, $msg, $uid, $chatId) {
     $sd   = $st['data'] ?? [];
     $text = trim((string)($msg['text'] ?? ''));
     $back = inlineKb([[btnCb('🎮 بازی‌ها', 'gm_home', 'admin')]]);
+
+    if ($action === 'gm_expire') {
+        $n = (int)str_replace([',', '،'], '', norm_fa_digits($text));
+        if ($n < 30 || $n > 86400) { sendMsg(BOT_TOKEN, $chatId, "⚠️ بین ۳۰ تا ۸۶۴۰۰ ثانیه."); return true; }
+        gmSet(function (&$c) use ($n) { $c['expire'] = $n; });
+        clearState($uid);
+        sendMsg(BOT_TOKEN, $chatId, '✅ مهلت بی‌حریف: ' . gmNum($n) . ' ثانیه', $back);
+        return true;
+    }
 
     if ($action === 'gm_openmax') {
         $n = (int)str_replace([',', '،'], '', norm_fa_digits($text));
