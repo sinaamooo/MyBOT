@@ -469,6 +469,8 @@ function maDefaultNum() {
             'cancel_do' => 'لغو و بازگشت وجه',
             'cancel_ask'=> 'شماره لغو شود و مبلغ برگردد؟',
             'again'     => 'شماره‌ی تازه',
+            'repeat'    => 'کد مجدد روی همین شماره',
+            'repeat_ok' => 'درخواست شد — منتظر کد تازه',
             'expired'   => 'مهلت تمام شد — مبلغ به کیف پول برگشت',
             'canceled'  => 'لغو شد — مبلغ به کیف پول برگشت',
             'left'      => 'زمان باقی‌مانده',
@@ -2675,6 +2677,21 @@ function maApi() {
         if (!$st) maApiOut(['ok' => false, 'error' => 'not_found'], 404);
         maApiOut(['ok' => true, 'active' => true, 'num' => $st,
                   'balance' => (float)(getUser($uid)['balance'] ?? 0)]);
+    }
+
+    // ---- 🔁 شماره مجازی: کد مجدد روی همان شماره ----
+    if ($action === 'num_repeat') {
+        if ($key !== 'num' || !function_exists('numRepeat'))
+            maApiOut(['ok' => false, 'error' => 'bad_app'], 400);
+
+        $oid = trim((string)($body['order'] ?? ''));
+        $own = $oid !== '' ? numGet($oid) : null;
+        if (!$own || (int)($own['uid'] ?? 0) !== $uid)
+            maApiOut(['ok' => false, 'error' => 'not_found'], 404);
+
+        [$ok, $err] = numRepeat((string)$own['order']);
+        if (!$ok) maApiOut(['ok' => false, 'error' => 'failed', 'message' => $err], 409);
+        maApiOut(['ok' => true, 'num' => numState((string)$own['order'])]);
     }
 
     // ---- ☎️ شماره مجازی: لغو و بازگشت وجه ----

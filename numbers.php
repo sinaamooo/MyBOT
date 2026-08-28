@@ -52,6 +52,7 @@ function numDefaults() {
                     'method' => 'POST', 'path' => '',
                     'body'   => '{"country":"{country}","service":"{service}"}',
                     'id_path' => 'id', 'phone_path' => 'phone', 'err_path' => 'message',
+                    'ttl_path' => '', 'rep_path' => '',
                 ],
                 // 📩 پیگیری کد
                 'status' => [
@@ -63,6 +64,17 @@ function numDefaults() {
                 'cancel' => [
                     'method' => 'POST', 'path' => '',
                     'body'   => '{"id":"{id}"}',
+                    'err_path' => 'message',
+                ],
+                // ✅ بستنِ شماره بعد از گرفتنِ کد — اختیاری ولی مهم:
+                //    تا نبندیم، شماره روی پنلِ فروشنده اشغال می‌ماند.
+                'close' => [
+                    'method' => 'GET', 'path' => '', 'body' => '',
+                    'err_path' => 'message',
+                ],
+                // 🔁 کد مجدد روی همان شماره — اختیاری
+                'repeat' => [
+                    'method' => 'GET', 'path' => '', 'body' => '',
                     'err_path' => 'message',
                 ],
                 // 💰 موجودی پنل — اختیاری، فقط برای دکمه‌ی تست
@@ -400,6 +412,10 @@ function numBuy($order) {
     // ⏳ اگر پنل خودش مهلت داده، همان را نگه دار — دقیق‌تر از عددِ ماست
     $ttl = numParseTtl(maJsonPath($resp, (string)($ops['ttl_path'] ?? '')));
 
+    // 🔁 آیا این شماره «کد مجدد» می‌دهد؟
+    $rep = maJsonPath($resp, (string)($ops['rep_path'] ?? ''));
+    $canRep = is_scalar($rep) && in_array(strtolower(trim((string)$rep)), ['1', 'true', 'yes'], true);
+
     numPut([
         'order'   => $oid,
         'uid'     => (int)($order['user_id'] ?? 0),
@@ -415,6 +431,8 @@ function numBuy($order) {
         'created' => time(),
         'checked' => 0,
         'wait'    => $ttl >= 60 ? $ttl : 0,
+        'can_repeat' => $canRep,
+        'repeats' => 0,
     ]);
     return [true, ''];
 }
@@ -466,6 +484,12 @@ function numState($orderId, $force = false) {
         'left'   => (int)$left,
         'wait'   => $wait,
         'name'   => (string)($act['name'] ?? ''),
+        // 🔁 دکمه‌ی «کد مجدد» فقط وقتی نشان داده شود که واقعا کار کند
+        'repeat' => (!empty($act['can_repeat'])
+                     && ($act['status'] ?? '') === 'done'
+                     && $left > 0
+                     && trim((string)numVal('api.ops.repeat.path', '')) !== '') ? 1 : 0,
+        'repeats' => (int)($act['repeats'] ?? 0),
     ];
 }
 
@@ -493,7 +517,7 @@ function numPoll($orderId) {
 
     // ⛔️ مرده؟ (لغو یا مسدود) — پول همان‌جا برگردد، منتظرِ مهلت نمانیم
     if ($st !== '' && numStateIn($st, (string)($ops['dead_val'] ?? ''))) {
-        numFinish($orderId, 'expired');
+        numFinish($orderId, 'expired', false);   // پنل خودش بسته — لازم نیست بگوییم
         return;
     }
 
@@ -568,26 +592,107 @@ function numParseTtl($v) {
 function numOrderDone($orderId) {
     if (!class_exists('MaOrder')) return;
     $o = MaOrder::get($orderId);
-    if (!$o || ($o['status'] ?? '') === MaOrder::DONE) return;
+    if (!$o) return;
 
-    MaOrder::set($orderId, function (&$x) {
-        $x['status'] = MaOrder::DONE;
-        $x['delivered_at'] = nowStr();
-        $x['sending'] = 0;
-        $x['last_error'] = '';
-    });
+    // 🔁 کدِ مجدد روی همان شماره یعنی سفارش از قبل DONE است. پس «قبلا
+    //    تمام شده» دلیلِ ساکت ماندن نیست — کدِ تازه هم باید برسد. فقط
+    //    گذارِ وضعیت و گزارش یک بار انجام می‌شوند.
+    $first = ($o['status'] ?? '') !== MaOrder::DONE;
+
+    if ($first) {
+        MaOrder::set($orderId, function (&$x) {
+            $x['status'] = MaOrder::DONE;
+            $x['delivered_at'] = nowStr();
+            $x['sending'] = 0;
+            $x['last_error'] = '';
+        });
+        $o = MaOrder::get($orderId);
+    }
 
     $act = numGet($orderId);
-    $o   = MaOrder::get($orderId);
     if (function_exists('maTellUser') && $act) {
         maTellUser($o,
-            "✅ <b>کد شما رسید</b>\n\n" .
+            ($first ? "✅ <b>کد شما رسید</b>\n\n" : "🔁 <b>کد مجدد رسید</b>\n\n") .
             '📦 ' . h((string)($act['name'] ?? '')) . "\n" .
             '☎️ <code>' . h((string)$act['phone']) . "</code>\n" .
             '🔑 <code>' . h((string)$act['code']) . "</code>\n" .
             '🧾 <code>' . h((string)$orderId) . '</code>');
     }
-    if (function_exists('axReportOrder')) axReportOrder($o, 'done');
+    if ($first && function_exists('axReportOrder')) axReportOrder($o, 'done');
+
+    // ✅ شماره را روی پنلِ فروشنده ببند.
+    //
+    //    تا نبندیم اشغال می‌ماند و ظرفیتِ خریداری‌شده هدر می‌رود. ولی اگر
+    //    این شماره «کد مجدد» دارد، بستن یعنی همان قابلیت را دور بریزیم —
+    //    پس آنجا دست نگه می‌داریم و اجازه می‌دهیم خودش منقضی شود.
+    if ($act && empty($act['can_repeat'])) numClose($orderId);
+}
+
+/** شماره را روی پنل می‌بندد — بی‌صدا، چون به کاربر ربطی ندارد */
+function numClose($orderId) {
+    $act = numGet($orderId);
+    if (!$act || empty($act['aid']) || !empty($act['closed'])) return;
+    if (trim((string)numVal('api.ops.close.path', '')) === '') return;
+
+    [$r, $e] = numCall('close', [
+        'id'      => (string)$act['aid'],
+        'order'   => (string)$orderId,
+        'country' => (string)($act['country'] ?? ''),
+        'service' => (string)($act['service'] ?? ''),
+    ]);
+    if ($r) numSetAct($orderId, function (&$x) { $x['closed'] = time(); return true; });
+    else    error_log('[numbers] بستن شماره روی پنل نگرفت: ' . $e);
+}
+
+/**
+ * 🔁 کد مجدد روی همان شماره.
+ *
+ * برگشت: [موفق؟, پیام]
+ */
+function numRepeat($orderId) {
+    $act = numGet($orderId);
+    if (!$act)                     return [false, 'این شماره پیدا نشد'];
+    if (empty($act['can_repeat'])) return [false, 'این شماره کد مجدد ندارد'];
+    if (($act['status'] ?? '') !== 'done') return [false, 'الان نمی‌شود کد مجدد گرفت'];
+    if (trim((string)numVal('api.ops.repeat.path', '')) === '')
+        return [false, 'کد مجدد روی این پنل تنظیم نشده'];
+
+    // مهلت همان مهلتِ اولیه است و از لحظه‌ی خرید حساب می‌شود
+    if (time() - (int)($act['created'] ?? 0) >= numWaitFor($act))
+        return [false, 'مهلتِ کد مجدد تمام شده'];
+
+    // 🔒 ادعای اتمی: دو تقه‌ی پشت‌سرهم دو درخواست به پنل نفرستد
+    $claimed = false;
+    numSetAct($orderId, function (&$x) use (&$claimed) {
+        if (($x['status'] ?? '') !== 'done') return false;
+        $x['status'] = 'repeating';
+        $claimed = true;
+        return true;
+    });
+    if (!$claimed) return [false, 'همین الان درخواست داده شد'];
+
+    [$resp, $err] = numCall('repeat', [
+        'id'      => (string)$act['aid'],
+        'order'   => (string)$orderId,
+        'country' => (string)($act['country'] ?? ''),
+        'service' => (string)($act['service'] ?? ''),
+    ]);
+
+    $ops  = numVal('api.ops.repeat', []);
+    $fail = !$resp ? $err : numErr($resp, $ops);
+    if ($fail !== '') {
+        numSetAct($orderId, function (&$x) { $x['status'] = 'done'; return true; });
+        return [false, $fail];
+    }
+
+    numSetAct($orderId, function (&$x) {
+        $x['status']  = 'waiting';
+        $x['code']    = '';
+        $x['checked'] = 0;
+        $x['repeats'] = (int)($x['repeats'] ?? 0) + 1;
+        return true;
+    });
+    return [true, ''];
 }
 
 // ============================================================
@@ -600,7 +705,7 @@ function numOrderDone($orderId) {
  *
  * ⚠️ برگشت پول فقط یک بار — با ادعای اتمی روی خودِ رکورد.
  */
-function numFinish($orderId, $why = 'cancel') {
+function numFinish($orderId, $why = 'cancel', $tellPanel = true) {
     $done = false;
     numSetAct($orderId, function (&$x) use ($why, &$done) {
         if ($x['status'] !== 'waiting' && $x['status'] !== 'buying') return false;
@@ -613,8 +718,13 @@ function numFinish($orderId, $why = 'cancel') {
 
     $act = numGet($orderId);
 
-    // به پنل هم بگو، ولی اگر نگرفت جلوی برگشت پول را نگیر
-    if (!empty($act['aid'])) {
+    // به پنل هم بگو، ولی اگر نگرفت جلوی برگشت پول را نگیر.
+    //
+    // ⚠️ وقتی خودِ پنل گفته شماره کنسل یا مسدود شده، دوباره «لغو کن»
+    //    گفتن بی‌معنی است: نامبرلند cancelnumber را فقط در وضعیت ۱
+    //    می‌پذیرد و اینجا وضعیت ۳ یا ۴ است. پس فقط خطای بی‌خود در
+    //    لاگ می‌ماند.
+    if ($tellPanel && !empty($act['aid'])) {
         [$r, $e] = numCall('cancel', [
             'id'      => (string)$act['aid'],
             'order'   => (string)$orderId,
@@ -687,6 +797,7 @@ function numPresets() {
                 'buy' => [
                     'method' => 'GET', 'path' => '/v2.php/?method=getnum&sid={service}', 'body' => '',
                     'id_path' => 'ID', 'phone_path' => 'NUMBER', 'ttl_path' => 'TIME',
+                    'rep_path' => 'REPEAT',
                     'ok_path' => 'RESULT', 'ok_val' => '1', 'err_path' => 'DESCRIPTION',
                 ],
                 // 📌 وضعیت‌های نامبرلند: ۱ منتظر کد · ۲ کد رسید · ۳ لغو شده
@@ -701,20 +812,30 @@ function numPresets() {
                     'done_val' => '2,6', 'dead_val' => '3,4',
                     'err_path' => '',
                 ],
+                // 🔴 cancelnumber فقط در وضعیت ۱ کار می‌کند و هزینه را در
+                //    پنلِ فروشنده هم برمی‌گرداند.
                 'cancel' => [
-                    'method' => 'GET', 'path' => '', 'body' => '',
+                    'method' => 'GET', 'path' => '/v2.php/?method=cancelnumber&id={id}', 'body' => '',
                     'err_path' => 'DESCRIPTION', 'ok_path' => '', 'ok_val' => '',
+                ],
+                // ✅ closenumber فقط در وضعیت ۲ یا ۵ کار می‌کند و شماره را
+                //    آزاد می‌کند (وضعیت ۶).
+                'close' => [
+                    'method' => 'GET', 'path' => '/v2.php/?method=closenumber&id={id}', 'body' => '',
+                    'err_path' => 'DESCRIPTION',
+                ],
+                // 🔁 repeat فقط در وضعیت ۲ کار می‌کند و شماره را به ۵ می‌برد.
+                'repeat' => [
+                    'method' => 'GET', 'path' => '/v2.php/?method=repeat&id={id}', 'body' => '',
+                    'err_path' => 'DESCRIPTION',
                 ],
                 'balance' => [
                     'method' => 'GET', 'path' => '', 'body' => '',
                     'val_path' => 'AMOUNT', 'err_path' => 'DESCRIPTION',
                 ],
             ],
-            // ⚠️ این دو مسیر عمدا خالی مانده‌اند، نه از قلم افتاده:
-            //    «تغییر وضعیت شماره» و «موجودی» در مستندات نامبرلند بخش
-            //    جدا دارند و اسم متدشان را حدس نمی‌زنیم. با «🧪 تست خام»
-            //    پیدایشان کنید و در همان عملیات بگذارید.
-            'todo' => ['cancel' => 'لغو شماره', 'balance' => 'موجودی پنل'],
+            // ⚠️ فقط «موجودی» خالی مانده — بخشِ جداگانه‌ای دارد که ندیده‌ام.
+            'todo' => ['balance' => 'موجودی پنل'],
 
             // 📥 مسیرهای «وارد کردن کاتالوگ».
             //    operator=min یعنی از هر ترکیبِ کشور+سرویس فقط ارزان‌ترین
@@ -963,6 +1084,8 @@ function numOpLabels() {
         'buy'     => '🛒 گرفتن شماره',
         'status'  => '📩 پیگیری کد',
         'cancel'  => '🔴 لغو شماره',
+        'close'   => '✅ بستن بعد از کد',
+        'repeat'  => '🔁 کد مجدد',
         'balance' => '💰 موجودی پنل',
     ];
 }
@@ -1028,6 +1151,8 @@ function numAdmHome($chatId, $msgId) {
         [btnCb('🛒 عملیات گرفتن شماره', 'numop_buy', 'admin')],
         [btnCb('📩 عملیات پیگیری کد', 'numop_status', 'admin')],
         [btnCb('🔴 عملیات لغو', 'numop_cancel', 'admin')],
+        [btnCb('✅ عملیات بستن', 'numop_close', 'admin'),
+         btnCb('🔁 عملیات کد مجدد', 'numop_repeat', 'admin')],
         [btnCb('💰 عملیات موجودی', 'numop_balance', 'admin')],
         [btnCb('⏳ مهلت انتظار کد', 'nums_wait', 'admin'),
          btnCb('🔁 فاصله‌ی پیگیری', 'nums_poll', 'admin')],
@@ -1083,7 +1208,8 @@ function numAdmOp($chatId, $msgId, $op) {
 function numOpFields($op) {
     switch ($op) {
         case 'buy':     return ['id_path' => '🧾 مسیر شناسه', 'phone_path' => '☎️ مسیر شماره',
-                                'ttl_path' => '⏳ مسیر مهلت', 'err_path' => '⚠️ مسیر خطا',
+                                'ttl_path' => '⏳ مسیر مهلت', 'rep_path' => '🔁 مسیر «کد مجدد دارد»',
+                                'err_path' => '⚠️ مسیر خطا',
                                 'ok_path' => '🚦 مسیر کد موفقیت', 'ok_val' => '🚦 مقدار موفقیت'];
         case 'status':  return ['code_path' => '🔑 مسیر کد', 'state_path' => '📊 مسیر وضعیت',
                                 'done_val' => '✅ وضعیتِ «کد رسید»', 'dead_val' => '⛔️ وضعیتِ «لغو/مسدود»',
@@ -1445,6 +1571,9 @@ function numFieldAsk($op, $field) {
                                "مثال نامبرلند: <code>RESULT</code>\n\nبرای خالی کردن: <code>-</code>";
         case 'ok_val':  return "🚦 مقداری که یعنی «موفق» را بفرستید.\n" .
                                "مثال نامبرلند: <code>1</code>\n\nبرای خالی کردن: <code>-</code>";
+        case 'rep_path': return "🔁 اگر پنل موقعِ فروش می‌گوید این شماره «کد مجدد» دارد، نامِ آن فیلد را بفرستید.\n" .
+                                "مثال نامبرلند: <code>REPEAT</code> (که <code>1</code> یعنی دارد)\n\n" .
+                                "برای خالی کردن: <code>-</code>";
         case 'ttl_path': return "⏳ اگر پنل موقعِ فروش مهلتِ شماره را می‌دهد، نامِ آن فیلد را بفرستید.\n" .
                                 "مثال نامبرلند: <code>TIME</code> (که <code>00:20:00</code> می‌دهد)\n\n" .
                                 "با این، شمارشِ معکوسِ ربات دقیقا همان مهلتِ واقعی می‌شود.\n" .

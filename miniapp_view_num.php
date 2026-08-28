@@ -510,9 +510,26 @@ function paintLive(n) {
     S.tick = Math.max(0, n.left);
   } else {
     stopPoll();
+
+    // 🔁 «کد مجدد» فقط وقتی که سرور گفته این شماره واقعا می‌تواند —
+    //    دکمه‌ای که بزنی و خطا بدهد، بدتر از نبودنش است.
+    if (n.repeat) {
+      const rp = document.createElement('button');
+      rp.className = 'btn sm'; rp.textContent = U('repeat', 'کد مجدد');
+      rp.style.marginTop = '10px';
+      rp.addEventListener('click', async () => {
+        rp.disabled = true; buzz();
+        const r = await api('num_repeat', { order: n.order });
+        rp.disabled = false;
+        if (r.ok && r.num) { paintLive(r.num); toast(U('repeat_ok', ''), 'ok'); }
+        else toast(r.message || 'انجام نشد', 'bad');
+      });
+      w.appendChild(rp);
+    }
+
     const btn = document.createElement('button');
-    btn.className = 'btn sm'; btn.textContent = U('again', 'شماره‌ی تازه');
-    btn.style.marginTop = '10px';
+    btn.className = 'btn ghost sm'; btn.textContent = U('again', 'شماره‌ی تازه');
+    btn.style.marginTop = '8px';
     btn.addEventListener('click', () => { paintLive(null); go('shop'); });
     w.appendChild(btn);
   }
