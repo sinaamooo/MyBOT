@@ -34,8 +34,9 @@ if (!defined('NUM_LIB')) define('NUM_LIB', 1);
 
 function numDefaults() {
     return [
-        'wait'  => 900,        // مهلت انتظار کد — ثانیه
-        'poll'  => 6,          // فاصله‌ی دو پرسش از پنل — ثانیه
+        'wait'   => 900,       // مهلت انتظار کد — ثانیه
+        'poll'   => 6,         // فاصله‌ی دو پرسش از پنل — ثانیه
+        'markup' => 0,         // درصد سود، فقط موقعِ «وارد کردن» روی قیمتِ تازه‌ها
         'api'   => [
             'on'         => false,
             'name'       => 'پنل شماره',
@@ -79,7 +80,7 @@ function numCfg() {
     $d = numDefaults();
     if (!is_array($c)) return $d;
 
-    $out = array_replace($d, array_intersect_key($c, ['wait' => 1, 'poll' => 1]));
+    $out = array_replace($d, array_intersect_key($c, ['wait' => 1, 'poll' => 1, 'markup' => 1]));
     $out['api'] = array_replace($d['api'], is_array($c['api'] ?? null) ? $c['api'] : []);
     $out['api']['ops'] = $d['api']['ops'];
     foreach ((array)($c['api']['ops'] ?? []) as $k => $v) {
@@ -714,8 +715,19 @@ function numPresets() {
             //    جدا دارند و اسم متدشان را حدس نمی‌زنیم. با «🧪 تست خام»
             //    پیدایشان کنید و در همان عملیات بگذارید.
             'todo' => ['cancel' => 'لغو شماره', 'balance' => 'موجودی پنل'],
+
+            // 📥 مسیرهای «وارد کردن کاتالوگ».
+            //    operator=min یعنی از هر ترکیبِ کشور+سرویس فقط ارزان‌ترین
+            //    اپراتور بیاید — وگرنه یک سرویس چند بار تکرار می‌شود.
+            'catalog' => [
+                'info'      => '/v2.php/?method=getinfo&operator=min',
+                'services'  => '/v2.php/?method=getservice',
+                'countries' => '/v2.php/?method=getcountry',
+            ],
             // متدهایی که در «🧪 تست خام» به درد می‌خورند
-            'probe' => ['getinfo', 'getservice', 'getcountry'],
+            'probe' => [
+                'getinfo&operator=min', 'getinfo&country=8', 'getservice', 'getcountry',
+            ],
         ],
     ];
 }
@@ -724,7 +736,8 @@ function numPresets() {
 function numApplyPreset($key) {
     $p = numPresets()[$key] ?? null;
     if (!$p) return false;
-    numSet(function (&$c) use ($p) {
+    numSet(function (&$c) use ($p, $key) {
+        $k = $key;
         $c['api']['on']        = true;
         $c['api']['name']      = $p['name'];
         $c['api']['base']      = $p['base'];
@@ -732,9 +745,216 @@ function numApplyPreset($key) {
         $c['api']['auth_key']  = $p['auth_key'];
         foreach ($p['ops'] as $op => $fields)
             $c['api']['ops'][$op] = array_replace((array)($c['api']['ops'][$op] ?? []), $fields);
-        $c['api']['preset'] = $p['label'];
+        $c['api']['preset']     = $p['label'];
+        $c['api']['preset_key'] = $k;
     });
     return true;
+}
+
+// ============================================================
+// 📥 وارد کردن کاتالوگ از پنل
+// ============================================================
+//
+// بدون این، ادمین باید برای هر کشور و هر سرویس یک ردیف بسازد و شناسه‌اش
+// را دستی تایپ کند — برای پنلی با صدها ترکیب، عملا نشدنی است و یک اشتباهِ
+// تایپی هم تا وقتِ خریدِ مشتری معلوم نمی‌شود.
+//
+// اینجا همان فهرست را از خودِ پنل می‌گیریم و کشورها و سرویس‌ها را
+// می‌سازیم. دو قاعده‌ی سفت:
+//
+//   • ادغام، نه جایگزینی. قیمت و نام و ایموجی‌ای که ادمین دست‌کاری کرده
+//     دست‌نخورده می‌ماند؛ فقط چیزهای تازه اضافه می‌شوند.
+//   • هیچ‌وقت چیزی حذف نمی‌شود. سرویسی که از پنل رفته، خاموش می‌شود نه پاک.
+
+/**
+ * قالبِ فعلی.
+ *
+ * ⚠️ روی آدرسِ پنل تطبیق نمی‌دهیم: آدرس دقیقا همان چیزی است که ادمین
+ *    ممکن است عوض کند (دامنه‌ی آینه، http به‌جای https، اسلشِ آخر) و
+ *    آن‌وقت «وارد کردن» بی‌صدا از کار می‌افتاد. پس کلیدِ قالب را همان
+ *    موقعِ اعمال ذخیره می‌کنیم و از روی همان می‌خوانیم.
+ */
+function numActivePreset() {
+    $all = numPresets();
+
+    $k = trim((string)numVal('api.preset_key', ''));
+    if ($k !== '' && isset($all[$k])) return $all[$k] + ['key' => $k];
+
+    // پیکربندی‌هایی که قبل از این ذخیره شده‌اند کلید ندارند — از روی آدرس
+    $base = rtrim((string)numVal('api.base', ''), '/');
+    if ($base === '') return null;
+    foreach ($all as $k2 => $p)
+        if (rtrim($p['base'], '/') === $base) return $p + ['key' => $k2];
+    return null;
+}
+
+/** یک متدِ ساده‌ی GET روی پنل — برای فهرست‌هایی که عملیاتِ تعریف‌شده ندارند */
+function numFetch($path) {
+    [$url, $m, $hd, $bd, $er] = numRequest($path, 'GET', '');
+    if ($er !== '') return [null, $er];
+    return maHttp($url, 'GET', $hd, '', (int)numVal('api.timeout', 15));
+}
+
+/** پرچمِ یک کشور از روی نامِ انگلیسی‌اش — هرچه نشناسیم 🌍 می‌شود */
+function numFlag($nameEn) {
+    static $map = [
+        'russia' => '🇷🇺', 'ukraine' => '🇺🇦', 'kazakhstan' => '🇰🇿', 'china' => '🇨🇳',
+        'england' => '🇬🇧', 'unitedkingdom' => '🇬🇧', 'uk' => '🇬🇧', 'usa' => '🇺🇸',
+        'unitedstates' => '🇺🇸', 'america' => '🇺🇸', 'germany' => '🇩🇪', 'france' => '🇫🇷',
+        'india' => '🇮🇳', 'indonesia' => '🇮🇩', 'philippines' => '🇵🇭', 'vietnam' => '🇻🇳',
+        'turkey' => '🇹🇷', 'poland' => '🇵🇱', 'romania' => '🇷🇴', 'netherlands' => '🇳🇱',
+        'spain' => '🇪🇸', 'italy' => '🇮🇹', 'canada' => '🇨🇦', 'brazil' => '🇧🇷',
+        'mexico' => '🇲🇽', 'argentina' => '🇦🇷', 'colombia' => '🇨🇴', 'nigeria' => '🇳🇬',
+        'kenya' => '🇰🇪', 'southafrica' => '🇿🇦', 'egypt' => '🇪🇬', 'morocco' => '🇲🇦',
+        'malaysia' => '🇲🇾', 'thailand' => '🇹🇭', 'pakistan' => '🇵🇰', 'bangladesh' => '🇧🇩',
+        'israel' => '🇮🇱', 'georgia' => '🇬🇪', 'armenia' => '🇦🇲', 'azerbaijan' => '🇦🇿',
+        'uzbekistan' => '🇺🇿', 'kyrgyzstan' => '🇰🇬', 'tajikistan' => '🇹🇯', 'moldova' => '🇲🇩',
+        'latvia' => '🇱🇻', 'lithuania' => '🇱🇹', 'estonia' => '🇪🇪', 'sweden' => '🇸🇪',
+        'finland' => '🇫🇮', 'norway' => '🇳🇴', 'denmark' => '🇩🇰', 'portugal' => '🇵🇹',
+        'austria' => '🇦🇹', 'switzerland' => '🇨🇭', 'belgium' => '🇧🇪', 'ireland' => '🇮🇪',
+        'greece' => '🇬🇷', 'bulgaria' => '🇧🇬', 'serbia' => '🇷🇸', 'croatia' => '🇭🇷',
+        'czechia' => '🇨🇿', 'czechrepublic' => '🇨🇿', 'hungary' => '🇭🇺', 'slovakia' => '🇸🇰',
+        'australia' => '🇦🇺', 'newzealand' => '🇳🇿', 'japan' => '🇯🇵', 'southkorea' => '🇰🇷',
+        'korea' => '🇰🇷', 'taiwan' => '🇹🇼', 'hongkong' => '🇭🇰', 'singapore' => '🇸🇬',
+    ];
+    $k = strtolower(preg_replace('/[^a-z]/i', '', (string)$nameEn));
+    return $map[$k] ?? '🌍';
+}
+
+/**
+ * کاتالوگ را از پنل می‌خواند و به شکلِ «کشورها و سرویس‌ها» درمی‌آورد.
+ *
+ * برگشت: [کشورها, ردیف‌ها, خطا]
+ *   کشورها: code => ['name' => …, 'flag' => …]
+ *   ردیف‌ها: هرکدام ['sid','country','service','name','price','count','ttl','on']
+ */
+function numCatalog() {
+    $p = numActivePreset();
+    if (!$p || empty($p['catalog'])) return [[], [], 'این پنل «وارد کردن» ندارد — قالبش را نمی‌شناسیم'];
+    $c = $p['catalog'];
+
+    [$rows, $err] = numFetch($c['info']);
+    if (!is_array($rows)) return [[], [], $err ?: 'فهرست شماره‌ها نیامد'];
+    if (!array_is_list($rows)) {
+        // پنل به‌جای فهرست، خطا داده
+        $d = maJsonPath($rows, 'DESCRIPTION');
+        return [[], [], is_scalar($d) ? (string)$d : 'پاسخ پنل فهرست نبود'];
+    }
+
+    // نام سرویس‌ها و کشورها — اگر نیامدند، کد را به‌جای نام می‌گذاریم
+    $svcName = $ctryName = $ctryEn = [];
+    [$sv] = numFetch($c['services']);
+    foreach ((array)$sv as $s) {
+        if (!is_array($s) || !isset($s['id'])) continue;
+        $svcName[(string)$s['id']] = trim((string)($s['name'] ?? $s['name_en'] ?? $s['id']));
+    }
+    [$ct] = numFetch($c['countries']);
+    foreach ((array)$ct as $x) {
+        if (!is_array($x) || !isset($x['id'])) continue;
+        $ctryName[(string)$x['id']] = trim((string)($x['name'] ?? $x['name_en'] ?? $x['id']));
+        $ctryEn[(string)$x['id']]   = trim((string)($x['name_en'] ?? $x['name'] ?? ''));
+    }
+
+    $countries = $out = [];
+    foreach ($rows as $r) {
+        if (!is_array($r) || !isset($r['id'])) continue;
+        $cc = (string)($r['country'] ?? '');
+        $ss = (string)($r['service'] ?? '');
+        if ($cc === '' || $ss === '') continue;
+
+        $countries[$cc] = [
+            'name' => $ctryName[$cc] ?? ('کشور ' . $cc),
+            'flag' => numFlag($ctryEn[$cc] ?? ''),
+        ];
+        $out[] = [
+            'sid'     => (string)$r['id'],
+            'country' => $cc,
+            'service' => $ss,
+            'name'    => ($svcName[$ss] ?? ('سرویس ' . $ss)) . ' — ' . ($ctryName[$cc] ?? $cc),
+            'price'   => (float)($r['amount'] ?? 0),
+            'count'   => (int)($r['count'] ?? 0),
+            'ttl'     => numParseTtl($r['time'] ?? ''),
+            'on'      => (string)($r['active'] ?? '1') !== '0' && (int)($r['count'] ?? 0) > 0,
+        ];
+    }
+    return [$countries, $out, ''];
+}
+
+/**
+ * کاتالوگ را در پیکربندی مینی‌اپ می‌نشاند.
+ *
+ * $markup: درصد سودی که روی قیمتِ پنل کشیده می‌شود.
+ * برگشت: [کشورِ تازه, سرویسِ تازه, به‌روزشده, خاموش‌شده]
+ */
+function numImport(array $countries, array $rows, $markup = 0) {
+    $newC = $newI = $upd = $off = 0;
+    $mul  = 1 + (max(0, (float)$markup) / 100);
+
+    maSet('num', function (&$a) use ($countries, $rows, $mul, &$newC, &$newI, &$upd, &$off) {
+        if (!is_array($a['cats'] ?? null))  $a['cats']  = [];
+        if (!is_array($a['items'] ?? null)) $a['items'] = [];
+
+        // ── کشورها ──
+        $byCode = [];
+        foreach ($a['cats'] as $i => $c) {
+            $code = trim((string)($c['code'] ?? ''));
+            if ($code !== '') $byCode[$code] = $i;
+        }
+        $order = count($a['cats']);
+        foreach ($countries as $code => $info) {
+            if (isset($byCode[$code])) continue;         // هست — دست نمی‌زنیم
+            $a['cats'][] = [
+                'id' => 'c' . bin2hex(random_bytes(3)), 'emoji' => $info['flag'],
+                'name' => $info['name'], 'code' => $code, 'on' => true, 'order' => ++$order,
+            ];
+            $byCode[$code] = count($a['cats']) - 1;
+            $newC++;
+        }
+
+        // ── سرویس‌ها ──
+        $bySid = [];
+        foreach ($a['items'] as $i => $it) {
+            $svc = trim((string)($it['svc'] ?? ''));
+            if ($svc !== '') $bySid[$svc] = $i;
+        }
+        $seen = [];
+        $iOrder = count($a['items']);
+        foreach ($rows as $r) {
+            $seen[$r['sid']] = true;
+            $catIdx = $byCode[$r['country']] ?? null;
+            $catId  = $catIdx !== null ? (string)$a['cats'][$catIdx]['id'] : '';
+
+            if (isset($bySid[$r['sid']])) {
+                // 🔒 فقط چیزهایی که مالِ پنل‌اند به‌روز می‌شوند.
+                //    قیمت و نام و ایموجی مالِ ادمین است — دست نمی‌خورد.
+                $k = $bySid[$r['sid']];
+                $was = !empty($a['items'][$k]['on']);
+                $a['items'][$k]['on'] = (bool)$r['on'];
+                if ($catId !== '') $a['items'][$k]['cat'] = $catId;
+                if ($was && !$r['on']) $off++; else $upd++;
+                continue;
+            }
+
+            $a['items'][] = [
+                'id' => 'i' . bin2hex(random_bytes(3)), 'cat' => $catId, 'svc' => $r['sid'],
+                'emoji' => '☎️', 'name' => $r['name'], 'desc' => '',
+                'price' => round($r['price'] * $mul), 'unit' => '', 'badge' => '',
+                'ask' => 'none', 'min' => 1, 'max' => 1,
+                'on' => (bool)$r['on'], 'order' => ++$iOrder,
+            ];
+            $newI++;
+        }
+
+        // ردیفی که دیگر در پنل نیست: خاموش، نه پاک — شاید موقتا رفته باشد
+        foreach ($a['items'] as $k => $it) {
+            $svc = trim((string)($it['svc'] ?? ''));
+            if ($svc === '' || isset($seen[$svc]) || empty($it['on'])) continue;
+            $a['items'][$k]['on'] = false;
+            $off++;
+        }
+    });
+
+    return [$newC, $newI, $upd, $off];
 }
 
 /** برچسب فارسی هر عملیات */
@@ -797,6 +1017,7 @@ function numAdmHome($chatId, $msgId) {
     $rows = [
         [btnCb(!empty($api['on']) ? '❌ خاموش کن' : '✅ روشن کن', 'numtog', 'info')],
         [btnCb('⚡️ آماده‌سازی خودکار پنل', 'numpre', 'confirm')],
+        [btnCb('📥 وارد کردن کشورها و سرویس‌ها', 'numimp', 'buy')],
         [btnCb('🧪 تست خام (هر متدی)', 'numraw', 'confirm')],
         [btnCb('📖 خواندن مستندات API', 'numspec', 'confirm')],
         [btnCb('💰 تست موجودی پنل', 'numtest', 'confirm')],
@@ -871,6 +1092,96 @@ function numOpFields($op) {
         default:        return ['err_path' => '⚠️ مسیر خطا',
                                 'ok_path' => '🚦 مسیر کد موفقیت', 'ok_val' => '🚦 مقدار موفقیت'];
     }
+}
+
+/**
+ * 📥 پیش‌نمایشِ وارد کردن.
+ *
+ * اول نشان می‌دهیم چه چیزی قرار است بیاید و چه چیزی دست‌نخورده می‌ماند،
+ * بعد ادمین تایید می‌کند. نوشتنِ بی‌خبر روی کاتالوگی که ادمین ساخته،
+ * حتی اگر ادغامی باشد، ترسناک است.
+ */
+function numAdmImport($chatId, $msgId) {
+    $back = inlineKb([[btnCb('☎️ شماره مجازی', 'num_home', 'admin')]]);
+    if (!numReady()) {
+        editMsg(BOT_TOKEN, $chatId, $msgId, "⚠️ اول آدرس و کلید پنل را ثبت کنید.", $back);
+        return;
+    }
+
+    [$countries, $rows, $err] = numCatalog();
+    if ($err !== '') {
+        editMsg(BOT_TOKEN, $chatId, $msgId,
+            "❌ <b>فهرست نیامد</b>\n<code>" . h(mb_substr($err, 0, 300)) . "</code>\n\n" .
+            "با «🧪 تست خام» ببینید پنل به <code>getinfo</code> چه جوابی می‌دهد.",
+            inlineKb([[btnCb('🧪 تست خام', 'numraw', 'confirm')],
+                      [btnCb('☎️ شماره مجازی', 'num_home', 'admin')]]));
+        return;
+    }
+
+    // چقدرش تازه است؟ — تا ادمین بداند این دکمه چه می‌کند
+    $a = maGet('num');
+    $haveC = $haveI = [];
+    foreach ((array)($a['cats'] ?? []) as $c)
+        if (trim((string)($c['code'] ?? '')) !== '') $haveC[(string)$c['code']] = 1;
+    foreach ((array)($a['items'] ?? []) as $i)
+        if (trim((string)($i['svc'] ?? '')) !== '') $haveI[(string)$i['svc']] = 1;
+
+    $newC = $newI = 0;
+    foreach ($countries as $code => $_) if (!isset($haveC[$code])) $newC++;
+    foreach ($rows as $r)               if (!isset($haveI[$r['sid']])) $newI++;
+
+    $mk = (float)numVal('markup', 0);
+
+    $t  = "📥 <b>وارد کردن از پنل</b>\n\n";
+    $t .= "در پنل پیدا شد:\n";
+    $t .= "🌍 <b>" . count($countries) . "</b> کشور · ☎️ <b>" . count($rows) . "</b> سرویس\n\n";
+    $t .= "اگر تایید کنید:\n";
+    $t .= "➕ <b>{$newC}</b> کشور و <b>{$newI}</b> سرویسِ تازه ساخته می‌شود\n";
+    $t .= "🔄 بقیه فقط روشن/خاموش می‌شوند\n";
+    $t .= "🔒 قیمت و نام و ایموجیِ سرویس‌های موجود <b>دست نمی‌خورد</b>\n";
+    $t .= "🗑 هیچ‌چیز پاک نمی‌شود — سرویسی که در پنل نباشد فقط خاموش می‌شود\n\n";
+    $t .= "💵 سود روی قیمتِ پنل: <b>" . rtrim(rtrim(number_format($mk, 1), '0'), '.') . "٪</b>";
+    if ($mk <= 0) $t .= "\n<i>یعنی به قیمتِ خرید می‌فروشید — سود را قبل از وارد کردن ست کنید.</i>";
+
+    // چند نمونه، تا ادمین ببیند چه چیزی می‌آید
+    $t .= "\n\n<b>نمونه:</b>\n";
+    foreach (array_slice($rows, 0, 5) as $r) {
+        $t .= '• ' . h(mb_substr($r['name'], 0, 34)) . ' — <code>' . h($r['sid']) . '</code> · ' .
+              fmtNum(round($r['price'] * (1 + max(0, $mk) / 100))) . ' ت' .
+              ($r['count'] > 0 ? ' · ' . fmtNum($r['count']) . ' موجود' : ' · ناموجود') . "\n";
+    }
+    if (count($rows) > 5) $t .= '<i>… و ' . (count($rows) - 5) . " تای دیگر</i>\n";
+
+    editMsg(BOT_TOKEN, $chatId, $msgId, $t, inlineKb([
+        [btnCb('✅ تایید و وارد کن', 'numimpgo', 'buy')],
+        [btnCb('💵 درصد سود', 'nums_markup', 'admin')],
+        [btnCb('🔙 بازگشت', 'num_home', 'nav')],
+    ]));
+}
+
+/** انجامِ واقعیِ وارد کردن */
+function numAdmImportGo($chatId, $msgId) {
+    [$countries, $rows, $err] = numCatalog();
+    if ($err !== '') {
+        editMsg(BOT_TOKEN, $chatId, $msgId, "❌ " . h(mb_substr($err, 0, 300)),
+                inlineKb([[btnCb('☎️ شماره مجازی', 'num_home', 'admin')]]));
+        return;
+    }
+
+    [$nc, $ni, $up, $off] = numImport($countries, $rows, (float)numVal('markup', 0));
+
+    $t  = "✅ <b>وارد شد</b>\n\n";
+    $t .= "🌍 کشور تازه: <b>{$nc}</b>\n";
+    $t .= "➕ سرویس تازه: <b>{$ni}</b>\n";
+    $t .= "🔄 به‌روزشده: <b>{$up}</b>\n";
+    $t .= "⚪️ خاموش‌شده: <b>{$off}</b>\n\n";
+    $t .= "حالا در «🚀 مینی‌اپ‌ها ← ☎️ مینی‌اپ شماره مجازی» قیمت‌ها و نام‌ها را " .
+          "هر طور خواستید ویرایش کنید.";
+
+    editMsg(BOT_TOKEN, $chatId, $msgId, $t, inlineKb([
+        [btnCb('☎️ مینی‌اپ شماره مجازی', 'maadm_app_num', 'admin')],
+        [btnCb('🔙 بازگشت', 'num_home', 'nav')],
+    ]));
 }
 
 /** 📖 مستندات — همان جست‌وجوی مینی‌اپ‌ها، روی آدرسِ این پنل */
@@ -1030,6 +1341,8 @@ function numCallback($data, $uid, $chatId, $msgId, $cbId, $isAdmin) {
     }
     if ($data === 'numtest')  { $ack('⏳ تماس با پنل…'); numAdmTest($chatId); return true; }
     if ($data === 'numopen')  { $ack(); numAdmOpen($chatId, $msgId); return true; }
+    if ($data === 'numimp')   { $ack('⏳ خواندن فهرست…'); numAdmImport($chatId, $msgId); return true; }
+    if ($data === 'numimpgo') { $ack('⏳ در حال وارد کردن…'); numAdmImportGo($chatId, $msgId); return true; }
 
     if ($data === 'numtog') {
         numSet(function (&$c) { $c['api']['on'] = empty($c['api']['on']); });
@@ -1082,6 +1395,10 @@ function numCallback($data, $uid, $chatId, $msgId, $cbId, $isAdmin) {
         'nums_wait'       => ['num_wait',      "⏳ مهلت انتظار کد را به ثانیه بفرستید.\nمثال: <code>900</code> یعنی ۱۵ دقیقه. کمتر از ۶۰ پذیرفته نمی‌شود."],
         'nums_poll'       => ['num_poll',      "🔁 فاصله‌ی دو پرسش از پنل را به ثانیه بفرستید.\nکمتر از ۳ ثانیه پنل را خسته می‌کند."],
         'nums_timeout'    => ['num_timeout',   "⏱ مهلت هر تماس با پنل را به ثانیه بفرستید. بین ۳ تا ۶۰."],
+        'nums_markup'     => ['num_markup',    "💵 درصد سود روی قیمتِ پنل را بفرستید.\n\n" .
+                                               "مثال: <code>40</code> یعنی شماره‌ی ۲٬۰۰۰ تومانیِ پنل، ۲٬۸۰۰ تومان فروخته شود.\n\n" .
+                                               "این فقط موقعِ «📥 وارد کردن» روی قیمتِ سرویس‌های <b>تازه</b> اعمال می‌شود؛ " .
+                                               "قیمتی که خودتان ست کرده‌اید هیچ‌وقت عوض نمی‌شود."],
     ];
     if (isset($simple[$data])) {
         [$act, $msg] = $simple[$data];
@@ -1221,6 +1538,16 @@ function numStateHandle($action, $msg, $uid, $chatId) {
             $done('✅ مهلت تماس: <b>' . $v . '</b> ثانیه');
             return true;
 
+        case 'num_markup':
+            $v = min(1000.0, max(0.0, (float)str_replace([',', '،'], '', numDigitsF($plain))));
+            numSet(function (&$c) use ($v) { $c['markup'] = $v; });
+            clearState($uid);
+            sendMsg(BOT_TOKEN, $chatId,
+                '✅ سود: <b>' . rtrim(rtrim(number_format($v, 1), '0'), '.') . '٪</b>',
+                inlineKb([[btnCb('📥 وارد کردن', 'numimp', 'buy')],
+                          [btnCb('☎️ شماره مجازی', 'num_home', 'admin')]]));
+            return true;
+
         case 'num_raw':
             if ($plain === '') { sendMsg(BOT_TOKEN, $chatId, "⚠️ یک مسیر بفرستید.", $back); return true; }
             [$url, $m, $hd, $bd, $er] = numRequest($plain, 'GET', '');
@@ -1281,6 +1608,14 @@ function numStateHandle($action, $msg, $uid, $chatId) {
             return true;
     }
     return false;
+}
+
+/** مثل numDigits ولی نقطه‌ی اعشار را نگه می‌دارد */
+function numDigitsF($s) {
+    $s = strtr((string)$s, ['۰'=>'0','۱'=>'1','۲'=>'2','۳'=>'3','۴'=>'4','۵'=>'5','۶'=>'6','۷'=>'7','۸'=>'8','۹'=>'9',
+                            '٠'=>'0','١'=>'1','٢'=>'2','٣'=>'3','٤'=>'4','٥'=>'5','٦'=>'6','٧'=>'7','٨'=>'8','٩'=>'9',
+                            '٫'=>'.', '،'=>'']);
+    return preg_replace('/[^0-9.]/', '', $s);
 }
 
 /** عددِ فارسی یا عربی هم عدد است */
