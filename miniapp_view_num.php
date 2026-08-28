@@ -241,6 +241,21 @@ body::before{
 .pill.d{background:color-mix(in srgb,var(--ok) 20%,transparent);color:var(--ok)}
 .pill.x{background:color-mix(in srgb,var(--bad) 20%,transparent);color:var(--bad)}
 
+/* ── 📋 کارتِ سفارش ──────────────────────── */
+.ocard{
+  border-radius:var(--r-lg);padding:14px;margin-bottom:12px;
+  background:linear-gradient(150deg,color-mix(in srgb,var(--c1) 12%,var(--s1)),var(--s1) 70%);
+  border:1px solid var(--hair)
+}
+.ohint{margin:0 2px 14px;font-size:11.5px;color:var(--dim2);line-height:1.75}
+.ohead{display:flex;align-items:center;gap:8px;margin-bottom:11px}
+.ohead b{flex:1;min-width:0;font-size:13.5px;font-weight:700;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ocard .big{margin-bottom:8px}
+.ocard .big .v{font-size:17px}
+.ocard .code .v{font-size:22px}
+.ocard .timer{margin:10px 0 12px}
+
 /* ── شیت و توست ──────────────────────────── */
 .mask{position:fixed;inset:0;z-index:60;background:rgba(2,6,14,.72);backdrop-filter:blur(6px);
   opacity:0;pointer-events:none;transition:.25s var(--ease)}
@@ -307,7 +322,8 @@ body::before{
 
   <!-- 🧾 سفارش‌ها -->
   <section class="page" id="p-orders">
-    <div class="sect" id="sOrders">سفارش‌های اخیر</div>
+    <div class="sect" id="sOrders">سفارش‌های من</div>
+    <p class="ohint" id="oHint"></p>
     <div id="orders"></div>
   </section>
 
@@ -640,7 +656,12 @@ async function doBuy(it, btn) {
   if (r.ok) {
     closeSheet(); buzz('medium');
     if (typeof r.balance === 'number') setBal(r.balance);
-    if (r.num) { paintLive(r.num); go('home'); toast(U('wait_ttl', ''), 'ok'); }
+    if (r.num) {
+      // 📋 بعد از خرید مستقیم می‌بریمش سرِ «سفارش‌های من» — همان‌جا که
+      //    شماره را کپی می‌کند و بعد «دریافت کد» را می‌زند.
+      paintLive(r.num); loadOrders(); go('orders');
+      toast(U('bought', 'شماره گرفته شد'), 'ok');
+    }
     else { toast(r.message || U('done', ''), 'ok'); loadMe(); }
     return;
   }
@@ -713,6 +734,9 @@ function askTopup(need) {
 }
 
 /* ── سفارش‌ها ────────────────────────────── */
+/* ── 📋 سفارش‌های من ─────────────────────────
+   هر سفارش یک کارت است: اسم سرویس، شماره با دکمه‌ی کپی، و بسته به
+   حالتش یک دکمه — «دریافت کد» وقتی منتظریم، یا خودِ کد وقتی رسیده. */
 function paintOrders(list) {
   const box = $('#orders'); box.textContent = '';
   if (!list || !list.length) {
@@ -722,17 +746,104 @@ function paintOrders(list) {
     box.appendChild(e); return;
   }
   const frag = document.createDocumentFragment();
-  list.forEach(o => {
-    const r = document.createElement('div'); r.className = 'row';
-    const ic = document.createElement('div'); ic.className = 'ic'; ic.textContent = o.emoji || '☎️'; r.appendChild(ic);
-    const tx = document.createElement('div'); tx.className = 'tx';
-    const b = document.createElement('b'); b.textContent = o.name; tx.appendChild(b);
-    const sp = document.createElement('span'); sp.textContent = fmt(o.total) + ' ' + (B.currency || ''); tx.appendChild(sp);
-    r.appendChild(tx);
-    const pl = document.createElement('span'); pl.className = 'pill'; pl.textContent = o.status; r.appendChild(pl);
-    frag.appendChild(r);
-  });
+  list.forEach(o => frag.appendChild(orderCard(o)));
   box.appendChild(frag);
+}
+
+const ST = {
+  waiting:  ['w', () => U('wait_ttl', 'منتظر پیامک')],
+  done:     ['d', () => U('got_code', 'کد رسید')],
+  cancel:   ['x', () => U('canceled', 'لغو شد')],
+  expired:  ['x', () => U('expired', 'مهلت تمام شد')],
+  buying:   ['w', () => U('sending', '…')],
+  repeating:['w', () => U('sending', '…')],
+};
+
+function orderCard(o) {
+  const card = document.createElement('div');
+  card.className = 'ocard';
+  card.dataset.order = o.order;
+
+  // سربرگ: اسم سرویس + وضعیت
+  const head = document.createElement('div'); head.className = 'ohead';
+  const nm = document.createElement('b'); nm.textContent = o.name || '☎️'; head.appendChild(nm);
+  const [cls, lab] = ST[o.status] || ['', () => o.status];
+  const pill = document.createElement('span'); pill.className = 'pill ' + cls; pill.textContent = lab();
+  head.appendChild(pill);
+  card.appendChild(head);
+
+  // شماره — همیشه دیده شود و همیشه قابل کپی
+  card.appendChild(bigRow(U('num_ttl', 'شماره'), o.phone, U('copy_num', 'کپی'), false));
+
+  // کد، اگر آمده
+  if (o.code) card.appendChild(bigRow(U('code_ttl', 'کد'), o.code, U('copy_code', 'کپی کد'), true));
+
+  // شمارش معکوس، تا وقتی منتظریم
+  if (o.status === 'waiting' && o.left > 0) {
+    const t = document.createElement('div'); t.className = 'timer';
+    const bar = document.createElement('div'); bar.className = 'bar';
+    const fill = document.createElement('i');
+    fill.style.width = Math.max(0, Math.min(100, (o.left / Math.max(1, o.wait)) * 100)) + '%';
+    bar.appendChild(fill); t.appendChild(bar);
+    const lb = document.createElement('b'); lb.className = 'oleft'; lb.textContent = mmss(o.left);
+    t.appendChild(lb);
+    card.appendChild(t);
+  }
+
+  // 🔑 دکمه‌ی اصلی — همان چیزی که کاربر بعد از کپی کردنِ شماره می‌زند
+  if (o.can_get) {
+    const get = document.createElement('button');
+    get.className = 'btn sm';
+    get.textContent = U('get_code', 'دریافت کد');
+    get.addEventListener('click', () => askCode(o.order, get, card));
+    card.appendChild(get);
+
+    const cx = document.createElement('button');
+    cx.className = 'btn ghost sm'; cx.style.marginTop = '8px';
+    cx.textContent = U('cancel_do', 'لغو');
+    cx.addEventListener('click', () => askCancel(o));
+    card.appendChild(cx);
+  } else if (o.repeat) {
+    const rp = document.createElement('button');
+    rp.className = 'btn sm'; rp.textContent = U('repeat', 'کد مجدد');
+    rp.addEventListener('click', async () => {
+      rp.disabled = true; buzz();
+      const r = await api('num_repeat', { order: o.order });
+      rp.disabled = false;
+      if (r.ok) { toast(U('repeat_ok', ''), 'ok'); loadOrders(); }
+      else toast(r.message || 'انجام نشد', 'bad');
+    });
+    card.appendChild(rp);
+  }
+  return card;
+}
+
+/* «دریافت کد» — همان‌جا از پنل می‌پرسد و جواب را در همان کارت می‌نشاند */
+async function askCode(order, btn, card) {
+  const was = btn.textContent;
+  btn.disabled = true; btn.textContent = U('sending', '…'); buzz();
+  const r = await api('num_code', { order });
+  btn.disabled = false; btn.textContent = was;
+
+  if (!r.ok) { toast(r.message || 'انجام نشد', 'bad'); return; }
+  const n = r.num || {};
+  if (n.code) {
+    buzz('heavy'); toast(U('code_ttl', 'کد رسید'), 'ok');
+    card.replaceWith(orderCard(Object.assign({}, n, { name: n.name, can_get: 0 })));
+    return;
+  }
+  if (n.status && n.status !== 'waiting') { toast(U('expired', ''), 'bad'); loadOrders(); return; }
+  // هنوز نیامده — بگو چقدر وقت مانده، نه یک «نشد»ِ خالی
+  toast(U('not_yet', 'هنوز نرسیده') + ' · ' + mmss(n.left || 0), '');
+  const lb = card.querySelector('.oleft');
+  if (lb) lb.textContent = mmss(n.left || 0);
+}
+
+async function loadOrders() {
+  const r = await api('num_orders');
+  if (!r.ok) { if (r.message) toast(r.message, 'bad'); return; }
+  if (typeof r.balance === 'number') setBal(r.balance);
+  paintOrders(r.list || []);
 }
 
 /* ── ناوبری ──────────────────────────────── */
@@ -741,7 +852,7 @@ function go(name) {
   $$('.page').forEach(p => p.classList.toggle('on', p.id === 'p-' + name));
   $$('#nav button').forEach(b => b.setAttribute('aria-selected', b.dataset.go === name ? 'true' : 'false'));
   window.scrollTo({ top: 0, behavior: 'smooth' });
-  if (name === 'orders') loadMe();
+  if (name === 'orders') loadOrders();
 }
 $$('#nav button').forEach(b => b.addEventListener('click', () => { buzz(); go(b.dataset.go); }));
 
@@ -783,6 +894,7 @@ function boot() {
   $('#kBal').textContent = U('balance', 'اعتبار');
   $('#sHot').textContent = U('hot', '');
   $('#sOrders').textContent = U('orders_ttl', '');
+  $('#oHint').textContent = U('orders_hint', '');
   $('#topupBtn').textContent = U('topup_btn', '＋ شارژ');
   $$('#nav button')[0].querySelector('span').textContent = U('nav_home', 'خانه');
   $$('#nav button')[1].querySelector('span').textContent = U('nav_shop', 'شماره‌ها');
@@ -793,7 +905,7 @@ function boot() {
   $('#topupBtn').addEventListener('click', () => { buzz(); askTopup(0); });
 
   paintCats(); paintGrid(); paintHot();
-  loadMe(); loadLive();
+  loadMe(); loadLive(); loadOrders();
 
   // برگشت به صفحه بعد از قفل شدن گوشی — وضعیت را تازه کن
   document.addEventListener('visibilitychange', () => {

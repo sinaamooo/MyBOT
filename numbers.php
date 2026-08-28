@@ -36,7 +36,8 @@ function numDefaults() {
     return [
         'wait'   => 900,       // مهلت انتظار کد — ثانیه
         'poll'   => 6,         // فاصله‌ی دو پرسش از پنل — ثانیه
-        'markup' => 0,         // درصد سود، فقط موقعِ «وارد کردن» روی قیمتِ تازه‌ها
+        'markup' => 0,         // درصد سود روی قیمتِ پنل
+        'sync_price' => true,  // قیمتِ پنل منبعِ حقیقت باشد و هر بار به‌روز شود
         'api'   => [
             'on'         => false,
             'name'       => 'پنل شماره',
@@ -92,7 +93,8 @@ function numCfg() {
     $d = numDefaults();
     if (!is_array($c)) return $d;
 
-    $out = array_replace($d, array_intersect_key($c, ['wait' => 1, 'poll' => 1, 'markup' => 1]));
+    $out = array_replace($d, array_intersect_key($c,
+        ['wait' => 1, 'poll' => 1, 'markup' => 1, 'sync_price' => 1]));
     $out['api'] = array_replace($d['api'], is_array($c['api'] ?? null) ? $c['api'] : []);
     $out['api']['ops'] = $d['api']['ops'];
     foreach ((array)($c['api']['ops'] ?? []) as $k => $v) {
@@ -324,16 +326,29 @@ function numActiveFor($uid) {
 /** فهرست کوتاهِ فعال‌سازی‌های اخیرِ یک کاربر — برای صفحه‌ی «سفارش‌ها» */
 function numHistory($uid, $limit = 10) {
     $uid = (int)$uid;
+    $now = time();
     $out = [];
     foreach (numAll() as $act) {
         if ((int)($act['uid'] ?? 0) !== $uid) continue;
+        $st   = (string)($act['status'] ?? '');
+        $wait = numWaitFor($act);
+        $left = max(0, $wait - ($now - (int)($act['created'] ?? 0)));
         $out[] = [
             'order'  => (string)$act['order'],
             'name'   => (string)($act['name'] ?? ''),
             'phone'  => (string)($act['phone'] ?? ''),
             'code'   => (string)($act['code'] ?? ''),
-            'status' => (string)($act['status'] ?? ''),
+            'status' => $st,
             'at'     => (int)($act['created'] ?? 0),
+            // 🕒 صفحه‌ی «سفارش‌های من» باید بتواند شمارش معکوس نشان دهد و
+            //    بداند کدام دکمه را بگذارد — بدون این، برای هر ردیف یک
+            //    درخواستِ جدا لازم می‌شد.
+            'left'   => $st === 'waiting' ? (int)$left : 0,
+            'wait'   => (int)$wait,
+            'can_get'=> $st === 'waiting' && $left > 0 ? 1 : 0,
+            'repeat' => (!empty($act['can_repeat']) && $st === 'done' && $left > 0
+                         && trim((string)numVal('api.ops.repeat.path', '')) !== '') ? 1 : 0,
+            'price'  => (float)($act['price'] ?? 0),
         ];
     }
     usort($out, fn($a, $b) => $b['at'] <=> $a['at']);
@@ -1007,11 +1022,13 @@ function numCatalog() {
  * $markup: درصد سودی که روی قیمتِ پنل کشیده می‌شود.
  * برگشت: [کشورِ تازه, سرویسِ تازه, به‌روزشده, خاموش‌شده]
  */
-function numImport(array $countries, array $rows, $markup = 0) {
+function numImport(array $countries, array $rows, $markup = 0, $syncPrice = null) {
     $newC = $newI = $upd = $off = 0;
     $mul  = 1 + (max(0, (float)$markup) / 100);
+    // قیمتِ پنل، منبعِ حقیقت است یا قیمتی که ادمین دستی گذاشته؟
+    if ($syncPrice === null) $syncPrice = !empty(numVal('sync_price', true));
 
-    maSet('num', function (&$a) use ($countries, $rows, $mul, &$newC, &$newI, &$upd, &$off) {
+    maSet('num', function (&$a) use ($countries, $rows, $mul, $syncPrice, &$newC, &$newI, &$upd, &$off) {
         if (!is_array($a['cats'] ?? null))  $a['cats']  = [];
         if (!is_array($a['items'] ?? null)) $a['items'] = [];
 
@@ -1046,12 +1063,15 @@ function numImport(array $countries, array $rows, $markup = 0) {
             $catId  = $catIdx !== null ? (string)$a['cats'][$catIdx]['id'] : '';
 
             if (isset($bySid[$r['sid']])) {
-                // 🔒 فقط چیزهایی که مالِ پنل‌اند به‌روز می‌شوند.
-                //    قیمت و نام و ایموجی مالِ ادمین است — دست نمی‌خورد.
+                // 🔒 نام و ایموجی و برچسب همیشه مالِ ادمین‌اند — دست نمی‌خورند.
+                //    قیمت ولی بستگی دارد: اگر «قیمت از پنل» روشن باشد، قیمتِ
+                //    فروشنده منبعِ حقیقت است و هر بار به‌روز می‌شود؛ وگرنه
+                //    قیمتی که ادمین گذاشته سرِ جایش می‌ماند.
                 $k = $bySid[$r['sid']];
                 $was = !empty($a['items'][$k]['on']);
                 $a['items'][$k]['on'] = (bool)$r['on'];
                 if ($catId !== '') $a['items'][$k]['cat'] = $catId;
+                if ($syncPrice) $a['items'][$k]['price'] = round($r['price'] * $mul);
                 if ($was && !$r['on']) $off++; else $upd++;
                 continue;
             }
@@ -1131,6 +1151,16 @@ function numAdmHome($chatId, $msgId) {
                      ($miss === ['لغو'] ? " — فروش کار می‌کند ولی لغو روی پنل انجام نمی‌شود.\n"
                                         : " — تا اینها ست نشوند فروش انجام نمی‌شود.\n");
 
+    // 📊 یک نگاه به کاتالوگ، تا معلوم باشد چیزی برای فروش هست یا نه
+    if (function_exists('maGet')) {
+        $a  = maGet('num');
+        $nc = count(array_filter((array)($a['cats'] ?? []),  fn($x) => !empty($x['on'])));
+        $ni = count(array_filter((array)($a['items'] ?? []), fn($x) => !empty($x['on'])));
+        $t .= "\n🌍 کشور: <b>{$nc}</b> · ☎️ سرویس: <b>{$ni}</b>";
+        $t .= "\nمینی‌اپ: " . (!empty($a['on']) ? '✅ باز' : '❌ بسته') . "\n";
+        if ($ni === 0) $t .= "⚠️ هیچ سرویسی روشن نیست — «📥 وارد کردن» را بزنید.\n";
+    }
+
     if ($open) $t .= "\n⏳ <b>{$open}</b> شماره‌ی باز، در انتظار کد.";
 
     $t .= "\n\n💡 اول آدرس و کلید را بدهید، بعد «📖 خواندن مستندات» را بزنید تا " .
@@ -1158,7 +1188,14 @@ function numAdmHome($chatId, $msgId) {
          btnCb('🔁 فاصله‌ی پیگیری', 'nums_poll', 'admin')],
         [btnCb('⏱ مهلت تماس', 'nums_timeout', 'admin')],
         [btnCb('📋 شماره‌های باز', 'numopen', 'reject')],
-        [btnCb('🔙 بازگشت', 'maadm_home', 'nav')],
+        // 🚪 این بخش درِ خودش را دارد و همه‌چیزش همین‌جاست: کشورها،
+        //    سرویس‌ها، ظاهرِ مینی‌اپ. لازم نیست ادمین برای هر تغییرِ
+        //    کوچک برود سراغ بخشِ مینی‌اپ‌ها و برگردد.
+        [btnCb('🌍 کشورها', 'maadm_cats_num', 'admin'),
+         btnCb('☎️ سرویس‌ها', 'maadm_items_num', 'admin')],
+        [btnCb('🎨 ظاهر و متن‌های مینی‌اپ', 'maadm_app_num', 'admin')],
+        [btnCb('🔗 آدرس مینی‌اپ', 'numlink', 'info')],
+        [btnCb('🔙 بازگشت', 'adm_home', 'nav')],
     ];
     if ($msgId) editMsg(BOT_TOKEN, $chatId, $msgId, $t, inlineKb($rows));
     else        sendMsg(BOT_TOKEN, $chatId, $t, inlineKb($rows));
@@ -1264,7 +1301,11 @@ function numAdmImport($chatId, $msgId) {
     $t .= "اگر تایید کنید:\n";
     $t .= "➕ <b>{$newC}</b> کشور و <b>{$newI}</b> سرویسِ تازه ساخته می‌شود\n";
     $t .= "🔄 بقیه فقط روشن/خاموش می‌شوند\n";
-    $t .= "🔒 قیمت و نام و ایموجیِ سرویس‌های موجود <b>دست نمی‌خورد</b>\n";
+    $sync = !empty(numVal('sync_price', true));
+    $t .= $sync
+        ? "💰 قیمتِ سرویس‌های موجود هم <b>از پنل به‌روز می‌شود</b>\n"
+        : "🔒 قیمتِ سرویس‌های موجود <b>دست نمی‌خورد</b>\n";
+    $t .= "🔒 نام و ایموجی و برچسب همیشه دست‌نخورده می‌مانند\n";
     $t .= "🗑 هیچ‌چیز پاک نمی‌شود — سرویسی که در پنل نباشد فقط خاموش می‌شود\n\n";
     $t .= "💵 سود روی قیمتِ پنل: <b>" . rtrim(rtrim(number_format($mk, 1), '0'), '.') . "٪</b>";
     if ($mk <= 0) $t .= "\n<i>یعنی به قیمتِ خرید می‌فروشید — سود را قبل از وارد کردن ست کنید.</i>";
@@ -1280,7 +1321,8 @@ function numAdmImport($chatId, $msgId) {
 
     editMsg(BOT_TOKEN, $chatId, $msgId, $t, inlineKb([
         [btnCb('✅ تایید و وارد کن', 'numimpgo', 'buy')],
-        [btnCb('💵 درصد سود', 'nums_markup', 'admin')],
+        [btnCb('💵 درصد سود', 'nums_markup', 'admin'),
+         btnCb($sync ? '💰 قیمت از پنل: روشن' : '💰 قیمت از پنل: خاموش', 'numsync', 'info')],
         [btnCb('🔙 بازگشت', 'num_home', 'nav')],
     ]));
 }
@@ -1467,8 +1509,25 @@ function numCallback($data, $uid, $chatId, $msgId, $cbId, $isAdmin) {
     }
     if ($data === 'numtest')  { $ack('⏳ تماس با پنل…'); numAdmTest($chatId); return true; }
     if ($data === 'numopen')  { $ack(); numAdmOpen($chatId, $msgId); return true; }
+    if ($data === 'numlink') {
+        $url = function_exists('maUrl') ? trim((string)maUrl('num')) : '';
+        $ack();
+        sendMsg(BOT_TOKEN, $chatId,
+            $url === ''
+                ? "⚠️ اول «🔗 آدرس عمومی» را در تنظیمات مینی‌اپ‌ها ثبت کنید."
+                : "🔗 <b>آدرس مینی‌اپ شماره مجازی</b>\n\n<code>" . h($url) . "</code>\n\n" .
+                  "همین را در BotFather به‌عنوان Web App بگذارید.",
+            inlineKb([[btnCb('☎️ شماره مجازی', 'num_home', 'admin')]]));
+        return true;
+    }
     if ($data === 'numimp')   { $ack('⏳ خواندن فهرست…'); numAdmImport($chatId, $msgId); return true; }
     if ($data === 'numimpgo') { $ack('⏳ در حال وارد کردن…'); numAdmImportGo($chatId, $msgId); return true; }
+    if ($data === 'numsync') {
+        numSet(function (&$c) { $c['sync_price'] = empty($c['sync_price']); });
+        $ack(!empty(numVal('sync_price')) ? '💰 قیمت از پنل می‌آید' : '🔒 قیمت دستِ خودتان');
+        numAdmImport($chatId, $msgId);
+        return true;
+    }
 
     if ($data === 'numtog') {
         numSet(function (&$c) { $c['api']['on'] = empty($c['api']['on']); });
@@ -1523,8 +1582,8 @@ function numCallback($data, $uid, $chatId, $msgId, $cbId, $isAdmin) {
         'nums_timeout'    => ['num_timeout',   "⏱ مهلت هر تماس با پنل را به ثانیه بفرستید. بین ۳ تا ۶۰."],
         'nums_markup'     => ['num_markup',    "💵 درصد سود روی قیمتِ پنل را بفرستید.\n\n" .
                                                "مثال: <code>40</code> یعنی شماره‌ی ۲٬۰۰۰ تومانیِ پنل، ۲٬۸۰۰ تومان فروخته شود.\n\n" .
-                                               "این فقط موقعِ «📥 وارد کردن» روی قیمتِ سرویس‌های <b>تازه</b> اعمال می‌شود؛ " .
-                                               "قیمتی که خودتان ست کرده‌اید هیچ‌وقت عوض نمی‌شود."],
+                                               "موقعِ «📥 وارد کردن» روی قیمتِ پنل کشیده می‌شود.\n" .
+                                               "صفر یعنی دقیقا به قیمتِ خودِ پنل بفروشید."],
     ];
     if (isset($simple[$data])) {
         [$act, $msg] = $simple[$data];

@@ -3770,6 +3770,11 @@ function admHome($chatId, $msgId = null) {
     $text .= "📢 کانال‌های اجباری: " . count(Channels::all()) . "\n";
     $text .= "⏳ منتظر تایید: " . Order::countBy(Order::REVIEW) . "\n";
     $text .= "✅ سفارش موفق: " . Order::countBy(Order::APPROVED) . "\n";
+    if (function_exists('numAll')) {
+        $open = 0;
+        foreach (numAll() as $a) if (($a['status'] ?? '') === 'waiting') $open++;
+        if ($open) $text .= "☎️ شماره‌ی باز: " . $open . "\n";
+    }
 
     // شانزده دکمه پشت سر هم، دیوار می‌شد. حالا هر حوزه یک در دارد و
     // چیزهای مربوط به هم پشت همان در جمع‌اند.
@@ -3777,7 +3782,7 @@ function admHome($chatId, $msgId = null) {
         [btnCb('🛍 فروشگاه', 'ag_shop', 'admin'),      btnCb('🚀 مینی‌اپ‌ها', 'ag_mini', 'admin')],
         [btnCb('🤖 ربات‌های اپلودر', 'ag_up', 'admin'), btnCb('🎯 ممبر و قفل‌ها', 'ag_lock', 'admin')],
         [btnCb('💹 قیمت لحظه‌ای', 'px_home', 'admin'),  btnCb('💎 الماس', 'dm_home', 'admin')],
-        [btnCb('🎮 بازی‌ها', 'gm_home', 'admin')],
+        [btnCb('☎️ شماره مجازی', 'num_home', 'admin'), btnCb('🎮 بازی‌ها', 'gm_home', 'admin')],
         [btnCb('💳 پرداخت', 'ag_pay', 'admin'),        btnCb('🎨 ظاهر و متن‌ها', 'ag_look', 'admin')],
         [btnCb('📡 کانال‌های متصل', 'ch_home', 'admin'),
          btnCb('📢 پیام همگانی و گزارش', 'ag_rep', 'admin')],
@@ -3921,8 +3926,9 @@ function admGroups() {
             [['📋 لیست تعرفه‌ها', 'adm_tariff'], ['🧾 لیست سفارشات', 'adm_orderlist']],
             [['🧩 مخزن، سفارش دستی، سود', 'ax_home']],
         ]],
-        'mini' => ['🚀 <b>مینی‌اپ‌ها</b>', 'خدمات تلگرام و شماره مجازی — ظاهر، محصول‌ها و قیمت‌ها.', [
+        'mini' => ['🚀 <b>مینی‌اپ‌ها</b>', 'ظاهر، محصول‌ها و قیمت‌ها.', [
             [['🚀 تنظیمات مینی‌اپ‌ها', 'maadm_home']],
+            [['☎️ شماره مجازی', 'num_home']],
             [['🧩 مخزن تحویل و سود', 'ax_home']],
         ]],
         'up' => ['🤖 <b>ربات‌های اپلودر</b>', 'ربات‌های زیرمجموعه و کانال‌هایشان.', [

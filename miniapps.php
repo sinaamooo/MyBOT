@@ -438,12 +438,12 @@ function maDefaultNum() {
             'topup_hint' => 'برای شارژ، دکمه‌ی «شارژ حساب» را بزنید — همین‌جا انجام می‌شود.',
             'nav_home'   => 'خانه',
             'nav_shop'   => 'شماره‌ها',
-            'nav_orders' => 'سفارش‌ها',
+            'nav_orders' => 'سفارش‌های من',
             'nav_me'     => 'حساب من',
             'hot'        => 'پرطرفدارترین‌ها',
             'cats_ttl'   => 'کشور',
             'rates_ttl'  => 'نرخ لحظه‌ای',
-            'orders_ttl' => 'سفارش‌های اخیر',
+            'orders_ttl' => 'سفارش‌های من',
             'no_orders'  => 'هنوز سفارشی ثبت نکرده‌اید.',
             'me_ttl'     => 'پروفایل من',
             'topup'      => 'افزایش اعتبار',
@@ -471,6 +471,11 @@ function maDefaultNum() {
             'again'     => 'شماره‌ی تازه',
             'repeat'    => 'کد مجدد روی همین شماره',
             'repeat_ok' => 'درخواست شد — منتظر کد تازه',
+            'get_code'  => '🔑 دریافت کد',
+            'not_yet'   => 'کد هنوز نرسیده',
+            'got_code'  => 'کد رسید',
+            'bought'    => 'شماره گرفته شد — کپی کنید و کد را بگیرید',
+            'orders_hint' => 'شماره را کپی کنید، در برنامه وارد کنید، بعد «دریافت کد» را بزنید.',
             'expired'   => 'مهلت تمام شد — مبلغ به کیف پول برگشت',
             'canceled'  => 'لغو شد — مبلغ به کیف پول برگشت',
             'left'      => 'زمان باقی‌مانده',
@@ -2676,6 +2681,37 @@ function maApi() {
         $st = numState($oid);
         if (!$st) maApiOut(['ok' => false, 'error' => 'not_found'], 404);
         maApiOut(['ok' => true, 'active' => true, 'num' => $st,
+                  'balance' => (float)(getUser($uid)['balance'] ?? 0)]);
+    }
+
+    // ---- 📋 شماره مجازی: سفارش‌های من ----
+    //
+    // یک درخواست، همه‌ی چیزی که آن صفحه لازم دارد: شماره‌ها، مهلتشان، و
+    // اینکه برای هرکدام کدام دکمه معنی دارد.
+    if ($action === 'num_orders') {
+        if ($key !== 'num' || !function_exists('numHistory'))
+            maApiOut(['ok' => false, 'error' => 'bad_app'], 400);
+        maApiOut(['ok' => true, 'list' => numHistory($uid, 20),
+                  'balance' => (float)(getUser($uid)['balance'] ?? 0)]);
+    }
+
+    // ---- 🔑 شماره مجازی: «دریافت کد» ----
+    //
+    // همان num_state است ولی بی‌معطلی از پنل می‌پرسد: اینجا کاربر خودش
+    // دکمه زده و منتظر ایستاده، پس فاصله‌ی معمولِ پرسش را رعایت نمی‌کنیم.
+    // محدودیتِ نرخِ خودِ maApi جلوی زیاده‌روی را می‌گیرد.
+    if ($action === 'num_code') {
+        if ($key !== 'num' || !function_exists('numState'))
+            maApiOut(['ok' => false, 'error' => 'bad_app'], 400);
+
+        $oid = trim((string)($body['order'] ?? ''));
+        $own = $oid !== '' ? numGet($oid) : numActiveFor($uid);
+        if (!$own || (int)($own['uid'] ?? 0) !== $uid)
+            maApiOut(['ok' => false, 'error' => 'not_found'], 404);
+
+        $st = numState((string)$own['order'], true);
+        if (!$st) maApiOut(['ok' => false, 'error' => 'not_found'], 404);
+        maApiOut(['ok' => true, 'num' => $st,
                   'balance' => (float)(getUser($uid)['balance'] ?? 0)]);
     }
 
