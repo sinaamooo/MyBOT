@@ -2120,6 +2120,10 @@ function axNanoGt($a, $b) {
  * برگشت: [true, 'شناسه'] یا [false, 'دلیل']
  */
 function axWalletSend($msgs, $note = '') {
+    // 🧪 درگاه تست — در حالت عادی وجود ندارد. مثل __tgHook، تا بشود
+    //    مسیرِ «چه چیزی به کجا فرستاده می‌شود» را بدونِ شبکه سنجید.
+    if (function_exists('__axSendHook')) return __axSendHook($msgs, $note);
+
     if (!axWalletReady()) return [false, 'امضا انجام نشد — ' . axWalletWhyNotReady()];
     if (!function_exists('tonSignedExternalB64')) return [false, 'ton_wallet.php بارگذاری نشده'];
 

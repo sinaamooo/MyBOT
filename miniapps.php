@@ -47,6 +47,9 @@ function maAutoLabels() {
         'stars'   => '⭐️ خرید استارز',
         'premium' => '💎 خرید پریمیوم',
         'gift'    => '🎁 خرید گیفت',
+        // 💎 این یکی پنلِ فروشنده ندارد: مستقیم از ولتِ خودتان امضا و
+        //    فرستاده می‌شود. مقصد همان چیزی است که مشتری در فرم نوشته.
+        'ton'     => '💎 ارسال تون از ولت خودم',
     ];
 }
 
@@ -1808,6 +1811,9 @@ function maAutoFulfill($orderId, $manual = false) {
     });
     if (!$claimed) return [false, 'همین حالا در حال ارسال است'];
 
+    // 💎 تونِ مستقیم — بدون هیچ پنلِ فروشنده‌ای
+    if ($op === 'ton') return maTonFulfill($orderId, $o);
+
     $cfgOp = $f['ops'][$op] ?? [];
     [$resp, $err] = maFulfillCall($op, $vars);
 
@@ -1878,6 +1884,66 @@ function maAutoFulfill($orderId, $manual = false) {
         ($ref !== '' ? "\n🧾 " . h($ref) : ''));
 
     return [true, $ref];
+}
+
+/**
+ * 💎 تحویلِ تون — از ولتِ خودِ فروشنده، بی‌واسطه.
+ *
+ * بقیه‌ی تحویل‌های خودکار یک پنلِ فروشنده دارند که سفارش را ثبت
+ * می‌کند. تون پنل ندارد و لازم هم ندارد: کلیدِ ولت همین‌جاست، پس
+ * تراکنش همین‌جا امضا و روی شبکه فرستاده می‌شود.
+ *
+ * مقصد را خودِ مشتری در فرمِ سفارش نوشته. مقدار:
+ *   • اگر روی محصول «مقدارِ ثابت» گذاشته باشید، همان ضربدر تعداد
+ *   • وگرنه خودِ تعدادی که مشتری خریده، به تون
+ *
+ * ⚠️ سقفِ هر تراکنش و سقفِ روزانه‌ی ولت اینجا هم برقرارند — همان‌ها
+ *    که در بخش ولت تنظیم شده‌اند. یعنی یک اشتباه در قیمت‌گذاری
+ *    نمی‌تواند ولت را خالی کند.
+ */
+function maTonFulfill($orderId, $o) {
+    $fail = function ($msg) use ($orderId) {
+        MaOrder::set($orderId, function (&$x) use ($msg) {
+            $x['sending'] = 0; $x['last_error'] = $msg;
+        });
+        maAutoFailNotice($orderId, $msg);
+        return [false, $msg];
+    };
+
+    if (!function_exists('axWalletSend')) return $fail('ولت در دسترس نیست');
+
+    $to = trim((string)($o['field'] ?? ''));
+    if ($to === '') return $fail('آدرس مقصد خالی است — روی این محصول باید «آدرس ولت» پرسیده شود');
+    if (!function_exists('tonParseAddress')) return $fail('ton_wallet.php بارگذاری نشده');
+    try { tonParseAddress($to); }
+    catch (Throwable $e) { return $fail('آدرس تون معتبر نیست: ' . mb_substr($to, 0, 24)); }
+
+    $i   = maFindItem($o['app'], $o['item_id']);
+    $per = (float)($i['auto_qty'] ?? 0);
+    $amt = $per > 0 ? $per * (float)($o['qty'] ?? 1) : (float)($o['qty'] ?? 0);
+    if ($amt <= 0) return $fail('مقدار تون صفر است');
+
+    $nano = tonToNano((string)$amt);
+    [$ok, $info] = axWalletSend(
+        [['address' => $to, 'amount' => $nano, 'comment' => 'order ' . $orderId]],
+        'مینی‌اپ · ' . $orderId);
+    if (!$ok) return $fail($info);
+
+    MaOrder::set($orderId, function (&$x) use ($info, $amt) {
+        $x['status']       = MaOrder::DONE;
+        $x['sending']      = 0;
+        $x['last_error']   = '';
+        $x['placed']       = time();
+        $x['ton_tx']       = (string)$info;
+        $x['provider_ref'] = rtrim(rtrim(number_format($amt, 4, '.', ''), '0'), '.') . ' TON';
+        $x['delivered_at'] = nowStr();
+        $x['auto']         = true;
+    });
+
+    $o = MaOrder::get($orderId);
+    if (function_exists('axReportOrder')) axReportOrder($o, 'done');
+    maTellUser($o, maDoneMsg($o, (string)($o['provider_ref'] ?? '')));
+    return [true, (string)($o['provider_ref'] ?? '')];
 }
 
 /** به ادمین خبر بده که تحویل خودکار نشد و راه‌های ادامه را بده */
