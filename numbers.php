@@ -178,6 +178,8 @@ function num5Get($path, $timeout = null) {
         CURLOPT_MAXREDIRS      => 3,
         CURLOPT_SSL_VERIFYPEER => true,
         CURLOPT_ENCODING       => '',          // gzip — فهرست قیمت‌ها بزرگ است
+        // بعضی دیوارهای آتش، درخواستِ بی‌شناسه را رد می‌کنند
+        CURLOPT_USERAGENT      => 'Mozilla/5.0 (compatible; ShopBot/1.0)',
         CURLOPT_HTTPHEADER     => [
             'Authorization: Bearer ' . $tok,
             'Accept: application/json',
@@ -266,6 +268,100 @@ function numCall($op, array $vars = []) {
         case 'balance': return num5Get('/user/profile');
     }
     return [null, 'عملیات «' . $op . '» را نمی‌شناسم'];
+}
+
+/**
+ * 🔬 یک تماسِ خام با ۵سیم — با همه‌ی جزئیاتی که برای عیب‌یابی لازم است.
+ *
+ * maHttp و num5Get فقط می‌گویند «نشد». برای پیدا کردنِ علت باید دانست
+ * که کجا نشد: اسمِ دامنه پیدا نشد؟ اتصال برقرار نشد؟ TLS؟ یا سرور
+ * جواب داد ولی جوابش ۴۰۱ بود؟ هرکدام راهِ حلِ کاملا متفاوتی دارند.
+ *
+ * برگشت: ['code'=>, 'err'=>, 'body'=>, 'dns'=>, 'conn'=>, 'total'=>]
+ */
+function num5Probe($path, $withToken = true, $timeout = 12) {
+    $base = rtrim(trim((string)numVal('api.base', NUM5_BASE)), '/');
+    $url  = $base . '/' . ltrim((string)$path, '/');
+    if (function_exists('__num5ProbeHook')) return __num5ProbeHook($url, $withToken);
+
+    $hdr = ['Accept: application/json'];
+    if ($withToken) {
+        $tok = trim((string)numVal('api.token', ''));
+        if ($tok !== '') $hdr[] = 'Authorization: Bearer ' . $tok;
+    }
+
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => max(4, (int)$timeout),
+        CURLOPT_CONNECTTIMEOUT => 8,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_MAXREDIRS      => 3,
+        CURLOPT_SSL_VERIFYPEER => true,
+        CURLOPT_ENCODING       => '',
+        CURLOPT_USERAGENT      => 'Mozilla/5.0 (compatible; ShopBot/1.0)',
+        CURLOPT_HTTPHEADER     => $hdr,
+    ]);
+    $body = curl_exec($ch);
+    $out  = [
+        'code'  => (int)curl_getinfo($ch, CURLINFO_HTTP_CODE),
+        'err'   => (string)curl_error($ch),
+        'errno' => (int)curl_errno($ch),
+        'body'  => $body === false ? '' : (string)$body,
+        'dns'   => (float)curl_getinfo($ch, CURLINFO_NAMELOOKUP_TIME),
+        'conn'  => (float)curl_getinfo($ch, CURLINFO_CONNECT_TIME),
+        'total' => (float)curl_getinfo($ch, CURLINFO_TOTAL_TIME),
+        'ip'    => (string)curl_getinfo($ch, CURLINFO_PRIMARY_IP),
+    ];
+    curl_close($ch);
+    return $out;
+}
+
+/**
+ * 🔎 شکلِ توکن.
+ *
+ * ۵سیم دو کلید می‌دهد و این تفاوت کسی را که اولین بار وصل می‌شود
+ * گیج می‌کند: کلیدِ بالا (JWT، با eyJ شروع می‌شود) مالِ API نسخه‌ی
+ * ۱ است — همانی که این ربات حرف می‌زند. کلیدِ پایین یک رشته‌ی ۳۲
+ * حرفیِ هگزادسیمال است و مالِ API قدیمی است که ما اصلا صدایش
+ * نمی‌زنیم. اگر آن یکی ثبت شود، ۵سیم درست و حسابی «۴۰۱» می‌دهد و
+ * آدم فکر می‌کند کلیدش خراب است.
+ *
+ * برگشت: ['ok'=>, 'kind'=>, 'why'=>]
+ */
+function numTokenShape($tok = null) {
+    $t = $tok === null ? trim((string)numVal('api.token', '')) : trim((string)$tok);
+
+    if ($t === '')
+        return ['ok' => false, 'kind' => 'empty', 'why' => 'هنوز چیزی ثبت نشده'];
+
+    if (preg_match('/^[0-9a-f]{32,64}$/i', $t))
+        return ['ok' => false, 'kind' => 'old',
+                'why' => 'این کلیدِ «API قدیمی» است (رشته‌ی هگز). این ربات با API نسخه‌ی ۱ کار می‌کند — ' .
+                         'کلیدِ بالاییِ صفحه را بفرستید، همان که با <code>eyJ</code> شروع می‌شود.'];
+
+    if (!str_starts_with($t, 'eyJ'))
+        return ['ok' => false, 'kind' => 'weird',
+                'why' => 'توکنِ ۵سیم همیشه با <code>eyJ</code> شروع می‌شود. شاید ناقص کپی شده باشد.'];
+
+    if (substr_count($t, '.') !== 2)
+        return ['ok' => false, 'kind' => 'cut',
+                'why' => 'توکن ناقص است — باید سه تکه باشد که با نقطه از هم جدا شده‌اند. ' .
+                         'روی دکمه‌ی کپیِ کنارِ کادر بزنید، نه اینکه دستی انتخابش کنید.'];
+
+    // 📅 JWT تاریخِ انقضا را داخل خودش دارد — بی‌آنکه لازم باشد جایی برویم
+    $exp = 0;
+    $mid = explode('.', $t)[1] ?? '';
+    $pad = strtr($mid, '-_', '+/');
+    $j   = json_decode((string)base64_decode($pad . str_repeat('=', (4 - strlen($pad) % 4) % 4)), true);
+    if (is_array($j) && !empty($j['exp'])) $exp = (int)$j['exp'];
+    if ($exp > 0 && $exp < time())
+        return ['ok' => false, 'kind' => 'expired',
+                'why' => 'این توکن در ' . date('Y/m/d', $exp) . ' منقضی شده. ' .
+                         'در ۵سیم «Refresh key» را بزنید و کلیدِ تازه را بفرستید.'];
+
+    return ['ok' => true, 'kind' => 'jwt',
+            'why' => $exp > 0 ? 'معتبر تا ' . date('Y/m/d', $exp) : 'شکلش درست است'];
 }
 
 /** موجودی حسابِ ۵سیم — [عدد, واحد, خطا] */
@@ -1219,8 +1315,11 @@ function numAdmHome($chatId, $msgId) {
     $t .= "وضعیت: " . (!empty($api['on']) ? '✅ روشن' : '❌ خاموش') . "\n";
     // 🔒 هیچ تکه‌ای از توکن نشان داده نمی‌شود — نه اولش، نه آخرش.
     //    عکسِ صفحه‌ی پنل زیاد دست‌به‌دست می‌شود.
+    $sh = numTokenShape();
     $t .= "🔑 توکن: " . ($tok !== ''
-          ? '✅ ثبت شده (' . fmtNum(strlen($tok)) . ' حرف)' : '<b>خالی</b>') . "\n";
+          ? ($sh['ok'] ? '✅ ثبت شده (' . fmtNum(strlen($tok)) . ' حرف)' : '⚠️ مشکل دارد')
+          : '<b>خالی</b>') . "\n";
+    if ($tok !== '' && !$sh['ok']) $t .= '<i>' . $sh['why'] . "</i>\n";
     $t .= "🎯 محصول: <b>تلگرام</b> — همین و بس\n\n";
 
     $t .= "💵 نرخ تبدیل: " . ($rate > 0
@@ -1260,6 +1359,7 @@ function numAdmHome($chatId, $msgId) {
          btnCb('💵 نرخ دلار', 'nums_rate', 'admin')],
         [btnCb(!empty(numVal('sync_price', true)) ? '💰 قیمت از ۵سیم: روشن' : '💰 قیمت از ۵سیم: خاموش',
                'numsync', 'info')],
+        [btnCb('🩺 عیب‌یابی اتصال', 'numdiag', 'confirm')],
         [btnCb('💰 موجودی حساب ۵سیم', 'numtest', 'confirm')],
         [btnCb('⏳ مهلت انتظار کد', 'nums_wait', 'admin'),
          btnCb('🔁 فاصله‌ی پیگیری', 'nums_poll', 'admin')],
@@ -1396,7 +1496,11 @@ function numAdmTest($chatId) {
     }
     [$bal, $cur, $err] = numBalance();
     if ($err !== '') {
-        sendMsg(BOT_TOKEN, $chatId, "❌ <b>نگرفت</b>\n<code>" . h(mb_substr($err, 0, 300)) . '</code>', $back);
+        sendMsg(BOT_TOKEN, $chatId,
+            "❌ <b>نگرفت</b>\n<code>" . h(mb_substr($err, 0, 300)) . "</code>\n\n" .
+            "🩺 «عیب‌یابی اتصال» می‌گوید دقیقا کجا می‌شکند — کلید، شبکه، یا نرخ.",
+            inlineKb([[btnCb('🩺 عیب‌یابی اتصال', 'numdiag', 'confirm')],
+                      [btnCb('☎️ شماره مجازی', 'num_home', 'admin')]]));
         return;
     }
     $rate = numRate();
@@ -1404,6 +1508,156 @@ function numAdmTest($chatId) {
     $t .= "💰 موجودی: <b>" . fmtNum($bal) . "</b> " . h($cur ?: '') . "\n";
     if ($rate > 0) $t .= "≈ <b>" . fmtNum(numRound100($bal * $rate)) . "</b> تومان\n";
     sendMsg(BOT_TOKEN, $chatId, $t, $back);
+}
+
+/**
+ * 🩺 عیب‌یابیِ اتصال — قدم به قدم.
+ *
+ * «کار نمی‌کند» چهار علتِ کاملا متفاوت دارد و هرکدام راهِ حلِ خودش
+ * را: توکنِ اشتباه، سروری که به ۵سیم نمی‌رسد، نرخِ تبدیلِ نداشته، و
+ * بخشی که روشن نشده. این صفحه هر چهار را جدا امتحان می‌کند و سرِ
+ * اولین شکست می‌ایستد و می‌گوید دقیقا چه کار کنید.
+ */
+function numAdmDiag($chatId, $msgId = 0) {
+    $t = "🩺 <b>عیب‌یابی اتصال ۵سیم</b>\n\n";
+    $rows = [];
+    $stop = false;
+
+    // ── ۱) شکلِ توکن ──
+    $sh  = numTokenShape();
+    $tok = trim((string)numVal('api.token', ''));
+    $t .= "<b>۱. توکن</b>\n";
+    if ($sh['ok']) {
+        $t .= "✅ ثبت شده · " . strlen($tok) . " حرف · " . h($sh['why']) . "\n";
+    } else {
+        $t .= "❌ " . $sh['why'] . "\n";
+        if ($sh['kind'] === 'old')
+            $t .= "\n📌 در همان صفحه‌ی ۵سیم <b>دو</b> کلید هست:\n" .
+                  "• بالایی — <b>API key for 5SIM protocol</b> ← <b>این را بفرستید</b>\n" .
+                  "• پایینی — <b>(Deprecated API)</b> ← این به درد ما نمی‌خورد\n";
+        $rows[] = [btnCb('🔑 توکن ۵سیم', 'nums_token', 'admin')];
+        $stop = true;
+    }
+
+    // ── ۲) آیا سرور اصلا به ۵سیم می‌رسد؟ ──
+    if (!$stop) {
+        $t .= "\n<b>۲. رسیدن به ۵سیم</b>\n";
+        $p = num5Probe('/guest/countries', false, 12);
+        if ($p['errno'] !== 0) {
+            $t .= "❌ <code>" . h(mb_substr($p['err'], 0, 120)) . "</code>\n";
+            // 🎯 هر خطای curl راهِ حلِ خودش را دارد
+            $why = match (true) {
+                $p['errno'] === 6  => "نامِ <code>5sim.net</code> پیدا نشد — DNS سرور مشکل دارد.",
+                $p['errno'] === 7  => "اتصال برقرار نشد. یا سرور اینترنتِ خروجی ندارد، یا " .
+                                      "۵سیم آی‌پیِ سرورتان را بسته است.",
+                $p['errno'] === 28 => "مهلت تمام شد — اتصال هست ولی خیلی کند یا فیلتر است.",
+                in_array($p['errno'], [35, 60, 77], true) =>
+                                      "دستِ TLS نگرفت. گواهی‌های سرور کهنه‌اند (بسته‌ی ca-certificates).",
+                default            => "اتصال به ۵سیم برقرار نشد.",
+            };
+            $t .= "🔴 " . $why . "\n\n";
+            $t .= "<b>این مشکلِ کلید نیست، مشکلِ خودِ سرور است.</b>\n" .
+                  "خیلی از هاست‌های ایرانی جلوی اتصالِ خروجی را می‌گیرند، و ۵سیم هم " .
+                  "بعضی رنج‌های ایران را می‌بندد. از پشتیبانیِ هاست بپرسید " .
+                  "«اتصال خروجی به 5sim.net باز است؟»\n";
+            $stop = true;
+        } else {
+            $t .= "✅ رسید · " . ($p['ip'] !== '' ? '<code>' . h($p['ip']) . '</code> · ' : '') .
+                  "کد <b>" . $p['code'] . "</b> · " . number_format($p['total'], 2) . " ثانیه\n";
+            if ($p['total'] > 4) $t .= "⚠️ کند است — ممکن است سرِ خرید هم دیر جواب بدهد.\n";
+        }
+    }
+
+    // ── ۳) خودِ توکن را قبول می‌کند؟ ──
+    if (!$stop) {
+        $t .= "\n<b>۳. پذیرشِ توکن</b>\n";
+        $p = num5Probe('/user/profile', true, 12);
+        $j = json_decode($p['body'], true);
+        if ($p['code'] === 200 && is_array($j) && isset($j['balance'])) {
+            $t .= "✅ قبول شد · موجودی: <b>" . fmtNum((float)$j['balance']) . "</b> " .
+                  h((string)($j['currency'] ?? '')) . "\n";
+            if ((float)$j['balance'] <= 0)
+                $t .= "⚠️ موجودیِ حسابِ ۵سیم صفر است — خرید انجام نمی‌شود.\n";
+            if (isset($j['rating']) && (float)$j['rating'] < 80)
+                $t .= "⚠️ امتیازِ حساب <b>" . (int)$j['rating'] . "</b> است؛ زیرِ ۸۰ بعضی خریدها رد می‌شوند.\n";
+        } elseif ($p['code'] === 401 || $p['code'] === 403) {
+            $t .= "❌ ۵سیم توکن را نپذیرفت (کد " . $p['code'] . ")\n\n";
+            $t .= "شکلش درست است ولی خودش قبول نشد. یعنی یکی از این‌ها:\n" .
+                  "• کلید عوض شده — در ۵سیم «Refresh key» زده‌اید و کلیدِ قدیمی را فرستاده‌اید\n" .
+                  "• کلیدِ پایینیِ صفحه (Deprecated) را کپی کرده‌اید\n" .
+                  "• موقعِ کپی، تکه‌ای جا افتاده\n\n" .
+                  "🔧 در ۵سیم روی دکمه‌ی <b>کپی</b>ِ کنارِ کادرِ بالایی بزنید (نه انتخاب با دست) " .
+                  "و همان را اینجا بفرستید.\n";
+            $rows[] = [btnCb('🔑 توکن را دوباره بفرست', 'nums_token', 'admin')];
+            $stop = true;
+        } else {
+            $t .= "❌ کد <b>" . $p['code'] . "</b>" .
+                  ($p['body'] !== '' ? " · <code>" . h(mb_substr(trim($p['body']), 0, 150)) . "</code>" : '') . "\n";
+            $stop = true;
+        }
+    }
+
+    // ── ۴) نرخ تبدیل ──
+    if (!$stop) {
+        $t .= "\n<b>۴. نرخ تبدیل</b>\n";
+        $r = numRate();
+        if ($r > 0) {
+            $t .= "✅ هر دلار <b>" . fmtNum($r) . "</b> تومان" .
+                  ((float)numVal('api.rate', 0) > 0 ? ' (دستی)' : ' (از بخش قیمت‌گیری)') . "\n";
+        } else {
+            $t .= "❌ معلوم نیست\n\n";
+            $t .= "<b>بدون نرخ، «وارد کردن» کار نمی‌کند</b> — و پیامش شبیهِ خرابیِ کلید است، " .
+                  "در حالی که کلید سالم است.\n" .
+                  "یا «💵 نرخ دلار» را دستی بگذارید، یا بخش قیمت‌گیری را روشن کنید.\n";
+            $rows[] = [btnCb('💵 نرخ دلار', 'nums_rate', 'admin'),
+                       btnCb('💹 قیمت‌گیری', 'px_home', 'nav')];
+            $stop = true;
+        }
+    }
+
+    // ── ۵) کاتالوگ تلگرام ──
+    if (!$stop) {
+        $t .= "\n<b>۵. شماره‌های تلگرام</b>\n";
+        [$co, $rowsC, $err] = numCatalog();
+        if ($err !== '') {
+            $t .= "❌ " . h(mb_substr($err, 0, 200)) . "\n";
+            $stop = true;
+        } else {
+            $t .= "✅ <b>" . fmtNum(count($rowsC)) . "</b> شماره از <b>" .
+                  fmtNum(count($co)) . "</b> کشور\n";
+            $on = 0;
+            foreach ($rowsC as $r) if (!empty($r['on'])) $on++;
+            $t .= "موجود: <b>" . fmtNum($on) . "</b>\n";
+        }
+    }
+
+    // ── ۶) بخش روشن است؟ ──
+    if (!$stop) {
+        $t .= "\n<b>۶. وضعیت بخش</b>\n";
+        if (!empty(numVal('api.on'))) {
+            $t .= "✅ روشن\n";
+        } else {
+            $t .= "❌ خاموش — همه‌چیز سالم است ولی فروش انجام نمی‌شود.\n";
+            $rows[] = [btnCb('✅ روشنش کن', 'numtog', 'info')];
+        }
+        $a  = function_exists('maGet') ? maGet('num') : [];
+        $ni = count(array_filter((array)($a['items'] ?? []), fn($x) => !empty($x['on'])));
+        if ($ni === 0) {
+            $t .= "⚠️ هنوز چیزی وارد نشده — «📥 وارد کردن» را بزنید.\n";
+            $rows[] = [btnCb('📥 وارد کردن', 'numimp', 'buy')];
+        } else {
+            $t .= "☎️ <b>" . fmtNum($ni) . "</b> شماره آماده‌ی فروش\n";
+        }
+    }
+
+    if (!$stop && !empty(numVal('api.on')))
+        $t .= "\n🎉 <b>همه‌چیز سرِ جایش است.</b>";
+
+    $rows[] = [btnCb('🔄 دوباره امتحان کن', 'numdiag', 'confirm')];
+    $rows[] = [btnCb('🔙 بازگشت', 'num_home', 'nav')];
+
+    if ($msgId) editMsg(BOT_TOKEN, $chatId, $msgId, $t, inlineKb($rows));
+    else        sendMsg(BOT_TOKEN, $chatId, $t, inlineKb($rows));
 }
 
 /** 🧹 صفحه‌ی پاک‌سازی */
@@ -1542,6 +1796,7 @@ function numCallback($data, $uid, $chatId, $msgId, $cbId, $isAdmin) {
     if ($data === 'numimp')    { $ack('⏳ در حال خواندن…'); numAdmImport($chatId, $msgId); return true; }
     if ($data === 'numimpgo')  { $ack('⏳'); numAdmImportGo($chatId, $msgId); return true; }
     if ($data === 'numtest')   { $ack('⏳'); numAdmTest($chatId); return true; }
+    if ($data === 'numdiag')   { $ack('🩺 در حال بررسی…'); numAdmDiag($chatId, $msgId); return true; }
     if ($data === 'numopen')   { $ack(); numAdmOpen($chatId, $msgId); return true; }
     if ($data === 'numclean')  { $ack(); numAdmClean($chatId, $msgId); return true; }
     if ($data === 'numclean1') { $ack('⏳'); numAdmCleanKeep($chatId, $msgId); return true; }
@@ -1626,16 +1881,31 @@ function numStateHandle($action, $msg, $uid, $chatId) {
 
     switch ($action) {
         case 'num_token':
-            // 🔒 توکن در تاریخچه‌ی گفتگو نمی‌ماند
+            // 🔒 توکن در تاریخچه‌ی گفتگو نمی‌ماند — چه قبولش کنیم چه نه
             $v = $blank ? '' : preg_replace('/\s+/', '', $plain);
-            if ($v !== '' && strlen($v) < 20) {
-                sendMsg(BOT_TOKEN, $chatId, "⚠️ این توکن خیلی کوتاه است. کلِ کلید را بفرستید.", $back);
-                return true;
-            }
-            numSet(function (&$c) use ($v) { $c['api']['token'] = $v; });
             if (!empty($msg['message_id'])) delMsg(BOT_TOKEN, $chatId, (int)$msg['message_id']);
+
+            // 🚦 کلیدِ اشتباه را همین‌جا بگیر، نه سرِ اولین خرید.
+            //
+            //    ۵سیم دو کلید می‌دهد و کلیدِ پایینی (API قدیمی) هم شکلِ
+            //    یک کلیدِ درست را دارد — ۳۲ حرف. اگر بی‌صدا ذخیره‌اش
+            //    کنیم، همه‌چیز ۴۰۱ می‌گیرد و آدم فکر می‌کند کلیدش
+            //    خراب است، در حالی که فقط اشتباهی را کپی کرده.
+            if ($v !== '') {
+                $sh = numTokenShape($v);
+                if (!$sh['ok']) {
+                    clearState($uid);
+                    sendMsg(BOT_TOKEN, $chatId,
+                        "⚠️ <b>این کلید به درد نمی‌خورد</b>\n\n" . $sh['why'],
+                        inlineKb([[btnCb('🔑 دوباره بفرست', 'nums_token', 'admin')],
+                                  [btnCb('☎️ شماره مجازی', 'num_home', 'admin')]]));
+                    return true;
+                }
+            }
+
+            numSet(function (&$c) use ($v) { $c['api']['token'] = $v; });
             $done($v === '' ? '✅ توکن پاک شد.' : "✅ توکن ثبت شد و پیامتان پاک شد.",
-                  inlineKb([[btnCb('💰 تست اتصال', 'numtest', 'confirm')],
+                  inlineKb([[btnCb('🩺 عیب‌یابی اتصال', 'numdiag', 'confirm')],
                             [btnCb('☎️ شماره مجازی', 'num_home', 'admin')]]));
             return true;
 
