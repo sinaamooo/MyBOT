@@ -126,6 +126,16 @@ body::before{
   box-shadow:0 8px 22px -12px var(--tint,var(--c1))
 }
 
+/* ── جستجو ───────────────────────────────── */
+.srch{margin:0 0 10px}
+.srch input{
+  width:100%;padding:12px 14px;border-radius:14px;background:var(--s1);
+  border:1px solid var(--hair);color:var(--ink);font-family:var(--ui);font-size:14px;outline:0
+}
+.srch input::placeholder{color:var(--dim2)}
+.srch input:focus{border-color:color-mix(in srgb,var(--c1) 50%,transparent)}
+#more{margin-top:12px}
+
 /* ── شبکه‌ی دو ستونه ─────────────────────── */
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 @media (max-width:330px){.grid{grid-template-columns:1fr}}
@@ -315,8 +325,10 @@ body::before{
 
   <!-- ☎️ شماره‌ها -->
   <section class="page" id="p-shop">
+    <div class="srch"><input id="q" type="search" inputmode="search" autocomplete="off"></div>
     <div class="cats" id="cats"></div>
     <div class="grid" id="grid"></div>
+    <button class="btn ghost" id="more" hidden></button>
     <div class="empty" id="gridEmpty" hidden><i>🔍</i><span></span></div>
   </section>
 
@@ -404,12 +416,25 @@ async function api(action, data) {
 }
 
 /* ── وضعیت ───────────────────────────────── */
-const S = { me: null, cat: 'all', live: null, tick: 0, poll: 0, page: 'home' };
+const S = { me: null, cat: 'all', live: null, tick: 0, poll: 0, page: 'home',
+            q: '', shown: 0 };
 
 /* ── ساخت کارت محصول ─────────────────────── */
 function catIndex(id) {
   const i = (B.cats || []).findIndex(c => c.id === id);
   return i < 0 ? 0 : i;
+}
+
+/* 🎨 رنگِ یک کارت.
+   وقتی دسته‌بندی هست، رنگ مالِ دسته است تا کارت‌های یک کشور کنار هم
+   دیده شوند. وقتی نیست — یعنی خودِ کشور محصول است — رنگ را از شناسه‌ی
+   خودِ محصول درمی‌آوریم، وگرنه کلِ شبکه یک‌رنگ و بی‌روح می‌شود. */
+function tintFor(it) {
+  if (it.cat && (B.cats || []).length) return tintOf(catIndex(it.cat));
+  let h = 0;
+  const k = String(it.id || it.name || '');
+  for (let i = 0; i < k.length; i++) h = (h * 31 + k.charCodeAt(i)) % 100003;
+  return tintOf(h);
 }
 function catOf(id) { return (B.cats || []).find(c => c.id === id) || null; }
 
@@ -417,7 +442,7 @@ function cardEl(it) {
   const c = catOf(it.cat);
   const el = document.createElement('div');
   el.className = 'card' + (it.stale ? ' off' : '');
-  el.style.setProperty('--tint', tintOf(catIndex(it.cat)));
+  el.style.setProperty('--tint', tintFor(it));
 
   const fl = document.createElement('div'); fl.className = 'fl';
   const b = document.createElement('b'); b.textContent = (c && c.emoji) || it.emoji || '☎️';
@@ -441,22 +466,56 @@ function cardEl(it) {
   return el;
 }
 
-function paintGrid() {
+/* 📄 چند کارت در هر نوبت ساخته شود.
+   با کاتالوگِ بزرگ، ساختنِ یک‌جای همه‌ی کارت‌ها صفحه را قفل می‌کند:
+   ۸۰۰ محصول یعنی هفت‌هزار گره و بیش از یک ثانیه فریزِ کامل روی گوشی.
+   پس یک صفحه می‌سازیم و بقیه با اسکرول می‌آیند. */
+const PAGE = 40;
+
+function visibleItems() {
+  const q = (S.q || '').trim().toLowerCase();
+  return (B.items || []).filter(i => {
+    if (S.cat !== 'all' && i.cat !== S.cat) return false;
+    if (!q) return true;
+    return (i.name || '').toLowerCase().includes(q)
+        || (i.desc || '').toLowerCase().includes(q);
+  });
+}
+
+function paintGrid(reset) {
   const g = $('#grid'), e = $('#gridEmpty');
-  g.textContent = '';
-  const list = (B.items || []).filter(i => S.cat === 'all' || i.cat === S.cat);
+  if (reset !== false) { g.textContent = ''; S.shown = 0; }
+
+  const list = visibleItems();
   if (!list.length) {
-    e.hidden = false; e.querySelector('span').textContent = U('empty', 'چیزی نیست.');
+    e.hidden = false;
+    e.querySelector('span').textContent = S.q ? U('no_match', 'چیزی پیدا نشد') : U('empty', 'چیزی نیست.');
+    $('#more').hidden = true;
     return;
   }
   e.hidden = true;
+
   const frag = document.createDocumentFragment();
-  list.forEach(i => frag.appendChild(cardEl(i)));
+  const to = Math.min(list.length, S.shown + PAGE);
+  for (let i = S.shown; i < to; i++) frag.appendChild(cardEl(list[i]));
   g.appendChild(frag);
+  S.shown = to;
+
+  const left = list.length - S.shown;
+  const more = $('#more');
+  more.hidden = left <= 0;
+  if (left > 0) more.textContent = U('more', 'بیشتر') + ' (' + fmt(left) + ')';
 }
 
 function paintCats() {
-  const box = $('#cats'); box.textContent = '';
+  const box = $('#cats');
+  box.textContent = '';
+  const cats = B.cats || [];
+
+  // یک نوارِ دسته که فقط «همه» دارد، جا می‌گیرد و کاری نمی‌کند
+  if (cats.length < 1) { box.hidden = true; return; }
+  box.hidden = false;
+
   const mk = (id, emoji, name, idx) => {
     const b = document.createElement('div');
     b.className = 'cat'; b.setAttribute('aria-selected', S.cat === id ? 'true' : 'false');
@@ -471,7 +530,7 @@ function paintCats() {
   const all = mk('all', '🌍', U('all', 'همه کشورها'), 0);
   all.style.setProperty('--tint', getComputedStyle(document.documentElement).getPropertyValue('--c1').trim() || '#2E7DFF');
   box.appendChild(all);
-  (B.cats || []).forEach((c, i) => box.appendChild(mk(c.id, c.emoji || '🏳️', c.name, i)));
+  cats.forEach((c, i) => box.appendChild(mk(c.id, c.emoji || '🏳️', c.name, i)));
 }
 
 function paintHot() {
@@ -900,6 +959,16 @@ function boot() {
   $$('#nav button')[1].querySelector('span').textContent = U('nav_shop', 'شماره‌ها');
   $$('#nav button')[2].querySelector('span').textContent = U('nav_orders', 'سفارش‌ها');
   $$('#nav button')[3].querySelector('span').textContent = U('nav_me', 'حساب من');
+
+  // 🔎 جستجو — با کاتالوگِ چند ده‌تایی، تنها راهِ رسیدن به یک کشورِ خاص
+  const q = $('#q');
+  q.placeholder = U('search', 'جستجو…');
+  let qT = 0;
+  q.addEventListener('input', () => {
+    clearTimeout(qT);
+    qT = setTimeout(() => { S.q = q.value; paintGrid(); }, 160);
+  });
+  $('#more').addEventListener('click', () => { buzz(); paintGrid(false); });
 
   $('#balBtn').addEventListener('click', () => { buzz(); askTopup(0); });
   $('#topupBtn').addEventListener('click', () => { buzz(); askTopup(0); });

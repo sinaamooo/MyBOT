@@ -38,6 +38,10 @@ function numDefaults() {
         'poll'   => 6,         // فاصله‌ی دو پرسش از پنل — ثانیه
         'markup' => 0,         // درصد سود روی قیمتِ پنل
         'sync_price' => true,  // قیمتِ پنل منبعِ حقیقت باشد و هر بار به‌روز شود
+        // 🎯 فقط این سرویس‌ها وارد شوند (کد سرویسِ پنل، با ویرگول).
+        //    خالی یعنی همه — که برای فروشنده‌ای که فقط یک چیز می‌فروشد
+        //    یعنی صدها محصولِ بی‌ربط و یک مینی‌اپِ غیرقابل‌استفاده.
+        'svc_only' => '',
         'api'   => [
             'on'         => false,
             'name'       => 'پنل شماره',
@@ -94,7 +98,7 @@ function numCfg() {
     if (!is_array($c)) return $d;
 
     $out = array_replace($d, array_intersect_key($c,
-        ['wait' => 1, 'poll' => 1, 'markup' => 1, 'sync_price' => 1]));
+        ['wait' => 1, 'poll' => 1, 'markup' => 1, 'sync_price' => 1, 'svc_only' => 1]));
     $out['api'] = array_replace($d['api'], is_array($c['api'] ?? null) ? $c['api'] : []);
     $out['api']['ops'] = $d['api']['ops'];
     foreach ((array)($c['api']['ops'] ?? []) as $k => $v) {
@@ -859,7 +863,11 @@ function numPresets() {
                 'info'      => '/v2.php/?method=getinfo&operator=min',
                 'services'  => '/v2.php/?method=getservice',
                 'countries' => '/v2.php/?method=getcountry',
+                'svc_arg'   => 'service',   // نامِ پارامترِ فیلترِ سرویس
             ],
+            // 🎯 تلگرام. اگر چیز دیگری هم می‌فروشید، از «🎯 سرویس‌ها»
+            //    عوضش کنید — ولی پیش‌فرض همانی باشد که بیشتر فروخته می‌شود.
+            'svc_only'  => '1',
             // متدهایی که در «🧪 تست خام» به درد می‌خورند
             'probe' => [
                 'getinfo&operator=min', 'getinfo&country=8', 'getservice', 'getcountry',
@@ -883,6 +891,8 @@ function numApplyPreset($key) {
             $c['api']['ops'][$op] = array_replace((array)($c['api']['ops'][$op] ?? []), $fields);
         $c['api']['preset']     = $p['label'];
         $c['api']['preset_key'] = $k;
+        if (isset($p['svc_only']) && trim((string)($c['svc_only'] ?? '')) === '')
+            $c['svc_only'] = (string)$p['svc_only'];
     });
     return true;
 }
@@ -901,6 +911,18 @@ function numApplyPreset($key) {
 //   • ادغام، نه جایگزینی. قیمت و نام و ایموجی‌ای که ادمین دست‌کاری کرده
 //     دست‌نخورده می‌ماند؛ فقط چیزهای تازه اضافه می‌شوند.
 //   • هیچ‌وقت چیزی حذف نمی‌شود. سرویسی که از پنل رفته، خاموش می‌شود نه پاک.
+
+/** کدهای سرویسی که اجازه‌ی ورود دارند — آرایه‌ی خالی یعنی همه */
+function numSvcOnly() {
+    $raw = trim((string)numVal('svc_only', ''));
+    if ($raw === '') return [];
+    $out = [];
+    foreach (preg_split('/[,\s|]+/', $raw) as $x) {
+        $x = trim($x);
+        if ($x !== '') $out[] = $x;
+    }
+    return array_values(array_unique($out));
+}
 
 /**
  * قالبِ فعلی.
@@ -969,7 +991,14 @@ function numCatalog() {
     if (!$p || empty($p['catalog'])) return [[], [], 'این پنل «وارد کردن» ندارد — قالبش را نمی‌شناسیم'];
     $c = $p['catalog'];
 
-    [$rows, $err] = numFetch($c['info']);
+    // 🎯 فیلترِ سرویس را به خودِ درخواست بده، نه بعدش.
+    //    هم پاسخ کوچک‌تر است، هم پنل کمتر زور می‌زند.
+    $only = numSvcOnly();
+    $path = $c['info'];
+    if ($only && count($only) === 1 && !empty($c['svc_arg']))
+        $path .= (str_contains($path, '?') ? '&' : '?') . $c['svc_arg'] . '=' . rawurlencode($only[0]);
+
+    [$rows, $err] = numFetch($path);
     if (!is_array($rows)) return [[], [], $err ?: 'فهرست شماره‌ها نیامد'];
     if (!array_is_list($rows)) {
         // پنل به‌جای فهرست، خطا داده
@@ -997,16 +1026,25 @@ function numCatalog() {
         $cc = (string)($r['country'] ?? '');
         $ss = (string)($r['service'] ?? '');
         if ($cc === '' || $ss === '') continue;
+        // پنل‌هایی که فیلترِ سمتِ خودشان را ندارند، اینجا غربال می‌شوند
+        if ($only && !in_array($ss, $only, true)) continue;
 
-        $countries[$cc] = [
-            'name' => $ctryName[$cc] ?? ('کشور ' . $cc),
-            'flag' => numFlag($ctryEn[$cc] ?? ''),
-        ];
+        $cName = $ctryName[$cc] ?? ('کشور ' . $cc);
+        $flag  = numFlag($ctryEn[$cc] ?? '');
+        $countries[$cc] = ['name' => $cName, 'flag' => $flag];
+
+        // 🏷 اسمِ محصول: وقتی فقط یک سرویس می‌فروشیم، نوشتنِ اسمِ آن روی
+        //    تک‌تکِ کارت‌ها فقط جا می‌گیرد — خودِ کشور کافی است.
+        $single = ($only && count($only) === 1);
         $out[] = [
             'sid'     => (string)$r['id'],
             'country' => $cc,
             'service' => $ss,
-            'name'    => ($svcName[$ss] ?? ('سرویس ' . $ss)) . ' — ' . ($ctryName[$cc] ?? $cc),
+            'flag'    => $flag,
+            'cname'   => $cName,
+            'single'  => $single,
+            'name'    => $single ? $cName
+                                 : (($svcName[$ss] ?? ('سرویس ' . $ss)) . ' — ' . $cName),
             'price'   => (float)($r['amount'] ?? 0),
             'count'   => (int)($r['count'] ?? 0),
             'ttl'     => numParseTtl($r['time'] ?? ''),
@@ -1028,7 +1066,13 @@ function numImport(array $countries, array $rows, $markup = 0, $syncPrice = null
     // قیمتِ پنل، منبعِ حقیقت است یا قیمتی که ادمین دستی گذاشته؟
     if ($syncPrice === null) $syncPrice = !empty(numVal('sync_price', true));
 
-    maSet('num', function (&$a) use ($countries, $rows, $mul, $syncPrice, &$newC, &$newI, &$upd, &$off) {
+    // 🎯 وقتی فقط یک سرویس می‌فروشیم، «کشور» دیگر دسته‌بندی نیست — خودِ
+    //    محصول است. ساختنِ ۶۰ دسته که هرکدام یک کارت دارد، هم نوارِ
+    //    دسته‌ها را بی‌فایده می‌کند هم کاربر را دو کلیک دورتر می‌برد.
+    $single = !empty($rows) && !empty($rows[0]['single']);
+
+    maSet('num', function (&$a) use ($countries, $rows, $mul, $syncPrice, $single,
+                                     &$newC, &$newI, &$upd, &$off) {
         if (!is_array($a['cats'] ?? null))  $a['cats']  = [];
         if (!is_array($a['items'] ?? null)) $a['items'] = [];
 
@@ -1038,15 +1082,17 @@ function numImport(array $countries, array $rows, $markup = 0, $syncPrice = null
             $code = trim((string)($c['code'] ?? ''));
             if ($code !== '') $byCode[$code] = $i;
         }
-        $order = count($a['cats']);
-        foreach ($countries as $code => $info) {
-            if (isset($byCode[$code])) continue;         // هست — دست نمی‌زنیم
-            $a['cats'][] = [
-                'id' => 'c' . bin2hex(random_bytes(3)), 'emoji' => $info['flag'],
-                'name' => $info['name'], 'code' => $code, 'on' => true, 'order' => ++$order,
-            ];
-            $byCode[$code] = count($a['cats']) - 1;
-            $newC++;
+        if (!$single) {
+            $order = count($a['cats']);
+            foreach ($countries as $code => $info) {
+                if (isset($byCode[$code])) continue;     // هست — دست نمی‌زنیم
+                $a['cats'][] = [
+                    'id' => 'c' . bin2hex(random_bytes(3)), 'emoji' => $info['flag'],
+                    'name' => $info['name'], 'code' => $code, 'on' => true, 'order' => ++$order,
+                ];
+                $byCode[$code] = count($a['cats']) - 1;
+                $newC++;
+            }
         }
 
         // ── سرویس‌ها ──
@@ -1059,7 +1105,7 @@ function numImport(array $countries, array $rows, $markup = 0, $syncPrice = null
         $iOrder = count($a['items']);
         foreach ($rows as $r) {
             $seen[$r['sid']] = true;
-            $catIdx = $byCode[$r['country']] ?? null;
+            $catIdx = $single ? null : ($byCode[$r['country']] ?? null);
             $catId  = $catIdx !== null ? (string)$a['cats'][$catIdx]['id'] : '';
 
             if (isset($bySid[$r['sid']])) {
@@ -1078,7 +1124,9 @@ function numImport(array $countries, array $rows, $markup = 0, $syncPrice = null
 
             $a['items'][] = [
                 'id' => 'i' . bin2hex(random_bytes(3)), 'cat' => $catId, 'svc' => $r['sid'],
-                'emoji' => '☎️', 'name' => $r['name'], 'desc' => '',
+                // پرچمِ کشور روی کارت، وقتی خودِ کشور محصول است
+                'emoji' => $single ? ($r['flag'] ?? '☎️') : '☎️',
+                'name' => $r['name'], 'desc' => '',
                 'price' => round($r['price'] * $mul), 'unit' => '', 'badge' => '',
                 'ask' => 'none', 'min' => 1, 'max' => 1,
                 'on' => (bool)$r['on'], 'order' => ++$iOrder,
@@ -1158,6 +1206,9 @@ function numAdmHome($chatId, $msgId) {
         $ni = count(array_filter((array)($a['items'] ?? []), fn($x) => !empty($x['on'])));
         $t .= "\n🌍 کشور: <b>{$nc}</b> · ☎️ سرویس: <b>{$ni}</b>";
         $t .= "\nمینی‌اپ: " . (!empty($a['on']) ? '✅ باز' : '❌ بسته') . "\n";
+        $only = numSvcOnly();
+        $t .= "🎯 فقط سرویسِ: <b>" . ($only ? h(implode('، ', $only)) : 'همه') . "</b>\n";
+        if (!$only) $t .= "⚠️ بدون فیلتر، همه‌ی سرویس‌های پنل وارد می‌شوند و مینی‌اپ سنگین می‌شود.\n";
         if ($ni === 0) $t .= "⚠️ هیچ سرویسی روشن نیست — «📥 وارد کردن» را بزنید.\n";
     }
 
@@ -1171,6 +1222,7 @@ function numAdmHome($chatId, $msgId) {
         [btnCb(!empty($api['on']) ? '❌ خاموش کن' : '✅ روشن کن', 'numtog', 'info')],
         [btnCb('⚡️ آماده‌سازی خودکار پنل', 'numpre', 'confirm')],
         [btnCb('📥 وارد کردن کشورها و سرویس‌ها', 'numimp', 'buy')],
+        [btnCb('🎯 چه چیزی می‌فروشید؟', 'numsvc', 'admin')],
         [btnCb('🧪 تست خام (هر متدی)', 'numraw', 'confirm')],
         [btnCb('📖 خواندن مستندات API', 'numspec', 'confirm')],
         [btnCb('💰 تست موجودی پنل', 'numtest', 'confirm')],
@@ -1258,6 +1310,92 @@ function numOpFields($op) {
 }
 
 /**
+ * 🎯 کدام سرویس‌ها فروخته شوند.
+ *
+ * فهرست را از خودِ پنل می‌گیریم تا ادمین لازم نباشد کدها را حفظ کند یا
+ * از مستندات دربیاورد. هرکدام یک دکمه با تیک.
+ */
+function numAdmServices($chatId, $msgId) {
+    $back = inlineKb([[btnCb('☎️ شماره مجازی', 'num_home', 'admin')]]);
+    $p = numActivePreset();
+    if (!$p || empty($p['catalog']['services'])) {
+        editMsg(BOT_TOKEN, $chatId, $msgId,
+            "🎯 <b>سرویس‌های مجاز</b>\n\n" .
+            "کدِ سرویس‌هایی که می‌فروشید را با ویرگول بفرستید — خالی یعنی همه.\n" .
+            "الان: <code>" . h(trim((string)numVal('svc_only', '')) ?: '(همه)') . "</code>",
+            inlineKb([[btnCb('✏️ ویرایش دستی', 'nums_svconly', 'admin')],
+                      [btnCb('🔙 بازگشت', 'num_home', 'nav')]]));
+        return;
+    }
+
+    [$list, $err] = numFetch($p['catalog']['services']);
+    $on = numSvcOnly();
+
+    $t  = "🎯 <b>چه چیزی می‌فروشید؟</b>\n\n";
+    $t .= "فقط سرویس‌هایی که تیک دارند وارد مینی‌اپ می‌شوند.\n";
+    $t .= "اگر هیچ‌کدام تیک نداشته باشد، همه وارد می‌شوند — که یعنی صدها " .
+          "محصولِ بی‌ربط و مینی‌اپی که باز نمی‌شود.\n\n";
+    $t .= "الان: <b>" . ($on ? h(implode('، ', $on)) : 'همه') . "</b>";
+
+    $rows = [];
+    if (!is_array($list) || !array_is_list($list)) {
+        $t .= "\n\n⚠️ فهرست سرویس‌ها از پنل نیامد" . ($err ? ': ' . h(mb_substr($err, 0, 90)) : '.');
+    } else {
+        $line = [];
+        foreach ($list as $x) {
+            if (!is_array($x) || !isset($x['id'])) continue;
+            $id  = (string)$x['id'];
+            $nm  = trim((string)($x['name'] ?? $x['name_en'] ?? $id));
+            $tik = in_array($id, $on, true) ? '✅ ' : '⚪️ ';
+            $line[] = btnCb($tik . mb_substr($nm, 0, 18), 'numsvc_' . $id, 'admin');
+            if (count($line) === 2) { $rows[] = $line; $line = []; }
+        }
+        if ($line) $rows[] = $line;
+    }
+    $rows[] = [btnCb('🧹 همه را بردار (یعنی همه‌چیز وارد شود)', 'numsvcx', 'reject')];
+    $rows[] = [btnCb('🔙 بازگشت', 'num_home', 'nav')];
+    editMsg(BOT_TOKEN, $chatId, $msgId, $t, inlineKb($rows));
+}
+
+/**
+ * 🧹 محصولاتی که دیگر جزو سرویس‌های مجاز نیستند را از مینی‌اپ بردار.
+ *
+ * فرقش با «خاموش کردن» این است که اینها واقعا نباید آنجا باشند: خاموشِ
+ * صدتا محصولِ بی‌ربط، هم فهرستِ پنل را غیرقابل‌استفاده می‌کند هم هر بار
+ * که ادمین چیزی را روشن می‌کند دوباره سر و کله‌شان پیدا می‌شود.
+ *
+ * برگشت: [تعداد محصولِ حذف‌شده, تعداد دسته‌ی خالیِ حذف‌شده]
+ */
+function numPruneCatalog(array $keepSids) {
+    $keep = array_flip(array_map('strval', $keepSids));
+    $delI = $delC = 0;
+
+    maSet('num', function (&$a) use ($keep, &$delI, &$delC) {
+        $items = [];
+        foreach ((array)($a['items'] ?? []) as $it) {
+            $svc = trim((string)($it['svc'] ?? ''));
+            // ردیفِ دستیِ ادمین (بدون کد سرویس) هیچ‌وقت حذف نمی‌شود
+            if ($svc === '' || isset($keep[$svc])) { $items[] = $it; continue; }
+            $delI++;
+        }
+        $a['items'] = array_values($items);
+
+        // دسته‌ای که دیگر هیچ محصولی ندارد و کدِ کشور دارد (یعنی خودمان
+        // ساخته‌ایمش) جا اشغال می‌کند
+        $used = [];
+        foreach ($a['items'] as $it) $used[(string)($it['cat'] ?? '')] = 1;
+        $cats = [];
+        foreach ((array)($a['cats'] ?? []) as $c) {
+            $id = (string)($c['id'] ?? '');
+            if (trim((string)($c['code'] ?? '')) !== '' && !isset($used[$id])) { $delC++; continue; }
+            $cats[] = $c;
+        }
+        $a['cats'] = array_values($cats);
+    });
+    return [$delI, $delC];
+}
+
+/**
  * 📥 پیش‌نمایشِ وارد کردن.
  *
  * اول نشان می‌دهیم چه چیزی قرار است بیاید و چه چیزی دست‌نخورده می‌ماند،
@@ -1293,10 +1431,23 @@ function numAdmImport($chatId, $msgId) {
     foreach ($countries as $code => $_) if (!isset($haveC[$code])) $newC++;
     foreach ($rows as $r)               if (!isset($haveI[$r['sid']])) $newI++;
 
-    $mk = (float)numVal('markup', 0);
+    $mk   = (float)numVal('markup', 0);
+    $only = numSvcOnly();
+
+    // چندتا از چیزهایی که الان در مینی‌اپ هستند، بیرونِ فیلترند؟
+    $willDel = 0;
+    if ($only) {
+        $keep = array_flip(array_map('strval', array_column($rows, 'sid')));
+        foreach ((array)($a['items'] ?? []) as $it) {
+            $svc = trim((string)($it['svc'] ?? ''));
+            if ($svc !== '' && !isset($keep[$svc])) $willDel++;
+        }
+    }
 
     $t  = "📥 <b>وارد کردن از پنل</b>\n\n";
-    $t .= "در پنل پیدا شد:\n";
+    $t .= "🎯 فیلتر: <b>" . ($only ? h(implode('، ', $only)) : 'همه‌ی سرویس‌ها') . "</b>\n";
+    if (!$only) $t .= "⚠️ بدون فیلتر، هرچه پنل دارد وارد می‌شود.\n";
+    $t .= "\nدر پنل پیدا شد:\n";
     $t .= "🌍 <b>" . count($countries) . "</b> کشور · ☎️ <b>" . count($rows) . "</b> سرویس\n\n";
     $t .= "اگر تایید کنید:\n";
     $t .= "➕ <b>{$newC}</b> کشور و <b>{$newI}</b> سرویسِ تازه ساخته می‌شود\n";
@@ -1306,7 +1457,10 @@ function numAdmImport($chatId, $msgId) {
         ? "💰 قیمتِ سرویس‌های موجود هم <b>از پنل به‌روز می‌شود</b>\n"
         : "🔒 قیمتِ سرویس‌های موجود <b>دست نمی‌خورد</b>\n";
     $t .= "🔒 نام و ایموجی و برچسب همیشه دست‌نخورده می‌مانند\n";
-    $t .= "🗑 هیچ‌چیز پاک نمی‌شود — سرویسی که در پنل نباشد فقط خاموش می‌شود\n\n";
+    $t .= $willDel
+        ? "🧹 <b>{$willDel}</b> محصولِ بیرون از فیلتر <b>حذف</b> می‌شود\n"
+        : "🗑 سرویسی که در پنل نباشد فقط خاموش می‌شود، پاک نه\n";
+    $t .= "\n";
     $t .= "💵 سود روی قیمتِ پنل: <b>" . rtrim(rtrim(number_format($mk, 1), '0'), '.') . "٪</b>";
     if ($mk <= 0) $t .= "\n<i>یعنی به قیمتِ خرید می‌فروشید — سود را قبل از وارد کردن ست کنید.</i>";
 
@@ -1338,11 +1492,20 @@ function numAdmImportGo($chatId, $msgId) {
 
     [$nc, $ni, $up, $off] = numImport($countries, $rows, (float)numVal('markup', 0));
 
+    // 🧹 هرچه جزو سرویس‌های مجاز نیست، از مینی‌اپ برود.
+    //    فقط وقتی فیلتری هست — بدون فیلتر، «مجاز» یعنی همه و این کار
+    //    معنی ندارد.
+    $delI = $delC = 0;
+    if (numSvcOnly()) [$delI, $delC] = numPruneCatalog(array_column($rows, 'sid'));
+
     $t  = "✅ <b>وارد شد</b>\n\n";
     $t .= "🌍 کشور تازه: <b>{$nc}</b>\n";
     $t .= "➕ سرویس تازه: <b>{$ni}</b>\n";
     $t .= "🔄 به‌روزشده: <b>{$up}</b>\n";
-    $t .= "⚪️ خاموش‌شده: <b>{$off}</b>\n\n";
+    $t .= "⚪️ خاموش‌شده: <b>{$off}</b>\n";
+    if ($delI || $delC) $t .= "🧹 حذف‌شده (بیرون از سرویس‌های شما): <b>{$delI}</b> محصول" .
+                              ($delC ? " · <b>{$delC}</b> دسته" : '') . "\n";
+    $t .= "\n";
     $t .= "حالا در «🚀 مینی‌اپ‌ها ← ☎️ مینی‌اپ شماره مجازی» قیمت‌ها و نام‌ها را " .
           "هر طور خواستید ویرایش کنید.";
 
@@ -1520,6 +1683,26 @@ function numCallback($data, $uid, $chatId, $msgId, $cbId, $isAdmin) {
             inlineKb([[btnCb('☎️ شماره مجازی', 'num_home', 'admin')]]));
         return true;
     }
+    if ($data === 'numsvc')  { $ack('⏳ خواندن فهرست…'); numAdmServices($chatId, $msgId); return true; }
+    if ($data === 'numsvcx') {
+        numSet(function (&$c) { $c['svc_only'] = ''; });
+        $ack('همه‌ی سرویس‌ها');
+        numAdmServices($chatId, $msgId);
+        return true;
+    }
+    if (str_starts_with($data, 'numsvc_')) {
+        $id = substr($data, 7);
+        if (preg_match('/^[A-Za-z0-9_.:-]{1,32}$/', $id)) {
+            $on = numSvcOnly();
+            $on = in_array($id, $on, true)
+                ? array_values(array_diff($on, [$id]))
+                : array_merge($on, [$id]);
+            numSet(function (&$c) use ($on) { $c['svc_only'] = implode(',', $on); });
+            $ack('✅');
+        } else $ack();
+        numAdmServices($chatId, $msgId);
+        return true;
+    }
     if ($data === 'numimp')   { $ack('⏳ خواندن فهرست…'); numAdmImport($chatId, $msgId); return true; }
     if ($data === 'numimpgo') { $ack('⏳ در حال وارد کردن…'); numAdmImportGo($chatId, $msgId); return true; }
     if ($data === 'numsync') {
@@ -1580,6 +1763,9 @@ function numCallback($data, $uid, $chatId, $msgId, $cbId, $isAdmin) {
         'nums_wait'       => ['num_wait',      "⏳ مهلت انتظار کد را به ثانیه بفرستید.\nمثال: <code>900</code> یعنی ۱۵ دقیقه. کمتر از ۶۰ پذیرفته نمی‌شود."],
         'nums_poll'       => ['num_poll',      "🔁 فاصله‌ی دو پرسش از پنل را به ثانیه بفرستید.\nکمتر از ۳ ثانیه پنل را خسته می‌کند."],
         'nums_timeout'    => ['num_timeout',   "⏱ مهلت هر تماس با پنل را به ثانیه بفرستید. بین ۳ تا ۶۰."],
+        'nums_svconly'    => ['num_svconly',   "🎯 کدِ سرویس‌هایی که می‌فروشید را با ویرگول بفرستید.\n\n" .
+                                               "مثال نامبرلند: <code>1</code> یعنی فقط تلگرام.\n\n" .
+                                               "برای «همه» یک خط تیره بفرستید: <code>-</code>"],
         'nums_markup'     => ['num_markup',    "💵 درصد سود روی قیمتِ پنل را بفرستید.\n\n" .
                                                "مثال: <code>40</code> یعنی شماره‌ی ۲٬۰۰۰ تومانیِ پنل، ۲٬۸۰۰ تومان فروخته شود.\n\n" .
                                                "موقعِ «📥 وارد کردن» روی قیمتِ پنل کشیده می‌شود.\n" .
@@ -1724,6 +1910,18 @@ function numStateHandle($action, $msg, $uid, $chatId) {
             $v = max(3, min(60, (int)numDigits($plain)));
             numSet(function (&$c) use ($v) { $c['api']['timeout'] = $v; });
             $done('✅ مهلت تماس: <b>' . $v . '</b> ثانیه');
+            return true;
+
+        case 'num_svconly':
+            $v = $blank ? '' : implode(',', array_filter(array_map(
+                    fn($x) => preg_replace('/[^A-Za-z0-9_.:-]/', '', trim($x)),
+                    preg_split('/[,\s|]+/', $plain))));
+            numSet(function (&$c) use ($v) { $c['svc_only'] = $v; });
+            clearState($uid);
+            sendMsg(BOT_TOKEN, $chatId,
+                $v === '' ? '✅ همه‌ی سرویس‌ها وارد می‌شوند.' : '✅ فقط: <code>' . h($v) . '</code>',
+                inlineKb([[btnCb('📥 وارد کردن', 'numimp', 'buy')],
+                          [btnCb('☎️ شماره مجازی', 'num_home', 'admin')]]));
             return true;
 
         case 'num_markup':
