@@ -2241,17 +2241,7 @@ function showProducts($uid, $chatId, $extra = [], $replyTo = null) {
 
     $rows = [];
 
-    // 📋 و 🧾 اول از همه — بالای دکمه‌های مینی‌اپ و محصول‌ها.
-    //    جایشان اینجاست نه پایین، چون مینی‌اپ‌ها ممکن است از راه $extra
-    //    بیایند و آن‌وقت هرچه پایین‌تر بگذاریم زیرشان می‌افتد.
-    $tf = cfg()['tariff'] ?? [];
-    if (!empty($tf['on'])) {
-        $b = ['text' => trim(($tf['btn']['emoji'] ?? '') . ' ' . ($tf['btn']['text'] ?? 'لیست تعرفه‌ها')),
-              'callback_data' => 'tariff'];
-        if (isStyle($tf['btn']['color'] ?? '')) $b['style'] = $tf['btn']['color'];
-        if (!empty($tf['btn']['icon'])) $b['icon_custom_emoji_id'] = (string)$tf['btn']['icon'];
-        $rows[] = [$b];
-    }
+    // 🧾 لیست سفارشات — اولین دکمه‌ی صفحه، بالای مینی‌اپ‌ها و محصول‌ها
     $ol = cfg()['orders_list'] ?? [];
     if (!empty($ol['on'])) $rows[] = [olBtn($ol['btn'] ?? [], 'ordlist_0', 'info')];
 
@@ -2272,6 +2262,16 @@ function showProducts($uid, $chatId, $extra = [], $replyTo = null) {
         foreach ($r as $b) if (isset($b['web_app'])) { $mergedIn = true; break 2; }
     }
     if (!$mergedIn) foreach (maRows() as $r) $rows[] = $r;
+
+    // 📋 لیست تعرفه‌ها — آخرین دکمه، زیر همه
+    $tf = cfg()['tariff'] ?? [];
+    if (!empty($tf['on'])) {
+        $b = ['text' => trim(($tf['btn']['emoji'] ?? '') . ' ' . ($tf['btn']['text'] ?? 'لیست تعرفه‌ها')),
+              'callback_data' => 'tariff'];
+        if (isStyle($tf['btn']['color'] ?? '')) $b['style'] = $tf['btn']['color'];
+        if (!empty($tf['btn']['icon'])) $b['icon_custom_emoji_id'] = (string)$tf['btn']['icon'];
+        $rows[] = [$b];
+    }
 
     panelShow($uid, $chatId, 'shop', $text, inlineKb($rows), $replyTo);
 }
@@ -2387,12 +2387,16 @@ function showOrderList($uid, $chatId, $page = 0, $msgId = null) {
         ];
     }
 
-    // 🔁 هر دو دکمه‌ی سوییچ، همیشه و کنار هم.
-    //    «صفحه بعد» در آخرین صفحه به اولی برمی‌گردد تا هیچ‌وقت مرده نباشد.
+    // 🔁 هر دو دکمه‌ی سوییچ، همیشه و کنار هم — «صفحه قبل» سمت اول آرایه.
+    //
+    //    ⚠️ دور نمی‌زنند: از صفحه‌ی ۱ به عقب و از آخری به جلو راهی نیست.
+    //    در آن دو حالت دکمه به‌جای پریدن، فقط می‌گوید به ته رسیده‌ای.
     if ($max > 1) {
         $rows[] = [
-            olBtn($ol['next']  ?? ['text' => 'صفحه بعد'], 'ordlist_' . (($page + 1) % $max), 'primary'),
-            olBtn($ol['first'] ?? ['text' => 'صفحه قبل'], 'ordlist_' . (($page - 1 + $max) % $max), 'primary'),
+            olBtn($ol['first'] ?? ['text' => 'صفحه قبل'],
+                  $page > 0 ? 'ordlist_' . ($page - 1) : 'ordstop_a', 'primary'),
+            olBtn($ol['next']  ?? ['text' => 'صفحه بعد'],
+                  $page + 1 < $max ? 'ordlist_' . ($page + 1) : 'ordstop_z', 'primary'),
         ];
     }
     $rows[] = [olBtn($ol['back'] ?? ['text' => 'برگشت'], 'menu_buy', 'danger')];
@@ -5193,6 +5197,8 @@ function masterHandle($update) {
 
         // 🧾 لیست سفارشات — دکمه‌های ردیف‌ها فقط برچسب‌اند
         if ($data === 'ordnop') { answerCb(BOT_TOKEN, $cbId); return; }
+        if ($data === 'ordstop_a') { answerCb(BOT_TOKEN, $cbId, 'همین صفحه‌ی اول است.', true); return; }
+        if ($data === 'ordstop_z') { answerCb(BOT_TOKEN, $cbId, 'این آخرین صفحه است.', true); return; }
         if (preg_match('/^ordlist_(\d+)$/', $data, $om)) {
             answerCb(BOT_TOKEN, $cbId);
             showOrderList($uid, $chatId, (int)$om[1], $msgId);
