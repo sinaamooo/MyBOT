@@ -978,9 +978,11 @@ function numClose($orderId) {
     $act = numGet($orderId);
     if (!$act || empty($act['aid']) || !empty($act['closed'])) return;
 
-    [$ok, $e] = numOpDo('close', (string)$act['aid']);
-    if ($ok) numSetAct($orderId, function (&$x) { $x['closed'] = time(); return true; });
-    else     error_log('[numbers] بستن سفارش روی ' . numProvName() . ' نگرفت: ' . $e);
+    // ⚠️ قبلا شکست فقط در error_log می‌نشست و هیچ‌کس دوباره تلاش
+    //    نمی‌کرد — شماره روی پنل باز می‌ماند و پولش می‌سوخت. حالا از
+    //    همان مسیری می‌رود که لغو می‌رود: اگر نگرفت، صف‌بندی می‌شود و
+    //    numRetryPanel با فاصله‌ی فزاینده دوباره امتحان می‌کند.
+    numTellPanelCancel($orderId);
 }
 
 /**
@@ -1090,28 +1092,119 @@ function numFinish($orderId, $why = 'cancel', $tellPanel = true) {
 function numTellPanelCancel($orderId) {
     $act = numGet($orderId);
     if (!$act || empty($act['aid'])) return [true, ''];
+    if (!empty($act['panel_closed'])) return [true, ''];    // قبلا بسته شده
 
-    $vars = ['id' => (string)$act['aid']];
+    $aid = (string)$act['aid'];
 
-    [$ok1, $err] = numOpDo('cancel', (string)$act['aid']);
-    $fail = $ok1 ? '' : ($err ?: 'پاسخی نیامد');
-
-    // ⛳️ رد شد چون پیامک رسیده؟ پس «بستن» جواب می‌دهد.
-    //    هر دو فروشنده همین قاعده را دارند: لغو فقط پیش از پیامک.
-    if ($fail !== '') {
-        [$ok2, ] = numOpDo('close', (string)$act['aid']);
-        if ($ok2) $fail = '';
+    // 1️⃣ اول بپرس پنل خودش این شماره را در چه حالی می‌بیند.
+    //
+    // ⚠️ همین یک پرسش، بزرگ‌ترین باگِ این بخش را می‌بندد. قبلا کورکورانه
+    //    «لغو» فرستاده می‌شد و بعد «بستن». ولی هر دو فروشنده قاعده‌ی
+    //    سفت‌وسختی دارند: لغو فقط روی شماره‌ی بی‌پیامک می‌گیرد و بستن
+    //    فقط روی شماره‌ای که پیامک گرفته. یعنی نصفِ حالت‌ها اول یک
+    //    درخواستِ محکوم‌به‌شکست می‌رفت، و اگر پنل همان لحظه سخت‌گیری
+    //    می‌کرد (مثلا «تا دو دقیقه بعدِ خرید لغو نکن»)، هر دو رد می‌شدند
+    //    و شماره روی پنل باز می‌ماند — یعنی پولِ رفته.
+    $state = numPanelState($aid);
+    if ($state === 'closed') {
+        numSetAct($orderId, function (&$x) {
+            $x['panel_err'] = '';
+            $x['panel_closed'] = time();
+            $x['closed'] = time();
+            unset($x['panel_pending']);
+            return true;
+        });
+        return [true, ''];
     }
+
+    // 2️⃣ عملیاتِ درست را اول امتحان کن، آن یکی را دومی.
+    //    (اگر حالِ پنل معلوم نشد، ترتیبِ قدیمی: لغو بعد بستن)
+    $ops  = ($state === 'sms') ? ['close', 'cancel'] : ['cancel', 'close'];
+    $fail = '';
+    foreach ($ops as $op) {
+        [$ok, $e] = numOpDo($op, $aid);
+        if ($ok) { $fail = ''; break; }
+        if ($fail === '') $fail = $e ?: 'پاسخی نیامد';
+    }
+
+    // 3️⃣ هر دو رد شدند؟ شاید بینِ این دو درخواست، خودِ پنل بسته‌اش کرده
+    //    (کد رسید و مهلت تمام شد). یک بار دیگر بپرس تا بی‌خود «باز» نماند.
+    if ($fail !== '' && numPanelState($aid) === 'closed') $fail = '';
 
     numSetAct($orderId, function (&$x) use ($fail) {
         $x['panel_err']   = $fail;
         $x['panel_tries'] = (int)($x['panel_tries'] ?? 0) + 1;
-        if ($fail === '') { $x['panel_closed'] = time(); $x['closed'] = time(); unset($x['panel_pending']); }
-        else              { $x['panel_pending'] = time(); }
+        if ($fail === '') {
+            $x['panel_closed'] = time();
+            $x['closed'] = time();
+            unset($x['panel_pending']);
+        } else {
+            $x['panel_pending'] = time();
+        }
         return true;
     });
 
     return [$fail === '', $fail];
+}
+
+/**
+ * 🔎 پنل این شماره را در چه حالی می‌بیند؟
+ *
+ *   'open'   — هنوز پیامکی نیامده  → «لغو» می‌گیرد
+ *   'sms'    — پیامک آمده           → «بستن» می‌گیرد
+ *   'closed' — لغو/مسدود/تمام‌شده   → کاری لازم نیست
+ *   ''       — معلوم نشد (شبکه یا پاسخِ ناشناخته)
+ */
+function numPanelState($aid) {
+    $aid = trim((string)$aid);
+    if ($aid === '') return '';
+
+    [$r, ] = numCall('status', ['id' => $aid]);
+    if (!is_array($r)) return '';
+
+    if (numProv() === 'numberland') {
+        // ⚠️ اینجا numNlErr به درد نمی‌خورد: در checkstatus خودِ RESULT
+        //    «وضعیت» است نه «موفق/ناموفق»، پس RESULT=2 (کد رسید) را
+        //    خطا می‌خواند. قاعده‌ی درست: منفی یعنی خطا، ۱ تا ۶ یعنی وضعیت.
+        $st = $r['RESULT'] ?? null;
+        if (!is_numeric($st)) return '';
+        $st = (int)$st;
+
+        if ($st < 0) {
+            // شناسه‌ی ناشناخته یعنی روی پنل نیست — بسته حساب می‌شود،
+            // وگرنه تا ابد برای چیزی که وجود ندارد دوباره تلاش می‌کنیم.
+            $d = trim((string)($r['DESCRIPTION'] ?? ''));
+            foreach (['پیدا نشد', 'یافت نشد', 'وجود ندارد', 'not found', 'invalid id'] as $needle)
+                if (stripos($d, $needle) !== false) return 'closed';
+            return '';
+        }
+
+        // ۱ منتظر · ۲ کد رسید · ۳ لغو · ۴ مسدود · ۵ منتظرِ کد مجدد · ۶ تمام
+        if (in_array($st, [3, 4, 6], true)) return 'closed';
+        if (in_array($st, [2, 5], true))    return 'sms';
+        if ($st === 1)                      return 'open';
+        return '';
+    }
+
+    $st = strtoupper(trim((string)($r['status'] ?? '')));
+    if (in_array($st, ['CANCELED', 'CANCELLED', 'TIMEOUT', 'FINISHED', 'BANNED'], true)) return 'closed';
+    if (is_array($r['sms'] ?? null) && count($r['sms']) > 0) return 'sms';
+    if ($st === 'RECEIVED') return 'sms';
+    if ($st === 'PENDING')  return 'open';
+    return '';
+}
+
+/**
+ * ⏳ فاصله‌ی تلاشِ بعدی — فزاینده.
+ *
+ * ثابتِ ۶۰ ثانیه دو جور بد بود: برای «تا دو دقیقه بعدِ خرید لغو نکن»
+ * زیادی زود، و برای قطعیِ طولانی زیادی مکرر. حالا اولین تلاش‌ها سریع‌اند
+ * (شاید فقط یک لرزشِ لحظه‌ای بوده) و بعد فاصله باز می‌شود.
+ */
+function numPanelBackoff($tries) {
+    static $steps = [15, 45, 120, 300, 600, 1800, 3600];
+    $i = max(0, (int)$tries - 1);
+    return $steps[min($i, count($steps) - 1)];
 }
 
 /**
@@ -1121,6 +1214,8 @@ function numTellPanelCancel($orderId) {
  * نگرفت، دیگر خودش خوب نمی‌شود و ادمین باید بداند — هر شماره‌ای که روی
  * ۵سیم باز بماند، پولِ رفته است.
  */
+if (!defined('NUM_PANEL_TRIES')) define('NUM_PANEL_TRIES', 14);
+
 function numRetryPanel($limit = 5) {
     $n = 0;
     foreach (numAll() as $act) {
@@ -1129,21 +1224,22 @@ function numRetryPanel($limit = 5) {
         if (in_array(($act['status'] ?? ''), ['waiting', 'buying'], true)) continue;
 
         $tries = (int)($act['panel_tries'] ?? 0);
-        if ($tries >= 6) continue;                       // بس است، دیگر خودش درست نمی‌شود
-        if (time() - (int)$act['panel_pending'] < 60) continue;
+        if ($tries >= NUM_PANEL_TRIES) continue;         // بس است، دیگر خودش درست نمی‌شود
+        // فاصله‌ی فزاینده: اول سریع، بعد آرام‌تر
+        if (time() - (int)$act['panel_pending'] < numPanelBackoff($tries)) continue;
 
         $oid = (string)$act['order'];
         [$ok, $err] = numTellPanelCancel($oid);
         $n++;
 
         // درست سرِ تلاشِ آخر، یک بار خبر بده
-        if (!$ok && $tries + 1 >= 6 && defined('ADMIN_ID') && ADMIN_ID) {
+        if (!$ok && $tries + 1 >= NUM_PANEL_TRIES && defined('ADMIN_ID') && ADMIN_ID) {
             sendMsg(BOT_TOKEN, ADMIN_ID,
-                "⚠️ <b>لغو روی ۵سیم نگرفت</b>\n\n" .
+                "⚠️ <b>لغو روی " . h(numProvName()) . " نگرفت</b>\n\n" .
                 '☎️ <code>' . h((string)($act['phone'] ?? '')) . "</code>\n" .
                 '🧾 <code>' . h($oid) . "</code>\n" .
                 '❌ <code>' . h(mb_substr((string)$err, 0, 200)) . "</code>\n\n" .
-                "پول کاربر برگشته، ولی این سفارش روی ۵سیم باز مانده. " .
+                "پول کاربر برگشته، ولی این سفارش روی " . h(numProvName()) . " باز مانده. " .
                 "دستی ببندیدش، وگرنه هزینه‌اش برنمی‌گردد.",
                 inlineKb([[btnCb('📋 شماره‌های باز', 'numopen', 'admin')]]));
         }
@@ -1160,7 +1256,7 @@ function numRetryPanel($limit = 5) {
  *   ۳. سفارش‌هایی که کدشان رسید و مهلتشان تمام شد → روی ۵سیم بسته شوند
  */
 function numTick($limit = 10) {
-    numRetryPanel(5);
+    numRetryPanel(max(5, (int)($limit / 2)));
     $now = time();
     $n   = 0;
     foreach (numAll() as $act) {
@@ -2040,6 +2136,7 @@ function numAdmHome($chatId, $msgId) {
          btnCb('🔁 فاصله‌ی پیگیری', 'nums_poll', 'admin')],
         [btnCb('⏱ مهلت تماس', 'nums_timeout', 'admin'),
          btnCb('🧢 سقف قیمت خرید', 'nums_max', 'admin')],
+        [btnCb('🌍 تعداد کشورِ صفحه‌ی اول', 'nums_cats', 'admin')],
         // ⚠️ array_merge نه «+»: جمعِ آرایه کلیدهای تکراری را دور می‌ریزد
         //    و دکمه‌ی دوم بی‌صدا گم می‌شد.
         array_merge([btnCb('🌐 آدرس پایه', 'nums_base', 'admin')],
@@ -2584,6 +2681,11 @@ function numCallback($data, $uid, $chatId, $msgId, $cbId, $isAdmin) {
             'poll'    => ["🔁 <b>فاصله‌ی پیگیری</b> (ثانیه)\n\nمثلا <code>6</code>", 'num_poll'],
             'timeout' => ["⏱ <b>مهلت تماس با ۵سیم</b> (ثانیه)\n\nمثلا <code>15</code>", 'num_timeout'],
             'max'     => ["🧢 <b>سقف قیمت خرید</b> (دلار)\n\nاگر قیمتِ لحظه‌ای از این بیشتر شد، خرید انجام نشود.\n\n<code>-</code> یعنی بی‌سقف.", 'num_max'],
+            'cats'    => ["🌍 <b>چند کشور روی صفحه‌ی اولِ مینی‌اپ؟</b>\n\n" .
+                          "فروشنده بالای صد کشور دارد؛ ریختنِ همه روی صفحه فقط اسکرول است.\n" .
+                          "پیشنهاد: <code>24</code>\n\n" .
+                          "بقیه‌ی کشورها گم نمی‌شوند — با جستجو پیدا می‌شوند.\n" .
+                          "<code>-</code> یعنی همه را نشان بده.", 'num_cats'],
         ];
         if (!isset($ask[$f])) { $ack(); return true; }
         [$txt, $state] = $ask[$f];
@@ -2674,6 +2776,14 @@ function numStateHandle($action, $msg, $uid, $chatId) {
             numSet(function (&$c) use ($v) { $c['api']['max'] = $v; });
             $done($v > 0 ? '✅ سقف: <b>$' . rtrim(rtrim(number_format($v, 2), '0'), '.') . '</b>'
                          : '✅ بی‌سقف.');
+            return true;
+
+        case 'num_cats':
+            $v = $blank ? 0 : max(0, (int)preg_replace('/[^0-9]/', '', numDigits($plain)));
+            maSet('num', function (&$a) use ($v) { $a['cats_max'] = $v; });
+            $done($v > 0
+                ? '✅ صفحه‌ی اول: <b>' . fmtNum($v) . '</b> کشور. بقیه با جستجو.'
+                : '✅ همه‌ی کشورها روی صفحه‌ی اول می‌آیند.');
             return true;
 
         case 'num_nl_svc':

@@ -21,6 +21,17 @@ function pxDefaults() {
     return [
         'on'  => true,
 
+        // 🏦 منبع اول: والکس — ایرانی، بی‌کلید، و تومان را مستقیم می‌دهد.
+        //
+        // منبع قبلی از بیرونِ ایران جواب می‌داد و روی هر تازه‌سازی چند
+        // ثانیه پشتِ تایم‌اوت می‌ماند؛ همان «گیر کردنِ» قیمت‌گیری. والکس
+        // از داخل نزدیک است و همان یک درخواست هم USDT/IRT می‌دهد هم
+        // جفت‌های دلاری. هر دو منبع حالا هم‌زمان (نه پشت‌سرهم) گرفته
+        // می‌شوند و والکس اولویت دارد؛ منبع دوم فقط جاهای خالی را پر
+        // می‌کند. اگر یکی از دسترس خارج شد، آن یکی تنهایی کافی است.
+        'wx_on'  => 1,
+        'wx_url' => 'https://api.wallex.ir/v1/markets',
+
         // منبع قیمت
         'api' => 'https://swapwallet.app/api/v1/market/prices',
         'key' => 'apikey-h8T5ufE73fILlDudXnPJp6CRYV9PSMKviBB0SxCXCAOzSFneGcBHaUa19am2kTIU',
@@ -286,6 +297,191 @@ function pxStale() {
     return false;
 }
 
+/**
+ * 🔢 عددِ داخلِ هر چیزی — با کاما، فاصله، رقمِ فارسی، یا رشته.
+ * null یعنی عدد نبود (نه صفر).
+ */
+function pxToNum($v) {
+    if (!is_scalar($v)) return null;
+    $raw = str_replace([',', '،', '٬', ' ', "\u{200c}"], '', norm_fa_digits((string)$v));
+    return is_numeric($raw) ? (float)$raw : null;
+}
+
+/**
+ * 🌐 چند آدرس، هم‌زمان.
+ *
+ * قبلا منبع‌ها پشت‌سرهم گرفته می‌شدند: تایم‌اوتِ اولی به‌علاوه‌ی دومی.
+ * با curl_multi هر دو در یک رفت‌وبرگشت تمام می‌شوند، پس کندیِ کل برابرِ
+ * کندترین منبع است نه مجموعشان.
+ *
+ * ورودی: [کلید => ['url'=>…, 'head'=>"…\n…", 'timeout'=>…]]
+ * خروجی: [همان کلید => [آرایه‌ی JSON یا null, خطا]]
+ */
+function pxGetMany(array $jobs, $timeout = 6) {
+    if (!$jobs) return [];
+
+    // 🧪 قلابِ آزمون — هر آدرسی که خودش جواب داد، همان؛ هرچه null داد
+    //    از مسیرِ واقعی می‌رود. پس آزمون می‌تواند یک منبع را جعل کند و
+    //    همان موقع منبعِ دیگر را واقعا از شبکه بگیرد.
+    $out = [];
+    if (function_exists('__pxHttpHook')) {
+        foreach ($jobs as $k => $j) {
+            $r = __pxHttpHook($j['url'], $j['head'] ?? '');
+            if (is_array($r)) { $out[$k] = $r; unset($jobs[$k]); }
+        }
+        if (!$jobs) return $out;
+    }
+
+    // بدونِ curl_multi (بعضی هاست‌های قدیمی) همان مسیرِ پشت‌سرهم
+    if (!function_exists('curl_multi_init')) {
+        foreach ($jobs as $k => $j)
+            $out[$k] = maHttp($j['url'], 'GET', $j['head'] ?? '', '', (int)($j['timeout'] ?? $timeout));
+        return $out;
+    }
+
+    $mh = curl_multi_init();
+    $hs = [];
+    foreach ($jobs as $k => $j) {
+        $url = trim((string)($j['url'] ?? ''));
+        if ($url === '' || !preg_match('#^https?://#i', $url)) continue;
+        $head = [];
+        foreach (preg_split('/\r?\n/', (string)($j['head'] ?? '')) as $line) {
+            $line = trim($line);
+            if ($line !== '' && str_contains($line, ':')) $head[] = $line;
+        }
+        $t  = max(2, (int)($j['timeout'] ?? $timeout));
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => $t,
+            CURLOPT_CONNECTTIMEOUT => min(5, $t),
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_MAXREDIRS      => 3,
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_ENCODING       => '',
+            CURLOPT_USERAGENT      => 'Mozilla/5.0 (compatible; ShopBot/1.0)',
+            CURLOPT_HTTPHEADER     => $head ?: ['Accept: application/json'],
+        ]);
+        curl_multi_add_handle($mh, $ch);
+        $hs[$k] = $ch;
+    }
+    if (!$hs) { curl_multi_close($mh); return $out; }
+
+    $running = null;
+    do {
+        curl_multi_exec($mh, $running);
+        if ($running) curl_multi_select($mh, 0.3);
+    } while ($running > 0);
+
+    foreach ($hs as $k => $ch) {
+        $body = curl_multi_getcontent($ch);
+        $err  = curl_error($ch);
+        $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_multi_remove_handle($mh, $ch);
+        curl_close($ch);
+
+        if (!is_string($body) || $body === '') { $out[$k] = [null, $err ?: 'پاسخی نیامد']; continue; }
+        if ($code < 200 || $code >= 300) {
+            $why = trim(preg_replace('/\s+/u', ' ', $body));
+            $out[$k] = [null, 'کد پاسخ ' . $code . ($why !== '' ? ' — ' . mb_substr($why, 0, 200) : '')];
+            continue;
+        }
+        $j = json_decode($body, true);
+        $out[$k] = is_array($j) ? [$j, ''] : [null, 'پاسخ JSON نبود'];
+    }
+    curl_multi_close($mh);
+    return $out;
+}
+
+/**
+ * 🏦 پاسخِ والکس → جفت‌ارزهای ما.
+ *
+ * والکس نمادها را چسبیده می‌دهد («USDTTMN»، «BTCUSDT») و قیمت را داخل
+ * stats. ما دو چیز می‌خواهیم: USDT/IRT و X/USDT.
+ *
+ *   • هر نمادِ …TMN  → X/IRT  (و USDTTMN همان USDT/IRT است)
+ *   • هر نمادِ …USDT → X/USDT
+ *   • هر X که فقط تومانی‌اش را داریم → X/USDT = X_TMN ÷ USDT_TMN
+ *
+ * ⚠️ نامِ دقیقِ فیلدها را حدس نمی‌زنیم: بینِ lastPrice، bidPrice و
+ *    askPrice هرکدام عددِ معتبری داشت برداشته می‌شود، و اگر ساختارِ
+ *    پاسخ عوض شد، هر جای دیگری از درخت که «symbols» باشد پیدا می‌شود.
+ *    پس یک تغییرِ کوچک در API، قیمت‌ها را صفر نمی‌کند.
+ */
+function pxWallexPairs($j) {
+    $syms = pxWallexSymbols($j);
+    if (!$syms) return [];
+
+    $tmn = $usd = $chg = [];
+    foreach ($syms as $key => $row) {
+        if (!is_array($row)) continue;
+        $sym = strtoupper(trim((string)($row['symbol'] ?? $key)));
+        if ($sym === '') continue;
+
+        $st = is_array($row['stats'] ?? null) ? $row['stats'] : $row;
+        $price = null;
+        foreach (['lastPrice', 'last_price', 'bidPrice', 'askPrice', 'last', 'price'] as $pk) {
+            $n = pxToNum($st[$pk] ?? null);
+            if ($n !== null && $n > 0) { $price = $n; break; }
+        }
+        if ($price === null) continue;
+
+        // پایه و مقصد: اگر خودِ والکس گفته، همان؛ وگرنه از تهِ نماد
+        $base  = strtoupper(trim((string)($row['baseAsset']  ?? '')));
+        $quote = strtoupper(trim((string)($row['quoteAsset'] ?? '')));
+        if ($base === '' || $quote === '') {
+            if (str_ends_with($sym, 'USDT'))     { $quote = 'USDT'; $base = substr($sym, 0, -4); }
+            elseif (str_ends_with($sym, 'TMN'))  { $quote = 'TMN';  $base = substr($sym, 0, -3); }
+            elseif (str_ends_with($sym, 'IRT'))  { $quote = 'TMN';  $base = substr($sym, 0, -3); }
+            else continue;
+        }
+        if ($quote === 'IRT' || $quote === 'IRR') $quote = 'TMN';
+        if ($base === '') continue;
+
+        $c = null;
+        foreach (['24h_ch', '24h_change', 'change24h', 'dayChange'] as $ck) {
+            $n = pxToNum($st[$ck] ?? null);
+            if ($n !== null) { $c = $n; break; }
+        }
+
+        if ($quote === 'TMN')  { $tmn[$base] = $price; if ($c !== null && !isset($chg[$base])) $chg[$base] = $c; }
+        if ($quote === 'USDT') { $usd[$base] = $price; if ($c !== null) $chg[$base] = $c; }
+    }
+
+    $irt = (float)($tmn['USDT'] ?? 0);
+    if ($irt <= 0) return [];              // بدونِ نرخِ دلار، بقیه به درد نمی‌خورد
+
+    $out = ['USDT/IRT' => $irt];
+    if (isset($chg['USDT'])) $out['USDT/CHANGE24'] = $chg['USDT'];
+
+    foreach ($usd as $b => $v) if ($b !== 'USDT' && $v > 0) $out[$b . '/USDT'] = $v;
+    // آنچه فقط تومانی داشت، از روی نرخِ دلار به دلار می‌آید
+    foreach ($tmn as $b => $v) {
+        if ($b === 'USDT' || $v <= 0) continue;
+        if (!isset($out[$b . '/USDT'])) $out[$b . '/USDT'] = $v / $irt;
+    }
+    foreach ($chg as $b => $v) if ($b !== 'USDT') $out[$b . '/CHANGE24'] = $v;
+
+    return $out;
+}
+
+/** فهرستِ نمادها را در پاسخِ والکس پیدا کن — هر جای درخت که باشد. */
+function pxWallexSymbols($j) {
+    if (!is_array($j)) return [];
+    if (is_array($j['result']['symbols'] ?? null)) return $j['result']['symbols'];
+    if (is_array($j['symbols'] ?? null))           return $j['symbols'];
+    if (is_array($j['result'] ?? null) && !isset($j['result']['symbols'])) {
+        // شاید خودِ result همان فهرست باشد
+        $r = $j['result'];
+        $first = is_array($r) ? reset($r) : null;
+        if (is_array($first) && (isset($first['stats']) || isset($first['symbol']))) return $r;
+    }
+    // آخرین تیر: هر کلیدِ «symbols» در دو سطحِ اول
+    foreach ($j as $v)
+        if (is_array($v) && is_array($v['symbols'] ?? null)) return $v['symbols'];
+    return [];
+}
+
 function pxFetch($fresh = false) {
     static $mem = null;
     if (!$fresh && is_array($mem)) return $mem;        // در همین درخواست، یک بار
@@ -313,25 +509,68 @@ function pxFetch($fresh = false) {
             return $mem = (array)(maCacheGet($ck, 0) ?: []);
     }
 
-    $url = trim((string)$c['api']);
-    if ($url === '') return $mem = [];
+    // 🌐 هر دو منبع، هم‌زمان — نه پشت‌سرهم.
+    //
+    // قبلا فقط یک منبع بود و اگر کند می‌شد، کلِ قیمت‌گیری پشتش می‌ماند.
+    // حالا والکس (ایرانی، بی‌کلید، تومانِ مستقیم) و منبعِ دلاری با هم
+    // گرفته می‌شوند و کندیِ کل برابرِ کندترینشان است، نه مجموعشان.
+    $to   = max(2, (int)$c['timeout']);
+    $jobs = [];
 
-    [$j, $err] = maHttp($url, 'GET', 'x-api-key: ' . trim((string)$c['key']) .
-                        "\nAccept: application/json", '', (int)$c['timeout']);
-    if (!is_array($j)) {
-        maCachePut('px_err', $err ?: 'پاسخی نیامد');
-        maCachePut('px_cool', time());
-        return $mem = (array)(maCacheGet($ck, 0) ?: []);   // کش قدیمی بهتر از هیچ
+    $wx = trim((string)($c['wx_url'] ?? ''));
+    if (!empty($c['wx_on']) && $wx !== '')
+        $jobs['wx'] = ['url' => $wx, 'head' => 'Accept: application/json', 'timeout' => $to];
+
+    $url = trim((string)$c['api']);
+    if ($url !== '')
+        $jobs['api'] = ['url' => $url, 'timeout' => $to,
+                        'head' => 'x-api-key: ' . trim((string)$c['key']) . "\nAccept: application/json"];
+
+    if (!$jobs) return $mem = [];
+    $res = pxGetMany($jobs, $to);
+
+    // 1️⃣ والکس پایه است — USDT/IRT و جفت‌های دلاری از همین یک تماس
+    $out = $wxErr = [];
+    [$jw, $ew] = $res['wx'] ?? [null, 'گرفته نشد'];
+    if (is_array($jw)) {
+        $out = pxWallexPairs($jw);
+        if (!$out) $wxErr[] = 'والکس: نمادی پیدا نشد';
+    } elseif (isset($jobs['wx'])) {
+        $wxErr[] = 'والکس: ' . $ew;
     }
 
+    // 2️⃣ منبعِ دوم فقط جاهای خالی را پر می‌کند
+    [$j, $err] = $res['api'] ?? [null, 'گرفته نشد'];
+    if (is_array($j)) {
+        foreach (pxSwapPairs($j) as $k => $v)
+            if (!isset($out[$k])) $out[$k] = $v;
+    } elseif (isset($jobs['api'])) {
+        $wxErr[] = 'منبع دوم: ' . $err;
+    }
+
+    // هیچ‌کدام نشد؟ کشِ قدیمی بهتر از هیچ.
+    if (!$out) {
+        maCachePut('px_err', implode(' · ', $wxErr) ?: 'پاسخی نیامد');
+        maCachePut('px_cool', time());
+        return $mem = (array)(maCacheGet($ck, 0) ?: []);
+    }
+
+    // یکی‌شان نشد ولی آن یکی جواب داد: کار می‌کند، فقط خطا را نگه دار
+    maCachePut('px_err', $wxErr ? implode(' · ', $wxErr) : '');
+    maCachePut('px_cool', 0);
+    maCachePut($ck, $out);
+    pxHistNote($out);
+    return $mem = $out;
+}
+
+/**
+ * پاسخِ منبعِ دومِ دلاری → جفت‌ارزها.
+ * کلیدهایش خودشان «BTC/USDT» شکل‌اند؛ مقدار یا عدد است یا یک شیء.
+ */
+function pxSwapPairs($j) {
     // بعضی پاسخ‌ها داخل result بسته‌بندی می‌شوند
     $rows = (isset($j['result']) && is_array($j['result'])) ? $j['result'] : $j;
-
-    $num = function ($v) {
-        if (!is_scalar($v)) return null;
-        $raw = str_replace([',', '،', '٬', ' '], '', norm_fa_digits((string)$v));
-        return is_numeric($raw) ? (float)$raw : null;
-    };
+    if (!is_array($rows)) return [];
 
     $out = [];
     foreach ($rows as $k => $v) {
@@ -339,7 +578,7 @@ function pxFetch($fresh = false) {
         $K = strtoupper($k);
 
         // حالت ساده: مقدار خودِ قیمت است
-        $n = $num($v);
+        $n = pxToNum($v);
         if ($n !== null) { $out[$K] = $n; continue; }
 
         // 🔎 حالت تودرتو: بعضی APIها به‌جای یک عدد، یک شیء می‌دهند
@@ -347,27 +586,17 @@ function pxFetch($fresh = false) {
         // و هم قیمت و هم درصد گم می‌شد.
         if (!is_array($v)) continue;
         foreach (['price', 'last', 'value', 'p', 'close', 'rate'] as $pk) {
-            if (isset($v[$pk]) && ($n = $num($v[$pk])) !== null) { $out[$K] = $n; break; }
+            if (isset($v[$pk]) && ($n = pxToNum($v[$pk])) !== null) { $out[$K] = $n; break; }
         }
         foreach (['change24h', 'change_24h', 'changePercent', 'change_percent',
                   'percentChange', 'percent', 'change', 'chg', 'dp'] as $ck) {
-            if (isset($v[$ck]) && ($c = $num($v[$ck])) !== null) {
-                $out[explode('/', $K)[0] . '/CHANGE24'] = $c;
+            if (isset($v[$ck]) && ($n = pxToNum($v[$ck])) !== null) {
+                $out[explode('/', $K)[0] . '/CHANGE24'] = $n;
                 break;
             }
         }
     }
-    if (!$out) {
-        maCachePut('px_err', 'پاسخ آمد ولی هیچ جفت‌ارزی نداشت');
-        maCachePut('px_cool', time());
-        return $mem = (array)(maCacheGet($ck, 0) ?: []);
-    }
-
-    maCachePut('px_err', '');
-    maCachePut('px_cool', 0);
-    maCachePut($ck, $out);
-    pxHistNote($out);
-    return $mem = $out;
+    return $out;
 }
 
 /**
@@ -1775,6 +2004,8 @@ function pxAdminHome($chatId, $msgId = null) {
         $s = pxStars(1);
         if ($s) $t .= '✨ هر استارز: <b>' . pxToman($s['irt']) . "</b> تومان\n";
     }
+    $t .= "\n🏦 منبع اول (والکس): " . (!empty($c['wx_on']) ? '✅ روشن' : '❌ خاموش') . "\n";
+    $t .= "🌐 منبع دوم: " . (trim((string)$c['api']) !== '' ? '✅ تنظیم شده' : '❌ ندارد') . "\n";
     if ($err !== '') $t .= "\n⚠️ آخرین خطا:\n<code>" . h(mb_substr($err, 0, 180)) . "</code>\n";
     $t .= "\n🖼 کارت گرافیکی: " . (!empty($c['card']['on'])
             ? (pxCardReady() ? '✅ روشن' : '⚠️ روشن ولی GD/فونت نیست') : '❌ خاموش') . "\n";
@@ -1788,6 +2019,8 @@ function pxAdminHome($chatId, $msgId = null) {
         [btnCb(!empty($c['on']) ? '✅ روشن' : '❌ خاموش', 'pxx', 'info'),
          btnCb('🔄 تازه‌سازی', 'pxr', 'confirm')],
         [btnCb('🧪 تست اتصال', 'pxtest', 'confirm')],
+        [btnCb(!empty($c['wx_on']) ? '🏦 والکس: روشن' : '🏦 والکس: خاموش', 'pxwx', 'info'),
+         btnCb('🌐 آدرس والکس', 'pxwu', 'admin')],
         [btnCb('🔑 کلید API', 'pxk', 'admin'), btnCb('🌐 آدرس API', 'pxu', 'admin')],
         [btnCb('📊 درصد سود', 'pxm', 'admin'), btnCb('⏱ ثانیه کش', 'pxttl', 'admin')],
         [btnCb('🗣 کلمه‌ها', 'pxw_home', 'admin'), btnCb('✏️ متن‌ها', 'pxt_home', 'admin')],
@@ -2032,13 +2265,58 @@ function pxAdminCard($chatId, $msgId) {
 }
 
 /** 🩺 تشخیص — دقیقا بگو کدام منبع زنده است و هر قیمت از کجا آمده */
+/**
+ * 🩺 هر منبعِ قیمت را جداگانه بسنج.
+ *
+ * برگشت: [['name','ok','n','ms','err'], …]
+ * زمان‌ها واقعی‌اند — همان چیزی که کاربر پشتش منتظر می‌ماند.
+ */
+function pxProbeSources() {
+    $c   = pxCfg();
+    $to  = max(2, (int)$c['timeout']);
+    $out = [];
+
+    $wx = trim((string)($c['wx_url'] ?? ''));
+    if ($wx !== '') {
+        $t0 = microtime(true);
+        [$j, $e] = pxGetMany(['wx' => ['url' => $wx, 'head' => 'Accept: application/json',
+                                       'timeout' => $to]], $to)['wx'] ?? [null, 'گرفته نشد'];
+        $ms = (int)round((microtime(true) - $t0) * 1000);
+        $p  = is_array($j) ? pxWallexPairs($j) : [];
+        $out[] = ['name' => 'والکس' . (empty($c['wx_on']) ? ' (خاموش)' : ''),
+                  'ok' => (bool)$p, 'n' => count($p), 'ms' => $ms,
+                  'err' => is_array($j) ? ($p ? '' : 'پاسخ آمد ولی نمادی نداشت') : (string)$e];
+    }
+
+    $api = trim((string)$c['api']);
+    if ($api !== '') {
+        $t0 = microtime(true);
+        [$j, $e] = pxGetMany(['api' => ['url' => $api, 'timeout' => $to,
+            'head' => 'x-api-key: ' . trim((string)$c['key']) . "\nAccept: application/json"]], $to)['api']
+            ?? [null, 'گرفته نشد'];
+        $ms = (int)round((microtime(true) - $t0) * 1000);
+        $p  = is_array($j) ? pxSwapPairs($j) : [];
+        $out[] = ['name' => 'منبع دوم', 'ok' => (bool)$p, 'n' => count($p), 'ms' => $ms,
+                  'err' => is_array($j) ? ($p ? '' : 'پاسخ آمد ولی جفت‌ارزی نداشت') : (string)$e];
+    }
+    return $out;
+}
+
 function pxAdminDiag($chatId) {
     $main = pxFetch();
     $alt  = pxAltFetch();
     $fx   = pxFxFetch();
 
     $t  = "🩺 <b>تشخیص منبع قیمت</b>\n\n";
-    $t .= ($main ? '✅' : '🔴') . ' <b>API اصلی</b> — ' . count($main) . " جفت‌ارز\n";
+
+    // 🏦 هر منبع را جدا بسنج — وگرنه «کار می‌کند» چیزی نمی‌گوید:
+    //    شاید فقط یکی‌شان زنده باشد و آن یکی هر بار پشتِ تایم‌اوت بماند.
+    foreach (pxProbeSources() as $row) {
+        $t .= ($row['ok'] ? '✅' : '🔴') . ' <b>' . h($row['name']) . '</b> — ' .
+              ($row['ok'] ? $row['n'] . ' جفت‌ارز · ' . $row['ms'] . ' میلی‌ثانیه'
+                          : h(mb_substr($row['err'], 0, 110))) . "\n";
+    }
+    $t .= "\n" . ($main ? '✅' : '🔴') . ' <b>روی هم</b> — ' . count($main) . " جفت‌ارز\n";
     if (!$main) $t .= '   <code>' . h(mb_substr(pxLastError() ?: 'بی‌پاسخ', 0, 120)) . "</code>\n";
     $t .= ($alt ? '✅' : '🔴') . ' <b>منبع ایرانی</b> — ' .
           ($alt ? h((string)(maCacheGet('px_altsrc', 0) ?: 'زنده')) : 'در دسترس نیست') . "\n";
@@ -2079,6 +2357,13 @@ function pxAdminCallback($data, $chatId, $msgId, $cbId) {
     if ($data === 'pxr') {
         pxFetch(true);
         answerCb(BOT_TOKEN, $cbId, '🔄'); pxAdminHome($chatId, $msgId); return true;
+    }
+    // 🏦 منبعِ والکس: روشن/خاموش
+    if ($data === 'pxwx') {
+        pxSet(function (&$c) { $c['wx_on'] = empty($c['wx_on']) ? 1 : 0; });
+        maCachePut('px_cool', 0);
+        pxFetch(true);
+        answerCb(BOT_TOKEN, $cbId, '✅'); pxAdminHome($chatId, $msgId); return true;
     }
     if ($data === 'pxtest') {
         answerCb(BOT_TOKEN, $cbId);
@@ -2219,6 +2504,9 @@ function pxAdminCallback($data, $chatId, $msgId, $cbId) {
     $asks = [
         'pxk'   => ['px_key',  "🔑 کلید API را بفرستید:"],
         'pxu'   => ['px_url',  "🌐 آدرس API قیمت را بفرستید:"],
+        'pxwu'  => ['px_wxurl',
+            "🏦 آدرس منبع والکس را بفرستید.\n\nپیش‌فرض:\n<code>https://api.wallex.ir/v1/markets</code>\n\n" .
+            "کلید نمی‌خواهد و تومان را مستقیم می‌دهد."],
         'pxm'   => ['px_marg', "📊 درصد سود روی نرخ بازار (۰ = دقیقا نرخ بازار):"],
         'pxttl' => ['px_ttl',  "⏱ چند ثانیه قیمت کش شود؟ (پیشنهاد ۱۵)"],
         'pxalturl' => ['px_alturl',
@@ -2294,6 +2582,14 @@ function pxStateHandle($action, $msg, $uid, $chatId) {
             sendMsg(BOT_TOKEN, $chatId, "⚠️ آدرس باید با http شروع شود."); return true;
         }
         pxSet(function (&$c) use ($text) { $c['api'] = $text; });
+        maCachePut('px_cool', 0);
+        return $done();
+    }
+    if ($action === 'px_wxurl') {
+        if ($text !== '' && !preg_match('#^https?://#i', $text)) {
+            sendMsg(BOT_TOKEN, $chatId, "⚠️ آدرس باید با http شروع شود."); return true;
+        }
+        pxSet(function (&$c) use ($text) { $c['wx_url'] = $text; });
         maCachePut('px_cool', 0);
         return $done();
     }

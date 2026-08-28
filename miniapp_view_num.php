@@ -529,6 +529,7 @@ body::before{
       <span class="ca">←</span><b id="crumbName"></b>
     </button>
     <div class="folders" id="folders"></div>
+    <p class="ohint" id="catHint" hidden></p>
     <div class="grid" id="grid"></div>
     <button class="btn ghost" id="more" hidden></button>
     <p class="ohint" id="gridHint" hidden></p>
@@ -752,6 +753,13 @@ function paintShop() {
   $('#folders').hidden = !showFolders;
   $('#grid').hidden = showFolders;
   $('#more').hidden = showFolders || $('#more').hidden;
+
+  // 🌍 پوشه‌ها فقط چند ده کشورِ اول‌اند؛ بقیه با جستجو می‌آیند.
+  //    بدون این خط، کاربر فکر می‌کند فقط همین‌ها را داریم.
+  const rest = (B.catn || 0) - (B.cats || []).length;
+  const ch = $('#catHint');
+  ch.hidden = !showFolders || rest <= 0;
+  if (!ch.hidden) ch.textContent = U('cats_rest', '').replace('{n}', fmt(rest));
 
   if (showFolders) { paintFolders(); $('#gridEmpty').hidden = true; $('#gridHint').hidden = true; return; }
   paintGrid();

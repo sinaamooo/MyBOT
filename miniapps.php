@@ -416,6 +416,8 @@ function maDefaultNum() {
     if ($d !== null) return $d;
     return $d = [
         'on'    => true,
+        // چند کشور روی صفحه‌ی اول پوشه شود — بقیه با جستجو. ۰ یعنی همه.
+        'cats_max' => 24,
         'title' => 'شماره مجازی',
         'sub'   => 'تحویل آنی · کد لحظه‌ای · بازگشت وجه',
         'hero'  => 'شماره از بیش از ۴۰ کشور، کد را همین‌جا ببینید',
@@ -455,6 +457,7 @@ function maDefaultNum() {
             'more'     => 'نمایش بیشتر',
             'no_match' => 'چیزی با این نام پیدا نشد.',
             'search_rest' => '💡 {n} کشور دیگر هم داریم — اسمش را در جستجو بنویسید.',
+            'cats_rest'   => '🌍 {n} کشور دیگر هم داریم — اسمش را در جستجو بنویسید.',
             'empty'    => 'فعلا شماره‌ای در این بخش نیست.',
             'pay_wallet' => 'پرداخت از کیف پول',
             'pay_other'  => 'روش‌های دیگر پرداخت',
@@ -2361,7 +2364,7 @@ function maBoot($key, $a) {
         'note'     => (string)$a['note'],
         'currency' => (string)($a['currency'] ?? 'تومان'),
         'ui'       => maUiAll($key),
-        'cats'     => maCatsPublic($a),
+        'cats'     => maCatsPublic($a, $key),
         'items'    => maItemsPublic($a, maTopN($key)),
     'catn'     => count((array)($a['cats'] ?? [])),
         // چندتا محصولِ روشن داریم؟ صفحه با این می‌فهمد که «بقیه» هم هست
@@ -2404,7 +2407,7 @@ function maUiAll($key) {
     return $out;
 }
 
-function maCatsPublic($a) {
+function maCatsPublic($a, $key = '') {
     // 📁 هر دسته یک پوشه است، پس باید بگوید چند شماره دارد و از چند تومان
     //    شروع می‌شود — وگرنه کاربر باید همه را باز کند تا بفهمد.
     $n = $from = [];
@@ -2429,7 +2432,34 @@ function maCatsPublic($a) {
             'from'  => (float)($from[$id] ?? 0),
         ];
     }
+
+    // ☎️ شماره مجازی: چند ده کشور، نه صدتا.
+    //
+    // فروشنده‌ها بالای صد کشور دارند و ریختنِ همه‌شان روی صفحه‌ی اول
+    // یعنی کاربر باید بیست بار اسکرول کند تا روسیه را ببیند. پس فقط
+    // کشورهای اولِ فهرست (که همان‌ها هم پرفروش‌ترین‌اند) پوشه می‌شوند و
+    // بقیه با جستجو می‌آیند — جستجو سمتِ سرور روی همه‌ی کشورها می‌گردد،
+    // پس هیچ کشوری گم نمی‌شود.
+    //
+    // شرطِ پرچم عمدی است: پوشه‌ی 🌍 نه قشنگ است نه چیزی می‌گوید. اگر
+    // پرچمی نداشت، می‌رود ته صف و جایش را به کشوری می‌دهد که دارد.
+    if ($key === 'num') {
+        $max = (int)(maGet('num')['cats_max'] ?? 24);
+        if ($max > 0 && count($out) > $max) {
+            $flagged = $plain = [];
+            foreach ($out as $c) {
+                if (maHasFlag((string)$c['emoji']) && (int)$c['n'] > 0) $flagged[] = $c;
+                else $plain[] = $c;
+            }
+            $out = array_slice(array_merge($flagged, $plain), 0, $max);
+        }
+    }
     return $out;
+}
+
+/** آیا این ایموجی یک پرچمِ واقعی است؟ (دو نشانگرِ منطقه‌ای پشت هم) */
+function maHasFlag($e) {
+    return (bool)preg_match('/[\x{1F1E6}-\x{1F1FF}]{2}/u', (string)$e);
 }
 
 /**

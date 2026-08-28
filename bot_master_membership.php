@@ -8845,6 +8845,10 @@ if (isset($_GET['cron'])) {
          ' · miniapp: ' . maAutoQueue(10) .
          ' · stock: ' . maStockQueue(10) .
          ' · rates: ' . count(axRatesRefresh()) .
+         // ☎️ شماره‌ها هم اینجا لازم‌اند: مهلت‌های تمام‌شده باید پول برگردانند
+         //    و لغوهایی که به پنل نرسیده‌اند دوباره تلاش شوند — حتی اگر
+         //    ساعت‌ها هیچ‌کس با ربات کار نکند.
+         ' · numbers: ' . (function_exists('numTick') ? numTick(50) : 0) .
          ' · archive: ' . (ordersArchive() + maOrdersArchive()) .
          ' · broadcast: ' . bcTick(120);
     exit;
