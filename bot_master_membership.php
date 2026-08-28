@@ -657,11 +657,11 @@ function defaultConfig() {
             'btn'   => ['emoji' => '🧾', 'text' => 'لیست سفارشات', 'color' => 'info', 'icon' => ''],
             'text'  => "🧾 <b>لیست سفارشات شما</b>",
             'empty' => "🧾 <b>لیست سفارشات شما</b>\n\nهنوز سفارشی ثبت نکرده‌اید.",
-            'h1'    => ['emoji' => '', 'text' => 'نوع سفارش',  'color' => 'success', 'icon' => ''],
-            'h2'    => ['emoji' => '', 'text' => 'مبلغ سفارش', 'color' => 'success', 'icon' => ''],
-            'next'  => ['emoji' => '', 'text' => 'صفحه بعد',   'color' => 'primary', 'icon' => ''],
-            'first' => ['emoji' => '', 'text' => 'صفحه قبل',   'color' => 'primary', 'icon' => ''],
-            'back'  => ['emoji' => '', 'text' => 'برگشت',      'color' => 'danger',  'icon' => ''],
+            'h1'    => ['emoji' => '', 'text' => 'نوع سفارش',  'color' => 'none', 'icon' => ''],
+            'h2'    => ['emoji' => '', 'text' => 'مبلغ سفارش', 'color' => 'none', 'icon' => ''],
+            'next'  => ['emoji' => '', 'text' => 'صفحه بعد',   'color' => 'none', 'icon' => ''],
+            'first' => ['emoji' => '', 'text' => 'صفحه قبل',   'color' => 'none', 'icon' => ''],
+            'back'  => ['emoji' => '', 'text' => 'برگشت',      'color' => 'none', 'icon' => ''],
         ],
 
         // 🚀 دو مینی‌اپ جدا — خدمات تلگرام و شماره مجازی
@@ -2313,7 +2313,14 @@ function olBtn($c, $data, $role = null) {
     $txt = trim((string)($c['emoji'] ?? '') . ' ' . (string)($c['text'] ?? ''));
     if ($txt === '') $txt = '—';
     $b = ['text' => $txt, 'callback_data' => $data];
-    $st = isStyle($c['color'] ?? '') ? $c['color'] : ($role ? gs($role) : null);
+
+    // 🎨 «none» یعنی واقعا بی‌رنگ، نه «تصمیمش با تو».
+    //    بدون این، برگشتن به حالتِ معمولی ناممکن بود: هر بار که رنگ را
+    //    برمی‌داشتی، نقشِ دکمه دوباره رنگش می‌کرد.
+    $own = strtolower(trim((string)($c['color'] ?? '')));
+    if ($own === 'none') return $b;
+
+    $st = isStyle($own) ? $own : ($role ? gs($role) : null);
     if (isStyle($st)) $b['style'] = $st;
     if (trim((string)($c['icon'] ?? '')) !== '') $b['icon_custom_emoji_id'] = (string)$c['icon'];
     return $b;
@@ -6528,17 +6535,8 @@ function masterHandle($update) {
         if (gmHandleText($text, $uid, $chatId, $fname, $uname, $rt, false, $msg)) return;
         if (dmHandleText($text, $uid, $chatId, $fname, $uname, $rt, false)) return;
 
-        // 💹 قیمت: اول با کشِ موجود جواب بده، بعد کش را تازه کن.
-        // بدون این، هر بار که کش تمام می‌شد اولین نفر پشت تماس شبکه
-        // منتظر می‌ماند و تاخیر را حس می‌کرد.
-        $stale = function_exists('pxStale') ? pxStale() : false;
-        if (function_exists('pxNoNet')) pxNoNet(true);
-        $hit = pxHandleText($text, $chatId, $rt);
-        if (function_exists('pxNoNet')) pxNoNet(false);
-        if ($hit) {
-            if ($stale && function_exists('pxWarm')) pxWarm();
-            return;
-        }
+        // 💹 قیمت: اول با کشِ موجود جواب بده، بعد کش را تازه کن
+        if (pxAnswerThenWarm($text, $chatId, $rt)) return;
         return;
     }
 
@@ -6623,7 +6621,7 @@ function masterHandle($update) {
         $rt = $msg['message_id'] ?? null;
         if (gmHandleText($text, $uid, $chatId, $fname, $uname, $rt, true, $msg)) return;
         if (dmHandleText($text, $uid, $chatId, $fname, $uname, $rt, true)) return;
-        if (pxHandleText($text, $chatId, $rt)) return;
+        if (pxAnswerThenWarm($text, $chatId, $rt)) return;
         return;
     }
     $action = $st['action'];
@@ -8658,6 +8656,39 @@ function migrateOnce($key, callable $fn) {
 }
 
 /** کارهای پس‌زمینه — بعد از جواب دادن به کاربر اجرا می‌شوند */
+/**
+ * 💹 جوابِ قیمت: اول از کش، بعد تازه‌سازی.
+ *
+ * چرا این تابع هست و چرا هر دو مسیر (خصوصی و گروه) باید از آن رد شوند:
+ *
+ * کشِ قیمت یک دقیقه عمر دارد. تا حالا هرکس اولین نفر بعد از تمام شدنِ
+ * کش بود، پشتِ تماس با API قیمت می‌ماند — یعنی هر دقیقه یک نفر تاخیرِ
+ * کاملِ شبکه را می‌خورد. روی APIای که دو-سه ثانیه جواب می‌دهد، همان یک
+ * نفر فکر می‌کند کلِ ربات کند است.
+ *
+ * حالا: با کشِ موجود جواب می‌دهیم (هرچقدر هم کهنه)، پیام کاربر می‌رود،
+ * و تازه بعدش کش را نو می‌کنیم. فقط وقتی هیچ کشی نداریم — یعنی اولین
+ * اجرای ربات — چاره‌ای جز انتظار نیست.
+ *
+ * ⚠️ مسیر خصوصی این محافظ را نداشت و فقط گروه‌ها داشتند؛ یعنی همان
+ *    جایی که بیشترِ کاربرها هستند، بی‌محافظ بود.
+ */
+function pxAnswerThenWarm($text, $chatId, $replyTo = null) {
+    if (!function_exists('pxHandleText')) return false;
+
+    // هیچ کشی نداریم؟ آن‌وقت انتظار ناگزیر است — چیزی برای نشان دادن نیست
+    $cold = !function_exists('pxHasAnyCache') || !pxHasAnyCache();
+
+    $stale = function_exists('pxStale') ? pxStale() : false;
+    if (!$cold && function_exists('pxNoNet')) pxNoNet(true);
+    $hit = pxHandleText($text, $chatId, $replyTo);
+    if (function_exists('pxNoNet')) pxNoNet(false);
+
+    if (!$hit) return false;
+    if (($stale || $cold) && function_exists('pxWarm')) pxWarm();
+    return true;
+}
+
 function runBackgroundQueues() {
     processDeleteQueue(20);
 
@@ -8740,12 +8771,25 @@ function runBackgroundQueues() {
         });
     });
 
-    // 🎨 رنگ‌های لیست سفارشات — سرستون سبز، سوییچ آبی، برگشت قرمز
-    migrateOnce('v8_ordcolors', function () {
+    // 🖼 کارت‌های قیمت از کشِ JSON بیرون بروند.
+    //
+    //    این یکی فقط «مرتب‌سازی» نیست: هر کارت حدود ۴۰ کیلوبایت است و
+    //    داخل همان فایلی می‌نشست که هر maCachePut در کلِ ربات آن را
+    //    بازنویسی می‌کند. روی نصبی که مدتی کار کرده، فایل نزدیک یک
+    //    مگابایت شده بود و همه‌چیز را کند می‌کرد.
+    migrateOnce('v10_cardfiles', function () {
+        if (function_exists('pxDropCardCache')) pxDropCardCache();
+    });
+
+    // 🎨 لیست سفارشات بی‌رنگ شود.
+    //
+    //    مهاجرتِ قبلی (v8_ordcolors) این دکمه‌ها را سبز و آبی و قرمز کرده
+    //    بود؛ حالا برعکسش. رنگِ دستیِ ادمین هم برمی‌گردد — چون خواسته
+    //    همین بود، و هر رنگی که بخواهد از همان پنل دوباره ست می‌شود.
+    migrateOnce('v10_ordplain', function () {
         cfgSet(function (&$c) {
-            foreach (['h1' => 'success', 'h2' => 'success', 'next' => 'primary',
-                      'first' => 'primary', 'back' => 'danger'] as $k => $col)
-                $c['orders_list'][$k]['color'] = $col;
+            foreach (['h1', 'h2', 'next', 'first', 'back'] as $k)
+                $c['orders_list'][$k]['color'] = 'none';
         });
     });
 

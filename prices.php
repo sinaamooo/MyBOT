@@ -268,6 +268,16 @@ function pxWarm() {
     }
 }
 
+/**
+ * آیا اصلا کشی داریم؟ (هر چقدر هم کهنه)
+ *
+ * فرقش با pxStale مهم است: «کهنه» یعنی می‌شود جواب داد ولی بعدش باید نو
+ * کرد؛ «نداریم» یعنی چاره‌ای جز انتظار نیست.
+ */
+function pxHasAnyCache() {
+    return is_array(maCacheGet('px_pairs', 0));
+}
+
 /** آیا الان کشِ قیمت کهنه است؟ (تا بدانیم بعدا تازه‌سازی لازم است) */
 function pxStale() {
     if (maCacheGet('px_pairs', max(15, (int)pxVal('ttl', 60))) === null) return true;
@@ -294,7 +304,12 @@ function pxFetch($fresh = false) {
         if (is_array($hit)) return $mem = $hit;
 
         // 🐢 همین چند لحظه پیش شکست خورده؟ دوباره پشت تایم‌اوت نایست
-        if (maCacheGet('px_cool', (int)$c['cooldown']) !== null)
+        //
+        // ⚠️ «صفر» یعنی شکستی در کار نیست. قبلا موقعِ موفقیت هم صفر
+        //    نوشته می‌شد و این شرط چون فقط null را استثنا می‌کرد، بعد از
+        //    هر موفقیت هم تا مدتِ cooldown سراغ شبکه نمی‌رفت — یعنی
+        //    درست برعکسِ چیزی که می‌خواستیم.
+        if ((int)(maCacheGet('px_cool', (int)$c['cooldown']) ?: 0) > 0)
             return $mem = (array)(maCacheGet($ck, 0) ?: []);
     }
 
@@ -1260,18 +1275,77 @@ function pxDeliver($chatId, $png, $caption, $markup = null, $replyTo = null, $ca
  * می‌شود و فقط نفر اول هزینه‌ی ساختن را می‌دهد.
  */
 function pxCardCached($key, callable $fn) {
-    $ck = 'pxcard_' . substr(md5((string)$key), 0, 16);
-    $ttl = max(10, (int)pxVal('card_ttl', 90));
+    $ttl  = max(10, (int)pxVal('card_ttl', 90));
+    $file = pxCardFile($key);
 
-    $hit = maCacheGet($ck, $ttl);
-    if (is_string($hit) && $hit !== '') {
-        $raw = base64_decode($hit, true);
-        if ($raw !== false && strlen($raw) > 100) return $raw;
+    if (is_file($file)) {
+        clearstatcache(true, $file);
+        if (time() - (@filemtime($file) ?: 0) <= $ttl) {
+            $raw = @file_get_contents($file);
+            if (is_string($raw) && strlen($raw) > 100) return $raw;
+        }
     }
 
     $png = pxTryCard($fn);
-    if (is_string($png) && $png !== '') maCachePut($ck, base64_encode($png));
+    if (is_string($png) && $png !== '' && strlen($png) > 100) {
+        $dir = dirname($file);
+        if (!is_dir($dir)) @mkdir($dir, 0755, true);
+        // اول موقت، بعد جابه‌جا — تا درخواستِ همزمان نصفه‌ی فایل را نخواند
+        $tmp = $file . '.' . bin2hex(random_bytes(4));
+        if (@file_put_contents($tmp, $png) !== false) @rename($tmp, $file);
+        else @unlink($tmp);
+        pxCardPrune();
+    }
     return $png;
+}
+
+/**
+ * 🖼 کارت‌ها روی دیسک، نه داخل کشِ JSON.
+ *
+ * ⚠️ چرا این مهم است: قبلا هر کارت را base64 کرده و داخل ma_cache.json
+ *    می‌گذاشتیم. هر کارت حدود ۴۰ کیلوبایت است و base64 بزرگ‌ترش هم
+ *    می‌کند؛ با ۱۴ ارز، آن فایل ۹۰۰ کیلوبایت شده بود.
+ *
+ *    و آن فایل، فایلِ کشِ کلِ ربات است: هر maCachePut — از هر بخشی، نه
+ *    فقط قیمت — کلش را می‌خواند، JSON را باز می‌کند، دوباره می‌سازد و
+ *    زیر قفل می‌نویسد. یعنی یک تصویر، کلِ ربات را کند می‌کرد و هرچه
+ *    ارزهای بیشتری کش می‌شد، کندتر.
+ *
+ *    حالا تصویر یک فایلِ جداست: خواندنش یک read است، نوشتنش هیچ قفلی
+ *    نمی‌گیرد، و کشِ JSON دوباره چند کیلوبایت می‌شود.
+ */
+function pxCardFile($key) {
+    return rtrim(DATA_DIR, '/') . '/pxcards/' . substr(md5((string)$key), 0, 16) . '.png';
+}
+
+/**
+ * 🧹 کارت‌هایی که در نسخه‌های قبل داخل کشِ JSON نشسته‌اند را بیرون بریز.
+ *
+ * روی نصبی که مدتی کار کرده، این فایل صدها کیلوبایت شده و هر نوشتنِ کش
+ * در کلِ ربات را کند می‌کند. یک بار تمیزش می‌کنیم و تمام.
+ */
+function pxDropCardCache() {
+    $n = 0;
+    mutate('ma_cache', function (&$c) use (&$n) {
+        foreach (array_keys($c) as $k)
+            if (str_starts_with((string)$k, 'pxcard_')) { unset($c[$k]); $n++; }
+    });
+    return $n;
+}
+
+/** کارت‌های کهنه را جمع کن — پوشه بی‌نهایت بزرگ نشود */
+function pxCardPrune() {
+    $dir = rtrim(DATA_DIR, '/') . '/pxcards';
+    // گران است، پس نه هر بار: حداکثر هر ۱۰ دقیقه یک بار
+    $mark = $dir . '/.swept';
+    if (is_file($mark) && time() - (@filemtime($mark) ?: 0) < 600) return;
+    @touch($mark);
+
+    $keep = max(600, (int)pxVal('card_ttl', 90) * 20);
+    $now  = time();
+    foreach ((array)@glob($dir . '/*.png') as $f) {
+        if ($now - (@filemtime($f) ?: $now) > $keep) @unlink($f);
+    }
 }
 
 function pxTryCard(callable $fn) {
