@@ -3137,6 +3137,17 @@ function maNoteAdd($app, $uid, $html, $order = '') {
     $key = maNoteKey($app, $uid);
     mutate('ma_notes', function (&$d) use ($key, $id, $emoji, $title, $body, $copy, $order) {
         if (!is_array($d[$key] ?? null)) $d[$key] = ['seen_id' => '', 'list' => []];
+
+        // 🔁 همان خبر، همین الان دوباره؟ ننویسش.
+        //
+        //    یک مسیر که دو بار صدا زده شود — دو تیکِ پس‌زمینه، دو تقه‌ی
+        //    پشت‌سرهم — نباید صندوق را دو تا کند. خبرهای متفاوت
+        //    می‌مانند؛ فقط عینِ همان، آن هم در یک دقیقه، رد می‌شود.
+        $last = $d[$key]['list'][0] ?? null;
+        if (is_array($last) && (string)($last['h'] ?? '') === $title
+            && (string)($last['b'] ?? '') === $body
+            && time() - (int)($last['t'] ?? 0) < 60) return;
+
         array_unshift($d[$key]['list'], [
             'id' => $id, 't' => time(), 'e' => $emoji, 'h' => $title,
             'b' => $body, 'c' => $copy, 'o' => (string)$order,
@@ -3635,14 +3646,20 @@ function maStateHandle($action, $sd, $msg, $uid, $chatId) {
         $f    = extractFile($msg);
         $html = msgHtml($msg);   // متن یا کپشن پیام ادمین، با قالب‌بندی
 
+        // 📦 فایل ناچار در ربات می‌رود — صندوقِ اعلان فایل نگه نمی‌دارد.
+        //    ولی متن، مثل هر خبرِ دیگرِ مینی‌اپ، همان‌جا می‌ماند.
         if ($f) {
             // فایل با سربرگ می‌رود؛ متن بلند جدا می‌آید تا به سقف ۱۰۲۴ کاراکتری کپشن نخورد
             [$type, $fileId] = $f;
             sendFile(BOT_TOKEN, $o['user_id'], $type, $fileId, $head);
             $sent = true;
             if (trim($html) !== '') sendMsg(BOT_TOKEN, $o['user_id'], $html);
+            // و در مینی‌اپ هم بداند کجا را نگاه کند
+            maTellUser($o, "📦 <b>سفارش شما تحویل شد</b>\n\n" .
+                           '📦 ' . h(maOrderTitle($o)) . "\n" .
+                           "فایلش را در خودِ ربات برایتان فرستادیم.");
         } elseif (trim($html) !== '') {
-            sendMsg(BOT_TOKEN, $o['user_id'], $head . "\n\n" . $html);
+            maTellUser($o, $head . "\n\n" . $html);
             $sent = true;
         }
         if (!$sent) { sendMsg(BOT_TOKEN, $chatId, '⚠️ محتوایی نفرستادید.'); return true; }

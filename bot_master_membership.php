@@ -147,7 +147,12 @@ function dataCache($file, $mode = 'has', $data = null, $raw = null) {
 function load($file, $fresh = false) {
     if (!$fresh && dataCache($file, 'has')) return dataCache($file, 'get');
 
-    $raw = @file_get_contents(dataPath($file));
+    // is_file اول: بدونش، هر فایلِ نساخته یک هشدارِ PHP می‌سازد. با @
+    // دیده نمی‌شود ولی هنوز ساخته می‌شود، و روی هاست‌هایی که
+    // error handler خودشان را گذاشته‌اند، لاگ را پر می‌کند.
+    $path = dataPath($file);
+    if (!is_file($path)) return dataCache($file, 'put', [], '');
+    $raw = @file_get_contents($path);
     if ($raw === false || $raw === '') return dataCache($file, 'put', [], '');
 
     // همان بایت‌های دفعه‌ی قبل؟ پس همان آرایه‌ی دفعه‌ی قبل

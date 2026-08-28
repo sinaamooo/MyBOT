@@ -613,13 +613,24 @@ async function runSearch(q) {
 
 /* 📁 باز کردن پوشه‌ی یک کشور */
 async function openCat(id, name) {
-  S.cat = id; S.catName = name || ''; S.catItems = []; S.q = '';
+  S.cat = id; S.catName = name || ''; S.q = '';
   $('#q').value = '';
-  paintShop();                                  // فوراً حالتِ خالی را نشان بده
+
+  /* ⚡️ اول آنچه همین الان در صفحه هست.
+     قبلا اینجا یک فهرستِ خالی نشان داده می‌شد تا شبکه جواب بدهد —
+     یعنی کاربر روی «روسیه» می‌زد و یک پوشه‌ی خالی می‌دید و بعد،
+     نیم‌ثانیه بعد، شماره‌ها می‌آمدند. حالا آنچه در بسته‌ی صفحه هست
+     فوری می‌نشیند و شبکه فقط تکمیلش می‌کند. */
+  S.catItems = (B.items || []).filter(i => i.cat === id);
+  paintShop();
+
+  // همه‌ی محصول‌ها از قبل داخل صفحه‌اند؟ پس درخواستی لازم نیست
+  if ((B.total || 0) <= (B.items || []).length) return;
+
   const r = await api('num_cat', { cat: id });
   if (S.cat !== id) return;                     // کاربر رفته جای دیگر
-  S.catItems = (r && r.ok && Array.isArray(r.items)) ? r.items : [];
-  paintShop();
+  // اگر شبکه نگرفت، همان فهرستِ محلی می‌ماند — بهتر از خالی شدن
+  if (r && r.ok && Array.isArray(r.items)) { S.catItems = r.items; paintShop(); }
 }
 
 function backToFolders() {
