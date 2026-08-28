@@ -743,15 +743,7 @@ function numFinish($orderId, $why = 'cancel', $tellPanel = true) {
     //    گفتن بی‌معنی است: نامبرلند cancelnumber را فقط در وضعیت ۱
     //    می‌پذیرد و اینجا وضعیت ۳ یا ۴ است. پس فقط خطای بی‌خود در
     //    لاگ می‌ماند.
-    if ($tellPanel && !empty($act['aid'])) {
-        [$r, $e] = numCall('cancel', [
-            'id'      => (string)$act['aid'],
-            'order'   => (string)$orderId,
-            'country' => (string)($act['country'] ?? ''),
-            'service' => (string)($act['service'] ?? ''),
-        ]);
-        if (!$r) error_log('[numbers] لغو روی پنل نگرفت: ' . $e);
-    }
+    if ($tellPanel) numTellPanelCancel($orderId);
 
     // 💰 پول برگردد
     $amount = (float)($act['price'] ?? 0);
@@ -770,8 +762,104 @@ function numFinish($orderId, $why = 'cancel', $tellPanel = true) {
     return [true, ''];
 }
 
+/**
+ * 🔴 به پنل بگو این شماره را ببندد.
+ *
+ * ⚠️ دو باگ که اینجا بود و پول می‌سوزاند:
+ *
+ *   ۱. فقط شکستِ شبکه دیده می‌شد. اگر نامبرلند پاسخِ معتبر ولی منفی
+ *      می‌داد — مثل {"RESULT":-305,"DESCRIPTION":"wrong status"} — آن
+ *      یک آرایه‌ی درست است، پس کد فکر می‌کرد کار انجام شده. شماره روی
+ *      پنل باز می‌ماند، هزینه‌اش برنمی‌گشت، و هیچ‌کس خبردار نمی‌شد.
+ *
+ *   ۲. حتی همان شکستِ شبکه فقط در error_log می‌نشست. کسی لاگِ سرور را
+ *      نمی‌خواند.
+ *
+ * حالا: پاسخ واقعا بررسی می‌شود، شکست روی خودِ فعال‌سازی ثبت می‌شود تا
+ * numTick دوباره تلاش کند، و بعد از چند تلاشِ ناموفق ادمین خبردار
+ * می‌شود.
+ *
+ * و یک نکته‌ی خودِ نامبرلند: cancelnumber فقط در وضعیت ۱ کار می‌کند.
+ * اگر کد بین درخواستِ کاربر و تماسِ ما رسیده باشد (وضعیت ۲)، لغو رد
+ * می‌شود — ولی closenumber می‌گیرد. پس آن را هم امتحان می‌کنیم، وگرنه
+ * شماره تا آخر تایمر اشغال می‌ماند.
+ *
+ * برگشت: [موفق؟, پیام]
+ */
+function numTellPanelCancel($orderId) {
+    $act = numGet($orderId);
+    if (!$act || empty($act['aid'])) return [true, ''];
+    if (trim((string)numVal('api.ops.cancel.path', '')) === '')
+        return [false, 'مسیر «عملیات لغو» تنظیم نشده'];
+
+    $vars = [
+        'id'      => (string)$act['aid'],
+        'order'   => (string)$orderId,
+        'country' => (string)($act['country'] ?? ''),
+        'service' => (string)($act['service'] ?? ''),
+    ];
+
+    [$resp, $err] = numCall('cancel', $vars);
+    $fail = !$resp ? ($err ?: 'پاسخی نیامد') : numErr($resp, numVal('api.ops.cancel', []));
+
+    // ⛳️ رد شد چون وضعیت عوض شده؟ پس کد رسیده — آنجا «بستن» جواب می‌دهد
+    if ($fail !== '' && trim((string)numVal('api.ops.close.path', '')) !== '') {
+        [$r2, $e2] = numCall('close', $vars);
+        $f2 = !$r2 ? ($e2 ?: 'پاسخی نیامد') : numErr($r2, numVal('api.ops.close', []));
+        if ($f2 === '') $fail = '';
+    }
+
+    numSetAct($orderId, function (&$x) use ($fail) {
+        $x['panel_err']   = $fail;
+        $x['panel_tries'] = (int)($x['panel_tries'] ?? 0) + 1;
+        if ($fail === '') { $x['panel_closed'] = time(); unset($x['panel_pending']); }
+        else              { $x['panel_pending'] = time(); }
+        return true;
+    });
+
+    return [$fail === '', $fail];
+}
+
+/**
+ * 🔁 لغوهایی که به پنل نرسیدند را دوباره امتحان کن.
+ *
+ * یک تلاشِ ناموفق ممکن است فقط قطعیِ لحظه‌ای باشد. ولی اگر چند بار هم
+ * نگرفت، دیگر خودش خوب نمی‌شود و ادمین باید بداند — هر شماره‌ای که روی
+ * پنل باز بماند، پولِ رفته است.
+ */
+function numRetryPanel($limit = 5) {
+    $n = 0;
+    foreach (numAll() as $act) {
+        if ($n >= $limit) break;
+        if (empty($act['panel_pending'])) continue;
+        if (in_array(($act['status'] ?? ''), ['waiting', 'buying'], true)) continue;
+
+        $tries = (int)($act['panel_tries'] ?? 0);
+        if ($tries >= 6) continue;                       // بس است، دیگر خودش درست نمی‌شود
+        if (time() - (int)$act['panel_pending'] < 60) continue;
+
+        $oid = (string)$act['order'];
+        [$ok, $err] = numTellPanelCancel($oid);
+        $n++;
+
+        // درست سرِ تلاشِ آخر، یک بار خبر بده
+        if (!$ok && $tries + 1 >= 6 && defined('ADMIN_ID') && ADMIN_ID) {
+            sendMsg(BOT_TOKEN, ADMIN_ID,
+                "⚠️ <b>لغو روی پنل نگرفت</b>\n\n" .
+                '☎️ <code>' . h((string)($act['phone'] ?? '')) . "</code>\n" .
+                '🧾 <code>' . h($oid) . "</code>\n" .
+                '❌ <code>' . h(mb_substr((string)$err, 0, 200)) . "</code>\n\n" .
+                "پول کاربر برگشته، ولی این شماره روی پنل فروشنده باز مانده. " .
+                "دستی ببندیدش، وگرنه هزینه‌اش برنمی‌گردد.",
+                inlineKb([[btnCb('📋 شماره‌های باز', 'numopen', 'admin')]]));
+        }
+    }
+    return $n;
+}
+
 /** ⏰ فعال‌سازی‌های از مهلت گذشته — از همان تیک عمومی ربات صدا زده می‌شود */
 function numTick($limit = 10) {
+    numRetryPanel(5);                 // لغوهایی که به پنل نرسیدند
     $now = time();
     $n   = 0;
     foreach (numAll() as $act) {
@@ -860,7 +948,10 @@ function numPresets() {
             //    operator=min یعنی از هر ترکیبِ کشور+سرویس فقط ارزان‌ترین
             //    اپراتور بیاید — وگرنه یک سرویس چند بار تکرار می‌شود.
             'catalog' => [
-                'info'      => '/v2.php/?method=getinfo&operator=min',
+                // any یعنی همه‌ی اپراتورها. min فقط ارزان‌ترینِ هر کشور را
+                // می‌داد و آن‌وقت هر کشور یک شماره داشت؛ حالا هر کشور یک
+                // پوشه است و چند شماره‌ی واقعی تویش.
+                'info'      => '/v2.php/?method=getinfo&operator=any',
                 'services'  => '/v2.php/?method=getservice',
                 'countries' => '/v2.php/?method=getcountry',
                 'svc_arg'   => 'service',   // نامِ پارامترِ فیلترِ سرویس
@@ -1058,9 +1149,16 @@ function numCatalog() {
         $flag  = numFlag($ctryEn[$cc] ?? '');
         $countries[$cc] = ['name' => $cName, 'flag' => $flag];
 
-        // 🏷 اسمِ محصول: وقتی فقط یک سرویس می‌فروشیم، نوشتنِ اسمِ آن روی
-        //    تک‌تکِ کارت‌ها فقط جا می‌گیرد — خودِ کشور کافی است.
+        // 🏷 اسمِ محصول.
+        //
+        //    کشور حالا «پوشه» است و چند شماره تویش دارد — هر اپراتور یکی.
+        //    پس اسمِ خودِ ردیف باید بگوید کدامِ آنهاست، نه اینکه اسمِ کشور
+        //    را چند بار تکرار کند.
         $single = ($only && count($only) === 1);
+        $op     = trim((string)($r['operator'] ?? ''));
+        $label  = $single
+            ? ($op !== '' && $op !== '0' ? 'اپراتور ' . $op : 'شماره')
+            : (($svcName[$ss] ?? ('سرویس ' . $ss)) . ($op !== '' && $op !== '0' ? ' · اپراتور ' . $op : ''));
         $out[] = [
             'sid'     => (string)$r['id'],
             'country' => $cc,
@@ -1069,16 +1167,17 @@ function numCatalog() {
             'cname'   => $cName,
             'single'  => $single,
             'rank'    => numRank($ctryEn[$cc] ?? ''),
-            'name'    => $single ? $cName
-                                 : (($svcName[$ss] ?? ('سرویس ' . $ss)) . ' — ' . $cName),
+            'name'    => $label,
+            'oper'    => $op,
             'price'   => (float)($r['amount'] ?? 0),
             'count'   => (int)($r['count'] ?? 0),
             'ttl'     => numParseTtl($r['time'] ?? ''),
             'on'      => (string)($r['active'] ?? '1') !== '0' && (int)($r['count'] ?? 0) > 0,
         ];
     }
-    // پرتقاضاها اول، بعد بقیه به ترتیبِ الفبا — همین ترتیب در مینی‌اپ می‌نشیند
-    usort($out, fn($x, $y) => [$x['rank'], $x['cname']] <=> [$y['rank'], $y['cname']]);
+    // کشورهای پرتقاضا اول؛ داخلِ هر کشور، ارزان‌ترین بالا
+    usort($out, fn($x, $y) => [$x['rank'], $x['cname'], $x['price']]
+                          <=> [$y['rank'], $y['cname'], $y['price']]);
     return [$countries, $out, ''];
 }
 
@@ -1094,10 +1193,9 @@ function numImport(array $countries, array $rows, $markup = 0, $syncPrice = null
     // قیمتِ پنل، منبعِ حقیقت است یا قیمتی که ادمین دستی گذاشته؟
     if ($syncPrice === null) $syncPrice = !empty(numVal('sync_price', true));
 
-    // 🎯 وقتی فقط یک سرویس می‌فروشیم، «کشور» دیگر دسته‌بندی نیست — خودِ
-    //    محصول است. ساختنِ ۶۰ دسته که هرکدام یک کارت دارد، هم نوارِ
-    //    دسته‌ها را بی‌فایده می‌کند هم کاربر را دو کلیک دورتر می‌برد.
-    $single = !empty($rows) && !empty($rows[0]['single']);
+    // 📁 هر کشور یک پوشه است و شماره‌هایش تویش. پس دسته‌ها همیشه ساخته
+    //    می‌شوند — چه یک سرویس بفروشیم چه چند تا.
+    $single = false;
 
     maSet('num', function (&$a) use ($countries, $rows, $mul, $syncPrice, $single,
                                      &$newC, &$newI, &$upd, &$off) {
@@ -1113,10 +1211,11 @@ function numImport(array $countries, array $rows, $markup = 0, $syncPrice = null
         if (!$single) {
             $order = count($a['cats']);
             foreach ($countries as $code => $info) {
+                $code = (string)$code;                   // کلیدِ عددیِ PHP → رشته
                 if (isset($byCode[$code])) continue;     // هست — دست نمی‌زنیم
                 $a['cats'][] = [
                     'id' => 'c' . bin2hex(random_bytes(3)), 'emoji' => $info['flag'],
-                    'name' => $info['name'], 'code' => $code, 'on' => true, 'order' => ++$order,
+                    'name' => $info['name'], 'code' => (string)$code, 'on' => true, 'order' => ++$order,
                 ];
                 $byCode[$code] = count($a['cats']) - 1;
                 $newC++;
@@ -1156,8 +1255,7 @@ function numImport(array $countries, array $rows, $markup = 0, $syncPrice = null
 
             $a['items'][] = [
                 'id' => 'i' . bin2hex(random_bytes(3)), 'cat' => $catId, 'svc' => $r['sid'],
-                // پرچمِ کشور روی کارت، وقتی خودِ کشور محصول است
-                'emoji' => $single ? ($r['flag'] ?? '☎️') : '☎️',
+                'emoji' => (string)($r['flag'] ?? '☎️'),
                 'name' => $r['name'], 'desc' => '',
                 'price' => round($r['price'] * $mul), 'unit' => '', 'badge' => '',
                 'ask' => 'none', 'min' => 1, 'max' => 1,
@@ -1243,6 +1341,11 @@ function numAdmHome($chatId, $msgId) {
         if (!$only) $t .= "⚠️ بدون فیلتر، همه‌ی سرویس‌های پنل وارد می‌شوند و مینی‌اپ سنگین می‌شود.\n";
         if ($ni === 0) $t .= "⚠️ هیچ سرویسی روشن نیست — «📥 وارد کردن» را بزنید.\n";
     }
+
+    $stuck = 0;
+    foreach (numAll() as $x)
+        if (!empty($x['panel_pending']) && !in_array(($x['status'] ?? ''), ['waiting','buying'], true)) $stuck++;
+    if ($stuck) $t .= "\n⚠️ <b>{$stuck}</b> شماره روی پنل بسته نشده — «📋 شماره‌های باز» را ببینید.";
 
     if ($open) $t .= "\n⏳ <b>{$open}</b> شماره‌ی باز، در انتظار کد.";
 
@@ -1815,7 +1918,27 @@ function numAdmOpen($chatId, $msgId) {
               " · " . intdiv($left, 60) . ":" . str_pad((string)($left % 60), 2, '0', STR_PAD_LEFT) . "\n";
         $rows[] = [btnCb('🔴 لغو ' . mb_substr((string)($a['phone'] ?? ''), 0, 16), 'numkill_' . $a['order'], 'reject')];
     }
-    if (!$n) $t .= "<i>الان هیچ شماره‌ای باز نیست.</i>";
+    if (!$n) $t .= "<i>الان هیچ شماره‌ای باز نیست.</i>\n";
+
+    // ⚠️ شماره‌هایی که در ربات بسته شده‌اند ولی روی پنل نه — هرکدام پولِ رفته
+    $stuck = [];
+    foreach (numAll() as $a) {
+        if (empty($a['panel_pending'])) continue;
+        if (in_array(($a['status'] ?? ''), ['waiting', 'buying'], true)) continue;
+        $stuck[] = $a;
+    }
+    if ($stuck) {
+        $t .= "\n⚠️ <b>روی پنل بسته نشدند</b> (" . count($stuck) . ")\n";
+        $t .= "<i>پول کاربر برگشته، ولی هزینه‌ی این‌ها در نامبرلند برنگشته.</i>\n";
+        foreach (array_slice($stuck, 0, 8) as $a) {
+            $t .= "• <code>" . h((string)($a['phone'] ?? '')) . "</code> — " .
+                  h(mb_substr((string)($a['panel_err'] ?? '—'), 0, 60)) .
+                  " (" . (int)($a['panel_tries'] ?? 0) . " تلاش)\n";
+            $rows[] = [btnCb('🔁 دوباره ' . mb_substr((string)($a['phone'] ?? ''), 0, 16),
+                             'numretry_' . $a['order'], 'confirm')];
+        }
+    }
+
     $rows[] = [btnCb('🔙 بازگشت', 'num_home', 'nav')];
     editMsg(BOT_TOKEN, $chatId, $msgId, $t, inlineKb($rows));
 }
@@ -1966,6 +2089,12 @@ function numCallback($data, $uid, $chatId, $msgId, $cbId, $isAdmin) {
         $ack(); numAdmOp($chatId, $msgId, substr($data, 6)); return true;
     }
 
+    if (str_starts_with($data, 'numretry_')) {
+        [$ok, $err] = numTellPanelCancel(substr($data, 9));
+        $ack($ok ? '✅ روی پنل بسته شد' : ('❌ ' . mb_substr((string)$err, 0, 80)));
+        numAdmOpen($chatId, $msgId);
+        return true;
+    }
     if (str_starts_with($data, 'numkill_')) {
         [$ok, $err] = numFinish(substr($data, 8), 'cancel');
         $ack($ok ? '✅ لغو شد و پول برگشت' : ('⚠️ ' . $err));

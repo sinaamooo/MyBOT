@@ -44,18 +44,26 @@ function maTplNum() {
 <style>
 :root{
   --c1:__C1__; --c2:__C2__; --c3:__C3__; --bg:__BG__;
+  /* رنگِ عمل: از تمِ پنل می‌آید ولی کم‌جان‌تر، تا صفحه آرام بماند */
+  --act:color-mix(in srgb, var(--c1) 62%, #8FB8F0);
 
-  --s1:#0C1526;      /* کارت */
-  --s2:#111C31;      /* کارت برجسته */
-  --s3:#17243D;      /* فشرده / فعال */
-  --hair:rgba(255,255,255,.07);
+  /* سطح‌ها: مشکیِ عمیق با ته‌مایه‌ی آبی — نه خاکستریِ خنثی */
+  --s1:#080D16;      /* کارت */
+  --s2:#0C131F;      /* کارت برجسته */
+  --s3:#111A29;      /* فشرده / فعال */
+  --hair:rgba(150,190,255,.09);
 
-  --ink:#EAF1FF;
-  --dim:#8FA0BF;
-  --dim2:#5D6C88;
-  --ok:#2ED47A;
-  --warn:#FFB020;
-  --bad:#FF5A6E;
+  /* متن: سفیدِ خالص نه — آبیِ خیلی کم‌رنگ، چشم را نمی‌زند */
+  --ink:#D7E4F5;
+  --dim:#7C90AE;
+  --dim2:#4E5F79;
+
+  /* دو رنگِ کم‌جانِ کاری: آبیِ پریده و سبزِ پریده */
+  --pale:#8FB8F0;
+  --mint:#7FD4A8;
+  --ok:#7FD4A8;
+  --warn:#E8B778;
+  --bad:#E8808F;
 
   --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
   --ui:-apple-system,BlinkMacSystemFont,"Segoe UI",Vazirmatn,Tahoma,sans-serif;
@@ -65,6 +73,10 @@ function maTplNum() {
   --nav:72px;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+/* ⚠️ خودِ [hidden] یعنی display:none، ولی هر display صریحی شکستش
+   می‌دهد — و پوشه‌ها grid و مسیرِ برگشت flex هستند. بدون این خط،
+   جعبه‌ی خالیِ برگشت همیشه بالای صفحه می‌ماند. */
+[hidden]{display:none !important}
 html,body{margin:0;padding:0;min-height:100%}
 body{
   background:var(--bg); color:var(--ink); font-family:var(--ui);
@@ -136,6 +148,54 @@ body::before{
 .srch input:focus{border-color:color-mix(in srgb,var(--c1) 50%,transparent)}
 #more{margin-top:12px}
 
+/* ── 📁 پوشه‌های کشور ────────────────────── */
+.folders{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media (max-width:330px){.folders{grid-template-columns:1fr}}
+.folder{
+  position:relative;overflow:hidden;display:flex;flex-direction:column;align-items:flex-start;gap:2px;
+  padding:15px 13px 13px;border-radius:var(--r-md);cursor:pointer;text-align:right;
+  font-family:var(--ui);color:var(--ink);
+  background:linear-gradient(160deg,color-mix(in srgb,var(--tint) 11%,var(--s1)),var(--s1) 72%);
+  border:1px solid var(--hair);transition:.2s var(--ease)
+}
+.folder:active{transform:scale(.975)}
+.folder::after{content:'';position:absolute;inset:auto -30% -70% -30%;height:80px;
+  background:radial-gradient(50% 100% at 50% 100%,color-mix(in srgb,var(--tint) 30%,transparent),transparent 70%);
+  filter:blur(18px);opacity:calc(.5 * __GLOW__);pointer-events:none}
+.folder b{font-size:14px;font-weight:700;line-height:1.5}
+.fmeta{font-size:11px;color:var(--dim2)}
+.fprice{
+  margin-top:6px;font-family:var(--mono);font-size:12.5px;font-weight:700;
+  color:color-mix(in srgb,var(--tint) 62%,var(--ink));direction:rtl
+}
+.folder.off{opacity:.42;filter:grayscale(.55)}
+
+/* 🏳️ پرچم‌ها تکان می‌خورند — مثل پرچمِ واقعی در باد.
+   تکانِ کم و کُند: قرار است زنده باشد، نه اینکه حواس را ببرد. */
+.flag{
+  display:inline-block;font-size:27px;line-height:1.1;margin-bottom:5px;
+  transform-origin:0% 60%;
+  animation:wave 3.6s ease-in-out infinite;
+  will-change:transform
+}
+@keyframes wave{
+  0%,100%{transform:rotate(0deg) skewX(0deg) scaleY(1)}
+  25%    {transform:rotate(-2.5deg) skewX(4deg) scaleY(.985)}
+  50%    {transform:rotate(0deg) skewX(0deg) scaleY(1)}
+  75%    {transform:rotate(2.5deg) skewX(-4deg) scaleY(.985)}
+}
+@media (prefers-reduced-motion:reduce){ .flag{animation:none} }
+
+/* ── مسیرِ برگشت ─────────────────────────── */
+.crumb{
+  display:flex;align-items:center;gap:9px;width:100%;margin:0 0 12px;
+  padding:11px 13px;border-radius:13px;cursor:pointer;text-align:right;
+  background:var(--s1);border:1px solid var(--hair);color:var(--ink);
+  font-family:var(--ui);font-size:13.5px;font-weight:700
+}
+.crumb:active{transform:scale(.99)}
+.crumb .ca{color:var(--pale);font-size:15px;line-height:1}
+
 /* ── شبکه‌ی دو ستونه ─────────────────────── */
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 @media (max-width:330px){.grid{grid-template-columns:1fr}}
@@ -150,7 +210,7 @@ body::before{
   background:radial-gradient(50% 100% at 50% 100%,color-mix(in srgb,var(--tint) 45%,transparent),transparent 70%);
   filter:blur(18px);opacity:calc(.55 * __GLOW__);pointer-events:none}
 .card .fl{display:flex;align-items:center;gap:6px;margin-bottom:7px}
-.card .fl b{font-size:20px;line-height:1}
+.card .fl b.flag{font-size:20px;line-height:1;margin-bottom:0}
 .card .badge{
   margin-inline-start:auto;font-size:9.5px;font-weight:800;padding:3px 7px;border-radius:8px;
   background:color-mix(in srgb,var(--tint) 24%,transparent);color:color-mix(in srgb,var(--tint) 70%,#fff);
@@ -326,7 +386,10 @@ body::before{
   <!-- ☎️ شماره‌ها -->
   <section class="page" id="p-shop">
     <div class="srch"><input id="q" type="search" inputmode="search" autocomplete="off"></div>
-    <div class="cats" id="cats"></div>
+    <button class="crumb" id="crumb" hidden>
+      <span class="ca">←</span><b id="crumbName"></b>
+    </button>
+    <div class="folders" id="folders"></div>
     <div class="grid" id="grid"></div>
     <button class="btn ghost" id="more" hidden></button>
     <p class="ohint" id="gridHint" hidden></p>
@@ -368,8 +431,11 @@ const B = __BOOT__;
 const TG = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
 if (TG) { try { TG.ready(); TG.expand(); TG.setHeaderColor && TG.setHeaderColor(getComputedStyle(document.documentElement).getPropertyValue('--bg').trim()); } catch (e) {} }
 
-/* 🎨 رنگِ هر کشور — تا شبکه یک‌دست و بی‌روح نشود */
-const TINTS = ['#FF5A6E','#3FA9FF','#FFC93C','#5BE7A9','#B47CFF','#FF9A5B','#4FD9E8','#FF7BD5','#7FE07F','#FFA0C9'];
+/* 🎨 رنگِ هر کشور.
+   همه از یک خانواده‌اند — آبیِ پریده تا سبزِ پریده — تا شبکه یکدست و
+   آرام بماند ولی کارت‌ها از هم جدا باشند. رنگین‌کمان اینجا شلوغی است. */
+const TINTS = ['#6E9EE8','#7FD4A8','#5B8FD4','#8FC9B4','#7EA9E0','#69C4A0',
+               '#4F7CBF','#9BD6BC','#88B4EC','#5FB894'];
 const tintOf = i => TINTS[i % TINTS.length];
 
 const $  = s => document.querySelector(s);
@@ -446,12 +512,17 @@ function cardEl(it) {
   el.style.setProperty('--tint', tintFor(it));
 
   const fl = document.createElement('div'); fl.className = 'fl';
-  const b = document.createElement('b'); b.textContent = (c && c.emoji) || it.emoji || '☎️';
+  const b = document.createElement('b'); b.className = 'flag';
+  b.textContent = (c && c.emoji) || it.emoji || '☎️';
+  b.style.animationDelay = (Math.random() * -3.6) + 's';
   fl.appendChild(b);
   if (it.badge) { const g = document.createElement('span'); g.className = 'badge'; g.textContent = it.badge; fl.appendChild(g); }
   el.appendChild(fl);
 
-  const h = document.createElement('h3'); h.textContent = it.name; el.appendChild(h);
+  const h = document.createElement('h3');
+  // در نتیجه‌ی جستجو کشور را هم بنویس — «اپراتور ۱» تنها معنی ندارد
+  h.textContent = it.cname ? (it.cname + ' · ' + it.name) : it.name;
+  el.appendChild(h);
   if (it.desc) { const p = document.createElement('p'); p.textContent = it.desc; el.appendChild(p); }
 
   const foot = document.createElement('div'); foot.className = 'foot';
@@ -468,35 +539,100 @@ function cardEl(it) {
 }
 
 /* 📄 چند کارت در هر نوبت ساخته شود.
-   با کاتالوگِ بزرگ، ساختنِ یک‌جای همه‌ی کارت‌ها صفحه را قفل می‌کند:
-   ۸۰۰ محصول یعنی هفت‌هزار گره و بیش از یک ثانیه فریزِ کامل روی گوشی.
-   پس یک صفحه می‌سازیم و بقیه با اسکرول می‌آیند. */
+   با کاتالوگِ بزرگ، ساختنِ یک‌جای همه‌ی کارت‌ها صفحه را قفل می‌کند. */
 const PAGE = 40;
 
-/* صفحه فقط چند ده‌تای اول را دارد؛ نتیجه‌ی جستجو از سرور می‌آید و
-   همان‌جا در S.hits می‌نشیند. */
+/* دو سطح: پوشه‌های کشور، و شماره‌های داخلِ یک کشور.
+   جستجو از هر دو سطح بیرون می‌زند و مستقیم شماره نشان می‌دهد. */
 function visibleItems() {
-  const q = (S.q || '').trim().toLowerCase();
-  if (q) return S.hits || [];
-  return (B.items || []).filter(i => S.cat === 'all' || i.cat === S.cat);
+  if ((S.q || '').trim()) return S.hits || [];
+  if (S.cat !== 'all')    return S.catItems || [];
+  return B.items || [];
 }
 
-/* 🔎 جستجو روی سرور.
-   با چند هزار کشور، فهرستِ کامل داخل صفحه نیست — پس نمی‌شود محلی گشت.
-   هر تایپ یک درخواست نمی‌فرستد: ۲۵۰ms صبر می‌کند و نتیجه‌ی کهنه را هم
-   دور می‌ریزد تا پاسخِ دیرتر جای تازه‌تر را نگیرد. */
+/* 🔎 جستجو روی سرور — فهرستِ کامل داخل صفحه نیست. */
 let qSeq = 0;
 async function runSearch(q) {
   q = (q || '').trim();
   S.q = q;
-  if (!q) { S.hits = []; paintGrid(); return; }
+  if (!q) { S.hits = []; paintShop(); return; }
 
   const mine = ++qSeq;
   $('#gridEmpty').hidden = true;
   const r = await api('num_search', { q });
-  if (mine !== qSeq) return;                 // جوابِ یک تایپِ قدیمی‌تر
+  if (mine !== qSeq) return;
   S.hits = (r && r.ok && Array.isArray(r.items)) ? r.items : [];
+  paintShop();
+}
+
+/* 📁 باز کردن پوشه‌ی یک کشور */
+async function openCat(id, name) {
+  S.cat = id; S.catName = name || ''; S.catItems = []; S.q = '';
+  $('#q').value = '';
+  paintShop();                                  // فوراً حالتِ خالی را نشان بده
+  const r = await api('num_cat', { cat: id });
+  if (S.cat !== id) return;                     // کاربر رفته جای دیگر
+  S.catItems = (r && r.ok && Array.isArray(r.items)) ? r.items : [];
+  paintShop();
+}
+
+function backToFolders() {
+  S.cat = 'all'; S.catName = ''; S.catItems = []; S.q = '';
+  $('#q').value = '';
+  paintShop();
+}
+
+/* نقاشیِ صفحه‌ی خرید — بسته به اینکه در کدام سطحیم */
+function paintShop() {
+  const inFolder = S.cat !== 'all';
+  const searching = !!(S.q || '').trim();
+  const showFolders = !inFolder && !searching && (B.cats || []).length > 0;
+
+  $('#crumb').hidden = !inFolder || searching;
+  if (inFolder) $('#crumbName').textContent = S.catName;
+
+  $('#folders').hidden = !showFolders;
+  $('#grid').hidden = showFolders;
+  $('#more').hidden = showFolders || $('#more').hidden;
+
+  if (showFolders) { paintFolders(); $('#gridEmpty').hidden = true; $('#gridHint').hidden = true; return; }
   paintGrid();
+}
+
+function paintFolders() {
+  const box = $('#folders');
+  box.textContent = '';
+  const frag = document.createDocumentFragment();
+  (B.cats || []).forEach((c, i) => frag.appendChild(folderEl(c, i)));
+  box.appendChild(frag);
+}
+
+function folderEl(c, i) {
+  const el = document.createElement('button');
+  el.className = 'folder';
+  el.style.setProperty('--tint', tintOf(i));
+
+  const f = document.createElement('span');
+  f.className = 'flag'; f.textContent = c.emoji || '🏳️';
+  f.style.animationDelay = (i % 12) * -0.35 + 's';
+  el.appendChild(f);
+
+  const nm = document.createElement('b'); nm.textContent = c.name; el.appendChild(nm);
+
+  const meta = document.createElement('span'); meta.className = 'fmeta';
+  meta.textContent = c.n > 0
+    ? fmt(c.n) + ' ' + U('numbers_n', 'شماره')
+    : U('empty_cat', 'موجود نیست');
+  el.appendChild(meta);
+
+  if (c.from > 0) {
+    const p = document.createElement('span'); p.className = 'fprice';
+    p.textContent = U('from', 'از') + ' ' + fmt(c.from);
+    el.appendChild(p);
+  }
+  if (!c.n) el.classList.add('off');
+  el.addEventListener('click', () => { buzz(); openCat(c.id, c.name); });
+  return el;
 }
 
 function paintGrid(reset) {
@@ -523,38 +659,13 @@ function paintGrid(reset) {
   more.hidden = left <= 0;
   if (left > 0) more.textContent = U('more', 'بیشتر') + ' (' + fmt(left) + ')';
 
-  // 💡 وقتی صفحه فقط بخشی از کشورها را دارد، کاربر باید بداند بقیه هم
-  //    هستند — وگرنه فکر می‌کند فقط همین‌قدر می‌فروشیم.
+  // 💡 «بقیه را با جستجو پیدا کنید» فقط سرِ فهرستِ کلی معنی دارد.
+  //    داخلِ پوشه‌ی یک کشور یا وسطِ نتیجه‌ی جستجو، حرفِ بی‌ربطی است.
   const hint = $('#gridHint');
   const rest = (B.total || 0) - (B.items || []).length;
-  hint.hidden = !!S.q || rest <= 0 || left > 0;
+  hint.hidden = !!S.q || S.cat !== 'all' || rest <= 0 || left > 0
+                || ((B.cats || []).length > 0);
   if (!hint.hidden) hint.textContent = U('search_rest', '').replace('{n}', fmt(rest));
-}
-
-function paintCats() {
-  const box = $('#cats');
-  box.textContent = '';
-  const cats = B.cats || [];
-
-  // یک نوارِ دسته که فقط «همه» دارد، جا می‌گیرد و کاری نمی‌کند
-  if (cats.length < 1) { box.hidden = true; return; }
-  box.hidden = false;
-
-  const mk = (id, emoji, name, idx) => {
-    const b = document.createElement('div');
-    b.className = 'cat'; b.setAttribute('aria-selected', S.cat === id ? 'true' : 'false');
-    b.style.setProperty('--tint', tintOf(idx));
-    const i = document.createElement('i'); i.textContent = emoji; b.appendChild(i);
-    const s = document.createElement('span'); s.textContent = name; b.appendChild(s);
-    b.addEventListener('click', () => { S.cat = id; buzz(); paintCats(); paintGrid(); });
-    return b;
-  };
-  // «همه» رنگِ خودِ تم را می‌گیرد، نه یکی از رنگ‌های کشورها — وگرنه
-  // شبیه یک کشورِ دیگر می‌شود و از بقیه جدا دیده نمی‌شود.
-  const all = mk('all', '🌍', U('all', 'همه کشورها'), 0);
-  all.style.setProperty('--tint', getComputedStyle(document.documentElement).getPropertyValue('--c1').trim() || '#2E7DFF');
-  box.appendChild(all);
-  cats.forEach((c, i) => box.appendChild(mk(c.id, c.emoji || '🏳️', c.name, i)));
 }
 
 function paintHot() {
@@ -750,7 +861,7 @@ async function doBuy(it, btn) {
   }
   if (r.error === 'no_balance') { closeSheet(); askTopup(r.need || 0); return; }
   if (r.error === 'price_changed' && typeof r.price === 'number') {
-    it.price = r.price; closeSheet(); paintGrid(); paintHot();
+    it.price = r.price; closeSheet(); paintShop(); paintHot();
   }
   toast(r.message || 'انجام نشد', 'bad');
 }
@@ -993,11 +1104,12 @@ function boot() {
     qT = setTimeout(() => runSearch(q.value), 250);
   });
   $('#more').addEventListener('click', () => { buzz(); paintGrid(false); });
+  $('#crumb').addEventListener('click', () => { buzz(); backToFolders(); });
 
   $('#balBtn').addEventListener('click', () => { buzz(); askTopup(0); });
   $('#topupBtn').addEventListener('click', () => { buzz(); askTopup(0); });
 
-  paintCats(); paintGrid(); paintHot();
+  paintShop(); paintHot();
   loadMe(); loadLive(); loadOrders();
 
   // برگشت به صفحه بعد از قفل شدن گوشی — وضعیت را تازه کن

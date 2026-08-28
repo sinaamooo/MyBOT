@@ -410,11 +410,12 @@ function maDefaultNum() {
         ],
 
         'theme' => [
+            // 🌑 مشکیِ عمیق با آبیِ پریده و سبزِ پریده — سفیدِ کم، آرام
             'preset' => 'ocean',
-            'c1'  => '#2E7DFF',
-            'c2'  => '#00E0C6',
-            'c3'  => '#7C4DFF',
-            'bg'  => '#050B18',
+            'c1'  => '#6E9EE8',
+            'c2'  => '#7FD4A8',
+            'c3'  => '#4A6FA8',
+            'bg'  => '#04070C',
             'glow' => 1,
             'grain' => 0,
             'fx'    => 1,
@@ -429,7 +430,10 @@ function maDefaultNum() {
             'sending'  => 'در حال گرفتن شماره…',
             'done'     => 'سفارش ثبت شد',
             'done_sub' => 'فاکتور پرداخت داخل ربات برایتان فرستاده شد.',
-            'search'   => 'جستجوی کشور…',
+            'search'    => 'جستجوی کشور…',
+            'numbers_n' => 'شماره',
+            'empty_cat' => 'موجود نیست',
+            'from'      => 'از',
             'more'     => 'نمایش بیشتر',
             'no_match' => 'چیزی با این نام پیدا نشد.',
             'search_rest' => '💡 {n} کشور دیگر هم داریم — اسمش را در جستجو بنویسید.',
@@ -2175,6 +2179,7 @@ function maBoot($key, $a) {
         'ui'       => maUiAll($key),
         'cats'     => maCatsPublic($a),
         'items'    => maItemsPublic($a, maTopN($key)),
+    'catn'     => count((array)($a['cats'] ?? [])),
         // چندتا محصولِ روشن داریم؟ صفحه با این می‌فهمد که «بقیه» هم هست
         'total'    => maCountOn($a),
         'top'      => maTopN($key),
@@ -2216,12 +2221,30 @@ function maUiAll($key) {
 }
 
 function maCatsPublic($a) {
+    // 📁 هر دسته یک پوشه است، پس باید بگوید چند شماره دارد و از چند تومان
+    //    شروع می‌شود — وگرنه کاربر باید همه را باز کند تا بفهمد.
+    $n = $from = [];
+    foreach ((array)($a['items'] ?? []) as $i) {
+        if (empty($i['on'])) continue;
+        $c = (string)($i['cat'] ?? '');
+        if ($c === '') continue;
+        $n[$c] = ($n[$c] ?? 0) + 1;
+        $p = maItemPrice($i);
+        if ($p > 0 && (!isset($from[$c]) || $p < $from[$c])) $from[$c] = $p;
+    }
+
     $out = [];
     foreach ($a['cats'] ?? [] as $c) {
         if (empty($c['on'])) continue;
-        $out[] = ['id' => (string)$c['id'], 'name' => (string)$c['name'], 'emoji' => (string)($c['emoji'] ?? '')];
+        $id = (string)$c['id'];
+        $out[] = [
+            'id'    => $id,
+            'name'  => (string)$c['name'],
+            'emoji' => (string)($c['emoji'] ?? ''),
+            'n'     => (int)($n[$id] ?? 0),
+            'from'  => (float)($from[$id] ?? 0),
+        ];
     }
-    usort($out, fn($x, $y) => 0);
     return $out;
 }
 
@@ -2274,17 +2297,30 @@ function maSearchItems($a, $q, $limit = 60) {
     $q = trim(mb_strtolower((string)$q));
     if ($q === '') return [];
 
-    $catPos = []; $n = 0;
-    foreach ($a['cats'] ?? [] as $c) $catPos[(string)$c['id']] = $n++;
+    $catPos = []; $catName = []; $n = 0;
+    foreach ($a['cats'] ?? [] as $c) {
+        $catPos[(string)$c['id']]  = $n++;
+        $catName[(string)$c['id']] = (string)($c['name'] ?? '');
+    }
 
+    // ⚠️ نامِ خودِ شماره حالا «اپراتور ۱» است، نه «تلگرام — روسیه».
+    //    پس اگر فقط نامِ ردیف را بگردیم، جستجوی «روسیه» هیچ‌چیز پیدا
+    //    نمی‌کند — و کاربر دقیقا همین را می‌نویسد. نامِ کشور هم باید
+    //    بگردد.
     $hits = [];
     foreach ($a['items'] ?? [] as $i) {
         if (empty($i['on'])) continue;
+        $cid  = (string)($i['cat'] ?? '');
+        $cn   = mb_strtolower($catName[$cid] ?? '');
         $name = mb_strtolower((string)($i['name'] ?? ''));
         $desc = mb_strtolower((string)($i['desc'] ?? ''));
-        if (!str_contains($name, $q) && !str_contains($desc, $q)) continue;
-        // آنکه از اولِ نامش می‌خواند، بالاتر — «روسیه» قبل از «بلاروسیه»
-        $hits[] = [str_starts_with($name, $q) ? 0 : 1, (int)($i['order'] ?? 99), $i];
+
+        $inCat  = $cn !== '' && str_contains($cn, $q);
+        if (!$inCat && !str_contains($name, $q) && !str_contains($desc, $q)) continue;
+
+        // آنکه از اولِ نامِ کشور می‌خواند، بالاتر — «روسیه» قبل از «بلاروس»
+        $rank = ($inCat && str_starts_with($cn, $q)) ? 0 : ($inCat ? 1 : 2);
+        $hits[] = [$rank, (int)($i['order'] ?? 99), $i];
         if (count($hits) >= $limit * 6) break;      // سقفِ کارِ بی‌فایده
     }
     usort($hits, fn($x, $y) => [$x[0], $x[1]] <=> [$y[0], $y[1]]);
@@ -2294,6 +2330,8 @@ function maSearchItems($a, $q, $limit = 60) {
         $out[] = [
             'id'    => (string)$i['id'],
             'cat'   => (string)($i['cat'] ?? ''),
+            // در نتیجه‌ی جستجو، «اپراتور ۱» تنها بی‌معنی است
+            'cname' => $catName[(string)($i['cat'] ?? '')] ?? '',
             'emoji' => (string)($i['emoji'] ?? '💠'),
             'name'  => (string)$i['name'],
             'desc'  => (string)($i['desc'] ?? ''),
@@ -2776,6 +2814,24 @@ function maApi() {
         if (mb_strlen($q) < 1) maApiOut(['ok' => true, 'items' => []]);
         if (mb_strlen($q) > 40) $q = mb_substr($q, 0, 40);
         maApiOut(['ok' => true, 'items' => maSearchItems($a, $q, 60)]);
+    }
+
+    // ---- 📁 شماره مجازی: شماره‌های یک کشور ----
+    //
+    // پوشه‌ها همیشه در صفحه هستند (سبک‌اند)، ولی محتوایشان نه — با چند
+    // هزار شماره نمی‌شود همه را در صفحه گذاشت. با باز کردن پوشه می‌آید.
+    if ($action === 'num_cat') {
+        if ($key !== 'num') maApiOut(['ok' => false, 'error' => 'bad_app'], 400);
+        $cid = trim((string)($body['cat'] ?? ''));
+        if ($cid === '') maApiOut(['ok' => true, 'items' => []]);
+
+        $out = [];
+        foreach (maItemsPublic($a, 0) as $i) {
+            if ((string)$i['cat'] !== $cid) continue;
+            $out[] = $i;
+            if (count($out) >= 60) break;
+        }
+        maApiOut(['ok' => true, 'items' => $out]);
     }
 
     // ---- 📋 شماره مجازی: سفارش‌های من ----
