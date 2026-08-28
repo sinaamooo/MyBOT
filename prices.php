@@ -209,12 +209,60 @@ function pxNoNet($on = null) {
     return $flag;
 }
 
-/** بعد از فرستادن جواب: هر منبعی که کهنه بود تازه شود */
+/**
+ * 🔒 فقط یک تازه‌سازی در هر بازه.
+ *
+ * بدون این، لحظه‌ای که کش تمام می‌شود چند پیامِ هم‌زمانِ گروه هرکدام یک
+ * تازه‌سازیِ کامل راه می‌اندازند: چند تماس به منبع اصلی و تا سه تماس به
+ * منبع دوم، هرکدام تا ۶ ثانیه. همه‌ی این‌ها روی هم می‌نشیند و کارگرهای
+ * PHP را می‌بندد — از بیرون یعنی «ربات سخت جواب می‌دهد».
+ *
+ * ادعا اتمی است: فقط پروسه‌ای که قفل را گرفت ادامه می‌دهد.
+ */
+function pxWarmClaim($secs) {
+    $f = DATA_DIR . '/.px_warm';
+    $now = time();
+    clearstatcache(true, $f);
+    if (($mt = @filemtime($f)) !== false && ($now - $mt) < $secs) return false;
+
+    // ⚠️ خودِ ساختنِ فایل، زمانش را روی «الان» می‌گذارد. پس باید بدانیم
+    //    قبل از ما بوده یا نه؛ وگرنه هر بار زمانِ خودمان را می‌بینیم و
+    //    فکر می‌کنیم یکی دیگر همین حالا ادعا کرده.
+    $existed = is_file($f);
+
+    $fp = @fopen($f, 'c');
+    if (!$fp) return true;                       // قفل نشد؛ لااقل کار را انجام بده
+    if (!flock($fp, LOCK_EX | LOCK_NB)) { fclose($fp); return false; }
+
+    $ok = true;
+    if ($existed) {
+        clearstatcache(true, $f);
+        $mt2 = @filemtime($f);
+        $ok  = !($mt2 !== false && ($now - $mt2) < $secs);
+    }
+    if ($ok) @touch($f);
+    flock($fp, LOCK_UN);
+    fclose($fp);
+    return $ok;
+}
+
+/**
+ * بعد از فرستادن جواب: هر منبعی که کهنه بود تازه شود.
+ *
+ * ⚠️ فقط همانی که واقعا کهنه است. قبلا هر بار هر دو منبع را با
+ * $fresh=true می‌گرفت، یعنی منبع دومِ ۵ دقیقه‌ای هم هر دقیقه از نو
+ * گرفته می‌شد — سه تماس شبکه‌ی بی‌خود روی هر تازه‌سازی.
+ */
 function pxWarm() {
     pxNoNet(false);
+    if (!pxWarmClaim(max(10, (int)(pxVal('ttl', 60) / 2)))) return;
+
     try {
-        pxFetch(true);
-        if (trim((string)pxVal('alt_url', '')) !== '') pxAltFetch(true);
+        if (maCacheGet('px_pairs', max(15, (int)pxVal('ttl', 60))) === null) pxFetch(true);
+
+        $alt = trim((string)pxVal('alt_url', ''));
+        if ($alt !== '' && maCacheGet('px_alt', max(30, (int)pxVal('alt_ttl', 300))) === null)
+            pxAltFetch(true);
     } catch (Throwable $e) {
         error_log('[prices-warm] ' . $e->getMessage());
     }

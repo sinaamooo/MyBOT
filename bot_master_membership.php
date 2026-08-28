@@ -649,6 +649,20 @@ function defaultConfig() {
             'auto' => false,  // جدول خودکار فقط اگر خودتان بخواهید — با {list} یا همین گزینه
         ],
 
+        // 🧾 لیست سفارشات — دکمه‌ی شیشه‌ای بالای دکمه‌های مینی‌اپ
+        'orders_list' => [
+            'on'    => true,
+            'per'   => 3,          // چند سفارش در هر صفحه
+            'btn'   => ['emoji' => '🧾', 'text' => 'لیست سفارشات', 'color' => 'info', 'icon' => ''],
+            'text'  => "🧾 <b>لیست سفارشات شما</b>",
+            'empty' => "🧾 <b>لیست سفارشات شما</b>\n\nهنوز سفارشی ثبت نکرده‌اید.",
+            'h1'    => ['emoji' => '', 'text' => 'نوع سفارش',  'color' => 'info', 'icon' => ''],
+            'h2'    => ['emoji' => '', 'text' => 'مبلغ سفارش', 'color' => 'info', 'icon' => ''],
+            'next'  => ['emoji' => '', 'text' => 'صفحه بعد',   'color' => 'primary', 'icon' => ''],
+            'first' => ['emoji' => '', 'text' => 'صفحه اول',   'color' => 'nav', 'icon' => ''],
+            'back'  => ['emoji' => '', 'text' => 'برگشت',      'color' => 'nav', 'icon' => ''],
+        ],
+
         // 🚀 دو مینی‌اپ جدا — خدمات تلگرام و فروش کانفیگ
         'miniapps' => maDefaultConfig(),
 
@@ -2242,6 +2256,10 @@ function showProducts($uid, $chatId, $extra = [], $replyTo = null) {
     foreach ($extra as $r) {
         foreach ($r as $b) if (isset($b['web_app'])) { $mergedIn = true; break 2; }
     }
+    // 🧾 لیست سفارشات — بالای دکمه‌های مینی‌اپ
+    $ol = cfg()['orders_list'] ?? [];
+    if (!empty($ol['on'])) $rows[] = [olBtn($ol['btn'] ?? [], 'ordlist_0', 'info')];
+
     if (!$mergedIn) foreach (maRows() as $r) $rows[] = $r;
 
     // 📋 دکمه لیست تعرفه‌ها — همیشه آخرین ردیف
@@ -2280,6 +2298,104 @@ function tariffTable() {
                 ' تا ' . number_format((int)$p['flow']['max']) . "\n";
     }
     return $out;
+}
+
+/**
+ * 🔘 یک دکمه‌ی شیشه‌ای از روی تنظیماتِ ذخیره‌شده.
+ *
+ * ایموجی پریمیوم جدا و به‌شکل شناسه می‌نشیند (icon)، چون برچسبِ دکمه
+ * HTML نمی‌پذیرد. ایموجی معمولی جلوی متن می‌آید.
+ */
+function olBtn($c, $data, $role = null) {
+    $txt = trim((string)($c['emoji'] ?? '') . ' ' . (string)($c['text'] ?? ''));
+    if ($txt === '') $txt = '—';
+    $b = ['text' => $txt, 'callback_data' => $data];
+    $st = isStyle($c['color'] ?? '') ? $c['color'] : ($role ? gs($role) : null);
+    if (isStyle($st)) $b['style'] = $st;
+    if (trim((string)($c['icon'] ?? '')) !== '') $b['icon_custom_emoji_id'] = (string)$c['icon'];
+    return $b;
+}
+
+/**
+ * 🧾 همه‌ی سفارش‌های یک کاربر — هم خریدهای خودِ ربات، هم مینی‌اپ‌ها.
+ * تازه‌ترین اول.
+ */
+function olOrders($uid) {
+    $out = [];
+
+    foreach (Order::forUser($uid) as $o) {
+        if (($o['type'] ?? '') === 'topup') continue;      // شارژ حساب خرید نیست
+        $p    = Product::get($o['product_id'] ?? '');
+        $name = $p ? trim(($p['emoji'] ?? '') . ' ' . $p['name']) : (string)($o['product_id'] ?? 'سفارش');
+        $out[] = [
+            'name'   => $name,
+            'amount' => (float)($o['amount'] ?? 0),
+            'cur'    => (string)($o['currency'] ?? 'تومان'),
+            'at'     => (string)($o['created_at'] ?? ''),
+        ];
+    }
+
+    if (class_exists('MaOrder')) {
+        foreach (MaOrder::forUser($uid, 200) as $o) {
+            $out[] = [
+                'name'   => trim((string)($o['item_emoji'] ?? '') . ' ' . (string)($o['item_name'] ?? 'سفارش')),
+                'amount' => (float)($o['total'] ?? 0),
+                'cur'    => (string)($o['currency'] ?? 'تومان'),
+                'at'     => (string)($o['created_at'] ?? ''),
+            ];
+        }
+    }
+
+    usort($out, fn($a, $b) => strcmp($b['at'], $a['at']));
+    return $out;
+}
+
+/**
+ * 🧾 صفحه‌ی لیست سفارشات.
+ *
+ * هر سفارش یک ردیفِ دو دکمه‌ای: نام محصول و مبلغش. بالایشان یک ردیف
+ * سرستون. پایین‌شان، اگر لازم باشد، «صفحه بعد» و «صفحه اول».
+ *
+ * دکمه‌ها فقط برچسب‌اند و کاری نمی‌کنند؛ ولی چون تلگرام دکمه‌ی بدون
+ * callback نمی‌پذیرد، همه به یک داده‌ی بی‌اثر وصل‌اند.
+ */
+function showOrderList($uid, $chatId, $page = 0, $msgId = null) {
+    $ol   = cfg()['orders_list'] ?? [];
+    $per  = max(1, (int)($ol['per'] ?? 3));
+    $all  = olOrders($uid);
+    $tot  = count($all);
+    $max  = $tot > 0 ? (int)ceil($tot / $per) : 1;
+    $page = max(0, min((int)$page, $max - 1));
+
+    if ($tot === 0) {
+        $rows = [[olBtn($ol['back'] ?? ['text' => 'برگشت'], 'menu_buy', 'nav')]];
+        $txt  = (string)($ol['empty'] ?? '🧾 هنوز سفارشی ثبت نکرده‌اید.');
+        if ($msgId) editMsg(BOT_TOKEN, $chatId, $msgId, $txt, inlineKb($rows));
+        else        sendMsg(BOT_TOKEN, $chatId, $txt, inlineKb($rows));
+        return;
+    }
+
+    $rows = [[olBtn($ol['h1'] ?? ['text' => 'نوع سفارش'],  'ordnop', 'info'),
+              olBtn($ol['h2'] ?? ['text' => 'مبلغ سفارش'], 'ordnop', 'info')]];
+
+    foreach (array_slice($all, $page * $per, $per) as $o) {
+        $rows[] = [
+            ['text' => mb_substr((string)$o['name'], 0, 28) ?: '—', 'callback_data' => 'ordnop'],
+            ['text' => fmtNum($o['amount']) . ' ' . $o['cur'], 'callback_data' => 'ordnop'],
+        ];
+    }
+
+    $nav = [];
+    if ($page + 1 < $max) $nav[] = olBtn($ol['next']  ?? ['text' => 'صفحه بعد'], 'ordlist_' . ($page + 1), 'primary');
+    if ($page > 0)        $nav[] = olBtn($ol['first'] ?? ['text' => 'صفحه اول'], 'ordlist_0', 'nav');
+    if ($nav) $rows[] = $nav;
+    $rows[] = [olBtn($ol['back'] ?? ['text' => 'برگشت'], 'menu_buy', 'nav')];
+
+    $txt = (string)($ol['text'] ?? '🧾 <b>لیست سفارشات شما</b>');
+    if ($max > 1) $txt .= "\n\nصفحه " . ($page + 1) . ' از ' . $max;
+
+    if ($msgId) editMsg(BOT_TOKEN, $chatId, $msgId, $txt, inlineKb($rows));
+    else        sendMsg(BOT_TOKEN, $chatId, $txt, inlineKb($rows));
 }
 
 /** 📋 نمایش لیست تعرفه‌ها — با دکمه برگشت به بخش خرید */
@@ -3784,7 +3900,7 @@ function admGroups() {
     return [
         'shop' => ['🛍 <b>فروشگاه</b>', 'محصول، سفارش، تعرفه — هرچه به فروش مربوط است.', [
             [['🛒 محصولات', 'eprods'], ['🧾 سفارش‌ها', 'adm_orders']],
-            [['📋 لیست تعرفه‌ها', 'adm_tariff']],
+            [['📋 لیست تعرفه‌ها', 'adm_tariff'], ['🧾 لیست سفارشات', 'adm_orderlist']],
             [['🧩 مخزن، سفارش دستی، سود', 'ax_home']],
         ]],
         'mini' => ['🚀 <b>مینی‌اپ‌ها</b>', 'خدمات تلگرام و فروش کانفیگ — ظاهر، محصول‌ها و قیمت‌ها.', [
@@ -4026,6 +4142,41 @@ function admTariff($chatId, $msgId) {
         [btnUI('back', 'adm_home', 'nav')],
     ];
     editMsg(BOT_TOKEN, $chatId, $msgId, $text, inlineKb($rows));
+}
+
+/** 🧾 تنظیم لیست سفارشات */
+function admOrderList($chatId, $msgId) {
+    $ol = cfg()['orders_list'] ?? [];
+    $lbl = function ($k, $d) use ($ol) {
+        $c = $ol[$k] ?? [];
+        $t = trim((string)($c['emoji'] ?? '') . ' ' . (string)($c['text'] ?? $d));
+        return h($t !== '' ? $t : $d) . (trim((string)($c['icon'] ?? '')) !== '' ? ' ✨' : '');
+    };
+
+    $t  = "🧾 <b>لیست سفارشات</b>\n\n";
+    $t .= "دکمه‌ای بالای دکمه‌های مینی‌اپ که خریدهای کاربر را نشان می‌دهد.\n";
+    $t .= "هر سفارش یک ردیف: نام محصول و مبلغش.\n\n";
+    $t .= "وضعیت: " . (!empty($ol['on']) ? '✅ روشن' : '❌ خاموش') . "\n";
+    $t .= "تعداد در هر صفحه: <b>" . (int)($ol['per'] ?? 3) . "</b>\n\n";
+    $t .= "🔘 دکمه: " . $lbl('btn', 'لیست سفارشات') . "\n";
+    $t .= "🏷 سرستون‌ها: " . $lbl('h1', 'نوع سفارش') . " · " . $lbl('h2', 'مبلغ سفارش') . "\n";
+    $t .= "➡️ صفحه بعد: " . $lbl('next', 'صفحه بعد') . " · ⏮ صفحه اول: " . $lbl('first', 'صفحه اول') . "\n";
+    $t .= "◀️ برگشت: " . $lbl('back', 'برگشت') . "\n\n";
+    $t .= "✨ یعنی ایموجی پریمیوم دارد.\n\n";
+    $t .= "<b>متن بالای صفحه:</b>\n" . (string)($ol['text'] ?? '—');
+
+    $rows = [
+        [btnCb(!empty($ol['on']) ? '❌ خاموش کردن' : '✅ روشن کردن', 'olx', 'info'),
+         btnCb('🔢 تعداد در صفحه', 'olper', 'admin')],
+        [btnCb('✏️ متن بالای صفحه', 'oltx', 'admin'), btnCb('✏️ متن «سفارشی نیست»', 'olem', 'admin')],
+        [btnCb('🔘 دکمه‌ی اصلی', 'olb_btn', 'admin')],
+        [btnCb('🏷 سرستون ۱', 'olb_h1', 'admin'), btnCb('🏷 سرستون ۲', 'olb_h2', 'admin')],
+        [btnCb('➡️ صفحه بعد', 'olb_next', 'admin'), btnCb('⏮ صفحه اول', 'olb_first', 'admin')],
+        [btnCb('◀️ دکمه برگشت', 'olb_back', 'admin')],
+        [btnCb('👁 پیش‌نمایش', 'olprev', 'confirm')],
+        [btnUI('back', 'adm_home', 'nav')],
+    ];
+    editMsg(BOT_TOKEN, $chatId, $msgId, mb_substr($t, 0, 3800), inlineKb($rows));
 }
 
 /** 📢 فهرست گزارش‌های خرید — یک گروه، هر محصول یک تاپیک */
@@ -5025,6 +5176,14 @@ function masterHandle($update) {
         // --- دکمه‌های منو در حالت شیشه‌ای ---
         if ($data === 'tariff') { answerCb(BOT_TOKEN, $cbId); showTariff($uid, $chatId); return; }
 
+        // 🧾 لیست سفارشات — دکمه‌های ردیف‌ها فقط برچسب‌اند
+        if ($data === 'ordnop') { answerCb(BOT_TOKEN, $cbId); return; }
+        if (preg_match('/^ordlist_(\d+)$/', $data, $om)) {
+            answerCb(BOT_TOKEN, $cbId);
+            showOrderList($uid, $chatId, (int)$om[1], $msgId);
+            return;
+        }
+
         if (str_starts_with($data, 'menu_')) {
             $act = substr($data, 5);
             answerCb(BOT_TOKEN, $cbId);
@@ -5653,6 +5812,37 @@ function masterHandle($update) {
             return;
         }
         if ($data === 'tfprev') { answerCb(BOT_TOKEN, $cbId); showTariff($uid, $chatId); return; }
+        if ($data === 'adm_orderlist') { answerCb(BOT_TOKEN, $cbId); admOrderList($chatId, $msgId); return; }
+        if ($data === 'olx') {
+            cfgSet(function (&$c) { $c['orders_list']['on'] = empty($c['orders_list']['on']); });
+            answerCb(BOT_TOKEN, $cbId, '✅'); admOrderList($chatId, $msgId); return;
+        }
+        if ($data === 'olprev') {
+            answerCb(BOT_TOKEN, $cbId);
+            showOrderList(ADMIN_ID, $chatId, 0);
+            return;
+        }
+        foreach ([['olper', 'ol_per', "🔢 در هر صفحه چند سفارش نشان داده شود؟ (۱ تا ۵)"],
+                  ['oltx',  'ol_text', "✏️ متن بالای صفحه‌ی لیست سفارشات را بفرستید.\n\n✨ ایموجی پریمیوم و نقل‌قول پشتیبانی می‌شود."],
+                  ['olem',  'ol_empty', "✏️ متنی که وقتی کاربر هیچ سفارشی ندارد نشان داده شود.\n\n✨ ایموجی پریمیوم و نقل‌قول پشتیبانی می‌شود."]] as [$d0, $act, $ask]) {
+            if ($data !== $d0) continue;
+            answerCb(BOT_TOKEN, $cbId);
+            setState(ADMIN_ID, $act, []);
+            sendMsg(BOT_TOKEN, $chatId, $ask, inlineKb([[btnUI('cancel', 'adm_orderlist', 'cancel')]]));
+            return;
+        }
+        if (preg_match('/^olb_([a-z0-9]+)$/', $data, $om)) {
+            answerCb(BOT_TOKEN, $cbId);
+            setState(ADMIN_ID, 'ol_btn', ['k' => $om[1]]);
+            $cur = cfg()['orders_list'][$om[1]] ?? [];
+            sendMsg(BOT_TOKEN, $chatId,
+                "🔘 متن این دکمه را بفرستید.\n\n" .
+                "✨ ایموجی پریمیوم را جلوی متن بگذارید — خودش برداشته و درست روی دکمه می‌نشیند.\n\n" .
+                "الان: <code>" . h(trim((string)($cur['emoji'] ?? '') . ' ' . (string)($cur['text'] ?? ''))) . '</code>',
+                inlineKb([[btnUI('cancel', 'adm_orderlist', 'cancel')]]));
+            return;
+        }
+
         foreach ([['tft',  'tf_text',  "✏️ متن لیست تعرفه‌ها را بفرستید.\n\n✨ ایموجی پریمیوم و نقل‌قول پشتیبانی می‌شود.\n\nاگر <code>{list}</code> بنویسید، جدول خودکار قیمت‌ها دقیقا همان‌جا می‌نشیند."],
                   ['tfbt', 'tf_btn',   '🔘 متن دکمه «لیست تعرفه‌ها»:'],
                   ['tfbe', 'tf_bemoji','😀 ایموجی دکمه تعرفه (خط تیره = حذف):'],
@@ -6547,6 +6737,56 @@ function masterHandle($update) {
         return;
     }
 
+    if (str_starts_with($action, 'ol_')) {
+        $plain = trim($msg['text'] ?? '');
+        $ids   = customEmojiIds($msg);
+        $back  = inlineKb([[btnCb('🧾 لیست سفارشات', 'adm_orderlist', 'admin')]]);
+
+        if ($action === 'ol_per') {
+            $n = (int)norm_fa_digits($plain);
+            if ($n < 1 || $n > 5) { sendMsg(BOT_TOKEN, $chatId, "⚠️ عددی بین ۱ تا ۵ بفرستید."); return; }
+            cfgSet(function (&$c) use ($n) { $c['orders_list']['per'] = $n; });
+            clearState($uid);
+            sendMsg(BOT_TOKEN, $chatId, "✅ در هر صفحه <b>{$n}</b> سفارش.", $back);
+            return;
+        }
+        if ($action === 'ol_text' || $action === 'ol_empty') {
+            $html = msgHtml($msg);
+            if (trim($html) === '') { sendMsg(BOT_TOKEN, $chatId, "⚠️ متن خالی است."); return; }
+            $k = $action === 'ol_text' ? 'text' : 'empty';
+            cfgSet(function (&$c) use ($k, $html) { $c['orders_list'][$k] = $html; });
+            clearState($uid);
+            sendMsg(BOT_TOKEN, $chatId, "✅ ذخیره شد. پیش‌نمایش:", $back);
+            sendMsg(BOT_TOKEN, $chatId, $html);
+            return;
+        }
+        if ($action === 'ol_btn') {
+            $k = (string)((getState($uid)['data']['k'] ?? ''));
+            if (!in_array($k, ['btn','h1','h2','next','first','back'], true)) { clearState($uid); return; }
+            if ($plain === '') { sendMsg(BOT_TOKEN, $chatId, "⚠️ متن خالی است."); return; }
+            // ایموجی پریمیوم جدا روی دکمه می‌نشیند؛ نویسه‌اش از متن برداشته
+            // می‌شود تا کنارِ خودش دوباره دیده نشود.
+            $txt = $plain;
+            if ($ids && function_exists('textWithoutCustomEmoji')) {
+                $clean = textWithoutCustomEmoji($msg);
+                if ($clean !== '') $txt = $clean;
+            }
+            cfgSet(function (&$c) use ($k, $txt, $ids) {
+                $c['orders_list'][$k]['text']  = $txt;
+                $c['orders_list'][$k]['emoji'] = '';
+                $c['orders_list'][$k]['icon']  = $ids ? (string)$ids[0] : '';
+            });
+            clearState($uid);
+            sendMsg(BOT_TOKEN, $chatId,
+                "✅ ذخیره شد" . ($ids ? " — ایموجی پریمیوم هم روی دکمه نشست." : '.') . "\n\nاین‌طور دیده می‌شود:",
+                inlineKb([[olBtn(cfg()['orders_list'][$k] ?? [], 'ordnop', 'info')]]));
+            sendMsg(BOT_TOKEN, $chatId, '👆', $back);
+            return;
+        }
+        clearState($uid);
+        return;
+    }
+
     if (str_starts_with($action, 'tf_')) {
         $plain = trim($msg['text'] ?? '');
         $ids   = customEmojiIds($msg);
@@ -6569,12 +6809,26 @@ function masterHandle($update) {
             [$w, $f] = $map[$action];
             $v = ($plain === '-' || $plain === '—') ? '' : $plain;
             if ($f === 'text' && $v === '') { sendMsg(BOT_TOKEN, $chatId, "⚠️ متن خالی است."); return; }
+
+            // ✨ ایموجی پریمیوم روی دکمه، جدا از متن می‌نشیند.
+            //
+            // ⚠️ خانه‌ی «ایموجی» فقط متنِ ساده را ذخیره می‌کرد، پس ایموجی
+            //    پریمیوم به نویسه‌ی جایگزینش تبدیل می‌شد و معمولی دیده
+            //    می‌شد. حالا شناسه‌اش در icon می‌نشیند و خودِ نویسه از
+            //    متن برداشته می‌شود تا دوتایی نشود.
             cfgSet(function (&$c) use ($w, $f, $v, $ids) {
+                if ($f === 'emoji') {
+                    $c['tariff'][$w]['icon']  = $ids ? (string)$ids[0] : '';
+                    $c['tariff'][$w]['emoji'] = $ids ? '' : $v;
+                    return;
+                }
                 $c['tariff'][$w][$f] = $v;
                 if ($f === 'text' && $ids) $c['tariff'][$w]['icon'] = $ids[0];
             });
             clearState($uid);
-            sendMsg(BOT_TOKEN, $chatId, "✅ ذخیره شد." . ($ids && $f === 'text' ? "\n✨ ایموجی پریمیوم نشست." : ''), $back);
+            sendMsg(BOT_TOKEN, $chatId,
+                "✅ ذخیره شد." . ($ids ? "\n✨ ایموجی پریمیوم روی دکمه نشست." : ''),
+                $back);
             return;
         }
         clearState($uid);
