@@ -504,33 +504,35 @@ function maDefaultNum() {
         //    می‌شود و با چند هزار ردیف، مینی‌اپ اصلا باز نمی‌شود.
         'top_n' => 40,
 
-        // 🌍 کشورها — `code` همان چیزی است که پنل فروشنده می‌شناسد
+        // 🌍 کشورها — `code` همان اسمی است که ۵سیم می‌شناسد (slug)
+        //
+        //    این‌ها فقط نمونه‌اند تا مینی‌اپِ تازه‌نصب خالی نباشد. یک بار
+        //    «📥 وارد کردن» که بزنید، کلِ کشورها با قیمتِ روز جایشان را
+        //    می‌گیرند.
         'cats' => [
-            ['id' => 'c_ru', 'emoji' => '🇷🇺', 'name' => 'روسیه',    'code' => '0',  'on' => true, 'order' => 1],
-            ['id' => 'c_ua', 'emoji' => '🇺🇦', 'name' => 'اوکراین',  'code' => '1',  'on' => true, 'order' => 2],
-            ['id' => 'c_kz', 'emoji' => '🇰🇿', 'name' => 'قزاقستان', 'code' => '2',  'on' => true, 'order' => 3],
-            ['id' => 'c_uk', 'emoji' => '🇬🇧', 'name' => 'انگلیس',   'code' => '16', 'on' => true, 'order' => 4],
-            ['id' => 'c_us', 'emoji' => '🇺🇸', 'name' => 'آمریکا',   'code' => '187','on' => true, 'order' => 5],
+            ['id' => 'c_ru', 'emoji' => '🇷🇺', 'name' => 'روسیه',    'code' => 'russia',     'on' => true, 'order' => 1],
+            ['id' => 'c_ua', 'emoji' => '🇺🇦', 'name' => 'اوکراین',  'code' => 'ukraine',    'on' => true, 'order' => 2],
+            ['id' => 'c_kz', 'emoji' => '🇰🇿', 'name' => 'قزاقستان', 'code' => 'kazakhstan', 'on' => true, 'order' => 3],
+            ['id' => 'c_uk', 'emoji' => '🇬🇧', 'name' => 'انگلیس',   'code' => 'england',    'on' => true, 'order' => 4],
+            ['id' => 'c_us', 'emoji' => '🇺🇸', 'name' => 'آمریکا',   'code' => 'usa',        'on' => true, 'order' => 5],
         ],
 
-        // 📱 سرویس‌ها — `svc` کد سرویس نزد پنل فروشنده است
+        // ☎️ شماره‌ها — `svc` شناسه‌ی ۵سیم است: «کشور|اپراتور».
+        //    «any» یعنی ۵سیم خودش ارزان‌ترینِ موجود را بدهد.
         'items' => [
-            ['id' => 'n_ru_tg', 'cat' => 'c_ru', 'svc' => 'tg', 'emoji' => '✈️', 'name' => 'تلگرام — روسیه',
+            ['id' => 'n_ru_tg', 'cat' => 'c_ru', 'svc' => 'russia|any', 'emoji' => '🇷🇺', 'name' => 'خودکار',
              'desc' => 'دریافت کد تلگرام روی شماره‌ی روسیه', 'price' => 45000, 'unit' => '',
              'badge' => 'پرفروش', 'ask' => 'none', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 1],
-            ['id' => 'n_ru_wa', 'cat' => 'c_ru', 'svc' => 'wa', 'emoji' => '💚', 'name' => 'واتساپ — روسیه',
-             'desc' => 'دریافت کد واتساپ روی شماره‌ی روسیه', 'price' => 58000, 'unit' => '',
-             'badge' => '', 'ask' => 'none', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 2],
-            ['id' => 'n_ua_tg', 'cat' => 'c_ua', 'svc' => 'tg', 'emoji' => '✈️', 'name' => 'تلگرام — اوکراین',
+            ['id' => 'n_ua_tg', 'cat' => 'c_ua', 'svc' => 'ukraine|any', 'emoji' => '🇺🇦', 'name' => 'خودکار',
              'desc' => 'دریافت کد تلگرام روی شماره‌ی اوکراین', 'price' => 62000, 'unit' => '',
              'badge' => '', 'ask' => 'none', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 1],
-            ['id' => 'n_kz_tg', 'cat' => 'c_kz', 'svc' => 'tg', 'emoji' => '✈️', 'name' => 'تلگرام — قزاقستان',
+            ['id' => 'n_kz_tg', 'cat' => 'c_kz', 'svc' => 'kazakhstan|any', 'emoji' => '🇰🇿', 'name' => 'خودکار',
              'desc' => 'دریافت کد تلگرام روی شماره‌ی قزاقستان', 'price' => 55000, 'unit' => '',
              'badge' => '', 'ask' => 'none', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 1],
-            ['id' => 'n_uk_tg', 'cat' => 'c_uk', 'svc' => 'tg', 'emoji' => '✈️', 'name' => 'تلگرام — انگلیس',
+            ['id' => 'n_uk_tg', 'cat' => 'c_uk', 'svc' => 'england|any', 'emoji' => '🇬🇧', 'name' => 'خودکار',
              'desc' => 'دریافت کد تلگرام روی شماره‌ی انگلیس', 'price' => 120000, 'unit' => '',
              'badge' => 'ویژه', 'ask' => 'none', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 1],
-            ['id' => 'n_us_tg', 'cat' => 'c_us', 'svc' => 'tg', 'emoji' => '✈️', 'name' => 'تلگرام — آمریکا',
+            ['id' => 'n_us_tg', 'cat' => 'c_us', 'svc' => 'usa|any', 'emoji' => '🇺🇸', 'name' => 'خودکار',
              'desc' => 'دریافت کد تلگرام روی شماره‌ی آمریکا', 'price' => 145000, 'unit' => '',
              'badge' => 'حرفه‌ای', 'ask' => 'none', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 1],
         ],

@@ -8787,8 +8787,12 @@ function runBackgroundQueues() {
         if (function_exists('pxDropCardCache')) pxDropCardCache();
     });
 
-    // ☎️ فقط شماره‌ی تلگرام — و کاتالوگی که بدونِ فیلتر وارد شده بود برود.
-    migrateOnce('v11_tgonly', function () {
+    // ☎️ فروشنده‌ی شماره عوض شد: نامبرلند رفت، ۵سیم آمد.
+    //
+    //    شناسه‌ی محصول‌ها هم عوض شده (عددی → «کشور|اپراتور»)، پس هرچه
+    //    از پنلِ قبلی مانده دیگر قابل خرید نیست و فقط مینی‌اپ را شلوغ
+    //    و ربات را کند می‌کند.
+    migrateOnce('v12_5sim', function () {
         if (function_exists('numForceTelegramOnly')) numForceTelegramOnly();
     });
 
