@@ -656,11 +656,11 @@ function defaultConfig() {
             'btn'   => ['emoji' => '🧾', 'text' => 'لیست سفارشات', 'color' => 'info', 'icon' => ''],
             'text'  => "🧾 <b>لیست سفارشات شما</b>",
             'empty' => "🧾 <b>لیست سفارشات شما</b>\n\nهنوز سفارشی ثبت نکرده‌اید.",
-            'h1'    => ['emoji' => '', 'text' => 'نوع سفارش',  'color' => 'info', 'icon' => ''],
-            'h2'    => ['emoji' => '', 'text' => 'مبلغ سفارش', 'color' => 'info', 'icon' => ''],
+            'h1'    => ['emoji' => '', 'text' => 'نوع سفارش',  'color' => 'success', 'icon' => ''],
+            'h2'    => ['emoji' => '', 'text' => 'مبلغ سفارش', 'color' => 'success', 'icon' => ''],
             'next'  => ['emoji' => '', 'text' => 'صفحه بعد',   'color' => 'primary', 'icon' => ''],
-            'first' => ['emoji' => '', 'text' => 'صفحه اول',   'color' => 'nav', 'icon' => ''],
-            'back'  => ['emoji' => '', 'text' => 'برگشت',      'color' => 'nav', 'icon' => ''],
+            'first' => ['emoji' => '', 'text' => 'صفحه اول',   'color' => 'primary', 'icon' => ''],
+            'back'  => ['emoji' => '', 'text' => 'برگشت',      'color' => 'danger',  'icon' => ''],
         ],
 
         // 🚀 دو مینی‌اپ جدا — خدمات تلگرام و فروش کانفیگ
@@ -2385,11 +2385,15 @@ function showOrderList($uid, $chatId, $page = 0, $msgId = null) {
         ];
     }
 
-    $nav = [];
-    if ($page + 1 < $max) $nav[] = olBtn($ol['next']  ?? ['text' => 'صفحه بعد'], 'ordlist_' . ($page + 1), 'primary');
-    if ($page > 0)        $nav[] = olBtn($ol['first'] ?? ['text' => 'صفحه اول'], 'ordlist_0', 'nav');
-    if ($nav) $rows[] = $nav;
-    $rows[] = [olBtn($ol['back'] ?? ['text' => 'برگشت'], 'menu_buy', 'nav')];
+    // 🔁 هر دو دکمه‌ی سوییچ، همیشه و کنار هم.
+    //    «صفحه بعد» در آخرین صفحه به اولی برمی‌گردد تا هیچ‌وقت مرده نباشد.
+    if ($max > 1) {
+        $rows[] = [
+            olBtn($ol['next']  ?? ['text' => 'صفحه بعد'], 'ordlist_' . (($page + 1) % $max), 'primary'),
+            olBtn($ol['first'] ?? ['text' => 'صفحه اول'], 'ordlist_0', 'primary'),
+        ];
+    }
+    $rows[] = [olBtn($ol['back'] ?? ['text' => 'برگشت'], 'menu_buy', 'danger')];
 
     $txt = (string)($ol['text'] ?? '🧾 <b>لیست سفارشات شما</b>');
     if ($max > 1) $txt .= "\n\nصفحه " . ($page + 1) . ' از ' . $max;
@@ -4162,6 +4166,9 @@ function admOrderList($chatId, $msgId) {
     $t .= "🏷 سرستون‌ها: " . $lbl('h1', 'نوع سفارش') . " · " . $lbl('h2', 'مبلغ سفارش') . "\n";
     $t .= "➡️ صفحه بعد: " . $lbl('next', 'صفحه بعد') . " · ⏮ صفحه اول: " . $lbl('first', 'صفحه اول') . "\n";
     $t .= "◀️ برگشت: " . $lbl('back', 'برگشت') . "\n\n";
+    $col = fn($k) => styleMap()[$ol[$k]['color'] ?? 'none'] ?? '—';
+    $t .= "\n🎨 سرستون‌ها: " . $col('h1') . " · سوییچ: " . $col('next') .
+          " · برگشت: " . $col('back') . " · اصلی: " . $col('btn') . "\n\n";
     $t .= "✨ یعنی ایموجی پریمیوم دارد.\n\n";
     $t .= "<b>متن بالای صفحه:</b>\n" . (string)($ol['text'] ?? '—');
 
@@ -4173,6 +4180,10 @@ function admOrderList($chatId, $msgId) {
         [btnCb('🏷 سرستون ۱', 'olb_h1', 'admin'), btnCb('🏷 سرستون ۲', 'olb_h2', 'admin')],
         [btnCb('➡️ صفحه بعد', 'olb_next', 'admin'), btnCb('⏮ صفحه اول', 'olb_first', 'admin')],
         [btnCb('◀️ دکمه برگشت', 'olb_back', 'admin')],
+        [btnCb('🎨 رنگ سرستون‌ها', 'olc_h', 'admin'),
+         btnCb('🎨 رنگ سوییچ', 'olc_n', 'admin')],
+        [btnCb('🎨 رنگ برگشت', 'olc_b', 'admin'),
+         btnCb('🎨 رنگ دکمه‌ی اصلی', 'olc_m', 'admin')],
         [btnCb('👁 پیش‌نمایش', 'olprev', 'confirm')],
         [btnUI('back', 'adm_home', 'nav')],
     ];
@@ -5818,6 +5829,17 @@ function masterHandle($update) {
             cfgSet(function (&$c) { $c['orders_list']['on'] = empty($c['orders_list']['on']); });
             answerCb(BOT_TOKEN, $cbId, '✅'); admOrderList($chatId, $msgId); return;
         }
+        if (preg_match('/^olc_([hnbm])$/', $data, $cm)) {
+            $keys = ['h' => ['h1','h2'], 'n' => ['next','first'], 'b' => ['back'], 'm' => ['btn']][$cm[1]];
+            cfgSet(function (&$c) use ($keys) {
+                $cur  = $c['orders_list'][$keys[0]]['color'] ?? 'none';
+                $next = nextStyle($cur);
+                foreach ($keys as $k) $c['orders_list'][$k]['color'] = $next;
+            });
+            answerCb(BOT_TOKEN, $cbId, '🎨');
+            admOrderList($chatId, $msgId);
+            return;
+        }
         if ($data === 'olprev') {
             answerCb(BOT_TOKEN, $cbId);
             showOrderList(ADMIN_ID, $chatId, 0);
@@ -6767,10 +6789,17 @@ function masterHandle($update) {
             if ($plain === '') { sendMsg(BOT_TOKEN, $chatId, "⚠️ متن خالی است."); return; }
             // ایموجی پریمیوم جدا روی دکمه می‌نشیند؛ نویسه‌اش از متن برداشته
             // می‌شود تا کنارِ خودش دوباره دیده نشود.
+            // ⚠️ اگر ادمین فقط یک ایموجی پریمیوم بفرستد، متنِ پاک‌شده خالی
+            //    می‌ماند. آن‌وقت نه می‌شود دکمه را بی‌متن گذاشت و نه باید
+            //    نویسه‌ی جایگزین را نگه داشت — چون کنارِ خودِ ایموجی
+            //    دوتایی دیده می‌شود. پس برچسبِ قبلی را نگه می‌داریم و فقط
+            //    شناسه را عوض می‌کنیم.
             $txt = $plain;
-            if ($ids && function_exists('textWithoutCustomEmoji')) {
-                $clean = textWithoutCustomEmoji($msg);
-                if ($clean !== '') $txt = $clean;
+            if ($ids) {
+                $clean = function_exists('textWithoutCustomEmoji') ? textWithoutCustomEmoji($msg) : '';
+                $txt   = $clean !== '' ? $clean
+                       : trim((string)(cfg()['orders_list'][$k]['text'] ?? ''));
+                if ($txt === '') { sendMsg(BOT_TOKEN, $chatId, "⚠️ یک متن هم کنار ایموجی بنویسید."); return; }
             }
             cfgSet(function (&$c) use ($k, $txt, $ids) {
                 $c['orders_list'][$k]['text']  = $txt;
@@ -8646,6 +8675,15 @@ function runBackgroundQueues() {
     migrateOnce('v7_ttl', function () {
         if (function_exists('pxSet'))
             pxSet(function (&$c) { if ((int)($c['ttl'] ?? 0) < 60) $c['ttl'] = 60; });
+    });
+
+    // 🎨 رنگ‌های لیست سفارشات — سرستون سبز، سوییچ آبی، برگشت قرمز
+    migrateOnce('v8_ordcolors', function () {
+        cfgSet(function (&$c) {
+            foreach (['h1' => 'success', 'h2' => 'success', 'next' => 'primary',
+                      'first' => 'primary', 'back' => 'danger'] as $k => $col)
+                $c['orders_list'][$k]['color'] = $col;
+        });
     });
 
     // 🗄 بایگانی سفارش‌ها — کم‌تکرار، چون خودش سنگین است
