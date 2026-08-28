@@ -64,7 +64,12 @@ function maAskLabels() {
 }
 
 function maDefaultConfig() {
-    return [
+    // 📌 یک آرایه‌ی ثابت است، ولی ساختنش ارزان نیست و maUT برای هر
+    //    برچسب یک بار صدایش می‌زد — یعنی چهل بار در هر باز شدنِ صفحه.
+    //    آرایه‌ها در PHP با مقدار پاس می‌شوند، پس نگه‌داشتنش امن است.
+    static $d = null;
+    if ($d !== null) return $d;
+    return $d = [
         // آدرس عمومی همین فایل — بدون این، دکمه مینی‌اپ ساخته نمی‌شود
         'base_url' => '',
 
@@ -176,7 +181,12 @@ function maDefaultConfig() {
 
 /** 🌟 مینی‌اپ خدمات تلگرام — تم «شفق قطبی» بنفش/فیروزه‌ای */
 function maDefaultTg() {
-    return [
+    // 📌 یک آرایه‌ی ثابت است، ولی ساختنش ارزان نیست و maUT برای هر
+    //    برچسب یک بار صدایش می‌زد — یعنی چهل بار در هر باز شدنِ صفحه.
+    //    آرایه‌ها در PHP با مقدار پاس می‌شوند، پس نگه‌داشتنش امن است.
+    static $d = null;
+    if ($d !== null) return $d;
+    return $d = [
         'on'    => true,
         'title' => 'خدمات تلگرام',
         'sub'   => 'استارز · پریمیوم · گیفت · تون',
@@ -396,7 +406,12 @@ function maDefaultTg() {
  * پس اضافه‌کردن یک کشور یا سرویس تازه فقط یک ردیف در پنل است، نه یک خط کد.
  */
 function maDefaultNum() {
-    return [
+    // 📌 یک آرایه‌ی ثابت است، ولی ساختنش ارزان نیست و maUT برای هر
+    //    برچسب یک بار صدایش می‌زد — یعنی چهل بار در هر باز شدنِ صفحه.
+    //    آرایه‌ها در PHP با مقدار پاس می‌شوند، پس نگه‌داشتنش امن است.
+    static $d = null;
+    if ($d !== null) return $d;
+    return $d = [
         'on'    => true,
         'title' => 'شماره مجازی',
         'sub'   => 'تحویل آنی · کد لحظه‌ای · بازگشت وجه',
@@ -594,9 +609,24 @@ function maCfg() {
  * هرچه ادمین خودش ست کرده سرِ جایش می‌ماند، و محصولی که حذف کرده
  * برنمی‌گردد.
  */
+/** کشِ ادغامِ maGet — درون‌درخواستی */
+function maGetMemo($key, $set = false, $val = null) {
+    static $m = [];
+    if ($set === 'drop') { if ($key === null) $m = []; else unset($m[$key]); return null; }
+    if ($set) return $m[$key] = $val;
+    return $m[$key] ?? null;
+}
+function maGetMemoDrop($key = null) { maGetMemo($key, 'drop'); }
+
 function maGet($key) {
+    // ⚡️ ادغام ارزان نیست و maUT برای هر برچسب یک بار صدایش می‌زند —
+    //    یعنی ده‌ها بار در هر باز شدنِ صفحه. کش تا وقتی زنده است که
+    //    کسی تنظیمات را عوض نکرده باشد؛ maSet خودش بی‌اعتبارش می‌کند.
+    $hit = maGetMemo($key);
+    if ($hit !== null) return $hit;
+
     $a = maCfg()['apps'][$key] ?? null;
-    if (!is_array($a)) return maDefaultConfig()['apps'][$key] ?? [];
+    if (!is_array($a)) return maGetMemo($key, true, maDefaultConfig()['apps'][$key] ?? []);
 
     $base = maDefaultConfig()['apps'][$key] ?? [];
 
@@ -618,7 +648,13 @@ function maGet($key) {
             $a[$part][$i] = array_replace($byId[$id], is_array($it) ? $it : []);
         }
     }
-    return $a;
+    return maGetMemo($key, true, $a);
+}
+
+/** کشِ maGet را دور بریز — بعد از هر نوشتنی روی تنظیماتِ مینی‌اپ */
+function maForget($key = null) {
+    maGetMemoDrop($key);
+    maPriceMemoDrop();
 }
 
 /**
@@ -640,6 +676,7 @@ function maDropOldTexts() {
 
 /** ویرایش پیکربندی یک مینی‌اپ */
 function maSet($key, callable $fn) {
+    // باطل کردنِ کش کارِ cfgSet است — همان‌جا که واقعا نوشته می‌شود
     cfgSet(function (&$c) use ($key, $fn) {
         if (!is_array($c['miniapps'] ?? null)) $c['miniapps'] = maDefaultConfig();
         if (!is_array($c['miniapps']['apps'][$key] ?? null))
@@ -1101,6 +1138,14 @@ function maLivePrice($item) {
  * می‌گذاشتید، مشتری قیمت پایه را می‌داد.
  */
 function maItemPrice($item) {
+    // ⚡️ در یک باز شدنِ صفحه، قیمتِ یک محصول تا سه بار حساب می‌شد:
+    //    یک بار برای خودِ کارت، یک بار برای «از چند تومان» پوشه، و
+    //    یک بار برای نشانه‌ی زنده‌بودن. با چهارصد ردیف یعنی هزار و
+    //    دویست حساب. تا وقتی تنظیمات عوض نشده، جوابش هم عوض نمی‌شود.
+    $memo = maPriceMemo();
+    $k = (string)($item['id'] ?? '') . '|' . (string)($item['price'] ?? '');
+    if ($k !== '|' && isset($memo[$k])) return $memo[$k];
+
     $live = maLivePrice($item);
     $base = $live !== null ? (float)$live : (float)($item['price'] ?? 0);
 
@@ -1115,8 +1160,25 @@ function maItemPrice($item) {
             : (float)axPrice((string)($item['id'] ?? ''), $base, (string)($item['cat'] ?? ''));
     }
     // تومانِ کامل — تا قیمتِ روی صفحه و مبلغِ کسرشده یکی باشند
-    return maMoney($base);
+    $out = maMoney($base);
+    if ($k !== '|') maPriceMemo($k, $out);
+    return $out;
 }
+
+/**
+ * کشِ درون‌درخواستیِ قیمت‌ها.
+ *
+ * بدون کلید: کلِ جدول را می‌دهد. با کلید: می‌نشاند.
+ * cfgSet خودش خالی‌اش می‌کند، پس هیچ‌وقت قیمتِ کهنه نمی‌ماند.
+ */
+function maPriceMemo($k = null, $v = null) {
+    static $m = [];
+    if ($k === 'drop') { $m = []; return []; }
+    if ($k === null)   return $m;
+    $m[$k] = $v;
+    return $v;
+}
+function maPriceMemoDrop() { maPriceMemo('drop'); }
 
 /**
  * آیا این سرویس قیمتش باید زنده باشد؟ (تون، ترون، تتر و گیفت مارکت)
@@ -2272,9 +2334,23 @@ function maItemsPublic($a, $limit = 0) {
     $catPos = []; $n = 0;
     foreach ($a['cats'] ?? [] as $c) $catPos[(string)$c['id']] = $n++;
 
-    $items = [];
-    foreach ($a['items'] ?? [] as $i) {
+    // ⚡️ اول مرتب و برش، بعد کارِ سنگین.
+    //
+    //    قبلا برعکس بود: برای هر چهارصد ردیف قیمت حساب می‌شد و بعد
+    //    چهل‌تای اول برداشته می‌شد — یعنی سیصد و شصت‌تایش دور ریخته
+    //    می‌شد. کلیدِ مرتب‌سازی (جای دسته و ترتیب) ارزان است و برای
+    //    همه‌شان حساب می‌شود؛ گران‌ها فقط برای بازمانده‌ها.
+    $keys = [];
+    foreach ($a['items'] ?? [] as $k => $i) {
         if (empty($i['on'])) continue;
+        $keys[] = [$catPos[(string)($i['cat'] ?? '')] ?? 999, (int)($i['order'] ?? 99), $k];
+    }
+    usort($keys, fn($x, $y) => [$x[0], $x[1]] <=> [$y[0], $y[1]]);
+    if ($limit > 0 && count($keys) > $limit) $keys = array_slice($keys, 0, $limit);
+
+    $items = [];
+    foreach ($keys as [$cpos, $ord, $k]) {
+        $i = $a['items'][$k];
         $items[] = [
             'id'    => (string)$i['id'],
             'cat'   => (string)($i['cat'] ?? ''),
@@ -2289,12 +2365,10 @@ function maItemsPublic($a, $limit = 0) {
             'ask'   => (string)($i['ask'] ?? 'none'),
             'min'   => (float)($i['min'] ?? 1),
             'max'   => (float)($i['max'] ?? 1),
-            'order' => (int)($i['order'] ?? 99),
-            'cpos'  => $catPos[(string)($i['cat'] ?? '')] ?? 999,
+            'order' => $ord,
+            'cpos'  => $cpos,
         ];
     }
-    usort($items, fn($x, $y) => [$x['cpos'], $x['order']] <=> [$y['cpos'], $y['order']]);
-    if ($limit > 0 && count($items) > $limit) $items = array_slice($items, 0, $limit);
     return $items;
 }
 

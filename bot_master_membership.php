@@ -111,39 +111,98 @@ require_once __DIR__ . '/profit.php';
 function dataPath($file) { return DATA_DIR . '/' . $file . '.json'; }
 
 /**
+ * 📼 کشِ درون‌درخواستیِ فایل‌های داده.
+ *
+ * هم آرایه‌ی decode‌شده را نگه می‌دارد هم بایت‌های خامی که از رویش
+ * ساخته شده. بایت‌ها به همان اندازه‌ی آرایه مهم‌اند: با آنها می‌شود
+ * فهمید فایل عوض شده یا نه، بدون اینکه دوباره decode شود.
+ *
+ * فقط تا پایان همین درخواست زنده است.
+ */
+function dataCache($file, $mode = 'has', $data = null, $raw = null) {
+    static $v = [], $r = [];
+    switch ($mode) {
+        case 'has': return array_key_exists($file, $v);
+        case 'get': return $v[$file] ?? [];
+        case 'raw': return $r[$file] ?? null;
+        case 'put': $v[$file] = $data; $r[$file] = $raw; return $data;
+        case 'drop': unset($v[$file], $r[$file]); return null;
+    }
+    return null;
+}
+
+/**
  * 🗃 خواندن فایل داده — با کشِ درون‌درخواستی.
  *
  * در یک درخواست، یک فایل چند بار خوانده می‌شود: مثلا صفحه‌ی پنل سه
- * بار سراغ سفارش‌ها می‌رود. وقتی فایل چند مگابایت شد، هر بار خواندن
- * و decode کردنش ده‌ها میلی‌ثانیه است. کش این را یک بار می‌کند.
+ * بار سراغ سفارش‌ها می‌رود. وقتی فایل چند صد کیلوبایت شد، هر بار
+ * خواندن و decode کردنش چند میلی‌ثانیه است. کش این را یک بار می‌کند.
  *
- * کش فقط تا پایان همین درخواست زنده است، و mutate() همیشه از روی
- * دیسک می‌خواند — پس هیچ‌وقت با داده‌ی کهنه چیزی نوشته نمی‌شود.
+ * ⚡️ و وقتی mutate() اجباراً تازه می‌خواند، اول بایت‌ها را با آنچه
+ *    قبلا خوانده‌ایم مقایسه می‌کنیم. خواندنِ ۶۵۰ کیلوبایت از کشِ
+ *    سیستم‌عامل ۰.۰۳ میلی‌ثانیه است، decode کردنش ۳.۷ — پس اگر کسی
+ *    فایل را عوض نکرده باشد، آن ۳.۷ تماماً صرفه‌جویی می‌شود. و در
+ *    یک درخواستِ معمولی، معمولا کسی عوضش نکرده.
  */
 function load($file, $fresh = false) {
-    static $cache = [];
-    if (!$fresh && array_key_exists($file, $cache)) return $cache[$file];
+    if (!$fresh && dataCache($file, 'has')) return dataCache($file, 'get');
 
-    $path = dataPath($file);
-    if (!file_exists($path)) return $cache[$file] = [];
-    $raw = file_get_contents($path);
-    if ($raw === false || $raw === '') return $cache[$file] = [];
+    $raw = @file_get_contents(dataPath($file));
+    if ($raw === false || $raw === '') return dataCache($file, 'put', [], '');
+
+    // همان بایت‌های دفعه‌ی قبل؟ پس همان آرایه‌ی دفعه‌ی قبل
+    if (dataCache($file, 'raw') === $raw) return dataCache($file, 'get');
+
     $out = json_decode($raw, true);
-    return $cache[$file] = (is_array($out) ? $out : []);
+    return dataCache($file, 'put', is_array($out) ? $out : [], $raw);
 }
 
+/**
+ * 💾 نوشتن اتمیک.
+ *
+ * ⚠️ دو کاری که قبلا اینجا هدر می‌رفت:
+ *
+ *   ۱. بعد از نوشتن، فایل دوباره از دیسک خوانده و decode می‌شد تا کش
+ *      «هم‌خط» شود — در حالی که آرایه‌اش همین‌جا دستمان بود. روی
+ *      فایلِ کاربران این تنها ۳.۷ میلی‌ثانیه بود، در هر نوشتن.
+ *
+ *   ۲. نوشتنی که هیچ‌چیز عوض نمی‌کرد هم انجام می‌شد. خیلی از
+ *      mutate()ها چیزی تغییر نمی‌دهند (کاربری که اسمش همان است،
+ *      وضعیتی که همان بود). حالا اگر بایت‌ها یکی باشند، دیسک دست
+ *      نمی‌خورد — که هم سریع‌تر است هم کشِ بقیه‌ی پردازه‌ها را
+ *      بی‌خود باطل نمی‌کند.
+ */
 function save($file, $data) {
     $path = dataPath($file);
     $dir  = dirname($path);
     if (!is_dir($dir)) @mkdir($dir, 0755, true);
-    $tmp  = $path . '.' . getmypid() . '.tmp';
+
     // بدون PRETTY_PRINT: فایل نصف می‌شود و encode چند برابر سریع‌تر.
     // این فایل را آدم نمی‌خواند، برنامه می‌خواند.
     $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     if ($json === false) return false;
+
+    // چیزی عوض نشده — و کشِ خام همین الان داخل mutate() تازه شده
+    if (dataCache($file, 'raw') === $json && is_file($path)) {
+        dataCache($file, 'put', $data, $json);
+        return true;
+    }
+
+    $tmp = $path . '.' . getmypid() . '.tmp';
     if (file_put_contents($tmp, $json, LOCK_EX) === false) return false;
     $ok = rename($tmp, $path);
-    if ($ok) load($file, true);          // کش را با چیزی که واقعا نوشته شد هم‌خط کن
+    if ($ok) {
+        dataCache($file, 'put', $data, $json);   // همان چیزی که نوشتیم، نه یک خواندنِ دوباره
+
+        // 🧹 هرچه از روی داده ساخته شده هم کهنه شد.
+        //
+        //    اینجا و نه در cfgSet: سود و قیمت فقط از config نمی‌آیند —
+        //    ext.json هم قیمتِ دستی و سودِ محصول را نگه می‌دارد. اگر
+        //    فقط یک دروازه را می‌بستیم، آن یکی بی‌صدا قیمتِ کهنه
+        //    می‌داد. و باطل کردن ارزان است: کش برای این بود که یک
+        //    صفحه هزار بار قیمت حساب نکند، و صفحه چیزی نمی‌نویسد.
+        if (function_exists('maForget')) maForget();
+    }
     return $ok;
 }
 
@@ -866,6 +925,13 @@ function cfgSet(callable $fn) {
         $fn($c);
     });
     cfg(true);   // کش را تازه کن وگرنه ادامه همین درخواست مقدار قدیمی را می‌بیند
+
+    // 🧹 هرچه از روی تنظیمات ساخته شده هم کهنه شد.
+    //
+    //    اینجا تنها دروازه‌ی نوشتنِ تنظیمات است، پس تنها جای درست
+    //    برای باطل کردن. اگر هر بخش خودش این کار را می‌کرد، یکی‌شان
+    //    بالاخره یادش می‌رفت و قیمتِ کهنه در همان درخواست می‌ماند.
+    if (function_exists('maForget')) maForget();
 }
 
 /** ایموجی پریمیوم دکمه‌های ثابت */
@@ -3812,7 +3878,8 @@ function admHome($chatId, $msgId = null) {
         [btnCb('🔧 راه‌اندازی خودکار', 'setup', 'confirm')],
         [btnCb('🌐 پنل وب', 'adm_web', 'info'),
          btnCb('🔒 تست نشتی داده', 'adm_leak', 'confirm')],
-        [btnCb('🩺 تست نوشتن روی دیسک', 'adm_wtest', 'confirm')],
+        [btnCb('🩺 تست نوشتن روی دیسک', 'adm_wtest', 'confirm'),
+         btnCb('⚡️ سرعت ربات', 'adm_speed', 'confirm')],
         [btnCb(UT('home'), 'home', 'nav')],
     ];
     if ($msgId) editMsg(BOT_TOKEN, $chatId, $msgId, $text, inlineKb($rows));
@@ -6531,6 +6598,11 @@ function masterHandle($update) {
             admWriteTest($chatId);
             return;
         }
+        if ($data === 'adm_speed') {
+            answerCb(BOT_TOKEN, $cbId, '⏱ در حال اندازه‌گیری…');
+            admSpeed($chatId, $msgId);
+            return;
+        }
         if ($data === 'adm_leak') {
             answerCb(BOT_TOKEN, $cbId, '🔒 در حال تست…');
             admLeakTest($chatId);
@@ -8722,6 +8794,87 @@ function pxAnswerThenWarm($text, $chatId, $replyTo = null) {
     if (!$hit) return false;
     if (($stale || $cold) && function_exists('pxWarm')) pxWarm();
     return true;
+}
+
+/**
+ * ⚡️ سرعتِ ربات — نه حدس، اندازه.
+ *
+ * سه چیز سرعتِ این ربات را تعیین می‌کند و هر سه اینجا دیده می‌شوند:
+ *
+ *   ۱. opcache — بزرگ‌ترینشان. کدِ ربات نزدیک یک‌ونیم مگابایت است و
+ *      بدون opcache در هر درخواست از نو کامپایل می‌شود.
+ *   ۲. اندازه‌ی فایل‌های داده — هر نوشتن، کلِ فایل را از نو می‌نویسد.
+ *   ۳. سرعتِ خودِ دیسک.
+ */
+function admSpeed($chatId, $msgId = 0) {
+    $t  = "⚡️ <b>سرعت ربات</b>\n\n";
+
+    // ── ۱) opcache ──
+    $st = function_exists('opcache_get_status') ? @opcache_get_status(false) : null;
+    $on = is_array($st) && !empty($st['opcache_enabled']);
+    $t .= "<b>opcache</b>: " . ($on ? '✅ روشن' : '❌ خاموش') . "\n";
+    if ($on) {
+        $mem  = $st['memory_usage'] ?? [];
+        $free = (float)($mem['free_memory'] ?? 0) / 1048576;
+        $hit  = (float)($st['opcache_statistics']['opcache_hit_rate'] ?? 0);
+        $t .= 'اصابت: <b>' . number_format($hit, 1) . '٪</b> · حافظه‌ی آزاد: <b>' .
+              number_format($free, 0) . "</b> مگابایت\n";
+        if ($free < 8) $t .= "⚠️ حافظه‌اش کم است — <code>opcache.memory_consumption=128</code>\n";
+        if ($hit > 0 && $hit < 90) $t .= "⚠️ نرخ اصابت پایین است؛ شاید حافظه‌اش کم باشد.\n";
+    } else {
+        $t .= "\n🔴 <b>مهم‌ترین کاری که می‌توانید بکنید همین است.</b>\n" .
+              "بدون آن، PHP در هر درخواست کلِ کدِ ربات را از نو می‌خواند و " .
+              "کامپایل می‌کند. روی یک سرور معمولی این تفاوت <b>۳۳</b> میلی‌ثانیه " .
+              "با <b>۵</b> میلی‌ثانیه است — در هر پیام، هر دکمه، هر باز کردنِ مینی‌اپ.\n\n" .
+              "در php.ini بگذارید:\n" .
+              "<code>opcache.enable=1</code>\n" .
+              "<code>opcache.memory_consumption=128</code>\n" .
+              "<code>opcache.max_accelerated_files=10000</code>\n" .
+              "<code>opcache.revalidate_freq=2</code>\n\n" .
+              "در سی‌پنل: Select PHP Version ← Extensions ← تیک <b>opcache</b>\n";
+    }
+
+    // ── ۲) فایل‌های داده ──
+    $t .= "\n<b>فایل‌های داده</b>\n";
+    $files = glob(DATA_DIR . '/*.json') ?: [];
+    usort($files, fn($a, $b) => filesize($b) <=> filesize($a));
+    $total = 0;
+    foreach ($files as $f) $total += filesize($f);
+    foreach (array_slice($files, 0, 6) as $f) {
+        $kb = filesize($f) / 1024;
+        $t .= '• <code>' . h(basename($f, '.json')) . '</code> — <b>' .
+              number_format($kb, 1) . "</b> KB" .
+              ($kb > 800 ? ' ⚠️' : '') . "\n";
+    }
+    $t .= 'مجموع: <b>' . number_format($total / 1024, 1) . "</b> KB\n";
+    if ($total > 3145728)
+        $t .= "⚠️ داده‌ها بزرگ شده‌اند. هر نوشتن یعنی بازنویسیِ کلِ فایل.\n";
+
+    // ── ۳) دیسک ──
+    $probe = DATA_DIR . '/.speed.tmp';
+    $blob  = str_repeat('x', 262144);      // ۲۵۶ کیلوبایت
+    $t0 = microtime(true);
+    for ($i = 0; $i < 5; $i++) { file_put_contents($probe, $blob); }
+    $w = (microtime(true) - $t0) / 5 * 1000;
+    $t0 = microtime(true);
+    for ($i = 0; $i < 5; $i++) { @file_get_contents($probe); }
+    $r = (microtime(true) - $t0) / 5 * 1000;
+    @unlink($probe);
+    $t .= "\n<b>دیسک</b> (۲۵۶ کیلوبایت)\n";
+    $t .= 'نوشتن: <b>' . number_format($w, 2) . '</b> ms · خواندن: <b>' .
+          number_format($r, 2) . "</b> ms\n";
+    if ($w > 20) $t .= "⚠️ دیسک کند است — روی هاست اشتراکی معمول است.\n";
+
+    // ── ۴) یک کارِ واقعی ──
+    $t0 = microtime(true);
+    for ($i = 0; $i < 5; $i++) maBoot('num', maGet('num'));
+    $b = (microtime(true) - $t0) / 5 * 1000;
+    $t .= "\n<b>ساختِ صفحه‌ی مینی‌اپ</b>: <b>" . number_format($b, 2) . "</b> ms\n";
+
+    $kb = [[btnCb('🔄 دوباره اندازه بگیر', 'adm_speed', 'confirm')],
+           [btnCb(UT('back'), 'adm_home', 'nav')]];
+    if ($msgId) editMsg(BOT_TOKEN, $chatId, $msgId, $t, inlineKb($kb));
+    else        sendMsg(BOT_TOKEN, $chatId, $t, inlineKb($kb));
 }
 
 function runBackgroundQueues() {

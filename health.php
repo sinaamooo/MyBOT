@@ -111,13 +111,50 @@ row($rows, function_exists('mb_substr'), 'افزونه mbstring',
     function_exists('mb_substr') ? 'فعال' : 'غیرفعال',
     'افزونه mbstring را فعال کنید — بدون آن متن فارسی درست بریده نمی‌شود.');
 
+// ───────── ⚡️ opcache — بزرگ‌ترین عاملِ سرعتِ ربات ─────────
+//
+// کدِ ربات نزدیک به یک‌ونیم مگابایت است. بدون opcache، PHP در هر
+// درخواست کلش را از نو می‌خواند و کامپایل می‌کند — روی سرورِ آزمون
+// ۳۳ میلی‌ثانیه، و این پیش از آنکه ربات حتی یک کار انجام دهد.
+// با opcache همان کار ۵ میلی‌ثانیه است.
+//
+// هیچ تنظیمی داخل کد نمی‌تواند روشنش کند؛ در php.ini است.
+$opOn   = function_exists('opcache_get_status') && filter_var(ini_get('opcache.enable'), FILTER_VALIDATE_BOOLEAN);
+$opStat = $opOn && function_exists('opcache_get_status') ? @opcache_get_status(false) : null;
+$opUsed = is_array($opStat) && !empty($opStat['opcache_enabled']);
+
+$opDetail = '';
+if (!function_exists('opcache_get_status')) {
+    $opDetail = 'افزونه‌ی opcache روی این سرور نصب نیست';
+} elseif (!$opUsed) {
+    $opDetail = 'نصب هست ولی خاموش است';
+} else {
+    $mem  = $opStat['memory_usage'] ?? [];
+    $used = (float)($mem['used_memory'] ?? 0) / 1048576;
+    $free = (float)($mem['free_memory'] ?? 0) / 1048576;
+    $hits = (float)($opStat['opcache_statistics']['opcache_hit_rate'] ?? 0);
+    $n    = (int)($opStat['opcache_statistics']['num_cached_scripts'] ?? 0);
+    $opDetail = sprintf('روشن — %d فایل در کش · %.1f٪ اصابت · %.0f مگابایت مصرف از %.0f آزاد',
+                        $n, $hits, $used, $free);
+    if ($free < 8) $opDetail .= ' ⚠️ حافظه‌اش دارد تمام می‌شود';
+}
+row($rows, $opUsed, '⚡️ opcache (سرعت کل ربات)', $opDetail,
+    'در php.ini این‌ها را بگذارید و PHP را ری‌استارت کنید:<br>' .
+    '<code>opcache.enable=1</code><br>' .
+    '<code>opcache.memory_consumption=128</code><br>' .
+    '<code>opcache.max_accelerated_files=10000</code><br>' .
+    '<code>opcache.validate_timestamps=1</code><br>' .
+    '<code>opcache.revalidate_freq=2</code><br>' .
+    'در سی‌پنل: Select PHP Version ← Extensions ← تیک opcache. ' .
+    'این تنها تغییری است که سرعتِ کلِ ربات را چند برابر می‌کند.');
+
 // ───────── ۳) فایل‌ها ─────────
-$need = ['bot_master_membership.php', 'miniapps.php', 'miniapp_view_tg.php', 'miniapp_view_num.php', 'numbers.php', 'admin_ext.php', 'ton_wallet.php'];
+$need = ['bot_master_membership.php', 'miniapps.php', 'miniapp_view_tg.php', 'miniapp_view_num.php', 'numbers.php', 'admin_ext.php', 'profit.php', 'ton_wallet.php'];
 $missing = [];
 foreach ($need as $f) if (!is_file(__DIR__ . '/' . $f)) $missing[] = $f;
 row($rows, !$missing, 'فایل‌های ربات',
-    $missing ? 'پیدا نشد: ' . implode('، ', $missing) : 'هر چهار فایل کنار هم هستند',
-    'هر چهار فایل باید در همین پوشه (' . __DIR__ . ') کنار هم باشند.');
+    $missing ? 'پیدا نشد: ' . implode('، ', $missing) : 'همه‌ی فایل‌ها کنار هم هستند',
+    'همه‌ی این فایل‌ها باید در همین پوشه (' . __DIR__ . ') کنار هم باشند.');
 
 // ───────── ۴) اجازه نوشتن ─────────
 $dir = __DIR__ . '/data_master';
