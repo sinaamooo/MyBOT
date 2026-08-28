@@ -712,7 +712,8 @@ function numFinish($orderId, $why = 'cancel', $tellPanel = true) {
             });
             if (function_exists('maRefund'))
                 maRefund((int)$act['uid'], $amount,
-                         $why === 'expired' ? 'کد شماره نرسید' : 'لغو شماره');
+                         $why === 'expired' ? 'کد شماره نرسید' : 'لغو شماره',
+                         (string)($o['app'] ?? 'num'));
         }
     }
     return [true, ''];

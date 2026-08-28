@@ -1946,14 +1946,23 @@ function maDebit($userId, $amount) {
 }
 
 /** برگرداندن پول به کیف پول (وقتی تحویل خودکار شکست بخورد و ادمین لغو کند) */
-function maRefund($userId, $amount, $note = '') {
+/**
+ * برگشت پول به کیف پول.
+ *
+ * $app اگر داده شود، خبرش در صندوقِ همان مینی‌اپ می‌نشیند نه در ربات —
+ * چون کاربری که وسط مینی‌اپ لغو کرده، همان‌جا منتظرِ جواب است، نه در
+ * گفتگوی ربات. بدونِ $app (شارژ و برگشتِ بیرونِ مینی‌اپ) مثل قبل پیام
+ * می‌رود.
+ */
+function maRefund($userId, $amount, $note = '', $app = '') {
     $amount = round((float)$amount, 2);
     if ($amount <= 0) return;
     addBalance($userId, $amount);
-    sendMsg(BOT_TOKEN, $userId,
-        "💰 <b>مبلغ به کیف پول شما برگشت</b>\n\n" .
-        '➕ ' . fmtNum($amount) . " تومان\n" .
-        ($note !== '' ? '📝 ' . h($note) : ''));
+    $txt = "💰 <b>مبلغ به کیف پول شما برگشت</b>\n\n" .
+           '➕ ' . fmtNum($amount) . " تومان\n" .
+           ($note !== '' ? '📝 ' . h($note) : '');
+    if ($app !== '' && in_array($app, maKeys(), true)) maNoteAdd($app, $userId, $txt);
+    else sendMsg(BOT_TOKEN, $userId, $txt);
 }
 
 /** پرداخت یک سفارش مینی‌اپ از کیف پول — برگشت: [موفق, پیام] */
@@ -2425,11 +2434,23 @@ function maApi() {
     $a = maGet($key);
     if (empty($a['on'])) maApiOut(['ok' => false, 'error' => 'closed', 'message' => 'این بخش موقتا بسته است.'], 403);
 
+    // ---- 🔔 صندوقِ اعلان‌های همین مینی‌اپ ----
+    if ($action === 'notes') {
+        [$list, $n] = maNotes($key, $uid, 40);
+        maApiOut(['ok' => true, 'list' => $list, 'n' => $n]);
+    }
+    if ($action === 'notes_seen') {
+        maNotesSeen($key, $uid);
+        maApiOut(['ok' => true, 'n' => 0]);
+    }
+
     // ---- وضعیت کاربر: موجودی + سفارش‌های اخیر ----
     if ($action === 'me') {
         maApiOut([
             'ok' => true,
             'balance' => (float)($u['balance'] ?? 0),
+            // 🔔 هر بار که «من» تازه می‌شود، نقطه هم تازه می‌شود
+            'notes_n' => maNoteUnseen($key, $uid),
             'uid'  => $uid,
             'admin'=> ($uid === ADMIN_ID) ? 1 : 0,
             'name' => trim((string)($user['first_name'] ?? '') . ' ' . (string)($user['last_name'] ?? '')),
@@ -2978,25 +2999,137 @@ function maInvoiceKb($o) {
  * «سفارش انجام شد»… و چت شلوغ می‌شد. حالا هر سفارش یک پیام دارد که
  * همان‌جا به‌روز می‌شود، پس همیشه فقط آخرین وضعیت دیده می‌شود.
  */
+// ============================================================
+// 🔔 اعلان‌های مینی‌اپ
+// ============================================================
+//
+// هیچ خبری از مینی‌اپ به ربات اصلی نمی‌رود. هر مینی‌اپ صندوقِ خودش را
+// دارد و کاربر همان‌جا می‌بیند چه شد — مثل هر برنامه‌ی دیگری که یک
+// نقطه‌ی قرمز روی زنگ می‌گذارد.
+//
+// چرا: چون یک کاربر که سه مینی‌اپ دارد، سه جور خبر می‌گرفت و همه‌شان
+// وسط گفتگوی ربات قاطیِ منوها می‌شد. حالا خبرِ شماره در مینی‌اپ شماره
+// می‌ماند و خبرِ ممبر در مینی‌اپ ممبر.
+
+if (!defined('MA_NOTE_KEEP')) define('MA_NOTE_KEEP', 40);      // چندتا برای هر کاربر
+if (!defined('MA_NOTE_TTL'))  define('MA_NOTE_TTL', 2592000);  // ۳۰ روز
+
+function maNoteKey($app, $uid) { return (string)$app . '_' . (int)$uid; }
+
+/**
+ * متنی که برای تلگرام نوشته شده بود → اعلانِ ساختاریافته.
+ *
+ * این‌طوری نوشته شده که هیچ صدازننده‌ای لازم نباشد عوض شود: هرچه قبلا
+ * به کاربر پیام می‌داد، حالا همان متن اعلان می‌شود. خطِ اول عنوان است،
+ * بقیه بدنه، و هرچه داخل <code> باشد کاندیدِ دکمه‌ی «کپی».
+ */
+function maNoteParse($html) {
+    $s = (string)$html;
+
+    // 📋 چیزهایی که ارزشِ کپی کردن دارند — کد و شماره و شناسه
+    $copy = [];
+    if (preg_match_all('#<code>(.*?)</code>#su', $s, $m))
+        foreach ($m[1] as $c) {
+            $c = trim(html_entity_decode(strip_tags($c), ENT_QUOTES, 'UTF-8'));
+            if ($c !== '') $copy[] = $c;
+        }
+
+    $txt = preg_replace('#<br\s*/?>#i', "\n", $s);
+    $txt = html_entity_decode(strip_tags((string)$txt), ENT_QUOTES, 'UTF-8');
+    $txt = trim(preg_replace("/\n{3,}/", "\n\n", (string)$txt));
+
+    $lines = preg_split("/\n/", $txt);
+    $title = trim((string)array_shift($lines));
+    $body  = trim(implode("\n", $lines));
+
+    // ایموجیِ ابتدای عنوان جدا شود تا کارت تمیزتر بنشیند
+    $emoji = '';
+    if (preg_match('/^(\X)\s+(.*)$/u', $title, $m) &&
+        preg_match('/[\x{1F300}-\x{1FAFF}\x{2600}-\x{27BF}\x{2B00}-\x{2BFF}\x{FE0F}]/u', $m[1])) {
+        $emoji = $m[1];
+        $title = trim($m[2]);
+    }
+    return [$emoji, mb_substr($title, 0, 90), mb_substr($body, 0, 600), array_slice($copy, 0, 3)];
+}
+
+/** یک اعلان در صندوقِ کاربر بگذار */
+function maNoteAdd($app, $uid, $html, $order = '') {
+    $uid = (int)$uid;
+    if ($uid <= 0) return '';
+    [$emoji, $title, $body, $copy] = maNoteParse($html);
+    if ($title === '' && $body === '') return '';
+
+    $id  = 'n' . base_convert((string)time(), 10, 36) . bin2hex(random_bytes(2));
+    $key = maNoteKey($app, $uid);
+    mutate('ma_notes', function (&$d) use ($key, $id, $emoji, $title, $body, $copy, $order) {
+        if (!is_array($d[$key] ?? null)) $d[$key] = ['seen_id' => '', 'list' => []];
+        array_unshift($d[$key]['list'], [
+            'id' => $id, 't' => time(), 'e' => $emoji, 'h' => $title,
+            'b' => $body, 'c' => $copy, 'o' => (string)$order,
+        ]);
+        $d[$key]['list'] = array_slice($d[$key]['list'], 0, MA_NOTE_KEEP);
+
+        // 🧹 صندوق‌های خیلی کهنه جا اشغال نکنند
+        if (count($d) > 400) {
+            $cut = time() - MA_NOTE_TTL;
+            foreach ($d as $k => $v)
+                if ((int)($v['list'][0]['t'] ?? 0) < $cut) unset($d[$k]);
+        }
+    });
+    return $id;
+}
+
+/**
+ * صندوقِ کاربر: [فهرست, نادیده‌ها]
+ *
+ * ⚠️ «نادیده» با شناسه شمرده می‌شود نه با زمان. با زمان یک باگِ باریک
+ *    داشت: خبری که در همان ثانیه‌ای می‌رسید که کاربر صندوق را باز کرده
+ *    بود، برای همیشه دیده‌شده حساب می‌شد و نقطه‌اش هیچ‌وقت روشن نمی‌شد.
+ */
+function maNotes($app, $uid, $limit = 40) {
+    $box = load('ma_notes')[maNoteKey($app, $uid)] ?? null;
+    if (!is_array($box)) return [[], 0];
+    $all  = (array)($box['list'] ?? []);
+    $mark = (string)($box['seen_id'] ?? '');
+    $list = array_slice($all, 0, max(1, (int)$limit));
+
+    // فهرست از تازه به کهنه است: هرچه بالای علامت است، ندیده
+    $n = 0;
+    foreach ($all as $x) {
+        if ((string)($x['id'] ?? '') === $mark) break;
+        $n++;
+    }
+    return [$list, min($n, count($all))];
+}
+
+/** چندتا نادیده — همین را نقطه‌ی روی زنگ نشان می‌دهد */
+function maNoteUnseen($app, $uid) { [, $n] = maNotes($app, $uid, MA_NOTE_KEEP); return $n; }
+
+/** همه را خوانده‌شده علامت بزن — با شناسه‌ی تازه‌ترین خبر */
+function maNotesSeen($app, $uid) {
+    $key = maNoteKey($app, $uid);
+    mutate('ma_notes', function (&$d) use ($key) {
+        if (!is_array($d[$key] ?? null)) $d[$key] = ['seen_id' => '', 'list' => []];
+        $d[$key]['seen_id'] = (string)($d[$key]['list'][0]['id'] ?? '');
+    });
+}
+
+/**
+ * خبر دادن به خریدار.
+ *
+ * ⚠️ اینجا دیگر هیچ پیامی به ربات اصلی نمی‌رود. خبر در صندوقِ همان
+ *    مینی‌اپ می‌نشیند و کاربر با نقطه‌ی قرمزِ روی زنگ می‌بیندش.
+ *
+ *    قبلا هر مینی‌اپ وسط گفتگوی ربات پیام می‌داد و منوها و خبرها قاطیِ
+ *    هم می‌شدند. حالا هر اپ فقط مالِ خودش را می‌گوید.
+ *
+ *    و یک فایده‌ی دیگر: تلگرام دیگر گلوگاه نیست. یک تماس شبکه‌ی ۲۰۰
+ *    میلی‌ثانیه‌ای وسطِ مسیرِ تحویل بود که حالا یک نوشتنِ محلی است.
+ */
 function maTellUser($o, $text, $markup = null) {
-    $id  = (string)($o['id'] ?? '');
     $uid = (int)($o['user_id'] ?? 0);
     if (!$uid) return;
-
-    $mid = (int)($o['msg_id'] ?? 0);
-    if ($mid) {
-        $d = ['chat_id' => $uid, 'message_id' => $mid, 'text' => $text,
-              'parse_mode' => 'HTML', 'disable_web_page_preview' => 'true'];
-        if ($markup) $d['reply_markup'] = json_encode($markup);
-        $r = tg(BOT_TOKEN, 'editMessageText', $d);
-        if (!empty($r['ok'])) return;
-        // «تغییری نکرده» یعنی همان متن سرِ جایش هست — کاری لازم نیست
-        if (str_contains(strtolower((string)($r['description'] ?? '')), 'not modified')) return;
-        // پیام پاک شده یا خیلی کهنه است → تازه بفرست
-    }
-    $r = sendMsg(BOT_TOKEN, $uid, $text, $markup);
-    $new = (int)($r['result']['message_id'] ?? 0);
-    if ($new && $id !== '') MaOrder::set($id, function (&$x) use ($new) { $x['msg_id'] = $new; });
+    maNoteAdd((string)($o['app'] ?? ''), $uid, $text, (string)($o['id'] ?? ''));
 }
 
 function maNotifyAdmin($o, $head = '🆕 <b>سفارش تازه مینی‌اپ</b>') {
@@ -3094,7 +3227,7 @@ function maDeliver($o) {
                 $x['status']   = MaOrder::REJECT;
                 $refund = true;
             });
-            if ($refund) maRefund((int)$o['user_id'], (float)$o['total'], 'شماره در دسترس نبود');
+            if ($refund) maRefund((int)$o['user_id'], (float)$o['total'], 'شماره در دسترس نبود', (string)$o['app']);
             maTellUser(MaOrder::get($id),
                 "☎️ <b>شماره در دسترس نبود</b>\n\n" .
                 "مبلغ سفارش به کیف پول شما برگشت. کمی بعد دوباره امتحان کنید.");
@@ -3355,7 +3488,7 @@ function maCallback($data, $uid, $chatId, $msgId, $cbId, $isAdmin) {
         if ($o['status'] === MaOrder::DONE) { answerCb(BOT_TOKEN, $cbId, 'این سفارش تحویل شده.', true); return true; }
 
         MaOrder::set($id, function (&$x) { $x['refunded'] = true; $x['status'] = MaOrder::REJECT; });
-        maRefund($o['user_id'], (float)$o['total'], 'سفارش ' . maOrderTitle($o) . ' انجام نشد.');
+        maRefund($o['user_id'], (float)$o['total'], 'سفارش ' . maOrderTitle($o) . ' انجام نشد.', (string)$o['app']);
         answerCb(BOT_TOKEN, $cbId, '✅ برگشت خورد');
         sendMsg(BOT_TOKEN, $chatId, '💰 مبلغ <b>' . fmtNum($o['total']) . '</b> تومان به کیف پول کاربر برگشت.');
         return true;

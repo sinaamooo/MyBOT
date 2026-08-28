@@ -107,6 +107,44 @@ body::before{
   box-shadow:0 6px 18px -10px color-mix(in srgb,var(--c1) 70%,transparent);
   cursor:pointer;flex:0 0 auto;border:1px solid var(--hair)
 }
+/* 🔔 زنگ — با همان نقطه‌ای که هر برنامه‌ای دارد */
+.bell{
+  position:relative;flex:0 0 auto;width:42px;height:42px;border-radius:14px;
+  border:1px solid var(--line);background:var(--s2);color:var(--fg);
+  display:grid;place-items:center;font-size:18px;cursor:pointer;
+  transition:transform .16s var(--ease),background .16s
+}
+.bell:active{transform:scale(.93)}
+.bell .dot{
+  position:absolute;top:7px;inset-inline-end:7px;min-width:8px;height:8px;
+  border-radius:99px;background:var(--bad);box-shadow:0 0 0 2px var(--bg);
+  opacity:0;transform:scale(.4);transition:opacity .2s,transform .2s
+}
+.bell.has .dot{opacity:1;transform:scale(1);animation:ping 1.8s ease-out infinite}
+@keyframes ping{0%,60%,100%{box-shadow:0 0 0 2px var(--bg)}30%{box-shadow:0 0 0 2px var(--bg),0 0 0 7px color-mix(in srgb,var(--bad) 30%,transparent)}}
+@media (prefers-reduced-motion:reduce){.bell.has .dot{animation:none}}
+
+/* 🔔 کارت‌های اعلان */
+.note{
+  border:1px solid var(--line);background:var(--s1);border-radius:var(--r2);
+  padding:13px 14px;margin-bottom:10px;position:relative;overflow:hidden
+}
+.note.new{border-color:color-mix(in srgb,var(--c1) 45%,var(--line))}
+.note.new::before{
+  content:'';position:absolute;inset-inline-start:0;top:0;bottom:0;width:3px;background:var(--c1)
+}
+.note .nh{display:flex;align-items:center;gap:8px;margin-bottom:5px}
+.note .nh i{font-style:normal;font-size:17px;line-height:1}
+.note .nh b{font-size:13.5px;font-weight:700;flex:1;min-width:0}
+.note .nh time{font-size:10.5px;color:var(--dim2);font-family:var(--mono);white-space:nowrap}
+.note p{font-size:12.5px;color:var(--dim);line-height:1.75;white-space:pre-line;margin:0}
+.note .ncp{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
+.note .ncp button{
+  border:1px solid var(--line);background:var(--s2);color:var(--fg);
+  border-radius:10px;padding:5px 10px;font-size:11.5px;font-family:var(--mono);
+  cursor:pointer;transition:transform .14s var(--ease)
+}
+.note .ncp button:active{transform:scale(.95)}
 .bal i{font-style:normal;font-size:15px}
 .bal b{font-size:14px;font-weight:800;font-family:var(--mono);letter-spacing:.2px}
 .bal small{font-size:10px;color:var(--dim);display:block;margin-top:-3px}
@@ -372,6 +410,7 @@ body::before{
     <div class="ava ph" id="ava">👤</div>
     <div class="who"><b id="uname">…</b><span id="uhandle"></span></div>
     <div class="bal" id="balBtn"><i>💎</i><div><b id="balV">—</b><small id="balK">اعتبار</small></div></div>
+    <button class="bell" id="bell" aria-label="اعلان‌ها">🔔<span class="dot"></span></button>
   </header>
 
   <!-- 🏠 خانه -->
@@ -401,6 +440,13 @@ body::before{
     <div class="sect" id="sOrders">سفارش‌های من</div>
     <p class="ohint" id="oHint"></p>
     <div id="orders"></div>
+  </section>
+
+  <!-- 🔔 اعلان‌ها -->
+  <section class="page" id="p-notes">
+    <div class="sect" id="sNotes">اعلان‌ها</div>
+    <div id="notes"></div>
+    <div class="empty" id="notesEmpty" hidden><i>🔔</i><span>هنوز خبری نیست.</span></div>
   </section>
 
   <!-- 👤 حساب -->
@@ -484,7 +530,7 @@ async function api(action, data) {
 
 /* ── وضعیت ───────────────────────────────── */
 const S = { me: null, cat: 'all', live: null, tick: 0, poll: 0, page: 'home',
-            q: '', shown: 0, hits: [] };
+            q: '', shown: 0, hits: [], notes: 0 };
 
 /* ── ساخت کارت محصول ─────────────────────── */
 function catIndex(id) {
@@ -1040,6 +1086,72 @@ async function loadOrders() {
   paintOrders(r.list || []);
 }
 
+/* ── 🔔 اعلان‌ها ───────────────────────────
+   هیچ خبری به ربات اصلی نمی‌رود؛ همه‌چیز همین‌جاست. نقطه‌ی روی زنگ
+   همان قراردادِ آشنای هر برنامه‌ای است: چیزی هست که ندیده‌ای. */
+function noteDot(n) {
+  S.notes = n | 0;
+  $('#bell').classList.toggle('has', S.notes > 0);
+}
+
+function agoTxt(t) {
+  const d = Math.max(0, Math.floor(Date.now() / 1000) - (t | 0));
+  if (d < 60) return 'همین الان';
+  if (d < 3600) return Math.floor(d / 60) + ' دقیقه پیش';
+  if (d < 86400) return Math.floor(d / 3600) + ' ساعت پیش';
+  return Math.floor(d / 86400) + ' روز پیش';
+}
+
+function noteCard(n, seenAt) {
+  const el = document.createElement('div');
+  el.className = 'note' + ((n.t | 0) > seenAt ? ' new' : '');
+
+  const head = document.createElement('div');
+  head.className = 'nh';
+  const i = document.createElement('i'); i.textContent = n.e || '🔔';
+  const b = document.createElement('b'); b.textContent = n.h || '';
+  const tm = document.createElement('time'); tm.textContent = agoTxt(n.t);
+  head.append(i, b, tm);
+
+  const p = document.createElement('p');
+  p.textContent = n.b || '';
+
+  el.append(head, p);
+
+  // 📋 کد و شماره را می‌شود همان‌جا کپی کرد — همان کاری که کاربر
+  //    وگرنه با دست و انگشت و نگه‌داشتن می‌کند
+  if (Array.isArray(n.c) && n.c.length) {
+    const box = document.createElement('div');
+    box.className = 'ncp';
+    n.c.forEach(v => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = v;
+      btn.addEventListener('click', () => copy(v, btn, v));
+      box.appendChild(btn);
+    });
+    el.appendChild(box);
+  }
+  return el;
+}
+
+async function loadNotes() {
+  const r = await api('notes');
+  if (!r.ok) return;
+  const box = $('#notes');
+  box.textContent = '';
+  const list = r.list || [];
+  $('#notesEmpty').hidden = list.length > 0;
+
+  // «تازه» را قبل از خوانده‌شدن حساب کن، وگرنه بعد از notes_seen
+  // همه‌چیز کهنه به نظر می‌رسد و کاربر نمی‌فهمد کدام تازه بود
+  const seenAt = Math.floor(Date.now() / 1000) - 1;
+  list.forEach((n, idx) => box.appendChild(noteCard(n, idx < (r.n | 0) ? 0 : seenAt)));
+
+  if ((r.n | 0) > 0) { await api('notes_seen'); }
+  noteDot(0);
+}
+
 /* ── ناوبری ──────────────────────────────── */
 function go(name) {
   S.page = name;
@@ -1047,6 +1159,7 @@ function go(name) {
   $$('#nav button').forEach(b => b.setAttribute('aria-selected', b.dataset.go === name ? 'true' : 'false'));
   window.scrollTo({ top: 0, behavior: 'smooth' });
   if (name === 'orders') loadOrders();
+  if (name === 'notes')  loadNotes();
 }
 $$('#nav button').forEach(b => b.addEventListener('click', () => { buzz(); go(b.dataset.go); }));
 
@@ -1073,6 +1186,7 @@ async function loadMe() {
     $('#ava').replaceWith(img); img.id = 'ava';
   }
   paintOrders(r.orders || []);
+  if (S.page !== 'notes') noteDot(r.notes_n || 0);
 }
 
 async function loadLive() {
@@ -1105,6 +1219,10 @@ function boot() {
   });
   $('#more').addEventListener('click', () => { buzz(); paintGrid(false); });
   $('#crumb').addEventListener('click', () => { buzz(); backToFolders(); });
+
+  $('#sNotes').textContent = U('notes_ttl', 'اعلان‌ها');
+  // نقطه را «من» می‌آورد — صفحه موقعِ ساخته شدن هنوز نمی‌داند کاربر کیست
+  $('#bell').addEventListener('click', () => { buzz(); go('notes'); });
 
   $('#balBtn').addEventListener('click', () => { buzz(); askTopup(0); });
   $('#topupBtn').addEventListener('click', () => { buzz(); askTopup(0); });

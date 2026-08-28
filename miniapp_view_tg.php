@@ -77,6 +77,7 @@ __SKIN__
       <h1 id="ttl">—</h1>
       <div class="chipbal" id="balChip"><b>+</b><span id="balTop">…</span><em id="curTop"></em></div>
     </div>
+    <button class="bell" id="bell" aria-label="اعلان‌ها">🔔<span class="bdot"></span></button>
     <button class="cta" id="topCta">＋ شارژ</button>
   </div>
 
@@ -169,6 +170,12 @@ __SKIN__
       <div class="link" id="lnkBot"><s>🤖</s><em>بازگشت به ربات</em><s>‹</s></div>
       <div class="walbox" id="meNote" style="margin-top:12px"></div>
     </div>
+  </section>
+
+  <!-- ══ 🔔 اعلان‌ها ══ -->
+  <section class="pg" id="pgNote">
+    <div class="sect"><h2><s></s><span id="noteTtl">اعلان‌ها</span></h2></div>
+    <div id="noteList"><div class="void"><div>🔔</div>هنوز خبری نیست.</div></div>
   </section>
 
   <!-- ══ 👑 مدیریت (فقط مدیر) ══ -->
@@ -314,7 +321,7 @@ $('meNote').textContent  = B.note || '';
 document.title = B.title;
 
 /* ── وضعیت ── */
-var S = { page:'home', cat:'', q:'', item:null, qty:1, vol:0, busy:false, bal:0, nodes:[], me:null };
+var S = { page:'home', cat:'', q:'', item:null, qty:1, vol:0, busy:false, bal:0, nodes:[], me:null, notes:0 };
 
 /* ── سرور ── */
 function api(action, extra, ok, bad){
@@ -407,11 +414,15 @@ var PAGES = [
   { id:'shop',  ico:'grid',  name:U.nav_shop },
   { id:'ord',   ico:'bill',  name:U.nav_orders },
   { id:'me',    ico:'user',  name:U.nav_me },
-  { id:'adm',   ico:'crown', name:'مدیریت' }
+  { id:'adm',   ico:'crown', name:'مدیریت' },
+  // 🔔 در جزیره‌ی پایین نمی‌نشیند — درش زنگِ بالای صفحه است. پنج تا
+  //    دکمه‌ی پایین جا دارد، ششمی همه را باریک می‌کند.
+  { id:'note',  ico:'',      name:'اعلان‌ها', off:true }
 ];
 (function drawDock(){
   var h = '';
   PAGES.forEach(function(p){
+    if (p.off) return;
     h += '<b data-p="' + p.id + '"><i class="ico">' + ICONS[p.ico] + '</i><span>' + esc(p.name) + '</span></b>';
   });
   $('dock').innerHTML = h;
@@ -421,13 +432,15 @@ var DOCK = [].slice.call($('dock').children);
 function go(page, silent){
   if (S.page === page && silent) return;
   S.page = page;
+  var d = 0;
   for (var i=0;i<PAGES.length;i++){
     var on = PAGES[i].id === page;
-    DOCK[i].classList.toggle('on', on);
+    if (!PAGES[i].off) { DOCK[d] && DOCK[d].classList.toggle('on', on); d++; }
     $('pg' + PAGES[i].id.charAt(0).toUpperCase() + PAGES[i].id.slice(1)).classList.toggle('on', on);
   }
   window.scrollTo({ top:0, behavior: silent ? 'auto' : 'smooth' });
-  if (page === 'ord') drawOrders();
+  if (page === 'ord')  drawOrders();
+  if (page === 'note') loadNotes();
   if (page === 'adm' && !ADM.items.length) admLoad();
   backBtn();
 }
@@ -436,6 +449,51 @@ $('dock').addEventListener('click', function(ev){
   if (!el) return;
   tap(); go(el.getAttribute('data-p'));
 });
+
+/* ── 🔔 اعلان‌ها ──
+   هیچ خبری به ربات اصلی نمی‌رود؛ همه‌چیز همین‌جاست. */
+function noteDot(n){
+  S.notes = n | 0;
+  $('bell').classList.toggle('has', S.notes > 0);
+}
+function agoTxt(t){
+  var d = Math.max(0, Math.floor(Date.now()/1000) - (t|0));
+  if (d < 60) return 'همین الان';
+  if (d < 3600) return Math.floor(d/60) + ' دقیقه پیش';
+  if (d < 86400) return Math.floor(d/3600) + ' ساعت پیش';
+  return Math.floor(d/86400) + ' روز پیش';
+}
+function loadNotes(){
+  api('notes', {}, function(j){
+    var box = $('noteList'), list = j.list || [], fresh = j.n | 0;
+    if (!list.length){ box.innerHTML = '<div class="void"><div>🔔</div>هنوز خبری نیست.</div>'; noteDot(0); return; }
+    var h = '';
+    list.forEach(function(n, i){
+      h += '<div class="note' + (i < fresh ? ' new' : '') + '">' +
+             '<div class="nh"><i>' + esc(n.e || '🔔') + '</i><b>' + esc(n.h || '') + '</b>' +
+             '<time>' + esc(agoTxt(n.t)) + '</time></div>' +
+             '<p>' + esc(n.b || '') + '</p>';
+      if (n.c && n.c.length){
+        h += '<div class="ncp">';
+        n.c.forEach(function(v){ h += '<button type="button" data-cp="' + esc(v) + '">' + esc(v) + '</button>'; });
+        h += '</div>';
+      }
+      h += '</div>';
+    });
+    box.innerHTML = h;
+    if (fresh > 0) api('notes_seen', {}, function(){}, function(){});
+    noteDot(0);
+  }, function(){});
+}
+$('noteList').addEventListener('click', function(ev){
+  var b = ev.target.closest ? ev.target.closest('[data-cp]') : null;
+  if (!b) return;
+  var v = b.getAttribute('data-cp');
+  tap();
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(v);
+  toast(U.copied || 'کپی شد', true);
+});
+$('bell').addEventListener('click', function(){ tap(); go('note'); });
 
 /* دکمه بازگشت تلگرام: از هر صفحه‌ای به خانه، و از شیت به صفحه */
 function backBtn(){
@@ -456,6 +514,7 @@ if (TG && TG.BackButton){
 api('me', {}, function(j){
   S.me = j;
   setBal(j.balance);
+  if (S.page !== 'note') noteDot(j.notes_n || 0);
   var nm = (j.name || '').trim();
   if (nm) $('ttl').textContent = U.hi.replace('{name}', nm);
   $('meName').textContent = nm || B.title;
@@ -1170,6 +1229,32 @@ body.fx0 #stars{display:none}
   background:linear-gradient(135deg,var(--c1),var(--c2))}
 .cta:active{transform:scale(.96)}
 body.glow-on .cta{box-shadow:0 8px 22px -12px var(--c1)}
+
+/* 🔔 زنگ — با همان نقطه‌ای که هر برنامه‌ای دارد */
+.bell{position:relative;flex:0 0 auto;width:38px;height:38px;border-radius:13px;cursor:pointer;
+  border:1px solid var(--line,rgba(255,255,255,.1));background:rgba(255,255,255,.06);
+  color:inherit;display:grid;place-items:center;font-size:16px;font-family:inherit}
+.bell:active{transform:scale(.94)}
+.bell .bdot{position:absolute;top:6px;inset-inline-end:6px;width:8px;height:8px;border-radius:99px;
+  background:#FF5A6E;opacity:0;transform:scale(.4);transition:opacity .2s,transform .2s}
+.bell.has .bdot{opacity:1;transform:scale(1);animation:bping 1.8s ease-out infinite}
+@keyframes bping{0%,60%,100%{box-shadow:0 0 0 0 rgba(255,90,110,.55)}30%{box-shadow:0 0 0 6px rgba(255,90,110,0)}}
+@media (prefers-reduced-motion:reduce){.bell.has .bdot{animation:none}}
+
+/* 🔔 کارت‌های اعلان */
+.note{border:1px solid var(--line,rgba(255,255,255,.1));background:rgba(255,255,255,.04);
+  border-radius:16px;padding:13px 14px;margin-bottom:10px;position:relative;overflow:hidden}
+.note.new::before{content:'';position:absolute;inset-inline-start:0;top:0;bottom:0;width:3px;
+  background:linear-gradient(180deg,var(--c1),var(--c2))}
+.note .nh{display:flex;align-items:center;gap:8px;margin-bottom:5px}
+.note .nh i{font-style:normal;font-size:16px;line-height:1}
+.note .nh b{font-size:13px;font-weight:800;flex:1;min-width:0}
+.note .nh time{font-size:10px;color:var(--dim);white-space:nowrap}
+.note p{font-size:12px;color:var(--dim);line-height:1.8;white-space:pre-line;margin:0}
+.note .ncp{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
+.note .ncp button{border:1px solid var(--line,rgba(255,255,255,.1));background:rgba(255,255,255,.06);
+  color:inherit;border-radius:10px;padding:5px 10px;font-size:11px;font-family:inherit;cursor:pointer}
+.note .ncp button:active{transform:scale(.95)}
 .wsub{margin:0 0 10px;font-size:11.5px;color:var(--dim);text-align:center}
 
 /* ═══ صفحه‌ها ═══ */
