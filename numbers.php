@@ -396,6 +396,9 @@ function numBuy($order) {
         return [false, $fail];
     }
 
+    // ⏳ اگر پنل خودش مهلت داده، همان را نگه دار — دقیق‌تر از عددِ ماست
+    $ttl = numParseTtl(maJsonPath($resp, (string)($ops['ttl_path'] ?? '')));
+
     numPut([
         'order'   => $oid,
         'uid'     => (int)($order['user_id'] ?? 0),
@@ -410,6 +413,7 @@ function numBuy($order) {
         'price'   => (float)($order['total'] ?? 0),
         'created' => time(),
         'checked' => 0,
+        'wait'    => $ttl >= 60 ? $ttl : 0,
     ]);
     return [true, ''];
 }
@@ -436,7 +440,7 @@ function numState($orderId, $force = false) {
     $act = numGet($orderId);
     if (!$act) return null;
 
-    $wait = max(60, (int)numVal('wait', 900));
+    $wait = numWaitFor($act);
     $left = max(0, $wait - (time() - (int)$act['created']));
 
     if ($act['status'] === 'waiting') {
@@ -482,6 +486,26 @@ function numPoll($orderId) {
     $ops = numVal('api.ops.status', []);
     if (numErr($resp, $ops) !== '') return;
 
+    // 📊 وضعیتی که پنل داد — بعضی پنل‌ها عدد می‌دهند، بعضی کلمه
+    $st = maJsonPath($resp, (string)($ops['state_path'] ?? 'status'));
+    $st = is_scalar($st) ? strtolower(trim((string)$st)) : '';
+
+    // ⛔️ مرده؟ (لغو یا مسدود) — پول همان‌جا برگردد، منتظرِ مهلت نمانیم
+    if ($st !== '' && numStateIn($st, (string)($ops['dead_val'] ?? ''))) {
+        numFinish($orderId, 'expired');
+        return;
+    }
+
+    // ✅ کد آمده؟
+    //
+    // دو جور پنل داریم و هر دو باید کار کنند:
+    //   • آنکه تا کد نیامده اصلا فیلد کد را نمی‌فرستد → خودِ وجودِ کد نشانه است
+    //   • آنکه همیشه فیلد کد را می‌فرستد و تا وقتی نیامده تویش "0" می‌گذارد
+    //     → آنجا باید به وضعیت نگاه کرد، نه به فیلد کد
+    // پس اگر «مقدارِ رسیدن» تنظیم شده باشد، همان حرفِ آخر را می‌زند.
+    $wantSt = trim((string)($ops['done_val'] ?? ''));
+    if ($wantSt !== '' && !numStateIn($st, $wantSt)) return;   // هنوز نه
+
     $code = numExtractCode($resp, $ops);
     if ($code !== '') {
         numSetAct($orderId, function (&$x) use ($code) {
@@ -493,13 +517,50 @@ function numPoll($orderId) {
         return;
     }
 
-    // بعضی پنل‌ها به‌جای کد، وضعیت می‌دهند — «لغو شده» را هم بفهمیم
-    $st = maJsonPath($resp, (string)($ops['state_path'] ?? 'status'));
-    if (is_scalar($st)) {
-        $st = strtolower(trim((string)$st));
-        if (in_array($st, ['cancel', 'cancelled', 'canceled', 'refunded', 'expired'], true))
-            numFinish($orderId, 'expired');
+    // وضعیتِ کلمه‌ای، برای پنل‌هایی که چیزی تنظیم نشده
+    if ($wantSt === '' && $st !== '' &&
+        in_array($st, ['cancel', 'cancelled', 'canceled', 'refunded', 'expired'], true))
+        numFinish($orderId, 'expired');
+}
+
+/**
+ * آیا این وضعیت در فهرستِ داده‌شده هست؟
+ *
+ * فهرست با ویرگول جدا می‌شود («2,6») چون یک حالت همیشه یک عدد نیست:
+ * نامبرلند هم «کد رسید» دارد هم «تکمیل شد»، و هر دو یعنی کد دستمان است.
+ */
+function numStateIn($state, $list) {
+    $state = strtolower(trim((string)$state));
+    if ($state === '') return false;
+    foreach (preg_split('/[,\s|]+/', (string)$list) as $one) {
+        $one = strtolower(trim($one));
+        if ($one !== '' && $one === $state) return true;
     }
+    return false;
+}
+
+/**
+ * ⏳ مهلتِ این فعال‌سازی.
+ *
+ * اگر پنل موقعِ فروش خودش مهلت داده باشد («TIME»:«00:20:00») همان معتبر
+ * است، نه عددِ پنلِ ما — وگرنه یا زودتر پول برمی‌گردانیم و شماره‌ی
+ * پول‌داده را دور می‌ریزیم، یا دیرتر و کاربر الکی منتظر می‌ماند.
+ */
+function numWaitFor($act) {
+    $own = (int)($act['wait'] ?? 0);
+    if ($own >= 60) return $own;
+    return max(60, (int)numVal('wait', 900));
+}
+
+/** «00:20:00» یا «20:00» یا «1200» → ثانیه. ۰ یعنی نفهمیدم. */
+function numParseTtl($v) {
+    if (!is_scalar($v)) return 0;
+    $v = trim((string)$v);
+    if ($v === '') return 0;
+    if (preg_match('/^\d+$/', $v)) return (int)$v;
+    if (preg_match('/^(?:(\d+):)?(\d+):(\d+)$/', $v, $m))
+        return (int)($m[1] ?? 0) * 3600 + (int)$m[2] * 60 + (int)$m[3];
+    return 0;
 }
 
 /** کد رسید — سفارش بسته می‌شود و به خریدار خبر می‌رود */
@@ -581,13 +642,12 @@ function numFinish($orderId, $why = 'cancel') {
 
 /** ⏰ فعال‌سازی‌های از مهلت گذشته — از همان تیک عمومی ربات صدا زده می‌شود */
 function numTick($limit = 10) {
-    $wait = max(60, (int)numVal('wait', 900));
-    $now  = time();
-    $n    = 0;
+    $now = time();
+    $n   = 0;
     foreach (numAll() as $act) {
         if ($n >= $limit) break;
         if (($act['status'] ?? '') !== 'waiting') continue;
-        if ($now - (int)($act['created'] ?? 0) < $wait) continue;
+        if ($now - (int)($act['created'] ?? 0) < numWaitFor($act)) continue;
         numFinish((string)$act['order'], 'expired');
         $n++;
     }
@@ -625,24 +685,37 @@ function numPresets() {
             'ops' => [
                 'buy' => [
                     'method' => 'GET', 'path' => '/v2.php/?method=getnum&sid={service}', 'body' => '',
-                    'id_path' => 'ID', 'phone_path' => 'NUMBER',
-                    'ok_path' => 'RESULT', 'ok_val' => '1', 'err_path' => 'MESSAGE',
+                    'id_path' => 'ID', 'phone_path' => 'NUMBER', 'ttl_path' => 'TIME',
+                    'ok_path' => 'RESULT', 'ok_val' => '1', 'err_path' => 'DESCRIPTION',
                 ],
+                // 📌 وضعیت‌های نامبرلند: ۱ منتظر کد · ۲ کد رسید · ۳ لغو شده
+                //    ۴ مسدود شده · ۵ منتظر کد مجدد · ۶ تکمیل شد
+                //
+                //    اینجا فیلد CODE همیشه فرستاده می‌شود و تا وقتی کد نیامده
+                //    تویش "0" است. پس نمی‌شود به وجودِ CODE تکیه کرد — حرفِ
+                //    آخر را RESULT می‌زند.
                 'status' => [
-                    'method' => 'GET', 'path' => '/v2.php/?method=getsms&id={id}', 'body' => '',
-                    'code_path' => 'SMS', 'state_path' => 'RESULT', 'err_path' => '',
+                    'method' => 'GET', 'path' => '/v2.php/?method=checkstatus&id={id}', 'body' => '',
+                    'code_path' => 'CODE', 'state_path' => 'RESULT',
+                    'done_val' => '2,6', 'dead_val' => '3,4',
+                    'err_path' => '',
                 ],
                 'cancel' => [
-                    'method' => 'GET', 'path' => '/v2.php/?method=cancel&id={id}', 'body' => '',
-                    'err_path' => 'MESSAGE', 'ok_path' => '', 'ok_val' => '',
+                    'method' => 'GET', 'path' => '', 'body' => '',
+                    'err_path' => 'DESCRIPTION', 'ok_path' => '', 'ok_val' => '',
                 ],
                 'balance' => [
-                    'method' => 'GET', 'path' => '/v2.php/?method=getcredit', 'body' => '',
-                    'val_path' => 'AMOUNT', 'err_path' => 'MESSAGE',
+                    'method' => 'GET', 'path' => '', 'body' => '',
+                    'val_path' => 'AMOUNT', 'err_path' => 'DESCRIPTION',
                 ],
             ],
+            // ⚠️ این دو مسیر عمدا خالی مانده‌اند، نه از قلم افتاده:
+            //    «تغییر وضعیت شماره» و «موجودی» در مستندات نامبرلند بخش
+            //    جدا دارند و اسم متدشان را حدس نمی‌زنیم. با «🧪 تست خام»
+            //    پیدایشان کنید و در همان عملیات بگذارید.
+            'todo' => ['cancel' => 'لغو شماره', 'balance' => 'موجودی پنل'],
             // متدهایی که در «🧪 تست خام» به درد می‌خورند
-            'probe' => ['getservice', 'getinfo', 'getcredit'],
+            'probe' => ['getinfo', 'getservice', 'getcountry'],
         ],
     ];
 }
@@ -706,6 +779,14 @@ function numAdmHome($chatId, $msgId) {
 
     $t .= "<b>عملیات‌ها:</b>\n";
     foreach (numOpLabels() as $k => $lbl) $t .= $lbl . ': ' . numOpLine($k) . "\n";
+
+    // 🩺 عملیاتِ بی‌مسیر را همان بالا بگو، نه اینکه سرِ اولین خرید معلوم شود
+    $miss = [];
+    foreach (['buy' => 'گرفتن شماره', 'status' => 'پیگیری کد', 'cancel' => 'لغو'] as $k => $lbl)
+        if (trim((string)numVal('api.ops.' . $k . '.path', '')) === '') $miss[] = $lbl;
+    if ($miss) $t .= "\n⚠️ <b>بدون مسیر:</b> " . h(implode('، ', $miss)) .
+                     ($miss === ['لغو'] ? " — فروش کار می‌کند ولی لغو روی پنل انجام نمی‌شود.\n"
+                                        : " — تا اینها ست نشوند فروش انجام نمی‌شود.\n");
 
     if ($open) $t .= "\n⏳ <b>{$open}</b> شماره‌ی باز، در انتظار کد.";
 
@@ -781,9 +862,10 @@ function numAdmOp($chatId, $msgId, $op) {
 function numOpFields($op) {
     switch ($op) {
         case 'buy':     return ['id_path' => '🧾 مسیر شناسه', 'phone_path' => '☎️ مسیر شماره',
-                                'err_path' => '⚠️ مسیر خطا',
+                                'ttl_path' => '⏳ مسیر مهلت', 'err_path' => '⚠️ مسیر خطا',
                                 'ok_path' => '🚦 مسیر کد موفقیت', 'ok_val' => '🚦 مقدار موفقیت'];
         case 'status':  return ['code_path' => '🔑 مسیر کد', 'state_path' => '📊 مسیر وضعیت',
+                                'done_val' => '✅ وضعیتِ «کد رسید»', 'dead_val' => '⛔️ وضعیتِ «لغو/مسدود»',
                                 'err_path' => '⚠️ مسیر خطا'];
         case 'balance': return ['val_path' => '💠 مسیر مقدار', 'err_path' => '⚠️ مسیر خطا'];
         default:        return ['err_path' => '⚠️ مسیر خطا',
@@ -869,7 +951,7 @@ function numAdmOpen($chatId, $msgId) {
     foreach (numAll() as $a) {
         if (($a['status'] ?? '') !== 'waiting') continue;
         if (++$n > 20) break;
-        $left = max(0, (int)numVal('wait', 900) - (time() - (int)($a['created'] ?? 0)));
+        $left = max(0, numWaitFor($a) - (time() - (int)($a['created'] ?? 0)));
         $t .= "• <code>" . h((string)($a['phone'] ?? '')) . "</code> — " . h((string)($a['name'] ?? '')) .
               " · " . intdiv($left, 60) . ":" . str_pad((string)($left % 60), 2, '0', STR_PAD_LEFT) . "\n";
         $rows[] = [btnCb('🔴 لغو ' . mb_substr((string)($a['phone'] ?? ''), 0, 16), 'numkill_' . $a['order'], 'reject')];
@@ -915,9 +997,15 @@ function numCallback($data, $uid, $chatId, $msgId, $cbId, $isAdmin) {
             (!empty($p['sid_only'])
                 ? "📌 این پنل سرویس و کشور را با هم در یک شناسه می‌دهد. پس:\n" .
                   "• «کد کشور» در دسته‌ها را <b>خالی بگذارید</b>\n" .
-                  "• همان <code>sid</code> را در «📱 کد سرویس» هر محصول بنویسید\n\n"
+                  "• همان <code>sid</code> را در «📱 کد سرویس» هر محصول بنویسید\n" .
+                  "• <code>sid</code>ها را با «🧪 تست خام» و <code>getinfo</code> ببینید\n\n"
                 : '') .
-            "بعد با «🧪 تست خام» مطمئن شوید متدها درست‌اند.",
+            (!empty($p['todo'])
+                ? "⚠️ <b>دو مسیر خالی ماند</b> — اسمشان در مستندات هست ولی حدس نزدیم:\n" .
+                  implode('', array_map(fn($lbl) => '• ' . $lbl . "\n", $p['todo'])) .
+                  "با «🧪 تست خام» پیدا کنید و در همان عملیات بگذارید.\n" .
+                  "<i>بدون «لغو»، پول کاربر برمی‌گردد ولی شماره روی پنل باز می‌ماند تا خودش منقضی شود.</i>\n\n"
+                : "بعد با «🧪 تست خام» مطمئن شوید متدها درست‌اند."),
             inlineKb([[btnCb('☎️ شماره مجازی', 'num_home', 'admin')]]));
         return true;
     }
@@ -1040,6 +1128,18 @@ function numFieldAsk($op, $field) {
                                "مثال نامبرلند: <code>RESULT</code>\n\nبرای خالی کردن: <code>-</code>";
         case 'ok_val':  return "🚦 مقداری که یعنی «موفق» را بفرستید.\n" .
                                "مثال نامبرلند: <code>1</code>\n\nبرای خالی کردن: <code>-</code>";
+        case 'ttl_path': return "⏳ اگر پنل موقعِ فروش مهلتِ شماره را می‌دهد، نامِ آن فیلد را بفرستید.\n" .
+                                "مثال نامبرلند: <code>TIME</code> (که <code>00:20:00</code> می‌دهد)\n\n" .
+                                "با این، شمارشِ معکوسِ ربات دقیقا همان مهلتِ واقعی می‌شود.\n" .
+                                "برای خالی کردن: <code>-</code>";
+        case 'done_val': return "✅ وضعیت‌هایی که یعنی «کد رسید» را بفرستید — با ویرگول.\n" .
+                                "مثال نامبرلند: <code>2,6</code> (کد رسید، تکمیل شد)\n\n" .
+                                "این وقتی لازم است که پنل فیلدِ کد را همیشه می‌فرستد و تا نیامده تویش " .
+                                "<code>0</code> می‌گذارد.\n\nبرای خالی کردن: <code>-</code>";
+        case 'dead_val': return "⛔️ وضعیت‌هایی که یعنی «لغو یا مسدود» را بفرستید — با ویرگول.\n" .
+                                "مثال نامبرلند: <code>3,4</code> (کنسل شده، مسدود شده)\n\n" .
+                                "با این، پول بی‌درنگ برمی‌گردد و کاربر تا آخرِ مهلت الکی منتظر نمی‌ماند.\n" .
+                                "برای خالی کردن: <code>-</code>";
         default:
             return "🧭 مسیر این مقدار داخل پاسخِ پنل را بفرستید.\n" .
                    "برای فیلدهای تودرتو با نقطه: <code>data.activation.id</code>\n" .
