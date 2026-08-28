@@ -42,7 +42,7 @@ function chStreams() {
 
     $out += [
         'mini_tg' => ['🌟 خدمات تلگرام — بقیه', 'هر فروشِ این مینی‌اپ که دسته‌اش مقصد جدا ندارد.'],
-        'mini_cfg'=> ['🛡 کانفیگ — بقیه', 'هر فروشِ کانفیگ که دسته‌اش مقصد جدا ندارد.'],
+        'mini_num'=> ['☎️ شماره مجازی — بقیه', 'هر فروشِ شماره که دسته‌اش مقصد جدا ندارد.'],
         'mem_vip' => ['💎 ممبر ویژه', 'سفارش‌های ممبر ویژه.'],
         'mem_ok'  => ['✅ ممبر اخلاقی', 'سفارش‌های ممبر اخلاقی.'],
         'mem_no'  => ['🔞 ممبر غیراخلاقی', 'سفارش‌های ممبر غیراخلاقی.'],
@@ -68,8 +68,8 @@ function chAppCats() {
     $out = [];
     if (!function_exists('maKeys') || !function_exists('maGet')) return $cache = $out;
 
-    $appIcon = ['tg' => '🌟', 'cfg' => '🛡'];
-    $appName = ['tg' => 'خدمات تلگرام', 'cfg' => 'کانفیگ'];
+    $appIcon = ['tg' => '🌟', 'num' => '☎️'];
+    $appName = ['tg' => 'خدمات تلگرام', 'num' => 'شماره مجازی'];
     foreach (maKeys() as $app) {
         $a = maGet($app);
         foreach ((array)($a['cats'] ?? []) as $c) {
@@ -103,7 +103,7 @@ function chStreamFor($app, $productName = '', $cat = '') {
             if (isset(chStreams()[$ck]) && chReady($ck)) return $ck;
         }
         if ($app === 'tg')  return 'mini_tg';
-        if ($app === 'cfg') return 'mini_cfg';
+        if ($app === 'num') return 'mini_num';
         return 'buy';
     }
 
@@ -345,7 +345,7 @@ function chTopupReceipt($order) {
 
 /**
  * یک فروش انجام شد — می‌رود روی کانالِ همان بخش.
- * $app: 'tg' یا 'cfg' برای مینی‌اپ‌ها، خالی برای محصول‌های خودِ ربات.
+ * $app: 'tg' یا 'num' برای مینی‌اپ‌ها، خالی برای محصول‌های خودِ ربات.
  */
 function chBuy($uid, $uname, $productName, $qty, $amount, $code, $extra = [], $app = '', $cat = '') {
     $stream = chStreamFor($app, $productName, $cat);

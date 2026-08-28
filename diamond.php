@@ -685,7 +685,7 @@ function dmAdminGiftItems($chatId, $msgId, $page = 0) {
     $t = "🛍 <b>محصول هدیه را انتخاب کنید</b>\n\nصفحه " . ($page + 1) . ' از ' . $pages;
     $rows = [];
     foreach ($slice as [$app, $id, $name])
-        $rows[] = [btnCb(($app === 'cfg' ? '🛡 ' : '💠 ') . mb_substr($name, 0, 28), 'dmgp_' . $app . '_' . $id, 'admin')];
+        $rows[] = [btnCb(($app === 'num' ? '☎️ ' : '💠 ') . mb_substr($name, 0, 28), 'dmgp_' . $app . '_' . $id, 'admin')];
 
     $nav = [];
     if ($page > 0)          $nav[] = btnCb('⬅️ قبلی', 'dmgi_' . ($page - 1), 'nav');

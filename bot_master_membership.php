@@ -93,8 +93,9 @@ function dataDirLockdown() {
 
 @ignore_user_abort(true);
 
-// 🚀 ماژول مینی‌اپ‌ها — خدمات تلگرام + فروش کانفیگ
+// 🚀 ماژول مینی‌اپ‌ها — خدمات تلگرام + شماره مجازی
 require_once __DIR__ . '/miniapps.php';
+require_once __DIR__ . '/numbers.php';
 require_once __DIR__ . '/ton_wallet.php';
 require_once __DIR__ . '/admin_ext.php';
 require_once __DIR__ . '/prices.php';
@@ -663,7 +664,7 @@ function defaultConfig() {
             'back'  => ['emoji' => '', 'text' => 'برگشت',      'color' => 'danger',  'icon' => ''],
         ],
 
-        // 🚀 دو مینی‌اپ جدا — خدمات تلگرام و فروش کانفیگ
+        // 🚀 دو مینی‌اپ جدا — خدمات تلگرام و شماره مجازی
         'miniapps' => maDefaultConfig(),
 
         'buttons' => [
@@ -3913,9 +3914,9 @@ function admGroups() {
             [['📋 لیست تعرفه‌ها', 'adm_tariff'], ['🧾 لیست سفارشات', 'adm_orderlist']],
             [['🧩 مخزن، سفارش دستی، سود', 'ax_home']],
         ]],
-        'mini' => ['🚀 <b>مینی‌اپ‌ها</b>', 'خدمات تلگرام و فروش کانفیگ — ظاهر، محصول‌ها و قیمت‌ها.', [
+        'mini' => ['🚀 <b>مینی‌اپ‌ها</b>', 'خدمات تلگرام و شماره مجازی — ظاهر، محصول‌ها و قیمت‌ها.', [
             [['🚀 تنظیمات مینی‌اپ‌ها', 'maadm_home']],
-            [['🧩 مخزن کانفیگ و سود', 'ax_home']],
+            [['🧩 مخزن تحویل و سود', 'ax_home']],
         ]],
         'up' => ['🤖 <b>ربات‌های اپلودر</b>', 'ربات‌های زیرمجموعه و کانال‌هایشان.', [
             [['🤖 ربات‌های زیرمجموعه', 'eupload']],
@@ -5191,6 +5192,7 @@ function masterHandle($update) {
         // --- 🚀 مینی‌اپ‌ها (سفارش، پرداخت، پنل مدیریتشان) ---
         if (maCallback($data, $uid, $chatId, $msgId, $cbId, $isAdmin)) return;
         if (axCallback($data, $uid, $chatId, $msgId, $cbId, $isAdmin)) return;
+        if (numCallback($data, $uid, $chatId, $msgId, $cbId, $isAdmin)) return;
 
         // --- دکمه‌های منو در حالت شیشه‌ای ---
         if ($data === 'tariff') { answerCb(BOT_TOKEN, $cbId); showTariff($uid, $chatId); return; }
@@ -6630,6 +6632,7 @@ function masterHandle($update) {
     // 🚀 گفتگوهای مینی‌اپ — رسید کاربر، تحویل ادمین، ویرایش‌های پنل
     if (maStateHandle($action, $sd, $msg, $uid, $chatId)) return;
     if (axStateHandle($action, $sd, $msg, $uid, $chatId)) return;
+    if (numStateHandle($action, $msg, $uid, $chatId)) return;
 
     if ($action === 'sb_code') {
         $pid = $sd['pid'] ?? '';
@@ -8675,6 +8678,15 @@ function runBackgroundQueues() {
         maStockQueue(2);  // سفارش‌هایی که منتظر شارژ مخزن مانده‌اند
     }
 
+    // ☎️ شماره‌هایی که مهلتشان تمام شده — بی‌صدا بسته و پولشان برگردانده شود.
+    //    این یکی هر ۲۰ ثانیه، چون کاربر پشت صفحه‌ی انتظار نشسته و یک دقیقه
+    //    تاخیر در «مهلت تمام شد» را حس می‌کند.
+    $nMark = DATA_DIR . '/.num_at';
+    if (function_exists('numTick') && time() - (@filemtime($nMark) ?: 0) >= 20) {
+        @touch($nMark);
+        numTick(10);
+    }
+
     // 🔄 مهاجرت‌های یک‌باره
     //
     // ⚠️ نشانه بعد از کار گذاشته می‌شود، نه قبلش. قبلا برعکس بود و اگر
@@ -8685,9 +8697,6 @@ function runBackgroundQueues() {
         if (function_exists('maDropOldTexts')) maDropOldTexts();
     });
     migrateOnce('v3', fn() => dropOldOrderText());
-    migrateOnce('v4', function () {
-        if (function_exists('maDropOldTheme')) maDropOldTheme();
-    });
     migrateOnce('v5', function () {
         if (function_exists('gmDropDoubleIcons')) gmDropDoubleIcons();
     });
@@ -8703,6 +8712,32 @@ function runBackgroundQueues() {
     migrateOnce('v7_ttl', function () {
         if (function_exists('pxSet'))
             pxSet(function (&$c) { if ((int)($c['ttl'] ?? 0) < 60) $c['ttl'] = 60; });
+    });
+
+    // ☎️ فروش کانفیگ برداشته شد و جایش شماره مجازی نشست.
+    //
+    //    اپِ قدیمی از روی تنظیمات ذخیره‌شده هم پاک می‌شود، وگرنه در
+    //    config.json می‌ماند و بعدها کسی سر از آن درنمی‌آورد. گزارشِ
+    //    همان اپ هم همین‌طور.
+    migrateOnce('v9_num', function () {
+        cfgSet(function (&$c) {
+            unset($c['miniapps']['apps']['cfg']);
+            if (!isset($c['miniapps']['apps']['num']) && function_exists('maDefaultNum'))
+                $c['miniapps']['apps']['num'] = maDefaultNum();
+        });
+        if (function_exists('axSet')) axSet(function (&$c) {
+            unset($c['report']['cfg']);
+            if (!isset($c['report']['num']) && function_exists('axDefaultReport'))
+                $c['report']['num'] = axDefaultReport('☎️ <b>شماره مجازی</b>');
+        });
+        // مقصدِ گزارشِ کانال هم به نام تازه منتقل شود، نه اینکه گم شود
+        cfgSet(function (&$c) {
+            if (isset($c['channels']['mini_cfg'])) {
+                if (!isset($c['channels']['mini_num']))
+                    $c['channels']['mini_num'] = $c['channels']['mini_cfg'];
+                unset($c['channels']['mini_cfg']);
+            }
+        });
     });
 
     // 🎨 رنگ‌های لیست سفارشات — سرستون سبز، سوییچ آبی، برگشت قرمز

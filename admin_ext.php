@@ -6,7 +6,7 @@
  *
  * همه‌ی قابلیت‌های تازه اینجا زندگی می‌کنند تا فایل‌های اصلی سنگین نشوند:
  *
- *   📦 مخزن کانفیگ        — کانفیگ‌ها را می‌ریزید، ربات خودکار می‌فروشد
+ *   📦 مخزن تحویل         — محتوای تحویل را می‌ریزید، ربات خودکار می‌فروشد
  *   🎁 سفارش دستی گیفت    — فرم سفارش در کانال، دکمه «انجام شد»
  *   📊 گزارش مینی‌اپ‌ها    — گزارش جدا برای هر مینی‌اپ
  *   💱 نرخ خودکار ارز     — نوبیتکس / والکس برای کل ربات
@@ -34,15 +34,15 @@ if (!function_exists('array_is_list')) {
 
 function axDefaults() {
     return [
-        // ---------- 📦 مخزن کانفیگ ----------
+        // ---------- 📦 مخزن تحویل ----------
         'stock' => [
             'on'   => true,
-            // متن تحویل — {config} جای خود کانفیگ می‌نشیند
+            // متن تحویل — {data} جای خودِ محتوای تحویل می‌نشیند
             'text' => "✅ <b>سفارش شما آماده است</b>\n\n" .
                       "📦 محصول: <b>{item}</b>\n" .
                       "📅 تاریخ: {date}\n" .
                       "🧾 کد پیگیری: <code>{code}</code>\n\n" .
-                      "<blockquote>{config}</blockquote>\n\n" .
+                      "<blockquote>{data}</blockquote>\n\n" .
                       "🙏 از خرید شما سپاسگزاریم.",
             'empty_text' => "⚠️ <b>موجودی این محصول تمام شد</b>\n\n" .
                             "سفارش شما ثبت شد و به‌محض شارژ مخزن، خودکار برایتان می‌آید.\n" .
@@ -78,7 +78,7 @@ function axDefaults() {
         // ---------- 📊 گزارش مینی‌اپ‌ها ----------
         'report' => [
             'tg'  => axDefaultReport('🛰 <b>فروش خدمات تلگرام</b>'),
-            'cfg' => axDefaultReport('🛡 <b>فروش کانفیگ</b>'),
+            'num' => axDefaultReport('☎️ <b>شماره مجازی</b>'),
         ],
 
         // ---------- 💵 سود و قیمت ----------
@@ -231,35 +231,8 @@ function axLog($what, $detail = '') {
 }
 
 // ============================================================
-// 📦 مخزن کانفیگ — فروش خودکار از موجودی
+// 📦 مخزن تحویل — فروش خودکار از موجودی
 // ============================================================
-
-/**
- * حجم‌های پذیرفته‌شده. کاربر باید عدد «رند» بدهد:
- * ۵۰۰ مگابایت یا مضرب‌های ۱ گیگابایت. ۵۵۰ یا ۵۴۸ قبول نیست.
- */
-function axVolumeOk($mb) {
-    $mb = (float)$mb;
-    if ($mb <= 0 || $mb > 1024 * 1024) return false;         // سقف ۱ ترابایت
-    if (abs($mb - round($mb)) > 0.0001) return false;         // اعشاری نه
-    $mb = (int)round($mb);
-    if ($mb < 1024) return $mb % 500 === 0;                   // زیر ۱ گیگ: مضرب ۵۰۰ مگ
-    return $mb % 1024 === 0;                                  // بالای آن: گیگ کامل
-}
-
-/** ۵۰۰ → «۵۰۰ مگابایت» ، ۳۰۷۲ → «۳ گیگابایت» */
-function axVolumeLabel($mb) {
-    $mb = (int)$mb;
-    if ($mb % 1024 === 0 && $mb >= 1024) return ($mb / 1024) . ' گیگابایت';
-    return $mb . ' مگابایت';
-}
-
-/** فهرست حجم‌های رند تا سقف داده‌شده — برای دکمه‌های مینی‌اپ */
-function axVolumeChoices($maxGb = 100) {
-    $out = [500];
-    for ($g = 1; $g <= (int)$maxGb; $g++) $out[] = $g * 1024;
-    return $out;
-}
 
 /** شناسه‌ی مخزن یک محصول */
 // نقطه عمدا حذف می‌شود: axVal() مسیرها را با نقطه می‌شکند، پس شناسه‌ی
@@ -287,7 +260,7 @@ function axStockAll() {
     return $out;
 }
 
-/** افزودن کانفیگ — هر خط یک کانفیگ، تکراری‌ها کنار گذاشته می‌شوند */
+/** افزودن محتوا — هر خط یک تحویل، تکراری‌ها کنار گذاشته می‌شوند */
 function axStockAdd($itemId, $name, $raw) {
     $sku   = axSku($itemId);
     $lines = preg_split('/\r\n|\r|\n/u', (string)$raw);
@@ -312,9 +285,9 @@ function axStockAdd($itemId, $name, $raw) {
 }
 
 /**
- * یک کانفیگ از مخزن بردار — اتمیک.
+ * یک ردیف از مخزن بردار — اتمیک.
  * همان قفلی که مصرف می‌کند، حذف هم می‌کند؛ پس دو سفارش همزمان
- * هرگز یک کانفیگ نمی‌گیرند.
+ * هرگز یک ردیف نمی‌گیرند.
  */
 function axStockTake($itemId, $orderId = '') {
     $sku  = axSku($itemId);
@@ -334,7 +307,7 @@ function axStockTake($itemId, $orderId = '') {
     return $line === false ? null : $line;
 }
 
-/** برگرداندن کانفیگ به مخزن — اگر تحویل شکست خورد */
+/** برگرداندن ردیف به مخزن — اگر تحویل شکست خورد */
 function axStockReturn($itemId, $line) {
     $sku = axSku($itemId);
     axSet(function (&$c) use ($sku, $line) {
@@ -383,7 +356,8 @@ function axStockDeliver($order) {
     if (!$taken) return [false, 'برداشت از مخزن ناموفق'];
 
     $text = strtr((string)axVal('stock.text'), [
-        '{config}'   => h(implode("\n", $taken)),
+        '{data}'     => h(implode("\n", $taken)),
+        '{config}'   => h(implode("\n", $taken)),   // کلید قدیمی — متن‌های ذخیره‌شده نشکنند
         '{item}'     => h((string)($order['item_name'] ?? '')),
         '{qty}'      => (string)$qty,
         '{code}'     => h((string)($order['id'] ?? '')),
@@ -476,7 +450,7 @@ function axPayLabel($p) {
 }
 
 function axAppName($app) {
-    return ['tg' => 'خدمات تلگرام', 'cfg' => 'فروش کانفیگ'][$app] ?? '—';
+    return ['tg' => 'خدمات تلگرام', 'num' => 'شماره مجازی'][$app] ?? '—';
 }
 
 /** فرم سفارش را در کانال بگذار، با دکمه‌ی «انجام شد» */
@@ -856,20 +830,20 @@ function axHome($chatId, $msgId = null) {
 
     $t  = "🧩 <b>افزونه‌ی مدیریت</b>\n";
     $t .= "<i>نسخه " . AX_VERSION . "</i>\n\n";
-    $t .= "📦 مخزن کانفیگ: <b>" . count($st) . "</b> محصول · <b>" . number_format($tot) . "</b> عدد\n";
+    $t .= "📦 مخزن تحویل: <b>" . count($st) . "</b> محصول · <b>" . number_format($tot) . "</b> عدد\n";
     $t .= "🎁 سفارش دستی: " . (!empty($c['manual']['on']) && trim((string)$c['manual']['chat_id']) !== '' ? '✅ فعال' : '⚪️ خاموش') . "\n";
     $t .= "📊 گزارش تلگرام: " . (!empty($c['report']['tg']['on']) ? '✅' : '⚪️') .
-          " · کانفیگ: " . (!empty($c['report']['cfg']['on']) ? '✅' : '⚪️') . "\n";
+          " · شماره مجازی: " . (!empty($c['report']['num']['on']) ? '✅' : '⚪️') . "\n";
     $t .= "💵 سود و قیمت: " . (!empty($c['pricing']['on']) ? '✅ فعال' : '⚪️ خاموش') . "\n";
     $t .= "👛 ولت خودکار: " . (axWalletReady()
           ? (!empty($c['wallet']['dry']) ? '🧪 آزمایشی' : '🚀 فعال') : '⚪️ خاموش') . "\n\n";
     $t .= "💱 <b>نرخ زنده</b>\n" . axRatesText() . "\n";
 
     axShow($chatId, $msgId, $t, [
-        [btnCb('📦 مخزن کانفیگ', 'ax_stock', 'admin')],
+        [btnCb('📦 مخزن تحویل', 'ax_stock', 'admin')],
         [btnCb('🎁 سفارش دستی گیفت/تون', 'ax_manual', 'admin')],
         [btnCb('📊 گزارش خدمات تلگرام', 'ax_rep_tg', 'admin'),
-         btnCb('📊 گزارش کانفیگ', 'ax_rep_cfg', 'admin')],
+         btnCb('📊 گزارش شماره مجازی', 'ax_rep_num', 'admin')],
         [btnCb('💵 سود و قیمت', 'ax_price', 'admin')],
         [btnCb('👛 خودکارسازی ولت TON', 'ax_wallet', 'admin')],
         [btnCb('💱 نرخ ارز', 'ax_rates', 'admin'),
@@ -884,8 +858,8 @@ function axHome($chatId, $msgId = null) {
 
 function axStockHome($chatId, $msgId) {
     $st = axStockAll();
-    $t  = "📦 <b>مخزن کانفیگ</b>\n\n";
-    $t .= "کانفیگ‌ها را اینجا می‌ریزید، ربات بعد از هر خرید خودکار یکی می‌فرستد.\n\n";
+    $t  = "📦 <b>مخزن تحویل</b>\n\n";
+    $t .= "محتوای تحویل را اینجا می‌ریزید، ربات بعد از هر خرید خودکار یکی می‌فرستد.\n\n";
     if (!$st) $t .= "<i>هنوز محصولی در مخزن نیست.</i>\n";
     else foreach ($st as $sku => $s) {
         $warn = $s['n'] <= (int)axVal('stock.low_at', 3) ? ' ⚠️' : '';
@@ -896,7 +870,7 @@ function axStockHome($chatId, $msgId) {
     $rows = [];
     foreach ($st as $sku => $s)
         $rows[] = [btnCb('🗂 ' . mb_substr($s['name'], 0, 22) . ' (' . $s['n'] . ')', 'axsk_' . $sku, 'admin')];
-    $rows[] = [btnCb('➕ افزودن کانفیگ', 'axsadd', 'admin')];
+    $rows[] = [btnCb('➕ افزودن محتوا', 'axsadd', 'admin')];
     $rows[] = [btnCb((!empty(axVal('stock.on')) ? '🟢 روشن' : '🔴 خاموش'), 'axstog', 'admin'),
                btnCb('🔔 حد هشدار', 'axslow', 'admin')];
     $rows[] = [btnCb('✍️ متن تحویل', 'axstxt', 'admin'),
@@ -981,7 +955,7 @@ function axManualItems($chatId, $msgId) {
 function axCatalogItems() {
     $out = [];
     if (!function_exists('maGet')) return $out;
-    foreach (['tg', 'cfg'] as $app) {
+    foreach (['tg', 'num'] as $app) {
         foreach ((array)(maGet($app)['items'] ?? []) as $it) {
             if (!is_array($it) || empty($it['id'])) continue;
             $out[] = [
@@ -1204,7 +1178,7 @@ function axCallback($data, $uid, $chatId, $msgId, $cbId, $isAdmin) {
         return true;
     }
     if ($data === 'ax_rep_tg') { $ack(); axReportHome($chatId, $msgId, 'tg');  return true; }
-    if ($data === 'ax_rep_cfg'){ $ack(); axReportHome($chatId, $msgId, 'cfg'); return true; }
+    if ($data === 'ax_rep_num'){ $ack(); axReportHome($chatId, $msgId, 'num'); return true; }
 
     if ($data === 'ax_wallet') { $ack(); axWalletHome($chatId, $msgId); return true; }
     if ($data === 'ax_audit')  { $ack('⏳ در حال بررسی…'); axAuditShow($chatId, $msgId); return true; }
@@ -1376,7 +1350,7 @@ function axCallback($data, $uid, $chatId, $msgId, $cbId, $isAdmin) {
     foreach (['axrtog' => 'on', 'axrpaid' => 'on_paid', 'axrdone' => 'on_done'] as $pre => $key) {
         if (str_starts_with($data, $pre . '_')) {
             $app = substr($data, strlen($pre) + 1);
-            if (!in_array($app, ['tg', 'cfg'], true)) { $ack(); return true; }
+            if (!in_array($app, ['tg', 'num'], true)) { $ack(); return true; }
             axSet(function (&$c) use ($app, $key) { $c['report'][$app][$key] = empty($c['report'][$app][$key]); });
             $ack('✅');
             axReportHome($chatId, $msgId, $app);
@@ -1394,7 +1368,7 @@ function axCallback($data, $uid, $chatId, $msgId, $cbId, $isAdmin) {
     if (str_starts_with($data, 'axsk_'))  { $ack(); axStockItem($chatId, $msgId, substr($data, 5)); return true; }
     if (str_starts_with($data, 'axsclr_')) {
         $n = axStockClear(substr($data, 7));
-        $ack('🗑 ' . (int)$n . ' کانفیگ پاک شد');
+        $ack('🗑 ' . (int)$n . ' ردیف پاک شد');
         axStockHome($chatId, $msgId);
         return true;
     }
@@ -1420,9 +1394,9 @@ function axCallback($data, $uid, $chatId, $msgId, $cbId, $isAdmin) {
 
     // ---------- ورودی‌های متنی ----------
     $asks = [
-        'axsadd'  => ['ax_stock_add',  "📦 کانفیگ‌ها را بفرستید — <b>هر خط یک کانفیگ</b>.\n\nاول یک خط بنویسید:\n<code>نام محصول</code>\nبعد از خط بعد، کانفیگ‌ها.\n\nتکراری‌ها خودکار حذف می‌شوند."],
+        'axsadd'  => ['ax_stock_add',  "📦 محتوای تحویل را بفرستید — <b>هر خط یک ردیف</b>.\n\nاول یک خط بنویسید:\n<code>نام محصول</code>\nبعد از خط بعد، ردیف‌ها.\n\nتکراری‌ها خودکار حذف می‌شوند."],
         'axslow'  => ['ax_stock_low',  "🔔 زیر چند عدد هشدار کمبود بیاید؟ (فقط عدد)"],
-        'axstxt'  => ['ax_stock_text', "✍️ متن تحویل کانفیگ را بفرستید.\n\nکلیدها: <code>{config}</code> <code>{item}</code> <code>{qty}</code> <code>{code}</code> <code>{amount}</code> <code>{date}</code>\n\nمی‌توانید ایموجی پریمیوم و نقل‌قول بگذارید."],
+        'axstxt'  => ['ax_stock_text', "✍️ متن تحویل را بفرستید.\n\nکلیدها: <code>{data}</code> <code>{item}</code> <code>{qty}</code> <code>{code}</code> <code>{amount}</code> <code>{date}</code>\n\nمی‌توانید ایموجی پریمیوم و نقل‌قول بگذارید."],
         'axsemp'  => ['ax_stock_empty',"✍️ متن «موجودی تمام شد» را بفرستید.\n\nکلیدها: <code>{code}</code> <code>{item}</code>"],
         'axmchat' => ['ax_manual_chat',"📢 لینک یا آیدی کانال سفارش دستی را بفرستید.\n\nنمونه:\n<code>https://t.me/c/1234567890/5</code>\n<code>@mychannel</code>\n<code>-1001234567890</code>\n\n⚠️ ربات باید در آن کانال ادمین باشد."],
         'axmform' => ['ax_manual_form',"✍️ متن فرم سفارش را بفرستید.\n\nکلیدها: <code>{item} {qty} {field} {user} {user_id} {amount} {currency} {code} {pay} {app} {date}</code>"],
@@ -1459,7 +1433,7 @@ function axCallback($data, $uid, $chatId, $msgId, $cbId, $isAdmin) {
     if (str_starts_with($data, 'axsadd_')) {
         setState($uid, 'ax_stock_add', ['sku' => substr($data, 7)]);
         $ack();
-        sendMsg(BOT_TOKEN, $chatId, "📦 کانفیگ‌ها را بفرستید — هر خط یک کانفیگ.",
+        sendMsg(BOT_TOKEN, $chatId, "📦 محتوای تحویل را بفرستید — هر خط یک ردیف.",
             inlineKb([[btnCb('❌ انصراف', 'ax_stock', 'cancel')]]));
         return true;
     }
@@ -1467,7 +1441,7 @@ function axCallback($data, $uid, $chatId, $msgId, $cbId, $isAdmin) {
     if (str_starts_with($data, 'axrchat_') || str_starts_with($data, 'axrtxt_')) {
         $isTxt = str_starts_with($data, 'axrtxt_');
         $app   = substr($data, $isTxt ? 7 : 8);
-        if (!in_array($app, ['tg', 'cfg'], true)) { $ack(); return true; }
+        if (!in_array($app, ['tg', 'num'], true)) { $ack(); return true; }
         setState($uid, $isTxt ? 'ax_rep_text' : 'ax_rep_chat', ['app' => $app]);
         $ack();
         sendMsg(BOT_TOKEN, $chatId, $isTxt
@@ -1528,7 +1502,7 @@ function axStateHandle($action, $sd, $msg, $uid, $chatId) {
                 $lines = preg_split('/\r\n|\r|\n/u', $raw);
                 $name  = trim(array_shift($lines));
                 if ($name === '' || !$lines) {
-                    sendMsg(BOT_TOKEN, $chatId, "⚠️ اول یک خط نام محصول، بعد کانفیگ‌ها.");
+                    sendMsg(BOT_TOKEN, $chatId, "⚠️ اول یک خط نام محصول، بعد ردیف‌های تحویل.");
                     return true;
                 }
                 $sku = axSku($name);
@@ -1553,8 +1527,8 @@ function axStateHandle($action, $sd, $msg, $uid, $chatId) {
 
         case 'ax_stock_text':
             if ($rich === '') { sendMsg(BOT_TOKEN, $chatId, "⚠️ متن خالی است."); return true; }
-            if (!str_contains($rich, '{config}')) {
-                sendMsg(BOT_TOKEN, $chatId, "⚠️ متن باید کلید <code>{config}</code> داشته باشد، وگرنه کانفیگ به مشتری نمی‌رسد.");
+            if (!str_contains($rich, '{data}') && !str_contains($rich, '{config}')) {
+                sendMsg(BOT_TOKEN, $chatId, "⚠️ متن باید کلید <code>{data}</code> داشته باشد، وگرنه محتوای تحویل به مشتری نمی‌رسد.");
                 return true;
             }
             axSet(function (&$c) use ($rich) { $c['stock']['text'] = $rich; });
@@ -2456,10 +2430,10 @@ function axAudit() {
                : (!axWalletReady() ? 'خاموش یا عبارت بازیابی/آدرس ندارد'
                   : (!empty($w['dry']) ? 'در حالت آزمایشی — تراکنش ساخته می‌شود ولی نمی‌رود' : '')));
 
-    // ── مخزن کانفیگ ──
+    // ── مخزن تحویل ──
     $st = axStockAll(); $tot = 0; foreach ($st as $x) $tot += $x['n'];
-    $add('فروش خودکار کانفیگ از مخزن', !empty(axVal('stock.on')) && $tot > 0,
-         empty(axVal('stock.on')) ? 'مخزن خاموش است' : ($tot > 0 ? $tot . ' کانفیگ موجود' : 'مخزن خالی است'));
+    $add('فروش خودکار از مخزن', !empty(axVal('stock.on')) && $tot > 0,
+         empty(axVal('stock.on')) ? 'مخزن خاموش است' : ($tot > 0 ? $tot . ' ردیف موجود' : 'مخزن خالی است'));
 
     // ── سفارش دستی ──
     $m = axCfg()['manual'];
@@ -2469,7 +2443,7 @@ function axAudit() {
                      : (trim((string)$m['chat_id']) === '' ? $nMan . ' محصول دستی دارید ولی کانال تنظیم نشده!' : $nMan . ' محصول دستی'));
 
     // ── گزارش‌ها ──
-    foreach (['tg' => 'خدمات تلگرام', 'cfg' => 'فروش کانفیگ'] as $k => $lbl) {
+    foreach (['tg' => 'خدمات تلگرام', 'num' => 'شماره مجازی'] as $k => $lbl) {
         $rp = axVal('report.' . $k);
         $add('گزارش ' . $lbl, !empty($rp['on']) && trim((string)$rp['chat_id']) !== '',
              trim((string)$rp['chat_id']) === '' ? 'مقصد تنظیم نشده' : (empty($rp['on']) ? 'خاموش است' : ''));

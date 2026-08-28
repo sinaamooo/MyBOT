@@ -112,7 +112,7 @@ row($rows, function_exists('mb_substr'), 'افزونه mbstring',
     'افزونه mbstring را فعال کنید — بدون آن متن فارسی درست بریده نمی‌شود.');
 
 // ───────── ۳) فایل‌ها ─────────
-$need = ['bot_master_membership.php', 'miniapps.php', 'miniapp_view_tg.php', 'miniapp_view_cfg.php', 'admin_ext.php', 'ton_wallet.php'];
+$need = ['bot_master_membership.php', 'miniapps.php', 'miniapp_view_tg.php', 'miniapp_view_num.php', 'numbers.php', 'admin_ext.php', 'ton_wallet.php'];
 $missing = [];
 foreach ($need as $f) if (!is_file(__DIR__ . '/' . $f)) $missing[] = $f;
 row($rows, !$missing, 'فایل‌های ربات',

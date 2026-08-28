@@ -3,7 +3,7 @@
  * 🚀 ماژول مینی‌اپ‌ها — دو مینی‌اپ کاملا جدا روی ربات فروش ممبر
  *
  *   1) 🌟 خدمات تلگرام  (app=tg)   — استارز، پریمیوم، گیفت، تون، ترون
- *   2) 🛡 فروش کانفیگ   (app=cfg)  — سرویس‌های اینترنت / کانفیگ
+ *   2) ☎️ شماره مجازی   (app=num) — شماره برای دریافت کد سرویس‌ها
  *
  * هر دو مینی‌اپ:
  *   • ظاهر و رنگ و متن‌هایشان کاملا از داخل پنل ربات قابل ویرایش است
@@ -13,19 +13,19 @@
  *
  * آدرس‌ها (DOMAIN = آدرس عمومی همین فایلِ ربات):
  *   مینی‌اپ خدمات : https://DOMAIN/bot_master_membership.php?app=tg
- *   مینی‌اپ کانفیگ: https://DOMAIN/bot_master_membership.php?app=cfg
+ *   مینی‌اپ شماره : https://DOMAIN/bot_master_membership.php?app=num
  *   API           : https://DOMAIN/bot_master_membership.php?mapi=<action>
  */
 
 require_once __DIR__ . '/miniapp_view_tg.php';
-require_once __DIR__ . '/miniapp_view_cfg.php';
+require_once __DIR__ . '/miniapp_view_num.php';
 
 // ============================================================
 // ⚙️ پیکربندی پیش‌فرض
 // ============================================================
 
 /** کلیدهای دو مینی‌اپ — همیشه همین دوتا، جدا از هم */
-function maKeys() { return ['tg', 'cfg']; }
+function maKeys() { return ['tg', 'num']; }
 
 /**
  * ⚡️ سطح افکت گرافیکی: ۲ کامل · ۱ سبک · ۰ خاموش.
@@ -37,7 +37,7 @@ function maFxLevel($th) {
 }
 
 function maAppLabels() {
-    return ['tg' => '🌟 خدمات تلگرام', 'cfg' => '🛡 فروش کانفیگ'];
+    return ['tg' => '🌟 خدمات تلگرام', 'num' => '☎️ شماره مجازی'];
 }
 
 /** عملیات تحویل خودکار روی پنل فروش */
@@ -73,7 +73,7 @@ function maDefaultConfig() {
 
         // 🔗 ادغام با دکمه‌های ثبت سفارش: وقتی روشن باشد، دکمه‌های مینی‌اپ
         // عضو همان لیست زیردکمه‌ها می‌شوند و با همان «ترتیب» و همان «چیدمان»
-        // بین بقیه جا می‌گیرند — یعنی می‌شود کانفیگ را بالا و خدمات تلگرام
+        // بین بقیه جا می‌گیرند — یعنی می‌شود شماره مجازی را بالا و خدمات تلگرام
         // را بین ممبرها گذاشت.
         'merge' => true,
 
@@ -169,7 +169,7 @@ function maDefaultConfig() {
 
         'apps' => [
             'tg'  => maDefaultTg(),
-            'cfg' => maDefaultCfg(),
+            'num' => maDefaultNum(),
         ],
     ];
 }
@@ -384,27 +384,37 @@ function maDefaultTg() {
     ];
 }
 
-/** 🛡 مینی‌اپ فروش کانفیگ — تم «سایبر گرید» مشکی/سبز نئون */
-function maDefaultCfg() {
+/**
+ * ☎️ مینی‌اپ فروش شماره مجازی — تم «اقیانوس» آبی/فیروزه‌ای
+ *
+ * دو چیز این اپ را از اپ خدمات جدا می‌کند و هر دو اینجا در داده هستند،
+ * نه در کد نمایش:
+ *
+ *   • هر دسته یک «کد کشور» دارد (cats[].code)  — همان چیزی که پنل فروشنده می‌فهمد
+ *   • هر ردیف یک «کد سرویس» دارد (items[].svc) — تلگرام، واتساپ، …
+ *
+ * پس اضافه‌کردن یک کشور یا سرویس تازه فقط یک ردیف در پنل است، نه یک خط کد.
+ */
+function maDefaultNum() {
     return [
         'on'    => true,
-        'title' => 'فروش کانفیگ',
-        'sub'   => 'پرسرعت · بدون قطعی · تحویل آنی',
-        'hero'  => 'سرورهای اختصاصی، پینگ پایین، پشتیبانی کامل',
-        'note'  => 'کانفیگ بعد از تایید پرداخت، داخل همین ربات برایتان ارسال می‌شود.',
+        'title' => 'شماره مجازی',
+        'sub'   => 'تحویل آنی · کد لحظه‌ای · بازگشت وجه',
+        'hero'  => 'شماره از بیش از ۴۰ کشور، کد را همین‌جا ببینید',
+        'note'  => 'اگر تا پایان مهلت کدی نرسد، مبلغ خودکار به کیف پول شما برمی‌گردد.',
         'currency' => 'تومان',
 
         'btn' => [
-            'emoji' => '🛡', 'text' => 'خرید کانفیگ',
-            'color' => 'success', 'icon' => '', 'order' => 2, 'row' => 0,
+            'emoji' => '☎️', 'text' => 'شماره مجازی',
+            'color' => 'primary', 'icon' => '', 'order' => 2, 'row' => 0,
         ],
 
         'theme' => [
-            'preset' => 'aurora',
-            'c1'  => '#8B5CF6',
-            'c2'  => '#6366F1',
-            'c3'  => '#22D3EE',
-            'bg'  => '#08090D',
+            'preset' => 'ocean',
+            'c1'  => '#2E7DFF',
+            'c2'  => '#00E0C6',
+            'c3'  => '#7C4DFF',
+            'bg'  => '#050B18',
             'glow' => 1,
             'grain' => 0,
             'fx'    => 1,
@@ -412,27 +422,26 @@ function maDefaultCfg() {
 
         'ui' => [
             'balance'  => 'اعتبار شما',
-            'all'      => 'همه پلن‌ها',
-            'buy'      => 'خرید سرویس',
+            'all'      => 'همه کشورها',
+            'buy'      => 'گرفتن شماره',
             'submit'   => 'ثبت سفارش',
             'close'    => 'بستن',
-            'sending'  => 'در حال ثبت…',
+            'sending'  => 'در حال گرفتن شماره…',
             'done'     => 'سفارش ثبت شد',
             'done_sub' => 'فاکتور پرداخت داخل ربات برایتان فرستاده شد.',
-            'search'   => 'جستجو در پلن‌ها…',
-            'empty'    => 'فعلا پلنی در این بخش نیست.',
+            'search'   => 'جستجوی کشور یا سرویس…',
+            'empty'    => 'فعلا شماره‌ای در این بخش نیست.',
             'pay_wallet' => 'پرداخت از کیف پول',
             'pay_other'  => 'روش‌های دیگر پرداخت',
             'low_bal'    => 'موجودی کافی نیست',
             'paid_ok'    => 'پرداخت شد',
             'topup_hint' => 'برای شارژ، دکمه‌ی «شارژ حساب» را بزنید — همین‌جا انجام می‌شود.',
-            // 🆕 صفحه‌های تازه
             'nav_home'   => 'خانه',
-            'nav_shop'   => 'پلن‌ها',
+            'nav_shop'   => 'شماره‌ها',
             'nav_orders' => 'سفارش‌ها',
             'nav_me'     => 'حساب من',
-            'hot'        => 'پرفروش‌ترین‌ها',
-            'cats_ttl'   => 'نوع سرویس',
+            'hot'        => 'پرطرفدارترین‌ها',
+            'cats_ttl'   => 'کشور',
             'rates_ttl'  => 'نرخ لحظه‌ای',
             'orders_ttl' => 'سفارش‌های اخیر',
             'no_orders'  => 'هنوز سفارشی ثبت نکرده‌اید.',
@@ -445,10 +454,26 @@ function maDefaultCfg() {
             'copied'     => 'کپی شد ✓',
             'see_all'    => 'همه',
             'hi'         => 'سلام {name} 👋',
-            'plans'      => 'انتخاب بسته',
+            'plans'      => 'انتخاب سرویس',
             'custom'     => 'یا مقدار دلخواه (حداقل {min})',
             'buy_now'    => 'خرید',
             'topup_btn'  => '＋ شارژ',
+
+            // ☎️ رشته‌های خاصِ شماره — صفحه‌ی انتظار کد
+            'wait_ttl'  => 'منتظر پیامک',
+            'wait_sub'  => 'شماره را در برنامه وارد کنید، کد همین‌جا نشان داده می‌شود.',
+            'code_ttl'  => 'کد شما',
+            'num_ttl'   => 'شماره‌ی شما',
+            'copy_num'  => 'کپی شماره',
+            'copy_code' => 'کپی کد',
+            'cancel_do' => 'لغو و بازگشت وجه',
+            'cancel_ask'=> 'شماره لغو شود و مبلغ برگردد؟',
+            'again'     => 'شماره‌ی تازه',
+            'expired'   => 'مهلت تمام شد — مبلغ به کیف پول برگشت',
+            'canceled'  => 'لغو شد — مبلغ به کیف پول برگشت',
+            'left'      => 'زمان باقی‌مانده',
+            'active'    => 'شماره‌ی فعال',
+            'svc_ttl'   => 'سرویس',
         ],
 
         'glass' => [
@@ -456,42 +481,39 @@ function maDefaultCfg() {
             'card'    => ['emoji' => '💳', 'text' => 'کارت به کارت',      'color' => 'primary', 'icon' => ''],
             'receipt' => ['emoji' => '🧾', 'text' => 'ارسال رسید',        'color' => 'success', 'icon' => ''],
             'cancel'  => ['emoji' => '🔴', 'text' => 'انصراف',            'color' => 'danger',  'icon' => ''],
-            'open'    => ['emoji' => '🛡', 'text' => 'باز کردن مینی‌اپ',   'color' => 'success', 'icon' => ''],
+            'open'    => ['emoji' => '☎️', 'text' => 'باز کردن مینی‌اپ',   'color' => 'primary', 'icon' => ''],
         ],
         'glass_layout' => '1,1,1',
 
+        // 🌍 کشورها — `code` همان چیزی است که پنل فروشنده می‌شناسد
         'cats' => [
-            ['id' => 'k_vol',  'emoji' => '📦', 'name' => 'حجمی',      'on' => true, 'order' => 1],
-            ['id' => 'k_unl',  'emoji' => '♾', 'name' => 'نامحدود',   'on' => true, 'order' => 2],
-            ['id' => 'k_ded',  'emoji' => '🔒', 'name' => 'اختصاصی',   'on' => true, 'order' => 3],
+            ['id' => 'c_ru', 'emoji' => '🇷🇺', 'name' => 'روسیه',    'code' => '0',  'on' => true, 'order' => 1],
+            ['id' => 'c_ua', 'emoji' => '🇺🇦', 'name' => 'اوکراین',  'code' => '1',  'on' => true, 'order' => 2],
+            ['id' => 'c_kz', 'emoji' => '🇰🇿', 'name' => 'قزاقستان', 'code' => '2',  'on' => true, 'order' => 3],
+            ['id' => 'c_uk', 'emoji' => '🇬🇧', 'name' => 'انگلیس',   'code' => '16', 'on' => true, 'order' => 4],
+            ['id' => 'c_us', 'emoji' => '🇺🇸', 'name' => 'آمریکا',   'code' => '187','on' => true, 'order' => 5],
         ],
 
+        // 📱 سرویس‌ها — `svc` کد سرویس نزد پنل فروشنده است
         'items' => [
-            // 📦 حجم دلخواه — کاربر خودش حجم رند انتخاب می‌کند، قیمت به‌ازای هر گیگ
-            ['id' => 'k_vfree', 'cat' => 'k_vol', 'emoji' => '🎚', 'name' => 'حجم دلخواه',
-             'desc' => 'هر حجمی که بخواهید — فقط عددهای رند: ۵۰۰ مگ یا گیگ کامل',
-             'price' => 5500, 'unit' => 'گیگابایت', 'badge' => 'دلخواه',
-             'ask' => 'volume', 'min' => 500, 'max' => 102400, 'on' => true, 'order' => 0],
-            ['id' => 'k_v30', 'cat' => 'k_vol', 'emoji' => '📦', 'name' => '۳۰ گیگ — ۳۰ روزه',
-             'desc' => 'مولتی‌یوزر ۲ کاربره — مناسب موبایل', 'price' => 145000, 'unit' => '',
+            ['id' => 'n_ru_tg', 'cat' => 'c_ru', 'svc' => 'tg', 'emoji' => '✈️', 'name' => 'تلگرام — روسیه',
+             'desc' => 'دریافت کد تلگرام روی شماره‌ی روسیه', 'price' => 45000, 'unit' => '',
              'badge' => 'پرفروش', 'ask' => 'none', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 1],
-            ['id' => 'k_v60', 'cat' => 'k_vol', 'emoji' => '📦', 'name' => '۶۰ گیگ — ۳۰ روزه',
-             'desc' => 'مولتی‌یوزر ۳ کاربره — مناسب خانواده', 'price' => 235000, 'unit' => '',
+            ['id' => 'n_ru_wa', 'cat' => 'c_ru', 'svc' => 'wa', 'emoji' => '💚', 'name' => 'واتساپ — روسیه',
+             'desc' => 'دریافت کد واتساپ روی شماره‌ی روسیه', 'price' => 58000, 'unit' => '',
              'badge' => '', 'ask' => 'none', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 2],
-            ['id' => 'k_v120', 'cat' => 'k_vol', 'emoji' => '🎯', 'name' => '۱۲۰ گیگ — ۶۰ روزه',
-             'desc' => 'حجم بالا با قیمت مناسب', 'price' => 420000, 'unit' => '',
-             'badge' => 'اقتصادی', 'ask' => 'none', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 3],
-
-            ['id' => 'k_u1', 'cat' => 'k_unl', 'emoji' => '♾', 'name' => 'نامحدود — ۳۰ روزه',
-             'desc' => 'بدون محدودیت حجم — ۱ کاربر همزمان', 'price' => 320000, 'unit' => '',
+            ['id' => 'n_ua_tg', 'cat' => 'c_ua', 'svc' => 'tg', 'emoji' => '✈️', 'name' => 'تلگرام — اوکراین',
+             'desc' => 'دریافت کد تلگرام روی شماره‌ی اوکراین', 'price' => 62000, 'unit' => '',
              'badge' => '', 'ask' => 'none', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 1],
-            ['id' => 'k_u3', 'cat' => 'k_unl', 'emoji' => '♾', 'name' => 'نامحدود — ۹۰ روزه',
-             'desc' => 'بدون محدودیت حجم — ۲ کاربر همزمان', 'price' => 850000, 'unit' => '',
-             'badge' => 'ویژه', 'ask' => 'none', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 2],
-
-            ['id' => 'k_d1', 'cat' => 'k_ded', 'emoji' => '🔒', 'name' => 'آی‌پی اختصاصی — ۳۰ روزه',
-             'desc' => 'سرور اختصاصی، پینگ پایین، مناسب کار', 'price' => 690000, 'unit' => '',
-             'badge' => 'حرفه‌ای', 'ask' => 'text', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 1],
+            ['id' => 'n_kz_tg', 'cat' => 'c_kz', 'svc' => 'tg', 'emoji' => '✈️', 'name' => 'تلگرام — قزاقستان',
+             'desc' => 'دریافت کد تلگرام روی شماره‌ی قزاقستان', 'price' => 55000, 'unit' => '',
+             'badge' => '', 'ask' => 'none', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 1],
+            ['id' => 'n_uk_tg', 'cat' => 'c_uk', 'svc' => 'tg', 'emoji' => '✈️', 'name' => 'تلگرام — انگلیس',
+             'desc' => 'دریافت کد تلگرام روی شماره‌ی انگلیس', 'price' => 120000, 'unit' => '',
+             'badge' => 'ویژه', 'ask' => 'none', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 1],
+            ['id' => 'n_us_tg', 'cat' => 'c_us', 'svc' => 'tg', 'emoji' => '✈️', 'name' => 'تلگرام — آمریکا',
+             'desc' => 'دریافت کد تلگرام روی شماره‌ی آمریکا', 'price' => 145000, 'unit' => '',
+             'badge' => 'حرفه‌ای', 'ask' => 'none', 'min' => 1, 'max' => 1, 'on' => true, 'order' => 1],
         ],
     ];
 }
@@ -555,18 +577,25 @@ function maGet($key) {
     $a = maCfg()['apps'][$key] ?? null;
     if (!is_array($a)) return maDefaultConfig()['apps'][$key] ?? [];
 
-    $def = maDefaultConfig()['apps'][$key]['items'] ?? [];
-    if (!is_array($a['items'] ?? null) || !$def) return $a;
+    $base = maDefaultConfig()['apps'][$key] ?? [];
 
-    $byId = [];
-    foreach ($def as $d) if (isset($d['id'])) $byId[(string)$d['id']] = $d;
+    // 🧩 همین ادغام برای دسته‌ها هم لازم است، نه فقط محصول‌ها:
+    //    «کد کشور» (cats[].code) فیلدی است که نسخه‌های قبلی ذخیره‌اش
+    //    نکرده‌اند، و بدونش شماره‌ی مجازی اصلا خریده نمی‌شود.
+    foreach (['cats', 'items'] as $part) {
+        $def = $base[$part] ?? [];
+        if (!is_array($a[$part] ?? null) || !$def) continue;
 
-    foreach ($a['items'] as $i => $it) {
-        $id = (string)($it['id'] ?? '');
-        if ($id === '' || !isset($byId[$id])) continue;
-        // پیش‌فرض پایه، ذخیره‌شده رویش — پس فیلدهای تازه می‌آیند و
-        // چیزی که ادمین دست‌کاری کرده دست‌نخورده می‌ماند.
-        $a['items'][$i] = array_replace($byId[$id], is_array($it) ? $it : []);
+        $byId = [];
+        foreach ($def as $d) if (isset($d['id'])) $byId[(string)$d['id']] = $d;
+
+        foreach ($a[$part] as $i => $it) {
+            $id = (string)($it['id'] ?? '');
+            if ($id === '' || !isset($byId[$id])) continue;
+            // پیش‌فرض پایه، ذخیره‌شده رویش — پس فیلدهای تازه می‌آیند و
+            // چیزی که ادمین دست‌کاری کرده دست‌نخورده می‌ماند.
+            $a[$part][$i] = array_replace($byId[$id], is_array($it) ? $it : []);
+        }
     }
     return $a;
 }
@@ -586,28 +615,6 @@ function maDropOldTexts() {
         if ($cur === $old)
             maSet($k, function (&$a) { $a['ui']['topup_hint'] = ''; });
     }
-}
-
-/**
- * 🔄 تمِ سبزِ قدیمیِ مینی‌اپ کانفیگ را کنار می‌گذارد تا تمِ تازه‌ی
- * بنفش بنشیند. فقط وقتی که رنگ‌ها دقیقا همان پیش‌فرضِ قدیمی باشند —
- * یعنی ادمین دستشان نزده. هر رنگی که خودتان انتخاب کرده باشید
- * دست‌نخورده می‌ماند.
- */
-function maDropOldTheme() {
-    $old = ['c1' => '#00FF9C', 'c2' => '#00B3FF', 'c3' => '#FF2E97', 'bg' => '#04070A'];
-    $th  = (array)(maGet('cfg')['theme'] ?? []);
-    foreach ($old as $k => $v)
-        if (strtoupper(trim((string)($th[$k] ?? ''))) !== $v) return false;
-
-    maSet('cfg', function (&$a) {
-        $d = maDefaultCfg()['theme'];
-        $a['theme'] = array_replace((array)($a['theme'] ?? []), [
-            'preset' => $d['preset'], 'c1' => $d['c1'], 'c2' => $d['c2'],
-            'c3' => $d['c3'], 'bg' => $d['bg'], 'grain' => $d['grain'], 'fx' => $d['fx'],
-        ]);
-    });
-    return true;
 }
 
 /** ویرایش پیکربندی یک مینی‌اپ */
@@ -630,7 +637,7 @@ function maSetRoot(callable $fn) {
 /** متن دکمه‌های داخل مینی‌اپ */
 function maUT($key, $slug) {
     $a = maGet($key);
-    $d = ($key === 'tg' ? maDefaultTg() : maDefaultCfg())['ui'];
+    $d = ($key === 'tg' ? maDefaultTg() : maDefaultNum())['ui'];
     $v = trim((string)($a['ui'][$slug] ?? ''));
     return $v !== '' ? $v : ($d[$slug] ?? $slug);
 }
@@ -638,7 +645,7 @@ function maUT($key, $slug) {
 /** یک دکمه شیشه‌ای قابل ویرایش (متن + ایموجی + رنگ + ایموجی پریمیوم) */
 function maGlassBtn($key, $slug, $callbackData) {
     $a = maGet($key);
-    $d = ($key === 'tg' ? maDefaultTg() : maDefaultCfg())['glass'][$slug] ?? [];
+    $d = ($key === 'tg' ? maDefaultTg() : maDefaultNum())['glass'][$slug] ?? [];
     $g = $a['glass'][$slug] ?? $d;
 
     $label = trim((string)($g['emoji'] ?? '') . ' ' . (string)($g['text'] ?? ($d['text'] ?? $slug)));
@@ -1275,7 +1282,7 @@ class MaOrder
 
     /**
      * سفارش‌های یک کاربر. با $app، فقط سفارش‌های همان مینی‌اپ.
-     * بدون این، کسی که داخل «فروش کانفیگ» بود سفارش استارزش را هم
+     * بدون این، کسی که داخل «شماره مجازی» بود سفارش استارزش را هم
      * آنجا می‌دید — دو فروشگاه جدا که فهرست سفارششان قاطی بود.
      */
     public static function forUser($uid, $limit = 10, $app = null) {
@@ -2118,7 +2125,7 @@ function maServe($key) {
     }
 
     maSecurityHeaders();
-    echo $key === 'tg' ? maViewTg($a, maBoot($key, $a)) : maViewCfg($a, maBoot($key, $a));
+    echo $key === 'tg' ? maViewTg($a, maBoot($key, $a)) : maViewNum($a, maBoot($key, $a));
     exit;
 }
 
@@ -2170,7 +2177,7 @@ function maApiUrl() {
 }
 
 function maUiAll($key) {
-    $d = ($key === 'tg' ? maDefaultTg() : maDefaultCfg())['ui'];
+    $d = ($key === 'tg' ? maDefaultTg() : maDefaultNum())['ui'];
     $out = [];
     foreach ($d as $slug => $_) $out[$slug] = maUT($key, $slug);
     return $out;
@@ -2211,22 +2218,6 @@ function maItemsPublic($a) {
             'order' => (int)($i['order'] ?? 99),
             'cpos'  => $catPos[(string)($i['cat'] ?? '')] ?? 999,
         ];
-        // 📦 حجم دلخواه: فقط حجم‌هایی که واقعا در مخزن هستند به کاربر نشان داده شود
-        if ((string)($i['ask'] ?? '') === 'volume') {
-            $vols = [];
-            $min = (int)($i['min'] ?? 500);
-            $max = (int)($i['max'] ?? 102400);
-            if (function_exists('axVolumeChoices')) {
-                foreach (axVolumeChoices((int)floor($max / 1024)) as $mb) {
-                    if ($mb < $min || $mb > $max) continue;
-                    $have = function_exists('axStockCount') ? axStockCount($i['id'] . '_' . $mb) : 0;
-                    if ($have < 1) continue;
-                    $vols[] = ['mb' => $mb, 'label' => axVolumeLabel($mb), 'n' => $have,
-                               'price' => round(maItemPrice($i) * ($mb / 1024), 0)];
-                }
-            }
-            $items[count($items) - 1]['vols'] = $vols;
-        }
     }
     usort($items, fn($x, $y) => [$x['cpos'], $x['order']] <=> [$y['cpos'], $y['order']]);
     return $items;
@@ -2570,32 +2561,6 @@ function maApi() {
             if ($max > 0 && $qty > $max) maApiOut(['ok' => false, 'error' => 'max', 'message' => 'حداکثر مقدار ' . fmtNum($max) . ' است.'], 400);
         }
 
-        // 📦 حجم دلخواه — فقط عددهای رند: ۵۰۰ مگ، یا گیگ کامل
-        $volMb = 0;
-        if ($ask === 'volume') {
-            $volMb = (int)maNum($body['volume'] ?? 0);
-            if (!function_exists('axVolumeOk') || !axVolumeOk($volMb)) {
-                maApiOut(['ok' => false, 'error' => 'bad_volume',
-                          'message' => 'حجم باید رند باشد: ۵۰۰ مگابایت، یا گیگابایت کامل (۱، ۲، ۳ …).'], 400);
-            }
-            $max = (int)($item['max'] ?? 0);
-            if ($max > 0 && $volMb > $max)
-                maApiOut(['ok' => false, 'error' => 'max',
-                          'message' => 'حداکثر حجم ' . axVolumeLabel($max) . ' است.'], 400);
-            $min = (int)($item['min'] ?? 0);
-            if ($min > 0 && $volMb < $min)
-                maApiOut(['ok' => false, 'error' => 'min',
-                          'message' => 'حداقل حجم ' . axVolumeLabel($min) . ' است.'], 400);
-
-            // مخزن جدا برای هر حجم — «۱ گیگ» و «۳ گیگ» موجودی خودشان را دارند
-            $volSku = $itemId . '_' . $volMb;
-            if (function_exists('axStockCount') && axStockCount($volSku) < 1) {
-                maApiOut(['ok' => false, 'error' => 'out_of_stock',
-                          'message' => axVolumeLabel($volMb) . ' الان در مخزن موجود نیست. حجم دیگری را امتحان کنید.'], 409);
-            }
-            $qty = 1.0;
-        }
-
         $field = trim((string)($body['field'] ?? ''));
         if (in_array($ask, ['username', 'wallet', 'qty_wallet', 'qty_username', 'text'], true) && $field === '') {
             maApiOut(['ok' => false, 'error' => 'need_field', 'message' => 'لطفا فیلد خواسته‌شده را پر کنید.'], 400);
@@ -2615,15 +2580,6 @@ function maApi() {
 
         // 🔒 قیمت همیشه اینجا و از نو حساب می‌شود — هرچه کاربر بفرستد نادیده گرفته می‌شود
         $unitPrice = maItemPrice($item);
-
-        if ($ask === 'volume') {
-            // قیمت پایه به‌ازای هر گیگابایت است
-            $unitPrice = round($unitPrice * ($volMb / 1024), 0);
-            $item['unit'] = '';
-            $item['name'] = $item['name'] . ' — ' . axVolumeLabel($volMb);
-            $item['id']   = $itemId . '_' . $volMb;      // مخزن همین حجم
-            $field = $field !== '' ? $field : axVolumeLabel($volMb);
-        }
 
         $item['price'] = $unitPrice;
         $total = maMoney($unitPrice * (in_array($ask, ['qty', 'qty_wallet', 'qty_username'], true) ? $qty : 1));
@@ -2677,14 +2633,68 @@ function maApi() {
 
         $o   = MaOrder::get($oid);
         $bal = (float)(getUser($uid)['balance'] ?? 0);
+
+        // ☎️ شماره همان‌جا دست کاربر است — منتظر یک رفت‌وبرگشت دیگر نماند
+        $numSt = null;
+        if ($key === 'num' && function_exists('numState')) $numSt = numState($oid);
+
         maApiOut([
             'ok' => true, 'order' => $oid, 'total' => $total, 'paid' => true,
             'balance' => $bal,
             'done' => ($o['status'] === MaOrder::DONE),
-            'message' => ($o['status'] === MaOrder::DONE)
-                ? maUT($key, 'done_sub')
-                : 'پرداخت انجام شد. سفارش در حال پردازش است.',
+            'num'  => $numSt,
+            'message' => $numSt
+                ? maUT($key, 'wait_sub')
+                : (($o['status'] === MaOrder::DONE)
+                    ? maUT($key, 'done_sub')
+                    : 'پرداخت انجام شد. سفارش در حال پردازش است.'),
         ]);
+    }
+
+    // ---- ☎️ شماره مجازی: پیگیری کد ----
+    //
+    // مینی‌اپ هر چند ثانیه این را صدا می‌زند. خودِ numState از پنل زیاد
+    // نمی‌پرسد (فاصله‌ی `poll`), پس صدها کاربرِ باز هم پنل را نمی‌بندند.
+    if ($action === 'num_state') {
+        if ($key !== 'num' || !function_exists('numState'))
+            maApiOut(['ok' => false, 'error' => 'bad_app'], 400);
+
+        $oid = trim((string)($body['order'] ?? ''));
+        if ($oid === '') {
+            $act = numActiveFor($uid);
+            if (!$act) maApiOut(['ok' => true, 'active' => false, 'history' => numHistory($uid, 10)]);
+            $oid = (string)$act['order'];
+        } else {
+            // 🔒 سفارشِ کسِ دیگر را نمی‌شود دید — حتی اگر شناسه‌اش را حدس بزنند
+            $own = numGet($oid);
+            if (!$own || (int)($own['uid'] ?? 0) !== $uid)
+                maApiOut(['ok' => false, 'error' => 'not_found'], 404);
+        }
+
+        $st = numState($oid);
+        if (!$st) maApiOut(['ok' => false, 'error' => 'not_found'], 404);
+        maApiOut(['ok' => true, 'active' => true, 'num' => $st,
+                  'balance' => (float)(getUser($uid)['balance'] ?? 0)]);
+    }
+
+    // ---- ☎️ شماره مجازی: لغو و بازگشت وجه ----
+    if ($action === 'num_cancel') {
+        if ($key !== 'num' || !function_exists('numFinish'))
+            maApiOut(['ok' => false, 'error' => 'bad_app'], 400);
+
+        $oid = trim((string)($body['order'] ?? ''));
+        $own = $oid !== '' ? numGet($oid) : numActiveFor($uid);
+        if (!$own || (int)($own['uid'] ?? 0) !== $uid)
+            maApiOut(['ok' => false, 'error' => 'not_found'], 404);
+
+        // ⛔ قبل از دیدنِ کد لغو کردن باشد، نه بعدش — وگرنه هم کد را دارد هم پول را
+        if (($own['status'] ?? '') !== 'waiting')
+            maApiOut(['ok' => false, 'error' => 'closed',
+                      'message' => 'این شماره دیگر باز نیست.'], 409);
+
+        [$ok, $err] = numFinish((string)$own['order'], 'cancel');
+        if (!$ok) maApiOut(['ok' => false, 'error' => 'closed', 'message' => $err], 409);
+        maApiOut(['ok' => true, 'balance' => (float)(getUser($uid)['balance'] ?? 0)]);
     }
 
     maApiOut(['ok' => false, 'error' => 'unknown_action'], 400);
@@ -2860,7 +2870,43 @@ function maMarkPaid($id, $payMethod) {
 function maDeliver($o) {
     $id = $o['id'];
 
-    // 1️⃣ مخزن کانفیگ — اگر برای این محصول موجودی گذاشته‌ایم
+    // 0️⃣ شماره مجازی — تحویلش یک‌مرحله‌ای نیست
+    //
+    // بقیه‌ی محصولات با یک تحویل تمام می‌شوند؛ شماره تازه اولش است:
+    // اینجا فقط شماره گرفته می‌شود؛ سفارش وقتی تمام می‌شود که کد
+    // بیاید (numOrderDone) یا مهلت بگذرد و پول برگردد (numFinish).
+    if (($o['app'] ?? '') === 'num' && function_exists('numBuy')) {
+        [$ok, $err] = numBuy($o);
+        if (!$ok) {
+            // 💰 شماره‌ای در کار نیست که ادمین دستی تحویلش دهد — پس پول
+            //    همان‌جا برمی‌گردد. وگرنه پولِ کاربر بی‌دلیل بلوکه می‌ماند.
+            $refund = false;
+            MaOrder::set($id, function (&$x) use ($err, &$refund) {
+                $x['last_error'] = $err;
+                $x['sending']    = 0;
+                if (!empty($x['refunded'])) return;
+                $x['refunded'] = true;
+                $x['status']   = MaOrder::REJECT;
+                $refund = true;
+            });
+            if ($refund) maRefund((int)$o['user_id'], (float)$o['total'], 'شماره در دسترس نبود');
+            maTellUser(MaOrder::get($id),
+                "☎️ <b>شماره در دسترس نبود</b>\n\n" .
+                "مبلغ سفارش به کیف پول شما برگشت. کمی بعد دوباره امتحان کنید.");
+            maNotifyAdmin(MaOrder::get($id),
+                '☎️ <b>شماره گرفته نشد — پول برگشت</b>' .
+                ($err !== '' ? "\n<code>" . h($err) . '</code>' : ''));
+        } else {
+            $act = function_exists('numGet') ? numGet($id) : null;
+            if ($act) maTellUser(MaOrder::get($id),
+                "☎️ <b>شماره‌ی شما آماده است</b>\n\n" .
+                '📱 <code>' . h((string)($act['phone'] ?? '')) . "</code>\n\n" .
+                '⏳ مینی‌اپ را باز نگه دارید تا کد بیاید.');
+        }
+        return MaOrder::get($id);
+    }
+
+    // 1️⃣ مخزن تحویل — اگر برای این محصول موجودی گذاشته‌ایم
     if (function_exists('axStockCount') && axStockCount($o['item_id']) > 0
         && !empty(axVal('stock.on'))) {
         $claimed = MaOrder::set($id, function (&$x) {
@@ -3122,7 +3168,7 @@ function maCallback($data, $uid, $chatId, $msgId, $cbId, $isAdmin) {
             "📤 <b>تحویل سفارش</b>\n\n" .
             '📦 ' . h(maOrderTitle($o)) . "\n" .
             '👤 <code>' . $o['user_id'] . "</code>\n\n" .
-            'محتوای تحویل (کانفیگ، لینک، کد یا متن) را بفرستید — همان‌طور که هست برای کاربر ارسال می‌شود.',
+            'محتوای تحویل (لینک، کد یا متن) را بفرستید — همان‌طور که هست برای کاربر ارسال می‌شود.',
             inlineKb([[btnCb(UT('cancel'), 'cancel', 'cancel')]]));
         return true;
     }
@@ -3300,7 +3346,7 @@ function maAdmHome($chatId, $msgId = null) {
         $text .= "\n⚠️ تا وقتی آدرس ثبت نشود دکمه مینی‌اپ نمایش داده نمی‌شود.\n" .
                  "آدرس باید <b>https</b> و دقیقا آدرس عمومی همین فایل ربات باشد.";
     } else {
-        $text .= "\n🌟 " . h(maUrl('tg')) . "\n🛡 " . h(maUrl('cfg'));
+        $text .= "\n🌟 " . h(maUrl('tg')) . "\n☎️ " . h(maUrl('num'));
     }
 
     $pend = MaOrder::countBy(MaOrder::REVIEW);
@@ -3308,9 +3354,10 @@ function maAdmHome($chatId, $msgId = null) {
 
     $rows = [
         [btnCb('🌟 مینی‌اپ خدمات تلگرام', 'maadm_app_tg', 'info')],
-        [btnCb('🛡 مینی‌اپ فروش کانفیگ',  'maadm_app_cfg', 'info')],
+        [btnCb('☎️ مینی‌اپ شماره مجازی',  'maadm_app_num', 'info')],
         [btnCb('🔗 آدرس عمومی', 'maadm_base', 'admin'),
          btnCb('📐 چیدمان دکمه‌ها', 'maadm_rowlay', 'admin')],
+        [btnCb('☎️ اتصال پنل شماره مجازی', 'num_home', 'confirm')],
         [btnCb('🔌 قیمت‌گذاری زنده', 'maadm_pricing', 'confirm')],
         [btnCb('🤖 تحویل خودکار', 'maadm_fulfill', 'confirm'),
          btnCb('🩺 چرا خودکار نیست؟', 'maadm_autodiag', 'confirm')],
@@ -3551,16 +3598,23 @@ function maAdmCat($chatId, $msgId, $key, $cid) {
     $text  = "📂 <b>" . h(trim(($c['emoji'] ?? '') . ' ' . $c['name'])) . "</b>\n\n";
     $text .= 'نام: <code>' . h($c['name']) . "</code>\n";
     $text .= 'ایموجی: ' . h($c['emoji'] ?: '—') . "\n";
+    // ☎️ کد کشور فقط در مینی‌اپ شماره معنی دارد — جای دیگر شلوغی است
+    if ($key === 'num')
+        $text .= '🌍 کد کشور نزد پنل: <code>' . h(trim((string)($c['code'] ?? '')) ?: '—') . "</code>\n";
     $text .= 'سرویس‌های داخلش: <b>' . $n . "</b>\n";
     $text .= 'وضعیت: ' . (!empty($c['on']) ? '✅ روشن' : '❌ خاموش');
 
     $rows = [
         [btnCb('✏️ نام', 'maadm_catn_' . $key . '|' . $cid, 'admin'),
          btnCb('😀 ایموجی', 'maadm_cate_' . $key . '|' . $cid, 'admin')],
+    ];
+    if ($key === 'num')
+        $rows[] = [btnCb('🌍 کد کشور', 'maadm_catc_' . $key . '|' . $cid, 'admin')];
+    $rows = array_merge($rows, [
         [btnCb(!empty($c['on']) ? '❌ خاموش کن' : '✅ روشن کن', 'maadm_catx_' . $key . '|' . $cid, 'info')],
         [btnCb('🗑 حذف دسته', 'maadm_catd_' . $key . '|' . $cid, 'reject')],
         [btnCb(UT('back'), 'maadm_cats_' . $key, 'nav')],
-    ];
+    ]);
     editMsg(BOT_TOKEN, $chatId, $msgId, $text, inlineKb($rows));
 }
 
@@ -3614,6 +3668,9 @@ function maAdmItem($chatId, $msgId, $key, $iid) {
     if (trim((string)($i['market_key'] ?? '')) !== '') $text .= '🔗 کلید مارکت: <code>' . h($i['market_key']) . "</code>\n";
     if ((float)($i['stars'] ?? 0) > 0)                 $text .= '⭐️ ارزش استارز: <b>' . fmtNum($i['stars']) . "</b>\n";
     $text .= '📂 دسته: ' . h($cat ? trim(($cat['emoji'] ?? '') . ' ' . $cat['name']) : '—') . "\n";
+    // ☎️ کد سرویس — بدونش شماره‌ی این ردیف اصلا خریده نمی‌شود
+    if ($key === 'num')
+        $text .= '📱 کد سرویس نزد پنل: <code>' . h(trim((string)($i['svc'] ?? '')) ?: '—') . "</code>\n";
     $text .= '📝 توضیح: ' . h($i['desc'] ?: '—') . "\n";
     $text .= '🏷 برچسب: ' . h($i['badge'] ?: '—') . "\n";
     $text .= '❓ سوال از کاربر: ' . h(maAskLabels()[$i['ask'] ?? 'none'] ?? '—') . "\n";
@@ -3631,7 +3688,9 @@ function maAdmItem($chatId, $msgId, $key, $iid) {
         [btnCb('🏷 برچسب', 'maadm_ib_' . $p, 'admin'), btnCb('📂 دسته', 'maadm_ic_' . $p, 'admin')],
         [btnCb('❓ نوع سوال', 'maadm_ia_' . $p, 'admin'), btnCb('📐 واحد', 'maadm_iu_' . $p, 'admin')],
         [btnCb('🔽 حداقل', 'maadm_imin_' . $p, 'admin'), btnCb('🔼 حداکثر', 'maadm_imax_' . $p, 'admin')],
-        [btnCb('🔗 کلید مارکت', 'maadm_imk_' . $p, 'admin'), btnCb('⭐️ ارزش استارز', 'maadm_ist_' . $p, 'admin')],
+        ($key === 'num'
+            ? [btnCb('📱 کد سرویس', 'maadm_isv_' . $p, 'admin')]
+            : [btnCb('🔗 کلید مارکت', 'maadm_imk_' . $p, 'admin'), btnCb('⭐️ ارزش استارز', 'maadm_ist_' . $p, 'admin')]),
         [btnCb('🤖 تحویل خودکار', 'maadm_iau_' . $p, 'confirm')],
         [btnCb('🔢 ترتیب', 'maadm_io_' . $p, 'admin'),
          btnCb(!empty($i['on']) ? '❌ خاموش کن' : '✅ روشن کن', 'maadm_ix_' . $p, 'info')],
@@ -4025,9 +4084,11 @@ function maSpecKeywords() {
  *
  * برگشت: [آدرس, داده, گزارش تلاش‌ها]
  */
-function maSpecDiscover($explicit = '') {
+function maSpecDiscover($explicit = '', $baseOverride = null) {
+    // پنلِ شماره هم همین جست‌وجو را لازم دارد و آدرسِ خودش را می‌دهد؛
+    // بدون این پارامتر باید کل این تابع یک بار دیگر نوشته می‌شد.
     $f    = maCfg()['fulfill'] ?? [];
-    $base = rtrim((string)($f['base'] ?? ''), '/');
+    $base = rtrim((string)($baseOverride !== null ? $baseOverride : ($f['base'] ?? '')), '/');
     $log  = [];
 
     $tries = [];
@@ -4772,6 +4833,12 @@ function maAdminCallback($data, $uid, $chatId, $msgId, $cbId) {
             maAskState($uid, $chatId, 'ma_cat_emoji', ['k' => $key, 'c' => $arg], '😀 ایموجی دسته:',
                 'برای حذف <code>-</code> بفرستید.');
             return true;
+        case 'catc':
+            answerCb(BOT_TOKEN, $cbId);
+            maAskState($uid, $chatId, 'ma_cat_code', ['k' => $key, 'c' => $arg],
+                '🌍 کد این کشور نزد پنل فروشنده را بفرستید:',
+                'همان چیزی که در مستندات پنل نوشته — مثل <code>0</code> یا <code>ru</code>. برای حذف <code>-</code>.');
+            return true;
         case 'catx':
             maCatMutate($key, $arg, function (&$c) { $c['on'] = empty($c['on']); });
             answerCb(BOT_TOKEN, $cbId, '✅');
@@ -4796,7 +4863,7 @@ function maAdminCallback($data, $uid, $chatId, $msgId, $cbId) {
                 '🛒 نام سرویس جدید را بفرستید:', 'بعدش قیمت و بقیه تنظیماتش را می‌پرسم.');
             return true;
         case 'in': case 'ie': case 'ip': case 'id': case 'ib': case 'iu':
-        case 'io': case 'imin': case 'imax': case 'imk': case 'ist':
+        case 'io': case 'imin': case 'imax': case 'imk': case 'ist': case 'isv':
             answerCb(BOT_TOKEN, $cbId);
             $map = [
                 'in'   => ['name',  '✏️ نام سرویس:', ''],
@@ -4812,6 +4879,8 @@ function maAdminCallback($data, $uid, $chatId, $msgId, $cbId) {
                            "همان شناسه‌ای که در «🔌 تست اتصال» دیدید، مثل <code>birthday_cake</code>.\nبرای حذف <code>-</code>."],
                 'ist'  => ['stars', '⭐️ ارزش این سرویس به استارز:',
                            "مثلا برای گیفت تدی <code>15</code>.\nبا روشن بودن «نرخ استارز»، قیمت خودکار حساب می‌شود. ۰ = غیرفعال."],
+                'isv'  => ['svc', '📱 کد این سرویس نزد پنل شماره:',
+                           "همان چیزی که در مستندات پنل نوشته — مثل <code>tg</code> یا <code>wa</code>.\nبرای حذف <code>-</code>."],
             ];
             [$f, $title, $hint] = $map[$op];
             maAskState($uid, $chatId, 'ma_item_field', ['k' => $key, 'i' => $arg, 'f' => $f], $title, $hint);
@@ -4925,7 +4994,7 @@ function maAdminState($action, $sd, $msg, $uid, $chatId, $plain, $ids) {
         clearState($uid);
         sendMsg(BOT_TOKEN, $chatId,
             $v === '' ? '✅ آدرس پاک شد.' :
-            "✅ آدرس ثبت شد.\n\n🌟 <code>" . h(maUrl('tg')) . "</code>\n🛡 <code>" . h(maUrl('cfg')) . '</code>',
+            "✅ آدرس ثبت شد.\n\n🌟 <code>" . h(maUrl('tg')) . "</code>\n☎️ <code>" . h(maUrl('num')) . '</code>',
             inlineKb([[btnCb('🚀 مینی‌اپ‌ها', 'maadm_home', 'admin')]]));
         return true;
     }
@@ -5229,6 +5298,17 @@ function maAdminState($action, $sd, $msg, $uid, $chatId, $plain, $ids) {
             inlineKb([[btnCb('📂 دسته‌ها', 'maadm_cats_' . $key, 'admin')]]));
         return true;
     }
+    if ($action === 'ma_cat_code') {
+        // کد کشور مستقیم داخل آدرس و بدنه‌ی درخواست می‌نشیند، پس فقط
+        // نویسه‌های بی‌خطر — نه فاصله، نه اسلش، نه چیزی که مسیر را بشکند.
+        $v = $dash ? '' : preg_replace('/[^A-Za-z0-9_.:-]/', '', $plain);
+        $cid = (string)($sd['c'] ?? '');
+        maCatMutate($key, $cid, function (&$c) use ($v) { $c['code'] = $v; });
+        clearState($uid);
+        sendMsg(BOT_TOKEN, $chatId, $v === '' ? '✅ کد پاک شد.' : '✅ کد کشور: <code>' . h($v) . '</code>',
+            inlineKb([[btnCb('📂 دسته', 'maadm_cat_' . $key . '|' . $cid, 'admin')]]));
+        return true;
+    }
 
     // ---- سرویس‌ها ----
     if ($action === 'ma_item_new') {
@@ -5265,6 +5345,8 @@ function maAdminState($action, $sd, $msg, $uid, $chatId, $plain, $ids) {
         } else {
             $v = $dash ? '' : $plain;
             if ($f === 'name' && $v === '') { sendMsg(BOT_TOKEN, $chatId, '⚠️ نام خالی است.'); return true; }
+            // کد سرویس داخل آدرس و بدنه‌ی درخواست می‌نشیند — فقط نویسه‌ی بی‌خطر
+            if ($f === 'svc') $v = preg_replace('/[^A-Za-z0-9_.:-]/', '', $v);
             maItemMutate($key, $iid, function (&$i) use ($f, $v) { $i[$f] = $v; });
         }
         clearState($uid);
