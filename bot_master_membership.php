@@ -8787,6 +8787,11 @@ function runBackgroundQueues() {
         if (function_exists('pxDropCardCache')) pxDropCardCache();
     });
 
+    // ☎️ فقط شماره‌ی تلگرام — و کاتالوگی که بدونِ فیلتر وارد شده بود برود.
+    migrateOnce('v11_tgonly', function () {
+        if (function_exists('numForceTelegramOnly')) numForceTelegramOnly();
+    });
+
     // 🎨 لیست سفارشات بی‌رنگ شود.
     //
     //    مهاجرتِ قبلی (v8_ordcolors) این دکمه‌ها را سبز و آبی و قرمز کرده
