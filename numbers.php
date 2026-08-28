@@ -50,24 +50,82 @@ if (!defined('NUM_LIB')) define('NUM_LIB', 1);
 
 if (!defined('NUM5_BASE'))    define('NUM5_BASE', 'https://5sim.net/v1');
 if (!defined('NUM5_PRODUCT')) define('NUM5_PRODUCT', 'telegram');
+if (!defined('NUMNL_BASE'))   define('NUMNL_BASE', 'https://api.numberland.ir');
+
+/**
+ * 🏪 دو فروشنده، هر دو داخلِ کد.
+ *
+ * چرا هر دو: ۵سیم ارزان‌تر و بزرگ‌تر است، ولی از داخلِ ایران اغلب
+ * اصلا در دسترس نیست — DNS جوابِ دیگری می‌دهد و درخواست به مقصد
+ * نمی‌رسد. نامبرلند ایرانی است و می‌رسد. پس انتخابش با فروشنده
+ * است، نه با ما.
+ *
+ * ⚠️ باز هم هیچ مسیری دستی تنظیم نمی‌شود. شکلِ هر دو اینجا نوشته
+ *    شده و تنها چیزی که ادمین می‌دهد کلیدِ همان فروشنده است.
+ */
+function numProviders() {
+    return [
+        '5sim' => [
+            'label' => '🌍 ۵سیم (5sim.net)',
+            'name'  => '۵سیم',
+            'base'  => NUM5_BASE,
+            'key'   => 'توکن',
+            'cur'   => 'دلار',      // قیمت‌ها ارزی‌اند → نرخ لازم است
+            'help'  => '5sim.net ← Settings ← API key (کلیدِ بالایی، همان که با eyJ شروع می‌شود)',
+        ],
+        'numberland' => [
+            'label' => '🇮🇷 نامبرلند (numberland.ir)',
+            'name'  => 'نامبرلند',
+            'base'  => NUMNL_BASE,
+            'key'   => 'کلید API',
+            'cur'   => 'تومان',     // قیمت‌ها تومانی‌اند → نرخ لازم نیست
+            'help'  => 'numberland.ir ← پنل کاربری ← API',
+        ],
+    ];
+}
+
+function numProv() {
+    $p = (string)numVal('provider', '5sim');
+    return isset(numProviders()[$p]) ? $p : '5sim';
+}
+function numProvInfo($k = null) { return numProviders()[$k ?? numProv()]; }
+function numProvName() { return numProvInfo()['name']; }
+
+/** آیا قیمتِ این فروشنده ارزی است و باید تبدیل شود؟ */
+function numNeedsRate() { return numProv() === '5sim'; }
+
+/** کلیدِ فروشنده‌ی فعال */
+function numKey() {
+    return trim((string)numVal(numProv() === 'numberland' ? 'api.nl_key' : 'api.token', ''));
+}
+
+/** آدرسِ پایه — خالی یعنی پیش‌فرضِ همان فروشنده */
+function numBase() {
+    $own = rtrim(trim((string)numVal('api.base', '')), '/');
+    return $own !== '' ? $own : rtrim(numProvInfo()['base'], '/');
+}
 
 function numDefaults() {
     return [
+        'provider' => '5sim',
         'wait'   => 900,       // مهلت انتظار کد — ثانیه
-        'poll'   => 6,         // فاصله‌ی دو پرسش از ۵سیم — ثانیه
-        'markup' => 0,         // درصد سود روی قیمتِ ۵سیم
-        'sync_price' => true,  // قیمتِ ۵سیم منبعِ حقیقت باشد و هر بار به‌روز شود
+        'poll'   => 6,         // فاصله‌ی دو پرسش از فروشنده — ثانیه
+        'markup' => 0,         // درصد سود روی قیمتِ فروشنده
+        'sync_price' => true,  // قیمتِ فروشنده منبعِ حقیقت باشد و هر بار به‌روز شود
         'api'   => [
             'on'      => false,
             'token'   => '',            // توکن ۵سیم (JWT)
-            'base'    => NUM5_BASE,
+            'nl_key'  => '',            // کلید نامبرلند
+            'nl_svc'  => '1',           // کد سرویسِ تلگرام نزد نامبرلند
+            // 🌐 آدرسِ پایه. خالی یعنی آدرسِ رسمیِ همان فروشنده.
+            //    فقط برای وقتی که سرور مستقیم نمی‌رسد و باید از یک
+            //    واسطه رد شود.
+            'base'    => '',
             'timeout' => 15,
-            // 💵 نرخِ هر واحدِ پولِ حسابِ ۵سیم به تومان.
-            //    صفر یعنی «از بخش قیمت‌گیریِ خودِ ربات بگیر» — یعنی نرخِ
-            //    زنده‌ی دلار. اگر حسابتان روبلی است، اینجا نرخ روبل را
-            //    دستی بگذارید.
+            // 💵 نرخِ هر واحدِ پولِ ارزی به تومان — فقط برای ۵سیم.
+            //    صفر یعنی «از بخش قیمت‌گیریِ خودِ ربات بگیر».
             'rate'    => 0,
-            // 🧢 سقفِ قیمتِ هر خرید به واحدِ ۵سیم. صفر یعنی بی‌سقف.
+            // 🧢 سقفِ قیمتِ هر خرید به واحدِ فروشنده. صفر یعنی بی‌سقف.
             'max'     => 0,
         ],
     ];
@@ -79,12 +137,11 @@ function numCfg() {
     if (!is_array($c)) return $d;
 
     $out = array_replace($d, array_intersect_key($c,
-        ['wait' => 1, 'poll' => 1, 'markup' => 1, 'sync_price' => 1]));
+        ['wait' => 1, 'poll' => 1, 'markup' => 1, 'sync_price' => 1, 'provider' => 1]));
     $out['api'] = array_replace($d['api'],
         array_intersect_key(is_array($c['api'] ?? null) ? $c['api'] : [],
-                            ['on'=>1,'token'=>1,'base'=>1,'timeout'=>1,'rate'=>1,'max'=>1]));
-    // آدرس همیشه همان است — دستِ کسی نمی‌رود
-    if (trim((string)$out['api']['base']) === '') $out['api']['base'] = NUM5_BASE;
+                            ['on'=>1,'token'=>1,'nl_key'=>1,'nl_svc'=>1,
+                             'base'=>1,'timeout'=>1,'rate'=>1,'max'=>1]));
     return $out;
 }
 
@@ -105,7 +162,7 @@ function numSet(callable $fn) {
 }
 
 function numReady() {
-    return !empty(numVal('api.on')) && trim((string)numVal('api.token', '')) !== '';
+    return !empty(numVal('api.on')) && numKey() !== '';
 }
 
 /**
@@ -116,6 +173,8 @@ function numReady() {
  * نمی‌شود، چون قیمتِ غلط بدتر از نبودِ قیمت است.
  */
 function numRate() {
+    // نامبرلند تومانی می‌فروشد — نرخی در کار نیست
+    if (!numNeedsRate()) return 1.0;
     $own = (float)numVal('api.rate', 0);
     if ($own > 0) return $own;
     if (function_exists('pxRawToman')) {
@@ -160,14 +219,23 @@ function numRound100($t) {
  * برگشت: [آرایه‌ی پاسخ یا null, خطا]
  */
 function num5Get($path, $timeout = null) {
-    $base = rtrim(trim((string)numVal('api.base', NUM5_BASE)), '/');
-    if ($base === '') return [null, 'آدرس ۵سیم ثبت نشده'];
-    $tok = trim((string)numVal('api.token', ''));
-    if ($tok === '') return [null, 'توکن ۵سیم ثبت نشده'];
+    $base = numBase();
+    if ($base === '') return [null, 'آدرس فروشنده ثبت نشده'];
+    $key = numKey();
+    if ($key === '') return [null, 'کلید ' . numProvName() . ' ثبت نشده'];
     if ($timeout === null) $timeout = (int)numVal('api.timeout', 15);
 
     $url = $base . '/' . ltrim((string)$path, '/');
-    if (function_exists('__num5Hook')) return __num5Hook($url, $tok, $timeout);
+    $hdr = ['Accept: application/json'];
+
+    // 🔑 هر فروشنده کلید را جای خودش می‌خواهد: ۵سیم در سرآیند، نامبرلند
+    //    داخلِ خودِ آدرس. همین یک تفاوت است و همین‌جا تمام می‌شود.
+    if (numProv() === 'numberland')
+        $url .= (str_contains($url, '?') ? '&' : '?') . 'apikey=' . rawurlencode($key);
+    else
+        $hdr[] = 'Authorization: Bearer ' . $key;
+
+    if (function_exists('__num5Hook')) return __num5Hook($url, $key, $timeout);
 
     $ch = curl_init($url);
     curl_setopt_array($ch, [
@@ -180,10 +248,7 @@ function num5Get($path, $timeout = null) {
         CURLOPT_ENCODING       => '',          // gzip — فهرست قیمت‌ها بزرگ است
         // بعضی دیوارهای آتش، درخواستِ بی‌شناسه را رد می‌کنند
         CURLOPT_USERAGENT      => 'Mozilla/5.0 (compatible; ShopBot/1.0)',
-        CURLOPT_HTTPHEADER     => [
-            'Authorization: Bearer ' . $tok,
-            'Accept: application/json',
-        ],
+        CURLOPT_HTTPHEADER     => $hdr,
     ]);
     $res  = curl_exec($ch);
     $cerr = curl_error($ch);
@@ -193,9 +258,24 @@ function num5Get($path, $timeout = null) {
     return num5Parse($res, $cerr, $code);
 }
 
-/** پاسخِ خام ۵سیم → [آرایه, خطا]. جدا نوشته شده تا آزمون‌پذیر باشد. */
+/** آدرس بدون کلید — برای نشان دادن به ادمین */
+function numSafeUrl($url) {
+    return preg_replace('/([?&]apikey=)[^&]*/i', '$1***', (string)$url);
+}
+
+/** پاسخِ خام → [آرایه, خطا]. جدا نوشته شده تا آزمون‌پذیر باشد. */
 function num5Parse($res, $cerr, $code) {
-    if ($res === false || $res === null) return [null, 'اتصال به ۵سیم برقرار نشد: ' . $cerr];
+    if ($res === false || $res === null) return [null, 'اتصال برقرار نشد: ' . $cerr];
+
+    // 🕵️ جوابی که از فروشنده نیامده.
+    //
+    //    روی خیلی از سرورهای ایرانی، درخواست به ۵سیم اصلا به مقصد
+    //    نمی‌رسد: یک واسط جوابِ خودش را می‌دهد. شکلش هم لو می‌رود —
+    //    ۵سیم خطا را متنِ خام می‌دهد، نه JSONِ {"status":404,…}.
+    //    بدون این تشخیص، ادمین ساعت‌ها دنبالِ کلیدِ سالم می‌گردد.
+    if (numLooksIntercepted((string)$res, (int)$code))
+        return [null, 'این پاسخ از ' . numProvName() . ' نیامده — یک واسط جوابش را داده. ' .
+                      'یعنی درخواستِ سرور به مقصد نمی‌رسد.'];
 
     $txt = trim((string)$res);
     $j   = json_decode($txt, true);
@@ -215,7 +295,26 @@ function num5Parse($res, $cerr, $code) {
     return [$j, ''];
 }
 
-/** متنِ خطای ۵سیم → جمله‌ی فارسی. آنچه نشناسیم خودش را می‌گوید. */
+/**
+ * 🕵️ آیا این پاسخ را یک واسط ساخته، نه خودِ فروشنده؟
+ *
+ * نشانه‌اش شکلِ پاسخ است: هیچ‌کدام از این دو فروشنده خطایشان را
+ * به شکلِ {"status":404,"message":…,"data":{"error":"Invalid API
+ * endpoint"}} نمی‌دهند. ۵سیم متنِ خام می‌دهد و نامبرلند
+ * {"RESULT":…,"DESCRIPTION":…}.
+ */
+function numLooksIntercepted($body, $code) {
+    if ($code !== 404 && $code !== 403 && $code !== 502) return false;
+    $j = json_decode(trim((string)$body), true);
+    if (!is_array($j)) return false;
+    $blob = strtolower(json_encode($j));
+    foreach (['invalid api endpoint', 'access denied', 'forbidden by', 'blocked'] as $sig)
+        if (str_contains($blob, $sig)) return true;
+    // شکلِ عمومیِ یک دروازه‌ی واسط
+    return isset($j['status'], $j['message'], $j['data']) && !isset($j['RESULT']);
+}
+
+/** متنِ خطای فروشنده → جمله‌ی فارسی. آنچه نشناسیم خودش را می‌گوید. */
 function num5Why($raw, $code = 0) {
     $k = strtolower(trim(preg_replace('/\s+/u', ' ', (string)$raw)));
     static $map = [
@@ -235,7 +334,7 @@ function num5Why($raw, $code = 0) {
         'bad request'           => 'درخواست نادرست بود',
     ];
     if (isset($map[$k])) return $map[$k];
-    if ($code === 401 || $code === 403) return 'توکن ۵سیم پذیرفته نشد — کلید را دوباره ثبت کنید';
+    if ($code === 401 || $code === 403) return 'کلیدِ ' . numProvName() . ' پذیرفته نشد — دوباره ثبتش کنید';
     if ($k === '') return 'کد پاسخ ' . $code;
     return mb_substr($raw, 0, 200);
 }
@@ -249,11 +348,19 @@ function num5Why($raw, $code = 0) {
  * برگشت: [پاسخ, خطا]
  */
 function numCall($op, array $vars = []) {
-    $id = rawurlencode(trim((string)($vars['id'] ?? '')));
+    $id = trim((string)($vars['id'] ?? ''));
+    $nl = numProv() === 'numberland';
+
     switch ($op) {
         case 'buy':
-            $co = trim((string)($vars['country'] ?? ''));
-            $opr= trim((string)($vars['operator'] ?? '')) ?: 'any';
+            if ($nl) {
+                // نامبرلند: کشور و سرویس با هم یک شناسه‌اند
+                $sid = trim((string)($vars['sid'] ?? ''));
+                if ($sid === '') return [null, 'شناسه‌ی شماره مشخص نیست'];
+                return num5Get('/v2.php/?method=getnum&sid=' . rawurlencode($sid));
+            }
+            $co  = trim((string)($vars['country'] ?? ''));
+            $opr = trim((string)($vars['operator'] ?? '')) ?: 'any';
             if ($co === '') return [null, 'کشور مشخص نیست'];
             $p = '/user/buy/activation/' . rawurlencode($co) . '/' . rawurlencode($opr) .
                  '/' . rawurlencode(NUM5_PRODUCT);
@@ -261,13 +368,158 @@ function numCall($op, array $vars = []) {
             if ($max > 0) $p .= '?maxPrice=' . rawurlencode((string)$max);
             return num5Get($p);
 
-        case 'status':  return $id === '' ? [null, 'شناسه ندارد'] : num5Get('/user/check/'  . $id);
-        case 'cancel':  return $id === '' ? [null, 'شناسه ندارد'] : num5Get('/user/cancel/' . $id);
-        case 'close':   return $id === '' ? [null, 'شناسه ندارد'] : num5Get('/user/finish/' . $id);
-        case 'ban':     return $id === '' ? [null, 'شناسه ندارد'] : num5Get('/user/ban/'    . $id);
-        case 'balance': return num5Get('/user/profile');
+        case 'status':
+            if ($id === '') return [null, 'شناسه ندارد'];
+            return $nl ? num5Get('/v2.php/?method=checkstatus&id=' . rawurlencode($id))
+                       : num5Get('/user/check/' . rawurlencode($id));
+
+        case 'cancel':
+            if ($id === '') return [null, 'شناسه ندارد'];
+            return $nl ? num5Get('/v2.php/?method=cancelnumber&id=' . rawurlencode($id))
+                       : num5Get('/user/cancel/' . rawurlencode($id));
+
+        case 'close':
+            if ($id === '') return [null, 'شناسه ندارد'];
+            return $nl ? num5Get('/v2.php/?method=closenumber&id=' . rawurlencode($id))
+                       : num5Get('/user/finish/' . rawurlencode($id));
+
+        case 'repeat':
+            if ($id === '') return [null, 'شناسه ندارد'];
+            // ۵سیم «کد مجدد» جدا ندارد؛ تا finish نزنیم پیامکِ بعدی خودش می‌آید
+            return $nl ? num5Get('/v2.php/?method=repeat&id=' . rawurlencode($id))
+                       : [[], ''];
+
+        case 'ban':
+            if ($id === '') return [null, 'شناسه ندارد'];
+            return $nl ? num5Get('/v2.php/?method=bannumber&id=' . rawurlencode($id))
+                       : num5Get('/user/ban/' . rawurlencode($id));
+
+        case 'balance':
+            return $nl ? num5Get('/v2.php/?method=getbalance')
+                       : num5Get('/user/profile');
     }
     return [null, 'عملیات «' . $op . '» را نمی‌شناسم'];
+}
+
+// ------------------------------------------------------------
+// 🔌 لایه‌ی یکسان‌کننده
+// ------------------------------------------------------------
+//
+// بالاتر از اینجا، هیچ‌جای فایل نمی‌داند کدام فروشنده وصل است. هر
+// عملیات یک شکلِ واحد برمی‌گرداند و تفاوتِ دو پنل همین‌جا تمام
+// می‌شود — وگرنه هر «اگر نامبرلند بود» در ده جای چرخه‌ی سفارش
+// تکرار می‌شد و یکی‌شان بالاخره جا می‌ماند.
+
+/** خطای نامبرلند از داخلِ پاسخ — نامبرلند با کدِ ۲۰۰ هم «نه» می‌گوید */
+function numNlErr($r) {
+    if (!is_array($r)) return 'پاسخ نامعتبر';
+    if (!isset($r['RESULT'])) return '';
+    if ((string)$r['RESULT'] === '1') return '';
+    $d = trim((string)($r['DESCRIPTION'] ?? ''));
+    return $d !== '' ? $d : ('نامبرلند کدِ ' . $r['RESULT'] . ' داد');
+}
+
+/** 🛒 خرید → ['aid','phone','ttl','cost','err'] */
+function numBuyDo(array $meta) {
+    $nl = numProv() === 'numberland';
+    [$r, $e] = numCall('buy', $nl
+        ? ['sid' => $meta['sid'] ?? '']
+        : ['country' => $meta['country'] ?? '', 'operator' => ($meta['operator'] ?? '') ?: 'any']);
+
+    if (!is_array($r)) return ['err' => $e ?: 'پاسخی نیامد'];
+
+    if ($nl) {
+        if (($x = numNlErr($r)) !== '') return ['err' => $x];
+        $aid   = (string)($r['ID'] ?? '');
+        $phone = (string)($r['NUMBER'] ?? '');
+        if ($aid === '')   return ['err' => 'شناسه‌ی فعال‌سازی در پاسخ نامبرلند نبود'];
+        if ($phone === '') return ['err' => 'شماره در پاسخ نامبرلند نبود'];
+        return ['aid' => $aid, 'phone' => $phone,
+                'ttl' => numParseTtl($r['TIME'] ?? ''), 'cost' => 0.0,
+                'operator' => '', 'country' => (string)($meta['country'] ?? ''), 'err' => ''];
+    }
+
+    $aid   = (string)($r['id'] ?? '');
+    $phone = (string)($r['phone'] ?? '');
+    if ($aid === '')   return ['err' => 'شناسه‌ی سفارش در پاسخ ۵سیم نبود'];
+    if ($phone === '') return ['err' => 'شماره در پاسخ ۵سیم نبود'];
+    return ['aid' => $aid, 'phone' => $phone,
+            'ttl' => numExpiresIn((string)($r['expires'] ?? '')),
+            'cost' => (float)($r['price'] ?? 0),
+            'operator' => (string)($r['operator'] ?? ($meta['operator'] ?? '')),
+            'country'  => (string)($r['country']  ?? ($meta['country']  ?? '')),
+            'err' => ''];
+}
+
+/**
+ * 📩 پیگیری → ['state','code','n','err']
+ *   state: waiting | done | dead
+ *   n: چندمین پیامک است (برای «کد مجدد»)
+ */
+function numCheckDo($aid, $seen = 0) {
+    [$r, $e] = numCall('status', ['id' => $aid]);
+    if (!is_array($r)) return ['state' => 'waiting', 'code' => '', 'n' => $seen, 'err' => $e];
+
+    if (numProv() === 'numberland') {
+        $st = (string)($r['RESULT'] ?? '');
+        // ۱ منتظر · ۲ کد رسید · ۳ لغو · ۴ مسدود · ۵ منتظرِ کد مجدد · ۶ تمام
+        if (in_array($st, ['3', '4'], true))
+            return ['state' => 'dead', 'code' => '', 'n' => $seen, 'err' => ''];
+        if (!in_array($st, ['2', '6'], true))
+            return ['state' => 'waiting', 'code' => '', 'n' => $seen, 'err' => ''];
+        $code = numDigits((string)($r['CODE'] ?? ''));
+        if ($code === '' || $code === '0')
+            return ['state' => 'waiting', 'code' => '', 'n' => $seen, 'err' => ''];
+        return ['state' => 'done', 'code' => $code, 'n' => $seen + 1, 'err' => ''];
+    }
+
+    $st = strtoupper(trim((string)($r['status'] ?? '')));
+    if (in_array($st, ['CANCELED', 'CANCELLED', 'TIMEOUT', 'BANNED'], true))
+        return ['state' => 'dead', 'code' => '', 'n' => $seen, 'err' => ''];
+
+    $sms = is_array($r['sms'] ?? null) ? array_values($r['sms']) : [];
+    if (count($sms) <= $seen)
+        return ['state' => 'waiting', 'code' => '', 'n' => $seen, 'err' => ''];
+
+    $code = numExtractCode($sms[count($sms) - 1]);
+    if ($code === '') return ['state' => 'waiting', 'code' => '', 'n' => $seen, 'err' => ''];
+    return ['state' => 'done', 'code' => $code, 'n' => count($sms), 'err' => ''];
+}
+
+/** یک عملیاتِ ساده‌ی بله/نه → [موفق؟, خطا] */
+function numOpDo($op, $aid) {
+    [$r, $e] = numCall($op, ['id' => $aid]);
+    if (!is_array($r)) return [false, $e ?: 'پاسخی نیامد'];
+    if (numProv() === 'numberland' && ($x = numNlErr($r)) !== '') return [false, $x];
+    return [true, ''];
+}
+
+/** 💰 موجودی → [عدد, واحد, خطا] */
+function numBalanceDo() {
+    [$r, $e] = numCall('balance');
+    if (!is_array($r)) return [0.0, '', $e ?: 'پاسخی نیامد'];
+
+    if (numProv() === 'numberland') {
+        if (($x = numNlErr($r)) !== '') return [0.0, '', $x];
+        foreach (['AMOUNT', 'BALANCE', 'CREDIT', 'amount', 'balance'] as $k)
+            if (isset($r[$k]) && is_numeric($r[$k])) return [(float)$r[$k], 'تومان', ''];
+        return [0.0, '', 'موجودی در پاسخ نامبرلند نبود'];
+    }
+
+    if (!isset($r['balance']) || !is_numeric($r['balance']))
+        return [0.0, '', 'موجودی در پاسخ ۵سیم نبود'];
+    return [(float)$r['balance'], (string)($r['currency'] ?? ''), ''];
+}
+
+/** «00:20:00» یا «1200» → ثانیه. ۰ یعنی نفهمیدم. */
+function numParseTtl($v) {
+    if (!is_scalar($v)) return 0;
+    $v = trim((string)$v);
+    if ($v === '') return 0;
+    if (preg_match('/^\d+$/', $v)) return (int)$v;
+    if (preg_match('/^(?:(\d+):)?(\d+):(\d+)$/', $v, $m))
+        return (int)($m[1] ?? 0) * 3600 + (int)$m[2] * 60 + (int)$m[3];
+    return 0;
 }
 
 /**
@@ -280,14 +532,18 @@ function numCall($op, array $vars = []) {
  * برگشت: ['code'=>, 'err'=>, 'body'=>, 'dns'=>, 'conn'=>, 'total'=>]
  */
 function num5Probe($path, $withToken = true, $timeout = 12) {
-    $base = rtrim(trim((string)numVal('api.base', NUM5_BASE)), '/');
-    $url  = $base . '/' . ltrim((string)$path, '/');
+    $url = numBase() . '/' . ltrim((string)$path, '/');
     if (function_exists('__num5ProbeHook')) return __num5ProbeHook($url, $withToken);
 
     $hdr = ['Accept: application/json'];
     if ($withToken) {
-        $tok = trim((string)numVal('api.token', ''));
-        if ($tok !== '') $hdr[] = 'Authorization: Bearer ' . $tok;
+        $key = numKey();
+        if ($key !== '') {
+            if (numProv() === 'numberland')
+                $url .= (str_contains($url, '?') ? '&' : '?') . 'apikey=' . rawurlencode($key);
+            else
+                $hdr[] = 'Authorization: Bearer ' . $key;
+        }
     }
 
     $ch = curl_init($url);
@@ -364,14 +620,8 @@ function numTokenShape($tok = null) {
             'why' => $exp > 0 ? 'معتبر تا ' . date('Y/m/d', $exp) : 'شکلش درست است'];
 }
 
-/** موجودی حسابِ ۵سیم — [عدد, واحد, خطا] */
-function numBalance() {
-    [$j, $err] = numCall('balance');
-    if (!is_array($j)) return [0.0, '', $err ?: 'پاسخی نیامد'];
-    $b = $j['balance'] ?? null;
-    if (!is_numeric($b)) return [0.0, '', 'موجودی در پاسخ نبود'];
-    return [(float)$b, (string)($j['currency'] ?? ''), ''];
-}
+/** موجودی حسابِ فروشنده — [عدد, واحد, خطا] */
+function numBalance() { return numBalanceDo(); }
 
 // ============================================================
 // 🗂 انبار فعال‌سازی‌ها
@@ -488,7 +738,10 @@ function numItemMeta($itemId) {
                 if ($cc !== '') $co = $cc;
                 break;
             }
-        return ['operator' => $op, 'country' => $co, 'item' => $i];
+        // نامبرلند کشور و سرویس را در یک شناسه می‌دهد؛ ۵سیم دوتا.
+        // هر دو را برمی‌گردانیم و لایه‌ی خرید هرکدام را که لازم دارد برمی‌دارد.
+        return ['operator' => $op, 'country' => $co, 'sid' => $sid,
+                'prov' => (string)($i['prov'] ?? ''), 'item' => $i];
     }
     return null;
 }
@@ -506,11 +759,21 @@ function numBuy($order) {
     $oid = (string)$order['id'];
 
     if (numGet($oid)) return [true, ''];            // قبلا گرفته شده
-    if (!numReady())  return [false, 'اتصال به ۵سیم تنظیم نشده است'];
+    if (!numReady())  return [false, 'اتصال به ' . numProvName() . ' تنظیم نشده است'];
 
     $meta = numItemMeta((string)($order['item_id'] ?? ''));
     if (!$meta) return [false, 'این شماره دیگر تعریف نشده است'];
-    if ($meta['country'] === '') return [false, 'کشور این ردیف تنظیم نشده است'];
+
+    // ⚠️ ردیفی که مالِ فروشنده‌ی دیگری است، شناسه‌اش اینجا معنی ندارد.
+    //    بدون این بررسی، خرید با یک خطای گنگِ سمتِ پنل رد می‌شد.
+    if ($meta['prov'] !== '' && $meta['prov'] !== numProv())
+        return [false, 'این ردیف مالِ فروشنده‌ی قبلی است — یک بار «وارد کردن» را بزنید'];
+
+    if (numProv() === 'numberland') {
+        if (trim((string)$meta['sid']) === '') return [false, 'شناسه‌ی این ردیف تنظیم نشده است'];
+    } elseif ($meta['country'] === '') {
+        return [false, 'کشور این ردیف تنظیم نشده است'];
+    }
 
     // 🔒 ادعای اتمی: فقط یک اجرا شماره می‌خرد، حتی اگر دو درخواست هم‌زمان بیاید
     $claimed = false;
@@ -521,41 +784,29 @@ function numBuy($order) {
     });
     if (!$claimed) return [true, ''];
 
-    [$resp, $err] = numCall('buy', [
-        'country'  => $meta['country'],
-        'operator' => $meta['operator'] ?: 'any',
-    ]);
-
-    $fail = '';
-    if (!is_array($resp)) $fail = $err ?: 'پاسخی از ۵سیم نیامد';
-    else {
-        $aid   = $resp['id']    ?? null;
-        $phone = $resp['phone'] ?? null;
-        if (!is_scalar($aid) || trim((string)$aid) === '')       $fail = 'شناسه‌ی سفارش در پاسخ ۵سیم نبود';
-        elseif (!is_scalar($phone) || trim((string)$phone) === '') $fail = 'شماره در پاسخ ۵سیم نبود';
-    }
-
-    if ($fail !== '') {
+    $r = numBuyDo($meta);
+    if (($r['err'] ?? '') !== '') {
         mutate('num_acts', function (&$a) use ($oid) { unset($a[$oid]); });   // تا بشود دوباره تلاش کرد
-        return [false, $fail];
+        return [false, $r['err']];
     }
 
-    // ⏳ مهلتِ خودِ ۵سیم دقیق‌تر از عددِ ماست
-    $ttl = numExpiresIn((string)($resp['expires'] ?? ''));
+    // ⏳ مهلتِ خودِ فروشنده دقیق‌تر از عددِ ماست
+    $ttl = (int)($r['ttl'] ?? 0);
 
     numPut([
         'order'    => $oid,
         'uid'      => (int)($order['user_id'] ?? 0),
         'item'     => (string)($order['item_id'] ?? ''),
         'name'     => (string)($order['item_name'] ?? ''),
-        'operator' => (string)($resp['operator'] ?? $meta['operator']),
-        'country'  => (string)($resp['country'] ?? $meta['country']),
-        'aid'      => (string)$resp['id'],
-        'phone'    => numPhone((string)$resp['phone']),
+        'prov'     => numProv(),
+        'operator' => (string)($r['operator'] ?? ''),
+        'country'  => (string)($r['country'] ?? ''),
+        'aid'      => (string)$r['aid'],
+        'phone'    => numPhone((string)$r['phone']),
         'code'     => '',
         'status'   => 'waiting',
         'price'    => (float)($order['total'] ?? 0),
-        'cost'     => (float)($resp['price'] ?? 0),   // آنچه به ۵سیم دادیم
+        'cost'     => (float)($r['cost'] ?? 0),   // آنچه به فروشنده دادیم
         'created'  => time(),
         'checked'  => 0,
         'wait'     => $ttl >= 60 ? $ttl : 0,
@@ -626,36 +877,22 @@ function numState($orderId, $force = false) {
     ];
 }
 
-/** یک بار از ۵سیم می‌پرسد پیامک آمده یا نه */
+/** یک بار از فروشنده می‌پرسد پیامک آمده یا نه */
 function numPoll($orderId) {
     $act = numGet($orderId);
     if (!$act || $act['status'] !== 'waiting') return;
 
     numSetAct($orderId, function (&$x) { $x['checked'] = time(); return true; });
 
-    [$resp, $err] = numCall('status', ['id' => (string)$act['aid']]);
-    if (!is_array($resp)) return;                         // شبکه نبود — دفعه‌ی بعد
-
-    $st = strtoupper(trim((string)($resp['status'] ?? '')));
+    $r = numCheckDo((string)$act['aid'], (int)($act['sms_seen'] ?? 0));
 
     // ⛔️ مرده؟ پول همان‌جا برگردد، منتظرِ مهلت نمانیم.
-    //    ۵سیم خودش بسته، پس دوباره «لغو کن» گفتن بی‌معنی است.
-    if (in_array($st, ['CANCELED', 'CANCELLED', 'TIMEOUT', 'BANNED'], true)) {
-        numFinish($orderId, 'expired', false);
-        return;
-    }
+    //    فروشنده خودش بسته، پس دوباره «لغو کن» گفتن بی‌معنی است.
+    if ($r['state'] === 'dead') { numFinish($orderId, 'expired', false); return; }
+    if ($r['state'] !== 'done' || $r['code'] === '') return;
 
-    // 📨 پیامک‌ها. ۵سیم آنها را به ترتیبِ رسیدن می‌دهد و تا سفارش بسته
-    //    نشده، تازه‌ها را هم اضافه می‌کند. پس «کدِ مجدد» یعنی همان
-    //    پیامکِ بعدی — و برای همین می‌شماریم کدام‌ها را قبلا داده‌ایم.
-    $sms  = is_array($resp['sms'] ?? null) ? array_values($resp['sms']) : [];
-    $seen = (int)($act['sms_seen'] ?? 0);
-    if (count($sms) <= $seen) return;                     // چیزِ تازه‌ای نیست
-
-    $code = numExtractCode($sms[count($sms) - 1]);
-    if ($code === '') return;
-
-    $n = count($sms);
+    $code = $r['code'];
+    $n    = (int)$r['n'];
     numSetAct($orderId, function (&$x) use ($code, $n) {
         if ($x['status'] !== 'waiting') return false;
         $x['code'] = $code; $x['status'] = 'done'; $x['sms_seen'] = $n;
@@ -741,9 +978,9 @@ function numClose($orderId) {
     $act = numGet($orderId);
     if (!$act || empty($act['aid']) || !empty($act['closed'])) return;
 
-    [$r, $e] = numCall('close', ['id' => (string)$act['aid']]);
-    if (is_array($r)) numSetAct($orderId, function (&$x) { $x['closed'] = time(); return true; });
-    else              error_log('[numbers] بستن سفارش روی ۵سیم نگرفت: ' . $e);
+    [$ok, $e] = numOpDo('close', (string)$act['aid']);
+    if ($ok) numSetAct($orderId, function (&$x) { $x['closed'] = time(); return true; });
+    else     error_log('[numbers] بستن سفارش روی ' . numProvName() . ' نگرفت: ' . $e);
 }
 
 /**
@@ -768,6 +1005,20 @@ function numRepeat($orderId) {
         return true;
     });
     if (!$claimed) return [false, 'همین الان درخواست داده شد'];
+
+    // 🔁 نامبرلند برای کدِ مجدد یک عملیاتِ واقعی دارد و بدونِ صدا زدنش
+    //    پیامکِ تازه‌ای نمی‌آید. ۵سیم چیزی لازم ندارد — تا نبسته‌ایم
+    //    خودش می‌فرستد.
+    if (numProv() === 'numberland') {
+        [$ok, $e] = numOpDo('repeat', (string)$act['aid']);
+        if (!$ok) {
+            numSetAct($orderId, function (&$x) {
+                $x['status'] = 'done'; $x['repeats'] = max(0, (int)($x['repeats'] ?? 1) - 1);
+                return true;
+            });
+            return [false, $e];
+        }
+    }
     return [true, ''];
 }
 
@@ -842,13 +1093,14 @@ function numTellPanelCancel($orderId) {
 
     $vars = ['id' => (string)$act['aid']];
 
-    [$resp, $err] = numCall('cancel', $vars);
-    $fail = is_array($resp) ? '' : ($err ?: 'پاسخی نیامد');
+    [$ok1, $err] = numOpDo('cancel', (string)$act['aid']);
+    $fail = $ok1 ? '' : ($err ?: 'پاسخی نیامد');
 
-    // ⛳️ رد شد چون پیامک رسیده؟ پس «بستن» جواب می‌دهد
+    // ⛳️ رد شد چون پیامک رسیده؟ پس «بستن» جواب می‌دهد.
+    //    هر دو فروشنده همین قاعده را دارند: لغو فقط پیش از پیامک.
     if ($fail !== '') {
-        [$r2, $e2] = numCall('close', $vars);
-        if (is_array($r2)) $fail = '';
+        [$ok2, ] = numOpDo('close', (string)$act['aid']);
+        if ($ok2) $fail = '';
     }
 
     numSetAct($orderId, function (&$x) use ($fail) {
@@ -1046,6 +1298,11 @@ function numOperFa($op) {
  *   ردیف‌ها: هرکدام ['sid','country','operator','name','price','usd','count','on', …]
  */
 function numCatalog() {
+    return numProv() === 'numberland' ? numCatalogNl() : numCatalog5();
+}
+
+/** 🌍 ۵سیم — {کشور: {telegram: {اپراتور: {cost,count,rate}}}} */
+function numCatalog5() {
     $rate = numRate();
     if ($rate <= 0)
         return [[], [], 'نرخِ تبدیل معلوم نیست — یا در همین صفحه نرخ را بگذارید، یا بخش قیمت‌گیری را روشن کنید'];
@@ -1067,7 +1324,6 @@ function numCatalog() {
     }
 
     $countries = $out = [];
-
     foreach ($px as $slug => $byProduct) {
         $slug = (string)$slug;
         if (!is_array($byProduct)) continue;
@@ -1105,10 +1361,100 @@ function numCatalog() {
 
     if (!$out) return [[], [], 'هیچ شماره‌ی تلگرامی در پاسخِ ۵سیم نبود'];
 
-    // کشورهای پرتقاضا اول؛ داخلِ هر کشور، ارزان‌ترین بالا
     usort($out, fn($x, $y) => [$x['rank'], $x['cname'], $x['usd']]
                           <=> [$y['rank'], $y['cname'], $y['usd']]);
     return [$countries, $out, ''];
+}
+
+/**
+ * 🇮🇷 نامبرلند — فهرستِ صافِ ردیف‌ها.
+ *
+ * getinfo هر ترکیبِ «کشور × سرویس × اپراتور» را یک ردیف با شناسه‌ی
+ * خودش می‌دهد. قیمت‌ها تومانی‌اند، پس هیچ تبدیلی لازم نیست.
+ */
+function numCatalogNl() {
+    $svc = trim((string)numVal('api.nl_svc', '1')) ?: '1';
+
+    [$rows, $err] = num5Get('/v2.php/?method=getinfo&operator=any&service=' . rawurlencode($svc), 30);
+    if (!is_array($rows)) return [[], [], $err ?: 'فهرست شماره‌ها نیامد'];
+    if (!array_is_list($rows)) {
+        $d = trim((string)($rows['DESCRIPTION'] ?? ''));
+        return [[], [], $d !== '' ? $d : 'پاسخ نامبرلند فهرست نبود'];
+    }
+
+    // نامِ کشورها
+    $fa = $en = [];
+    [$ct] = num5Get('/v2.php/?method=getcountry', 30);
+    foreach ((array)$ct as $x) {
+        if (!is_array($x) || !isset($x['id'])) continue;
+        $fa[(string)$x['id']] = trim((string)($x['name'] ?? $x['name_en'] ?? $x['id']));
+        $en[(string)$x['id']] = trim((string)($x['name_en'] ?? ''));
+    }
+
+    $countries = $out = [];
+    foreach ($rows as $r) {
+        if (!is_array($r) || !isset($r['id'])) continue;
+        $cc = (string)($r['country'] ?? '');
+        $ss = (string)($r['service'] ?? '');
+        if ($cc === '' || $ss !== $svc) continue;
+
+        $cName = $fa[$cc] ?? ('کشور ' . $cc);
+        $flag  = numFlagFa($en[$cc] ?? $cName);
+        $countries[$cc] = ['name' => $cName, 'flag' => $flag];
+
+        $op    = trim((string)($r['operator'] ?? ''));
+        $price = (float)($r['amount'] ?? 0);
+        $cnt   = (int)($r['count'] ?? 0);
+        $out[] = [
+            'sid'      => (string)$r['id'],
+            'country'  => $cc,
+            'operator' => $op,
+            'flag'     => $flag,
+            'cname'    => $cName,
+            'rank'     => numRank($en[$cc] ?? ''),
+            'name'     => ($op !== '' && $op !== '0') ? 'اپراتور ' . $op : 'شماره',
+            'usd'      => 0.0,
+            'price'    => $price,                 // خودش تومان است
+            'count'    => $cnt,
+            'rate'     => 0.0,
+            'ttl'      => numParseTtl($r['time'] ?? ''),
+            'on'       => (string)($r['active'] ?? '1') !== '0' && $cnt > 0,
+        ];
+    }
+
+    if (!$out) return [[], [], 'هیچ شماره‌ای در پاسخِ نامبرلند نبود'];
+
+    usort($out, fn($x, $y) => [$x['rank'], $x['cname'], $x['price']]
+                          <=> [$y['rank'], $y['cname'], $y['price']]);
+    return [$countries, $out, ''];
+}
+
+/**
+ * 🚩 پرچم از روی نام — برای نامبرلند که ISO نمی‌دهد.
+ *
+ * جدولِ numFlagIso دقیق است ولی کدِ دو حرفی می‌خواهد. اینجا فقط اسم
+ * داریم، پس یک جدولِ کوچکِ نام→ISO کافی است و بقیه 🌍 می‌شوند.
+ */
+function numFlagFa($name) {
+    static $iso = [
+        'russia'=>'RU','ukraine'=>'UA','kazakhstan'=>'KZ','england'=>'GB','unitedkingdom'=>'GB',
+        'uk'=>'GB','usa'=>'US','unitedstates'=>'US','america'=>'US','germany'=>'DE','france'=>'FR',
+        'netherlands'=>'NL','poland'=>'PL','romania'=>'RO','indonesia'=>'ID','philippines'=>'PH',
+        'vietnam'=>'VN','india'=>'IN','malaysia'=>'MY','thailand'=>'TH','turkey'=>'TR','spain'=>'ES',
+        'italy'=>'IT','portugal'=>'PT','sweden'=>'SE','finland'=>'FI','norway'=>'NO','denmark'=>'DK',
+        'austria'=>'AT','switzerland'=>'CH','belgium'=>'BE','ireland'=>'IE','czechia'=>'CZ',
+        'czechrepublic'=>'CZ','hungary'=>'HU','slovakia'=>'SK','bulgaria'=>'BG','serbia'=>'RS',
+        'croatia'=>'HR','greece'=>'GR','latvia'=>'LV','lithuania'=>'LT','estonia'=>'EE',
+        'moldova'=>'MD','georgia'=>'GE','armenia'=>'AM','azerbaijan'=>'AZ','uzbekistan'=>'UZ',
+        'kyrgyzstan'=>'KG','tajikistan'=>'TJ','canada'=>'CA','brazil'=>'BR','mexico'=>'MX',
+        'argentina'=>'AR','colombia'=>'CO','southafrica'=>'ZA','nigeria'=>'NG','kenya'=>'KE',
+        'egypt'=>'EG','morocco'=>'MA','israel'=>'IL','australia'=>'AU','newzealand'=>'NZ',
+        'japan'=>'JP','southkorea'=>'KR','korea'=>'KR','taiwan'=>'TW','hongkong'=>'HK',
+        'singapore'=>'SG','china'=>'CN','iran'=>'IR','iraq'=>'IQ','pakistan'=>'PK',
+        'afghanistan'=>'AF','bangladesh'=>'BD','uae'=>'AE','saudiarabia'=>'SA',
+    ];
+    $k = strtolower(preg_replace('/[^a-z]/i', '', (string)$name));
+    return isset($iso[$k]) ? numFlagIso($iso[$k]) : '🌍';
 }
 
 /**
@@ -1169,6 +1515,7 @@ function numImport(array $countries, array $rows, $markup = 0, $syncPrice = null
                 $was = !empty($a['items'][$k]['on']);
                 $a['items'][$k]['on'] = (bool)$r['on'];
                 if ($catId !== '') $a['items'][$k]['cat'] = $catId;
+                $a['items'][$k]['prov'] = numProv();
                 if ($syncPrice) $a['items'][$k]['price'] = numRound100($r['price'] * $mul);
                 // ترتیبِ نمایش هم از ۵سیم می‌آید — وگرنه کشورِ پرفروشی که
                 // بار اول آخر افتاده، برای همیشه آخر می‌ماند
@@ -1179,6 +1526,7 @@ function numImport(array $countries, array $rows, $markup = 0, $syncPrice = null
 
             $a['items'][] = [
                 'id' => 'i' . bin2hex(random_bytes(3)), 'cat' => $catId, 'svc' => $r['sid'],
+                'prov' => numProv(),
                 'emoji' => (string)($r['flag'] ?? '☎️'),
                 'name' => $r['name'], 'desc' => '',
                 'price' => numRound100($r['price'] * $mul), 'unit' => '', 'badge' => '',
@@ -1255,9 +1603,14 @@ function numForceTelegramOnly() {
         $keep = [];
         foreach ((array)($a['items'] ?? []) as $it) {
             $svc = trim((string)($it['svc'] ?? ''));
-            // شناسه‌ی ۵سیم همیشه «کشور|اپراتور» است. هرچه این شکلی نیست،
-            // مالِ پنلِ قبلی است.
-            if ($svc === '' || str_contains($svc, '|')) { $keep[] = $it; continue; }
+            $pv  = trim((string)($it['prov'] ?? ''));
+            // ردیفِ دستیِ ادمین، یا ردیفی که مالِ فروشنده‌ی فعلی است، می‌ماند.
+            // ردیفِ بی‌نشان را از روی شکلِ شناسه‌اش حدس می‌زنیم: «کشور|اپراتور»
+            // مالِ ۵سیم است و عددِ تنها مالِ نامبرلند.
+            $mine = $pv !== '' ? ($pv === numProv())
+                               : (numProv() === '5sim' ? str_contains($svc, '|')
+                                                       : ctype_digit($svc));
+            if ($svc === '' || $mine) { $keep[] = $it; continue; }
             $delI++;
         }
         $a['items'] = array_values($keep);
@@ -1307,27 +1660,31 @@ function numAdmHome($chatId, $msgId) {
         if (!empty($a['panel_pending']) && !in_array(($a['status'] ?? ''), ['waiting','buying'], true)) $stuck++;
     }
 
-    $tok  = trim((string)($api['token'] ?? ''));
+    $tok  = numKey();
     $rate = numRate();
     $mk   = (float)numVal('markup', 0);
+    $pi   = numProvInfo();
 
-    $t  = "☎️ <b>شماره مجازی تلگرام — ۵سیم</b>\n\n";
+    $t  = "☎️ <b>شماره مجازی تلگرام</b>\n\n";
+    $t .= "🏪 فروشنده: <b>" . h($pi['label']) . "</b>\n";
     $t .= "وضعیت: " . (!empty($api['on']) ? '✅ روشن' : '❌ خاموش') . "\n";
     // 🔒 هیچ تکه‌ای از توکن نشان داده نمی‌شود — نه اولش، نه آخرش.
     //    عکسِ صفحه‌ی پنل زیاد دست‌به‌دست می‌شود.
     $sh = numTokenShape();
-    $t .= "🔑 توکن: " . ($tok !== ''
+    $t .= "🔑 " . h($pi['key']) . ": " . ($tok !== ''
           ? ($sh['ok'] ? '✅ ثبت شده (' . fmtNum(strlen($tok)) . ' حرف)' : '⚠️ مشکل دارد')
           : '<b>خالی</b>') . "\n";
     if ($tok !== '' && !$sh['ok']) $t .= '<i>' . $sh['why'] . "</i>\n";
     $t .= "🎯 محصول: <b>تلگرام</b> — همین و بس\n\n";
 
-    $t .= "💵 نرخ تبدیل: " . ($rate > 0
-          ? '<b>' . fmtNum($rate) . '</b> تومان' .
-            ((float)($api['rate'] ?? 0) > 0 ? ' (دستی)' : ' (از بخش قیمت‌گیری)')
-          : '<b>معلوم نیست</b>') . "\n";
+    $t .= numNeedsRate()
+        ? ("💵 نرخ تبدیل: " . ($rate > 0
+            ? '<b>' . fmtNum($rate) . '</b> تومان' .
+              ((float)($api['rate'] ?? 0) > 0 ? ' (دستی)' : ' (از بخش قیمت‌گیری)')
+            : '<b>معلوم نیست</b>') . "\n")
+        : "💵 قیمت‌ها تومانی‌اند — نرخی لازم نیست\n";
     $t .= "📈 سود: <b>" . rtrim(rtrim(number_format($mk, 1), '0'), '.') . "٪</b>\n";
-    $t .= "💰 قیمت از ۵سیم: " . (!empty(numVal('sync_price', true)) ? '✅ هر بار تازه' : '🔒 دستی') . "\n\n";
+    $t .= "💰 قیمت از فروشنده: " . (!empty(numVal('sync_price', true)) ? '✅ هر بار تازه' : '🔒 دستی') . "\n\n";
 
     $t .= "⏳ مهلت انتظار کد: <b>" . (int)numVal('wait', 900) . "</b> ثانیه\n";
     $t .= "🔁 فاصله‌ی پیگیری: <b>" . (int)numVal('poll', 6) . "</b> ثانیه\n";
@@ -1343,28 +1700,34 @@ function numAdmHome($chatId, $msgId) {
         if ($ni === 0) $t .= "⚠️ هنوز چیزی برای فروش نیست — «📥 وارد کردن» را بزنید.\n";
     }
 
-    if ($rate <= 0)
+    if (numNeedsRate() && $rate <= 0)
         $t .= "\n⚠️ بدون نرخ تبدیل، قیمتی وارد نمی‌شود. یا «💵 نرخ دلار» را دستی بگذارید، " .
               "یا بخش قیمت‌گیری را روشن کنید.\n";
     if ($tok === '')
-        $t .= "\n⚠️ تا توکن ثبت نشود هیچ خریدی انجام نمی‌شود.\n";
-    if ($stuck) $t .= "\n⚠️ <b>{$stuck}</b> سفارش روی ۵سیم بسته نشده — «📋 شماره‌های باز» را ببینید.";
+        $t .= "\n⚠️ تا " . h($pi['key']) . " ثبت نشود هیچ خریدی انجام نمی‌شود.\n";
+    if ($stuck) $t .= "\n⚠️ <b>{$stuck}</b> سفارش روی فروشنده بسته نشده — «📋 شماره‌های باز» را ببینید.";
     if ($open)  $t .= "\n⏳ <b>{$open}</b> شماره‌ی باز، در انتظار کد.";
 
     $rows = [
         [btnCb(!empty($api['on']) ? '❌ خاموش کن' : '✅ روشن کن', 'numtog', 'info')],
-        [btnCb('🔑 توکن ۵سیم', 'nums_token', 'admin')],
+        [btnCb('🏪 فروشنده: ' . $pi['name'], 'numprov', 'confirm')],
+        [btnCb('🔑 ' . $pi['key'] . ' ' . $pi['name'], 'nums_token', 'admin')],
         [btnCb('📥 وارد کردن کشورها و قیمت‌ها', 'numimp', 'buy')],
         [btnCb('📈 درصد سود', 'nums_markup', 'admin'),
          btnCb('💵 نرخ دلار', 'nums_rate', 'admin')],
         [btnCb(!empty(numVal('sync_price', true)) ? '💰 قیمت از ۵سیم: روشن' : '💰 قیمت از ۵سیم: خاموش',
                'numsync', 'info')],
         [btnCb('🩺 عیب‌یابی اتصال', 'numdiag', 'confirm')],
-        [btnCb('💰 موجودی حساب ۵سیم', 'numtest', 'confirm')],
+        [btnCb('💰 موجودی حساب ' . $pi['name'], 'numtest', 'confirm')],
         [btnCb('⏳ مهلت انتظار کد', 'nums_wait', 'admin'),
          btnCb('🔁 فاصله‌ی پیگیری', 'nums_poll', 'admin')],
         [btnCb('⏱ مهلت تماس', 'nums_timeout', 'admin'),
          btnCb('🧢 سقف قیمت خرید', 'nums_max', 'admin')],
+        // ⚠️ array_merge نه «+»: جمعِ آرایه کلیدهای تکراری را دور می‌ریزد
+        //    و دکمه‌ی دوم بی‌صدا گم می‌شد.
+        array_merge([btnCb('🌐 آدرس پایه', 'nums_base', 'admin')],
+                    numProv() === 'numberland'
+                        ? [btnCb('🎯 کد سرویس تلگرام', 'nums_nl_svc', 'admin')] : []),
         [btnCb('📋 شماره‌های باز', 'numopen', 'reject'),
          btnCb('🧹 پاک‌سازی', 'numclean', 'reject')],
         [btnCb('🌍 کشورها', 'maadm_cats_num', 'admin'),
@@ -1519,14 +1882,20 @@ function numAdmTest($chatId) {
  * اولین شکست می‌ایستد و می‌گوید دقیقا چه کار کنید.
  */
 function numAdmDiag($chatId, $msgId = 0) {
-    $t = "🩺 <b>عیب‌یابی اتصال ۵سیم</b>\n\n";
+    $pi = numProvInfo();
+    $t = "🩺 <b>عیب‌یابی اتصال — " . h($pi['name']) . "</b>\n\n";
     $rows = [];
     $stop = false;
 
-    // ── ۱) شکلِ توکن ──
-    $sh  = numTokenShape();
-    $tok = trim((string)numVal('api.token', ''));
-    $t .= "<b>۱. توکن</b>\n";
+    // ── ۱) شکلِ کلید ──
+    $tok = numKey();
+    $sh  = numProv() === '5sim'
+        ? numTokenShape($tok)
+        : ($tok === '' ? ['ok' => false, 'kind' => 'empty', 'why' => 'هنوز چیزی ثبت نشده']
+                       : (strlen($tok) < 16
+                          ? ['ok' => false, 'kind' => 'cut', 'why' => 'کلید خیلی کوتاه است — کلش را بفرستید']
+                          : ['ok' => true, 'kind' => 'nl', 'why' => 'شکلش درست است']));
+    $t .= "<b>۱. " . h($pi['key']) . "</b>\n";
     if ($sh['ok']) {
         $t .= "✅ ثبت شده · " . strlen($tok) . " حرف · " . h($sh['why']) . "\n";
     } else {
@@ -1541,8 +1910,9 @@ function numAdmDiag($chatId, $msgId = 0) {
 
     // ── ۲) آیا سرور اصلا به ۵سیم می‌رسد؟ ──
     if (!$stop) {
-        $t .= "\n<b>۲. رسیدن به ۵سیم</b>\n";
-        $p = num5Probe('/guest/countries', false, 12);
+        $t .= "\n<b>۲. رسیدن به " . h($pi['name']) . "</b>\n";
+        $probePath = numProv() === 'numberland' ? '/v2.php/?method=getcountry' : '/guest/countries';
+        $p = num5Probe($probePath, numProv() === 'numberland', 12);
         if ($p['errno'] !== 0) {
             $t .= "❌ <code>" . h(mb_substr($p['err'], 0, 120)) . "</code>\n";
             // 🎯 هر خطای curl راهِ حلِ خودش را دارد
@@ -1557,9 +1927,26 @@ function numAdmDiag($chatId, $msgId = 0) {
             };
             $t .= "🔴 " . $why . "\n\n";
             $t .= "<b>این مشکلِ کلید نیست، مشکلِ خودِ سرور است.</b>\n" .
-                  "خیلی از هاست‌های ایرانی جلوی اتصالِ خروجی را می‌گیرند، و ۵سیم هم " .
-                  "بعضی رنج‌های ایران را می‌بندد. از پشتیبانیِ هاست بپرسید " .
-                  "«اتصال خروجی به 5sim.net باز است؟»\n";
+                  "خیلی از هاست‌های ایرانی جلوی اتصالِ خروجی را می‌گیرند. " .
+                  "از پشتیبانیِ هاست بپرسید «اتصال خروجی باز است؟»\n";
+            if (numProv() === '5sim')
+                $t .= "\n🇮🇷 یا فروشنده را روی <b>نامبرلند</b> بگذارید — ایرانی است و می‌رسد.\n";
+            $rows[] = [btnCb('🏪 عوض کردن فروشنده', 'numprov', 'confirm')];
+            $stop = true;
+        } elseif (numLooksIntercepted($p['body'], $p['code'])) {
+            // 🕵️ جواب آمد، ولی از فروشنده نیامد
+            $t .= "❌ جواب آمد ولی از " . h($pi['name']) . " نیست\n";
+            $t .= ($p['ip'] !== '' ? "آی‌پی: <code>" . h($p['ip']) . "</code>\n" : '');
+            $t .= "<code>" . h(mb_substr(trim($p['body']), 0, 120)) . "</code>\n\n";
+            $t .= "🔴 <b>درخواستِ سرور به مقصد نمی‌رسد.</b>\n" .
+                  "یک واسط — فیلترینگ یا DNSِ هاست — جوابِ خودش را داده. " .
+                  "هیچ کلیدی این را درست نمی‌کند.\n\n";
+            if (numProv() === '5sim')
+                $t .= "🇮🇷 <b>راهِ حل:</b> فروشنده را روی <b>نامبرلند</b> بگذارید. " .
+                      "ایرانی است و از داخل ایران می‌رسد.\n";
+            else
+                $t .= "🌐 یا در «آدرس پایه» یک واسطه بگذارید.\n";
+            $rows[] = [btnCb('🏪 عوض کردن فروشنده', 'numprov', 'confirm')];
             $stop = true;
         } else {
             $t .= "✅ رسید · " . ($p['ip'] !== '' ? '<code>' . h($p['ip']) . '</code> · ' : '') .
@@ -1570,35 +1957,30 @@ function numAdmDiag($chatId, $msgId = 0) {
 
     // ── ۳) خودِ توکن را قبول می‌کند؟ ──
     if (!$stop) {
-        $t .= "\n<b>۳. پذیرشِ توکن</b>\n";
-        $p = num5Probe('/user/profile', true, 12);
-        $j = json_decode($p['body'], true);
-        if ($p['code'] === 200 && is_array($j) && isset($j['balance'])) {
-            $t .= "✅ قبول شد · موجودی: <b>" . fmtNum((float)$j['balance']) . "</b> " .
-                  h((string)($j['currency'] ?? '')) . "\n";
-            if ((float)$j['balance'] <= 0)
-                $t .= "⚠️ موجودیِ حسابِ ۵سیم صفر است — خرید انجام نمی‌شود.\n";
-            if (isset($j['rating']) && (float)$j['rating'] < 80)
-                $t .= "⚠️ امتیازِ حساب <b>" . (int)$j['rating'] . "</b> است؛ زیرِ ۸۰ بعضی خریدها رد می‌شوند.\n";
-        } elseif ($p['code'] === 401 || $p['code'] === 403) {
-            $t .= "❌ ۵سیم توکن را نپذیرفت (کد " . $p['code'] . ")\n\n";
-            $t .= "شکلش درست است ولی خودش قبول نشد. یعنی یکی از این‌ها:\n" .
-                  "• کلید عوض شده — در ۵سیم «Refresh key» زده‌اید و کلیدِ قدیمی را فرستاده‌اید\n" .
-                  "• کلیدِ پایینیِ صفحه (Deprecated) را کپی کرده‌اید\n" .
-                  "• موقعِ کپی، تکه‌ای جا افتاده\n\n" .
-                  "🔧 در ۵سیم روی دکمه‌ی <b>کپی</b>ِ کنارِ کادرِ بالایی بزنید (نه انتخاب با دست) " .
-                  "و همان را اینجا بفرستید.\n";
-            $rows[] = [btnCb('🔑 توکن را دوباره بفرست', 'nums_token', 'admin')];
-            $stop = true;
+        $t .= "\n<b>۳. پذیرشِ کلید</b>\n";
+        [$bal, $cur, $bErr] = numBalanceDo();
+        if ($bErr === '') {
+            $t .= "✅ قبول شد · موجودی: <b>" . fmtNum($bal) . "</b> " . h($cur) . "\n";
+            if ($bal <= 0)
+                $t .= "⚠️ موجودیِ حسابِ " . h($pi['name']) . " صفر است — خرید انجام نمی‌شود.\n";
         } else {
-            $t .= "❌ کد <b>" . $p['code'] . "</b>" .
-                  ($p['body'] !== '' ? " · <code>" . h(mb_substr(trim($p['body']), 0, 150)) . "</code>" : '') . "\n";
+            $t .= "❌ " . h(mb_substr($bErr, 0, 200)) . "\n\n";
+            $t .= "شکلش درست است ولی خودش قبول نشد. یعنی یکی از این‌ها:\n" .
+                  "• کلید عوض شده و کلیدِ قدیمی را فرستاده‌اید\n" .
+                  (numProv() === '5sim'
+                   ? "• کلیدِ پایینیِ صفحه (Deprecated) را کپی کرده‌اید\n" : '') .
+                  "• موقعِ کپی، تکه‌ای جا افتاده\n\n" .
+                  "🔧 روی دکمه‌ی <b>کپی</b>ِ کنارِ کادر بزنید (نه انتخاب با دست) " .
+                  "و همان را اینجا بفرستید.\n";
+            $rows[] = [btnCb('🔑 کلید را دوباره بفرست', 'nums_token', 'admin')];
             $stop = true;
         }
     }
 
     // ── ۴) نرخ تبدیل ──
-    if (!$stop) {
+    if (!$stop && !numNeedsRate()) {
+        $t .= "\n<b>۴. نرخ تبدیل</b>\n✅ لازم نیست — قیمت‌های " . h($pi['name']) . " تومانی‌اند\n";
+    } elseif (!$stop) {
         $t .= "\n<b>۴. نرخ تبدیل</b>\n";
         $r = numRate();
         if ($r > 0) {
@@ -1802,6 +2184,32 @@ function numCallback($data, $uid, $chatId, $msgId, $cbId, $isAdmin) {
     if ($data === 'numclean1') { $ack('⏳'); numAdmCleanKeep($chatId, $msgId); return true; }
     if ($data === 'numclean2') { $ack('⏳'); numAdmCleanAll($chatId, $msgId); return true; }
 
+    // 🏪 انتخاب فروشنده
+    if ($data === 'numprov') {
+        $ack();
+        $t = "🏪 <b>فروشنده‌ی شماره</b>\n\nالان: <b>" . h(numProvInfo()['label']) . "</b>\n\n";
+        $t .= "🌍 <b>۵سیم</b> — ارزان‌تر و بزرگ‌تر، ولی از داخل ایران اغلب در دسترس نیست: " .
+              "درخواست به مقصد نمی‌رسد و یک واسط جوابش را می‌دهد.\n\n";
+        $t .= "🇮🇷 <b>نامبرلند</b> — ایرانی، پس می‌رسد. قیمت‌ها تومانی‌اند و نرخ تبدیل لازم ندارد.\n\n";
+        $t .= "<i>بعد از عوض کردن، یک بار «📥 وارد کردن» را بزنید — شناسه‌ی محصول‌ها بین دو " .
+              "فروشنده فرق دارد و ردیف‌های قبلی دیگر قابل خرید نیستند.</i>";
+        $rows = [];
+        foreach (numProviders() as $k => $pv)
+            $rows[] = [btnCb(($k === numProv() ? '✅ ' : '⚪️ ') . $pv['label'], 'numprov_' . $k,
+                             $k === numProv() ? 'confirm' : 'admin')];
+        $rows[] = [btnCb('🔙 بازگشت', 'num_home', 'nav')];
+        editMsg(BOT_TOKEN, $chatId, $msgId, $t, inlineKb($rows));
+        return true;
+    }
+    if (str_starts_with($data, 'numprov_')) {
+        $k = substr($data, 8);
+        if (!isset(numProviders()[$k])) { $ack(); return true; }
+        numSet(function (&$c) use ($k) { $c['provider'] = $k; });
+        $ack('✅ ' . numProvName());
+        numAdmHome($chatId, $msgId);
+        return true;
+    }
+
     if ($data === 'numtog') {
         numSet(function (&$c) { $c['api']['on'] = empty($c['api']['on']); });
         $ack(!empty(numVal('api.on')) ? '✅ روشن' : '❌ خاموش');
@@ -1845,8 +2253,14 @@ function numCallback($data, $uid, $chatId, $msgId, $cbId, $isAdmin) {
     // ✍️ ورودی‌های متنی
     if (str_starts_with($data, 'nums_')) {
         $f = substr($data, 5);
-        static $ask = [
-            'token'   => ["🔑 <b>توکن ۵سیم</b>\n\nاز 5sim.net → Settings → API key بردارید و همین‌جا بفرستید.\n\n<i>پیامتان بلافاصله پاک می‌شود.</i>", 'num_token'],
+        $pi  = numProvInfo();
+        $ask = [
+            'token'   => ["🔑 <b>" . h($pi['key']) . ' ' . h($pi['name']) . "</b>\n\n" .
+                          h($pi['help']) . "\n\n<i>پیامتان بلافاصله پاک می‌شود.</i>", 'num_token'],
+            'nl_svc'  => ["🎯 <b>کد سرویس تلگرام نزد نامبرلند</b>\n\nمعمولا <code>1</code> است.", 'num_nl_svc'],
+            'base'    => ["🌐 <b>آدرس پایه</b>\n\nخالی بگذارید تا آدرسِ رسمیِ فروشنده استفاده شود.\n" .
+                          "فقط وقتی لازم است که سرور مستقیم نمی‌رسد و باید از یک واسطه رد شود.\n\n" .
+                          "<code>-</code> یعنی برگرد به پیش‌فرض.", 'num_base'],
             'markup'  => ["📈 <b>درصد سود</b>\n\nچند درصد روی قیمتِ ۵سیم کشیده شود؟ مثلا <code>25</code>", 'num_markup'],
             'rate'    => ["💵 <b>نرخ دلار</b>\n\nهر ۱ دلار چند تومان؟ عدد بفرستید.\n\n<code>-</code> بفرستید تا خودکار از بخش قیمت‌گیری بگیرد.", 'num_rate'],
             'wait'    => ["⏳ <b>مهلت انتظار کد</b> (ثانیه)\n\nمثلا <code>900</code>", 'num_wait'],
@@ -1891,7 +2305,9 @@ function numStateHandle($action, $msg, $uid, $chatId) {
             //    یک کلیدِ درست را دارد — ۳۲ حرف. اگر بی‌صدا ذخیره‌اش
             //    کنیم، همه‌چیز ۴۰۱ می‌گیرد و آدم فکر می‌کند کلیدش
             //    خراب است، در حالی که فقط اشتباهی را کپی کرده.
-            if ($v !== '') {
+            // نامبرلند کلیدِ هگزِ ۳۲ حرفی می‌دهد؛ ۵سیم JWT. شکل را
+            // بر اساس همان فروشنده‌ای می‌سنجیم که الان انتخاب است.
+            if ($v !== '' && numProv() === '5sim') {
                 $sh = numTokenShape($v);
                 if (!$sh['ok']) {
                     clearState($uid);
@@ -1903,8 +2319,18 @@ function numStateHandle($action, $msg, $uid, $chatId) {
                 }
             }
 
-            numSet(function (&$c) use ($v) { $c['api']['token'] = $v; });
-            $done($v === '' ? '✅ توکن پاک شد.' : "✅ توکن ثبت شد و پیامتان پاک شد.",
+            if ($v !== '' && numProv() === 'numberland' && strlen($v) < 16) {
+                clearState($uid);
+                sendMsg(BOT_TOKEN, $chatId,
+                    "⚠️ کلیدِ نامبرلند خیلی کوتاه است. کلِ کلید را بفرستید.",
+                    inlineKb([[btnCb('🔑 دوباره بفرست', 'nums_token', 'admin')],
+                              [btnCb('☎️ شماره مجازی', 'num_home', 'admin')]]));
+                return true;
+            }
+
+            $fld = numProv() === 'numberland' ? 'nl_key' : 'token';
+            numSet(function (&$c) use ($v, $fld) { $c['api'][$fld] = $v; });
+            $done($v === '' ? '✅ کلید پاک شد.' : "✅ کلید ثبت شد و پیامتان پاک شد.",
                   inlineKb([[btnCb('🩺 عیب‌یابی اتصال', 'numdiag', 'confirm')],
                             [btnCb('☎️ شماره مجازی', 'num_home', 'admin')]]));
             return true;
@@ -1931,6 +2357,23 @@ function numStateHandle($action, $msg, $uid, $chatId) {
             numSet(function (&$c) use ($v) { $c['api']['max'] = $v; });
             $done($v > 0 ? '✅ سقف: <b>$' . rtrim(rtrim(number_format($v, 2), '0'), '.') . '</b>'
                          : '✅ بی‌سقف.');
+            return true;
+
+        case 'num_nl_svc':
+            $v = preg_replace('/[^0-9]/', '', numDigits($plain)) ?: '1';
+            numSet(function (&$c) use ($v) { $c['api']['nl_svc'] = $v; });
+            $done('✅ کد سرویس: <code>' . h($v) . '</code>');
+            return true;
+
+        case 'num_base':
+            $v = $blank ? '' : rtrim($plain, '/');
+            if ($v !== '' && !preg_match('#^https?://[^\s]+$#i', $v)) {
+                sendMsg(BOT_TOKEN, $chatId, "⚠️ آدرس باید با <code>http://</code> یا <code>https://</code> شروع شود.", $back);
+                return true;
+            }
+            numSet(function (&$c) use ($v) { $c['api']['base'] = $v; });
+            $done($v === '' ? '✅ آدرسِ رسمیِ فروشنده استفاده می‌شود: <code>' . h(numBase()) . '</code>'
+                            : '✅ آدرس: <code>' . h($v) . '</code>');
             return true;
 
         case 'num_wait':

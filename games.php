@@ -61,10 +61,13 @@ function gmDefaults() {
                             "<blockquote>🟢 {p1}\n🔴 {p2}\n" .
                             "🏆 جایزه: <b>{prize}</b> الماس</blockquote>\n\n" .
                             "نوبت: {turn}",
-            // {wname} و {lname} رنگِ خودِ بازیکن را هم با خودشان می‌آورند
+            // {wname} و {lname} اسمِ اکانت‌اند، با رنگِ خودِ بازیکن.
+            // شناسه‌ی عددی ({winner}/{loser}) هنوز در دسترس است ولی
+            // روی متنِ پیش‌فرض نمی‌آید — یک عددِ ده‌رقمی به کسی چیزی
+            // نمی‌گوید، و در گروه فقط شلوغی است.
             'duel_win'   => "🎉 <b>نتیجه بازی مشخص شد</b>\n\n" .
-                            "<blockquote>🏆 برنده: {wname}  <code>{winner}</code>\n" .
-                            "❌ بازنده: {lname}  <code>{loser}</code></blockquote>",
+                            "<blockquote>🏆 برنده: {wname}\n" .
+                            "❌ بازنده: {lname}</blockquote>",
             'duel_draw'  => "🤝 <b>مساوی شد</b>\n\nشرطِ هر دو نفر برگشت.",
             'duel_join'  => "✅ پیوستن",
             'duel_cancel'=> "❌ لغو",
@@ -76,8 +79,8 @@ function gmDefaults() {
                             "🏆 جایزه‌ی برنده:\n{prize_big}\n" .
                             "🧾 مالیات:\n{tax_big}</blockquote>",
             'rand_win'   => "🎉 <b>نتیجه بازی مشخص شد</b>\n\n" .
-                            "<blockquote>🏆 برنده: {wname}  <code>{winner}</code>\n" .
-                            "❌ بازنده: {lname}  <code>{loser}</code></blockquote>",
+                            "<blockquote>🏆 برنده: {wname}\n" .
+                            "❌ بازنده: {lname}</blockquote>",
             'rand_none'  => "😔 <b>بازی باطل شد</b>\n\nکسی وارد نشد؛ شرط برگشت.",
             'rand_join'  => "🎲 شرکت در بازی",
 

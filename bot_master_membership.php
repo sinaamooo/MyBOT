@@ -8988,6 +8988,46 @@ function runBackgroundQueues() {
         if (function_exists('dmSumRebuild')) dmSumRebuild();
     });
 
+    // 💎 فاصله ۵ دقیقه، سطح هر ۱۰ هزار امتیاز، و «پیشرفت» از متن برود.
+    //
+    //    این‌ها را ادمین خواسته، پس روی مقدارِ ذخیره‌شده هم اعمال
+    //    می‌شوند نه فقط روی پیش‌فرض — وگرنه نصبی که از قبل کار
+    //    می‌کرده هیچ‌وقت تغییرشان را نمی‌بیند.
+    // 🎮 نتیجه‌ی بازی: اسمِ اکانت، نه شناسه‌ی عددی.
+    //
+    //    متنِ ذخیره‌شده {winner} داشت — یک عددِ ده‌رقمی که به کسی
+    //    چیزی نمی‌گوید. جایش {wname} می‌نشیند که اسم و رنگِ بازیکن
+    //    را با خودش می‌آورد. اگر ادمین متن را دست‌کاری کرده باشد،
+    //    فقط همان دو متغیر عوض می‌شوند و بقیه‌ی نوشته‌اش سرِ جایش
+    //    می‌ماند.
+    migrateOnce('v13_gmnames', function () {
+        if (!function_exists('gmSet')) return;
+        gmSet(function (&$c) {
+            foreach (['duel_win', 'rand_win'] as $k) {
+                $t = (string)($c['texts'][$k] ?? '');
+                if ($t === '' || !str_contains($t, '{winner}')) continue;
+                // «کاربر برنده: <code>{winner}</code>» → «برنده: {wname}»
+                $t = preg_replace('/<code>\s*\{winner\}\s*<\/code>/u', '{wname}', $t);
+                $t = preg_replace('/<code>\s*\{loser\}\s*<\/code>/u',  '{lname}', $t);
+                $t = str_replace(['{winner}', '{loser}'], ['{wname}', '{lname}'], $t);
+                $t = str_replace(['کاربر برنده', 'کاربر بازنده'], ['برنده', 'بازنده'], $t);
+                $c['texts'][$k] = $t;
+            }
+        });
+    });
+
+    migrateOnce('v13_dm5min', function () {
+        if (!function_exists('dmSet')) return;
+        dmSet(function (&$c) {
+            $c['cooldown']   = 300;
+            $c['level_step'] = 10000;
+            if (isset($c['texts']['win']) && is_string($c['texts']['win']))
+                $c['texts']['win'] = trim(preg_replace(
+                    ['/\s*·?\s*پیشرفت:\s*\{progress\}/u', '/\{progress\}/u'],
+                    '', $c['texts']['win']));
+        });
+    });
+
     // 🎨 لیست سفارشات بی‌رنگ شود.
     //
     //    مهاجرتِ قبلی (v8_ordcolors) این دکمه‌ها را سبز و آبی و قرمز کرده

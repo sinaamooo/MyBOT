@@ -39,6 +39,7 @@ function dmDefaults() {
         ],
         'group_only' => 1,           // فقط در گروه
         'top_n'      => 10,
+        'level_step' => 10000,       // هر چند امتیاز، یک سطح
 
         // 🔁 تبدیل الماس به موجودی کیف پول (۰ = خاموش)
         'to_wallet'  => 0,           // هر ۱ الماس چند تومان
@@ -46,7 +47,7 @@ function dmDefaults() {
 
         // ✏️ متن‌ها — همه قابل ویرایش
         'texts' => [
-            'win'      => "💎 <b>الماس!</b> {name}\n\n✨ +{reward} الماس\n💰 موجودی: {points}\n⭐️ سطح: {level} · پیشرفت: {progress}",
+            'win'      => "💎 <b>الماس!</b> {name}\n\n✨ +{reward} الماس\n💰 موجودی: {points}\n⭐️ سطح: {level}",
             'levelup'  => "\n\n🎉 <b>لِول آپ!</b> به سطح {level} رسیدی!",
             'wait'     => "⏳ {name}، هنوز زود است!\n⌛️ {m} دقیقه و {s} ثانیه دیگر می‌توانی الماس بزنی 💎",
             'private'  => "💎 الماس فقط داخل گروه کار می‌کند.\nمن را به گروهت اضافه کن.",
@@ -103,36 +104,26 @@ function dmOn() { return !empty(dmVal('on')); }
  * آستانه‌ی هر سطح. اول تند بالا می‌رود بعد کند —
  * تا سطح‌های اول زود بیایند و سطح‌های بالا ارزش داشته باشند.
  */
-function dmThresholds() {
-    static $t = null;
-    if ($t !== null) return $t;
-    $t = [];
-    $n = 10;
-    for ($i = 0; $i < 1000; $i++) {
-        $t[] = $n;
-        if ($i < 9)        $n += 20;
-        elseif ($i < 49)   $n += 50;
-        elseif ($i < 199)  $n += 100;
-        else               $n += 200;
-    }
-    return $t;
+/**
+ * ⭐️ سطح — از روی امتیاز، نه تعدادِ دفعات.
+ *
+ * قبلا سطح به «چند بار الماس زده‌ای» بند بود و پله‌هایش نامنظم:
+ * ۱۰، ۳۰، ۵۰، ۱۰۰… کسی نمی‌فهمید تا سطح بعد چقدر مانده و عددِ سطح
+ * هیچ ربطی به آنچه در جیب داشت نداشت.
+ *
+ * حالا ساده است و همه می‌فهمندش: هر ۱۰٬۰۰۰ امتیاز، یک سطح.
+ */
+function dmStep() { return max(1, (int)dmVal('level_step', 10000)); }
+
+function dmLevel($points) {
+    $p = max(0.0, (float)$points);
+    return min(1000, (int)floor($p / dmStep()) + 1);
 }
 
-function dmLevel($total) {
-    $total = (int)$total;
-    $level = 1;
-    foreach (dmThresholds() as $i => $th) {
-        if ($total >= $th) $level = $i + 2;
-        else break;
-    }
-    return min($level, 1000);
-}
-
-/** چند الماس تا سطح بعد */
+/** امتیازِ لازم برای رسیدن به سطحِ بعد */
 function dmNextAt($level) {
-    $t = dmThresholds();
     $level = (int)$level;
-    return ($level >= 1000) ? 0 : (int)($t[$level - 1] ?? 0);
+    return ($level >= 1000) ? 0 : $level * dmStep();
 }
 
 /**
@@ -338,7 +329,7 @@ function dmHit($uid, $name, $username = '') {
         $cd = max(5, (int)dmVal('cooldown', 300));
         if ($now - (int)($x['last'] ?? 0) < $cd) return null;
 
-        $level  = dmLevel((int)$x['total']);
+        $level  = dmLevel((float)($x['points'] ?? 0));
         $reward = dmReward($level);
 
         $x['name']     = $name;
@@ -346,7 +337,7 @@ function dmHit($uid, $name, $username = '') {
         $x['total']    = (int)$x['total'] + 1;
         $x['points']   = (float)$x['points'] + $reward;
         $x['last']     = $now;
-        $newLevel      = dmLevel((int)$x['total']);
+        $newLevel      = dmLevel((float)$x['points']);
         $x['level']    = $newLevel;
 
         return ['reward' => $reward, 'points' => $x['points'],
@@ -357,8 +348,9 @@ function dmHit($uid, $name, $username = '') {
         return [dmT('wait', ['name' => $name, 'm' => 0, 's' => $cd, 'left' => $cd]), false];
     }
 
+    // {progress} دیگر در متنِ پیش‌فرض نیست، ولی اگر ادمین خودش
+    // گذاشته باشد باید چیزی داشته باشد که جایش بنشیند
     $next = dmNextAt($res['level']);
-    $progress = $next > 0 ? number_format($res['total']) . '/' . number_format($next) : 'MAX';
 
     $msg = dmT('win', [
         'name'     => $name,
@@ -366,7 +358,7 @@ function dmHit($uid, $name, $username = '') {
         'points'   => number_format($res['points']),
         'level'    => $res['level'],
         'total'    => number_format($res['total']),
-        'progress' => $progress,
+        'progress' => $next > 0 ? number_format($res['points']) . '/' . number_format($next) : 'MAX',
     ]);
     if ($res['up']) $msg .= dmT('levelup', ['level' => $res['level']]);
 
@@ -377,14 +369,14 @@ function dmHit($uid, $name, $username = '') {
 function dmMeText($uid, $name) {
     $u = dmUser($uid);
     if (!$u) return dmT('me_none', ['word' => dmVal('word', 'الماس')]);
-    $level = dmLevel((int)$u['total']);
+    $level = dmLevel((float)($u['points'] ?? 0));
     $next  = dmNextAt($level);
     return dmT('me', [
         'name'   => $u['name'] ?: $name,
         'points' => number_format((float)$u['points']),
         'level'  => $level,
         'total'  => number_format((int)$u['total']),
-        'left'   => $next > 0 ? number_format(max(0, $next - (int)$u['total'])) : '—',
+        'left'   => $next > 0 ? number_format(max(0, $next - (float)($u['points'] ?? 0))) : '—',
     ]);
 }
 
@@ -399,7 +391,7 @@ function dmTopText() {
             'rank'   => $i,
             'name'   => h(trim((string)($u['name'] ?? '')) ?: ('کاربر ' . (int)($u['id'] ?? 0))),
             'points' => number_format((float)$u['points']),
-            'level'  => dmLevel((int)$u['total']),
+            'level'  => dmLevel((float)($u['points'] ?? 0)),
         ]) . "\n";
     }
     return $t;
@@ -556,6 +548,7 @@ function dmAdminHome($chatId, $msgId = null) {
           (trim((string)$c['aliases']) !== '' ? ' · <code>' . h($c['aliases']) . '</code>' : '') . "\n";
     $t .= '⏳ فاصله: <b>' . dmDur((int)$c['cooldown']) . "</b>\n";
     $t .= '🎁 جایزه پایه: <b>' . $c['base'] . '</b> · ضریب رشد: <b>' . $c['ratio'] . "</b>\n";
+    $t .= '⭐️ هر <b>' . number_format(dmStep()) . "</b> امتیاز = یک سطح\n";
     $t .= '📍 جای بازی: ' . (!empty($c['group_only']) ? 'فقط گروه' : 'گروه و خصوصی') . "\n\n";
     $t .= "👥 بازیکن‌ها: <b>" . number_format($s['users']) . "</b>\n";
     $t .= "💎 مجموع الماسِ همه: <b>" . number_format($s['points']) . "</b>\n";
@@ -574,6 +567,7 @@ function dmAdminHome($chatId, $msgId = null) {
         [btnCb('💬 کلمه', 'dmw', 'admin'), btnCb('➕ کلمه‌های دیگر', 'dma', 'admin')],
         [btnCb('⏳ فاصله', 'dmcd', 'admin'), btnCb('🎁 جایزه پایه', 'dmb', 'admin')],
         [btnCb('📈 ضریب رشد', 'dmr', 'admin'), btnCb('🔢 کف جایزه', 'dmmin', 'admin')],
+        [btnCb('⭐️ امتیاز هر سطح', 'dmstep', 'admin')],
         [btnCb('🔁 نرخ تبدیل', 'dmsw', 'admin'), btnCb('🔢 حداقل تبدیل', 'dmms', 'admin')],
         [btnCb('✏️ متن‌ها', 'dmt_home', 'admin'), btnCb('🏆 برترین‌ها', 'dmtop', 'confirm')],
         [btnCb('🎁 دادن الماس به کاربر', 'dmgive', 'admin')],
@@ -641,6 +635,14 @@ function dmAdminCallback($data, $chatId, $msgId, $cbId) {
     }
     // 🧮 اگر شمارنده و واقعیت از هم دور افتادند (مثلا بعد از دست‌کاری
     //    دستیِ فایل داده)، این دکمه از نو می‌شمارد
+    if ($data === 'dmstep') {
+        setState($chatId, 'dm_step', []);
+        answerCb(BOT_TOKEN, $cbId);
+        sendMsg(BOT_TOKEN, $chatId,
+            "⭐️ <b>امتیاز هر سطح</b>\n\nهر چند امتیاز، یک سطح بالا برود؟ مثلا <code>10000</code>",
+            inlineKb([[btnCb('🔙 بی‌خیال', 'dm_home', 'nav')]]));
+        return true;
+    }
     if ($data === 'dmsum') {
         $s = dmSumRebuild();
         answerCb(BOT_TOKEN, $cbId, '💎 ' . number_format($s['points']), true);
@@ -814,6 +816,11 @@ function dmStateHandle($action, $msg, $uid, $chatId) {
                         "واحد هم می‌شود نوشت: <code>5 دقیقه</code>");
         dmSet(function (&$c) use ($sec) { $c['cooldown'] = $sec; });
         return $done('✅ فاصله‌ی بین دو الماس: <b>' . dmDur($sec) . '</b>');
+    }
+    if ($action === 'dm_step') {
+        if ($num < 10 || $num > 100000000) return $bad('بین ۱۰ تا ۱۰۰٬۰۰۰٬۰۰۰.');
+        dmSet(function (&$c) use ($num) { $c['level_step'] = (int)$num; });
+        return $done('✅ هر <b>' . number_format((int)$num) . '</b> امتیاز = یک سطح');
     }
     if ($action === 'dm_base') {
         if ($num < 1 || $num > 1000000) return $bad('بین ۱ تا ۱۰۰۰۰۰۰.');
