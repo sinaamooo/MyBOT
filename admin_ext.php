@@ -153,6 +153,14 @@ function axDefaults() {
 
         // ---------- ⚙️ عمومی ----------
         'rates_auto' => true,
+        // 🔕 پیامِ «انجام شد» برای کارهای خودکار.
+        //
+        // هر تحویلِ خودکار و هر تراکنشِ ولت یک پیام به ادمین می‌فرستاد.
+        // روزی چند ده‌تا، همه هم بی‌کار — چون چیزی نیست که ادمین باید
+        // درباره‌اش تصمیم بگیرد؛ همه در «گزارش‌ها» و لاگ هستند. پس
+        // پیش‌فرض خاموش است. خطاها و کارهای نیمه‌کاره همیشه می‌آیند،
+        // این کلید فقط جلوی خبرِ موفقیت را می‌گیرد.
+        'quiet_auto' => true,
         'log'        => [],        // ۵۰ رویداد آخر
     ];
 }
@@ -385,6 +393,23 @@ function axStockDeliver($order) {
 
 function axNotifyAdmin($text, $kb = null) {
     if (defined('ADMIN_ID')) @sendMsg(BOT_TOKEN, ADMIN_ID, $text, $kb);
+}
+
+/**
+ * 🔕 آیا خبرِ «کارِ خودکار انجام شد» باید برود؟
+ *
+ * فقط برای خبرهای موفقیت. هرچه ادمین باید درباره‌اش کاری بکند —
+ * خطا، مخزنِ خالی، تحویلِ نیمه‌کاره — از این در رد نمی‌شود.
+ */
+function axQuietAuto() {
+    return !empty(axVal('quiet_auto', true));
+}
+
+/** خبرِ موفقیتِ یک کارِ خودکار — اگر «بی‌صدا» روشن باشد، هیچ. */
+function axNotifyAuto($text, $kb = null) {
+    if (axQuietAuto()) return false;
+    axNotifyAdmin($text, $kb);
+    return true;
 }
 
 // ============================================================
@@ -843,9 +868,12 @@ function axHome($chatId, $msgId = null) {
     $t .= "💵 سود و قیمت: " . (!empty($c['pricing']['on']) ? '✅ فعال' : '⚪️ خاموش') . "\n";
     $t .= "👛 ولت خودکار: " . (axWalletReady()
           ? (!empty($c['wallet']['dry']) ? '🧪 آزمایشی' : '🚀 فعال') : '⚪️ خاموش') . "\n\n";
+    $t .= "🔕 پیام کارهای خودکار: " . (axQuietAuto() ? '⚪️ بی‌صدا' : '✅ می‌آید') . "\n\n";
     $t .= "💱 <b>نرخ زنده</b>\n" . axRatesText() . "\n";
 
     axShow($chatId, $msgId, $t, [
+        [btnCb(axQuietAuto() ? '🔔 پیام کارهای خودکار بیاید' : '🔕 پیام کارهای خودکار نیاید',
+               'ax_quiet', 'confirm')],
         [btnCb('📦 مخزن تحویل', 'ax_stock', 'admin')],
         [btnCb('🎁 سفارش دستی گیفت/تون', 'ax_manual', 'admin')],
         [btnCb('📊 گزارش خدمات تلگرام', 'ax_rep_tg', 'admin'),
@@ -1160,6 +1188,13 @@ function axCallback($data, $uid, $chatId, $msgId, $cbId, $isAdmin) {
 
     // ---------- صفحه‌ها ----------
     if ($data === 'ax_home')   { $ack(); axHome($chatId, $msgId);        return true; }
+    // 🔕 پیامِ کارهای خودکار: بیاید / نیاید
+    if ($data === 'ax_quiet') {
+        $on = axSet(function (&$c) { $c['quiet_auto'] = empty($c['quiet_auto']); return !empty($c['quiet_auto']); });
+        $ack($on ? '🔕 دیگر پیام کارهای خودکار نمی‌آید' : '🔔 پیام کارهای خودکار روشن شد');
+        axHome($chatId, $msgId);
+        return true;
+    }
     if ($data === 'ax_stock')  { $ack(); axStockHome($chatId, $msgId);   return true; }
     if ($data === 'ax_manual') { $ack(); axManualHome($chatId, $msgId);  return true; }
     if ($data === 'ax_price')  { $ack(); axPriceHome($chatId, $msgId);   return true; }
@@ -2217,7 +2252,7 @@ function axWalletSend($msgs, $note = '') {
 
         $hash = '';
         axLog('wallet_send', nanoToTon($sum) . ' TON · seqno ' . (int)$seqno . ($note !== '' ? ' · ' . $note : ''));
-        axNotifyAdmin("👛 <b>تراکنش ولت فرستاده شد</b>\n\n" .
+        axNotifyAuto("👛 <b>تراکنش ولت فرستاده شد</b>\n\n" .
                       '💎 مبلغ: <b>' . h(nanoToTon($sum)) . "</b> TON\n" .
                       '📍 مقصد: <code>' . h(mb_substr($msgs[0]['address'], 0, 24)) . "…</code>\n" .
                       ($note !== '' ? '🧾 ' . h($note) . "\n" : '') .

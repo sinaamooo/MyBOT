@@ -67,6 +67,10 @@ function maTplNum() {
 
   --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
   --ui:-apple-system,BlinkMacSystemFont,"Segoe UI",Vazirmatn,Tahoma,sans-serif;
+  /* 🔠 فونتِ تیتر — هیچ فایلی از بیرون بار نمی‌شود (قاعده‌ی این فایل).
+     هرکدام از این‌ها روی گوشی بود، تیتر شکلِ خاصِ خودش را می‌گیرد؛
+     نبود، همان var(--ui) با وزن و فاصله‌ی تیتری می‌ماند. */
+  --dis:"Lalezar","Vazirmatn ExtraBold","Vazirmatn","IRANSansX","IRANSans","IRANYekanX","Sahel","Shabnam",var(--ui);
   --r-lg:22px; --r-md:16px; --r-sm:12px;
   --safe:env(safe-area-inset-bottom,0px);
   --ease:cubic-bezier(.22,.61,.36,1);
@@ -311,19 +315,108 @@ body::before{
 .btn.danger{background:linear-gradient(135deg,var(--bad),#C7304A);box-shadow:0 12px 28px -14px var(--bad)}
 .btn.sm{padding:11px;font-size:13px;border-radius:13px}
 
-/* ── ناوبری پایین ────────────────────────── */
+/* ── 📖 «شماره مجازی چیست؟» ────────────────
+   جای «پرطرفدارترین‌ها» را گرفت. آن‌جا چهار کارت تکراری بود که
+   همان‌ها یک تبِ پایین‌تر هم بودند؛ این‌جا حرفِ تازه‌ای زده می‌شود:
+   خریدار تازه‌وارد می‌فهمد اصلا دارد چه می‌خرد. */
+.about{
+  position:relative;overflow:hidden;border-radius:var(--r-lg);padding:18px 16px 16px;margin-bottom:14px;
+  background:linear-gradient(155deg,color-mix(in srgb,var(--c1) 13%,var(--s1)),var(--s1) 62%,color-mix(in srgb,var(--c3) 12%,var(--s1)));
+  border:1px solid var(--hair);box-shadow:0 20px 50px -30px rgba(0,0,0,.9)
+}
+.about::after{
+  content:'';position:absolute;inset:auto -25% -75% -25%;height:160px;
+  background:radial-gradient(50% 100% at 50% 100%,color-mix(in srgb,var(--c2) 26%,transparent),transparent 70%);
+  filter:blur(26px);opacity:calc(.6 * __GLOW__);pointer-events:none
+}
+.about .ah{display:flex;align-items:center;gap:9px;margin:0 0 9px}
+.about .ah i{
+  font-style:normal;font-size:17px;width:34px;height:34px;flex:0 0 auto;border-radius:11px;
+  display:grid;place-items:center;
+  background:linear-gradient(140deg,color-mix(in srgb,var(--c1) 40%,transparent),color-mix(in srgb,var(--c3) 30%,transparent));
+  border:1px solid color-mix(in srgb,var(--c2) 26%,transparent)
+}
+/* 🔠 تیترِ خفن — گرادیانِ رنگی روی متن، وزنِ سنگین، فاصله‌ی تیتری */
+.about h2{
+  margin:0;font-family:var(--dis);font-weight:900;font-size:20.5px;line-height:1.5;
+  letter-spacing:.3px;
+  background:linear-gradient(95deg,#fff 0%,color-mix(in srgb,var(--c2) 85%,#fff) 45%,color-mix(in srgb,var(--c1) 80%,#fff) 100%);
+  -webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent;
+  text-shadow:0 6px 22px color-mix(in srgb,var(--c2) 26%,transparent)
+}
+.about p{margin:0;font-size:12.8px;line-height:2.05;color:var(--dim);text-align:justify}
+/* ✨ ویژگی‌ها — سه‌تایی، شیشه‌ای */
+.feats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px}
+@media (max-width:340px){.feats{grid-template-columns:repeat(2,1fr)}}
+.feat{
+  display:flex;flex-direction:column;align-items:center;gap:5px;padding:11px 5px 9px;
+  border-radius:14px;text-align:center;
+  background:linear-gradient(180deg,rgba(255,255,255,.055),rgba(255,255,255,.012));
+  border:1px solid color-mix(in srgb,#fff 8%,transparent);
+  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)
+}
+.feat i{font-style:normal;font-size:17px;line-height:1}
+.feat b{font-size:10.8px;font-weight:700;color:var(--pale);line-height:1.4}
+/* 🛡 خطِ اعتماد */
+.trust{
+  display:flex;align-items:center;gap:10px;margin-top:13px;padding:11px 12px;border-radius:14px;
+  background:color-mix(in srgb,var(--ok) 9%,transparent);
+  border:1px solid color-mix(in srgb,var(--ok) 22%,transparent)
+}
+.trust i{font-style:normal;font-size:17px;flex:0 0 auto}
+.trust b{display:block;font-size:12.5px;font-weight:800;color:color-mix(in srgb,var(--ok) 78%,#fff)}
+.trust span{display:block;font-size:11px;color:var(--dim2);line-height:1.7;margin-top:1px}
+
+/* ── ناوبری پایین — جزیره‌ی شیشه‌ای ───────
+   یک نوارِ چسبیده به لبه‌ی صفحه بود؛ حالا یک جزیره‌ی شناور است:
+   شیشه‌ی مات، لبه‌ی نوری، و یک قرصِ رنگی که زیرِ دکمه‌ی فعال سُر
+   می‌خورد. قرص با translate جابه‌جا می‌شود، پس روی GPU می‌افتد و
+   هیچ چیدمانی دوباره حساب نمی‌شود. */
 .nav{
-  position:fixed;inset:auto 0 0 0;z-index:40;display:flex;justify-content:space-around;
-  padding:8px 8px calc(8px + var(--safe));backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
-  background:color-mix(in srgb,var(--bg) 82%,transparent);border-top:1px solid var(--hair)
+  position:fixed;z-index:40;inset:auto 12px calc(10px + var(--safe)) 12px;
+  max-width:616px;margin:0 auto;display:flex;justify-content:space-around;
+  padding:7px 6px;border-radius:24px;isolation:isolate;
+  backdrop-filter:blur(26px) saturate(180%);-webkit-backdrop-filter:blur(26px) saturate(180%);
+  background:
+    linear-gradient(180deg,rgba(255,255,255,.10),rgba(255,255,255,.02) 45%,rgba(0,0,0,.10)),
+    color-mix(in srgb,var(--s1) 62%,transparent);
+  border:1px solid color-mix(in srgb,#fff 12%,transparent);
+  box-shadow:
+    0 24px 60px -28px rgba(0,0,0,.95),
+    0 2px 0 0 rgba(255,255,255,.06) inset,
+    0 -1px 0 0 rgba(0,0,0,.35) inset
 }
+/* ✨ نوارِ نوریِ بالای شیشه — همان برقی که روی لبه‌ی شیشه می‌افتد */
+.nav::before{
+  content:'';position:absolute;inset:0 0 auto 0;height:1px;border-radius:24px 24px 0 0;
+  background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--c2) 70%,transparent),transparent);
+  opacity:calc(.8 * __GLOW__);pointer-events:none
+}
+/* 💊 قرصِ زیرِ دکمه‌ی فعال */
+.nav .pill{
+  position:absolute;z-index:-1;top:7px;bottom:7px;inset-inline-start:0;
+  width:0;border-radius:18px;pointer-events:none;
+  background:linear-gradient(150deg,color-mix(in srgb,var(--c1) 60%,transparent),color-mix(in srgb,var(--c3) 45%,transparent));
+  border:1px solid color-mix(in srgb,var(--c2) 34%,transparent);
+  box-shadow:0 10px 24px -12px var(--c1), 0 0 0 1px rgba(255,255,255,.05) inset;
+  transition:transform .38s var(--ease), width .38s var(--ease), opacity .25s var(--ease);
+  opacity:0
+}
+.nav.ready .pill{opacity:1}
 .nav button{
-  flex:1;background:none;border:0;color:var(--dim2);font-family:var(--ui);font-size:10.5px;font-weight:700;
-  display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 2px;cursor:pointer;transition:.2s var(--ease)
+  position:relative;flex:1;background:none;border:0;color:var(--dim2);
+  font-family:var(--ui);font-size:10.5px;font-weight:700;
+  display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 2px;
+  cursor:pointer;transition:color .22s var(--ease),transform .22s var(--ease)
 }
-.nav button i{font-style:normal;font-size:19px;line-height:1}
-.nav button[aria-selected="true"]{color:var(--c2)}
-.nav button[aria-selected="true"] i{transform:translateY(-2px);filter:drop-shadow(0 4px 10px color-mix(in srgb,var(--c2) 60%,transparent))}
+.nav button i{font-style:normal;font-size:19px;line-height:1;transition:transform .3s var(--ease),filter .3s var(--ease)}
+.nav button:active{transform:scale(.93)}
+.nav button[aria-selected="true"]{color:#fff}
+.nav button[aria-selected="true"] i{
+  transform:translateY(-2px) scale(1.12);
+  filter:drop-shadow(0 5px 12px color-mix(in srgb,var(--c2) 75%,transparent))
+}
+@media (prefers-reduced-motion:reduce){ .nav .pill{transition:none} }
 
 /* ── صفحه‌ها ─────────────────────────────── */
 .page{display:none;animation:in .28s var(--ease)}
@@ -418,8 +511,15 @@ body::before{
     <div class="hero"><div class="rays"></div>
       <h1 id="hTitle">…</h1><p id="hHero"></p></div>
     <div id="liveBox"></div>
-    <div class="sect" id="sHot">پرطرفدارترین‌ها</div>
-    <div class="grid" id="hotGrid"><div class="sk"></div><div class="sk"></div></div>
+
+    <div class="about">
+      <div class="ah"><i>💬</i><h2 id="abTtl">شماره مجازی چیست؟</h2></div>
+      <p id="abTxt"></p>
+      <div class="feats" id="feats"></div>
+      <div class="trust"><i>✅</i><div><b id="trTtl"></b><span id="trTxt"></span></div></div>
+    </div>
+
+    <button class="btn" id="goShop">☎️ دیدن شماره‌ها</button>
   </section>
 
   <!-- ☎️ شماره‌ها -->
@@ -461,6 +561,7 @@ body::before{
 </div>
 
 <nav class="nav" id="nav">
+  <span class="pill" id="navPill"></span>
   <button data-go="home"   aria-selected="true"><i>🏠</i><span>خانه</span></button>
   <button data-go="shop"><i>☎️</i><span>شماره‌ها</span></button>
   <button data-go="orders"><i>🧾</i><span>سفارش‌ها</span></button>
@@ -725,13 +826,25 @@ function paintGrid(reset) {
   if (!hint.hidden) hint.textContent = U('search_rest', '').replace('{n}', fmt(rest));
 }
 
-function paintHot() {
-  const g = $('#hotGrid'); g.textContent = '';
-  const list = (B.items || []).filter(i => !i.stale).slice(0, 4);
-  if (!list.length) { g.textContent = ''; return; }
-  const frag = document.createDocumentFragment();
-  list.forEach(i => frag.appendChild(cardEl(i)));
-  g.appendChild(frag);
+/* 📖 بلوکِ معرفی در خانه — متن‌ها همه از پنل می‌آیند، پس اگر ادمین
+   چیزی نوشته باشد همان می‌نشیند. هیچ‌کدام با innerHTML نمی‌رود. */
+function paintAbout() {
+  $('#abTtl').textContent = U('about_ttl', 'شماره مجازی چیست؟');
+  $('#abTxt').textContent = U('about_txt', '');
+  $('#trTtl').textContent = U('trust_ttl', 'با اطمینان خرید کنید');
+  $('#trTxt').textContent = U('trust_txt', '');
+
+  const box = $('#feats');
+  box.textContent = '';
+  const raw = U('feats', '');
+  // قالبِ متن: «💸 قیمت ارزان | ⭐ کیفیت بالا | …» — ادمین با | جدا می‌کند
+  raw.split('|').map(x => x.trim()).filter(Boolean).slice(0, 6).forEach(t => {
+    const m = t.match(/^(\S+)\s+([\s\S]+)$/);
+    const d = document.createElement('div'); d.className = 'feat';
+    const i = document.createElement('i'); i.textContent = m ? m[1] : '•';
+    const b = document.createElement('b'); b.textContent = m ? m[2] : t;
+    d.appendChild(i); d.appendChild(b); box.appendChild(d);
+  });
 }
 
 /* ── صفحه‌ی زنده‌ی شماره ─────────────────── */
@@ -918,7 +1031,7 @@ async function doBuy(it, btn) {
   }
   if (r.error === 'no_balance') { closeSheet(); askTopup(r.need || 0); return; }
   if (r.error === 'price_changed' && typeof r.price === 'number') {
-    it.price = r.price; closeSheet(); paintShop(); paintHot();
+    it.price = r.price; closeSheet(); paintShop();
   }
   toast(r.message || 'انجام نشد', 'bad');
 }
@@ -1168,11 +1281,33 @@ function go(name) {
   S.page = name;
   $$('.page').forEach(p => p.classList.toggle('on', p.id === 'p-' + name));
   $$('#nav button').forEach(b => b.setAttribute('aria-selected', b.dataset.go === name ? 'true' : 'false'));
+  movePill();
   window.scrollTo({ top: 0, behavior: 'smooth' });
   if (name === 'orders') loadOrders();
   if (name === 'notes')  loadNotes();
 }
+
+/* 💊 قرصِ ناوبری را زیرِ دکمه‌ی فعال بنشان.
+   «اعلان‌ها» دکمه‌ی خودش را ندارد (زنگش بالای صفحه است)، پس آن‌جا
+   قرص محو می‌شود به‌جای اینکه بپرد گوشه‌ی چپ. */
+function movePill() {
+  const nav = $('#nav'), pill = $('#navPill');
+  if (!nav || !pill) return;
+  const on = nav.querySelector('button[aria-selected="true"]');
+  if (!on) { pill.style.opacity = '0'; return; }
+  pill.style.opacity = '';
+  const nb = nav.getBoundingClientRect(), bb = on.getBoundingClientRect();
+  if (!bb.width) return;                       // هنوز چیده نشده
+  // RTL است، پس فاصله را از لبه‌ی راست می‌سنجیم — همان سمتی که
+  // inset-inline-start هم به آن نگاه می‌کند.
+  const rtl = getComputedStyle(nav).direction === 'rtl';
+  const off = rtl ? (nb.right - bb.right) : (bb.left - nb.left);
+  pill.style.width = bb.width + 'px';
+  pill.style.transform = 'translateX(' + (rtl ? -off : off) + 'px)';
+  nav.classList.add('ready');
+}
 $$('#nav button').forEach(b => b.addEventListener('click', () => { buzz(); go(b.dataset.go); }));
+addEventListener('resize', movePill);
 
 /* ── راه‌اندازی ──────────────────────────── */
 function setBal(v) {
@@ -1211,7 +1346,6 @@ function boot() {
   $('#meNote').textContent = B.note || '';
   $('#balK').textContent = U('balance', 'اعتبار');
   $('#kBal').textContent = U('balance', 'اعتبار');
-  $('#sHot').textContent = U('hot', '');
   $('#sOrders').textContent = U('orders_ttl', '');
   $('#oHint').textContent = U('orders_hint', '');
   $('#topupBtn').textContent = U('topup_btn', '＋ شارژ');
@@ -1237,9 +1371,13 @@ function boot() {
 
   $('#balBtn').addEventListener('click', () => { buzz(); askTopup(0); });
   $('#topupBtn').addEventListener('click', () => { buzz(); askTopup(0); });
+  $('#goShop').addEventListener('click', () => { buzz(); go('shop'); });
 
-  paintShop(); paintHot();
+  paintShop(); paintAbout();
   loadMe(); loadLive(); loadOrders();
+
+  // قرص را بعد از اولین چیدمان بنشان — قبلش عرضِ دکمه‌ها صفر است
+  requestAnimationFrame(() => requestAnimationFrame(movePill));
 
   // برگشت به صفحه بعد از قفل شدن گوشی — وضعیت را تازه کن
   document.addEventListener('visibilitychange', () => {

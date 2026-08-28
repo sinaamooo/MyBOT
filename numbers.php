@@ -1399,7 +1399,7 @@ function numCatalogNl() {
         if ($cc === '' || $ss !== $svc) continue;
 
         $cName = $fa[$cc] ?? ('کشور ' . $cc);
-        $flag  = numFlagFa($en[$cc] ?? $cName);
+        $flag  = numFlagFa($en[$cc] ?? '', $cName);
         $countries[$cc] = ['name' => $cName, 'flag' => $flag];
 
         $op    = trim((string)($r['operator'] ?? ''));
@@ -1432,29 +1432,333 @@ function numCatalogNl() {
 /**
  * 🚩 پرچم از روی نام — برای نامبرلند که ISO نمی‌دهد.
  *
- * جدولِ numFlagIso دقیق است ولی کدِ دو حرفی می‌خواهد. اینجا فقط اسم
- * داریم، پس یک جدولِ کوچکِ نام→ISO کافی است و بقیه 🌍 می‌شوند.
+ * نامبرلند برای هر کشور فقط یک اسم می‌دهد؛ گاهی انگلیسی، گاهی فارسی،
+ * گاهی با پسوند و پرانتز («Korea, South»، «کره جنوبی»، «UK (England)»).
+ * جدولِ قبلی فقط انگلیسیِ تمیز را می‌شناخت، برای همین بیشترِ ردیف‌ها
+ * 🌍 می‌شدند. حالا سه راه امتحان می‌شود و هر کدام جواب داد بس است:
+ *
+ *   ۱. خودِ متن اگر کدِ دو حرفیِ ISO باشد
+ *   ۲. جدولِ انگلیسی (با نام‌های جایگزین)
+ *   ۳. جدولِ فارسی
+ *
+ * و اگر هیچ‌کدام نشد، آخرین تیر: نامِ فارسیِ کشور را از numCountryFa
+ * می‌گیریم و ببینیم همان توی جدولِ فارسی هست یا نه.
  */
-function numFlagFa($name) {
-    static $iso = [
-        'russia'=>'RU','ukraine'=>'UA','kazakhstan'=>'KZ','england'=>'GB','unitedkingdom'=>'GB',
-        'uk'=>'GB','usa'=>'US','unitedstates'=>'US','america'=>'US','germany'=>'DE','france'=>'FR',
-        'netherlands'=>'NL','poland'=>'PL','romania'=>'RO','indonesia'=>'ID','philippines'=>'PH',
-        'vietnam'=>'VN','india'=>'IN','malaysia'=>'MY','thailand'=>'TH','turkey'=>'TR','spain'=>'ES',
-        'italy'=>'IT','portugal'=>'PT','sweden'=>'SE','finland'=>'FI','norway'=>'NO','denmark'=>'DK',
-        'austria'=>'AT','switzerland'=>'CH','belgium'=>'BE','ireland'=>'IE','czechia'=>'CZ',
-        'czechrepublic'=>'CZ','hungary'=>'HU','slovakia'=>'SK','bulgaria'=>'BG','serbia'=>'RS',
-        'croatia'=>'HR','greece'=>'GR','latvia'=>'LV','lithuania'=>'LT','estonia'=>'EE',
-        'moldova'=>'MD','georgia'=>'GE','armenia'=>'AM','azerbaijan'=>'AZ','uzbekistan'=>'UZ',
-        'kyrgyzstan'=>'KG','tajikistan'=>'TJ','canada'=>'CA','brazil'=>'BR','mexico'=>'MX',
-        'argentina'=>'AR','colombia'=>'CO','southafrica'=>'ZA','nigeria'=>'NG','kenya'=>'KE',
-        'egypt'=>'EG','morocco'=>'MA','israel'=>'IL','australia'=>'AU','newzealand'=>'NZ',
-        'japan'=>'JP','southkorea'=>'KR','korea'=>'KR','taiwan'=>'TW','hongkong'=>'HK',
-        'singapore'=>'SG','china'=>'CN','iran'=>'IR','iraq'=>'IQ','pakistan'=>'PK',
-        'afghanistan'=>'AF','bangladesh'=>'BD','uae'=>'AE','saudiarabia'=>'SA',
+function numFlagFa($name, $alt = '') {
+    foreach ([$name, $alt] as $cand) {
+        $f = numFlagOne($cand);
+        if ($f !== '🌍') return $f;
+    }
+    return '🌍';
+}
+
+/** یک اسم را به پرچم برساند، یا 🌍 بدهد. */
+function numFlagOne($name) {
+    $raw = trim((string)$name);
+    if ($raw === '') return '🌍';
+
+    // خودِ متن پرچم است؟ (بعضی منبع‌ها پرچم را قاطیِ اسم می‌دهند)
+    if (preg_match('/[\x{1F1E6}-\x{1F1FF}]{2}/u', $raw, $m)) return $m[0];
+
+    // «Korea, South» → «South Korea» ، «UK (England)» → «UK England»
+    $s = str_replace(['(', ')', '-', '_', '.', '،'], ' ', $raw);
+    if (strpos($s, ',') !== false) {
+        $parts = array_map('trim', explode(',', $s));
+        $s = implode(' ', array_reverse($parts));
+    }
+
+    $k = numFlagKey($s);
+    if ($k === '') return '🌍';
+
+    $map = numFlagMap();
+    if (isset($map[$k])) return numFlagIso($map[$k]);
+
+    // کدِ دو حرفیِ خالص
+    if (strlen($k) === 2 && ctype_alpha($k)) {
+        $f = numFlagIso($k);
+        if ($f !== '🌍') return $f;
+    }
+
+    // واژه‌های زائد را بریز دور و دوباره امتحان کن
+    $trim = preg_replace('/^(the|republicof|kingdomof|stateof|unitedstateof|کشور)/', '', $k);
+    if ($trim !== $k && isset($map[$trim])) return numFlagIso($map[$trim]);
+
+    // «UK (England)» یا «Telegram Indonesia» — اسمِ کشور یکی از واژه‌هاست.
+    // از بلندترین ترکیب به کوتاه‌ترین می‌گردیم تا «South Korea» زودتر از
+    // «Korea» و «North Macedonia» زودتر از «Macedonia» گیر بیفتد.
+    $w = preg_split('/\s+/u', trim($s), -1, PREG_SPLIT_NO_EMPTY);
+    $n = count($w);
+    if ($n > 1)
+        for ($len = $n; $len >= 1; $len--)
+            for ($i = 0; $i + $len <= $n; $i++) {
+                $kk = numFlagKey(implode('', array_slice($w, $i, $len)));
+                if ($kk !== '' && isset($map[$kk])) return numFlagIso($map[$kk]);
+            }
+
+    return '🌍';
+}
+
+/** کلیدِ یکدست: حروفِ لاتین کوچک یا حروفِ فارسی، بی‌فاصله. */
+function numFlagKey($s) {
+    $s = mb_strtolower(trim((string)$s), 'UTF-8');
+    // یکدست‌سازیِ عربی/فارسی
+    $s = strtr($s, ['ي'=>'ی','ك'=>'ک','ۀ'=>'ه','ة'=>'ه','أ'=>'ا','إ'=>'ا','آ'=>'ا','ؤ'=>'و','ئ'=>'ی','\u{200c}'=>'']);
+    return preg_replace('/[^a-z\x{0600}-\x{06FF}]/u', '', $s);
+}
+
+/** جدولِ نام → ISO. هم انگلیسی هم فارسی، در یک جا. */
+function numFlagMap() {
+    static $map = null;
+    if ($map !== null) return $map;
+
+    // انگلیسی (با نام‌های جایگزینِ رایج در پنل‌های شماره)
+    $en = [
+        'RU'=>['russia','russianfederation','rusia'],
+        'UA'=>['ukraine'],
+        'KZ'=>['kazakhstan','kazakstan'],
+        'GB'=>['england','unitedkingdom','uk','greatbritain','britain','scotland','wales'],
+        'US'=>['usa','unitedstates','unitedstatesofamerica','america','us'],
+        'DE'=>['germany','deutschland'],
+        'FR'=>['france'],
+        'NL'=>['netherlands','holland'],
+        'PL'=>['poland'],
+        'RO'=>['romania'],
+        'ID'=>['indonesia'],
+        'PH'=>['philippines','phillipines'],
+        'VN'=>['vietnam','vietnam','vietnamese'],
+        'IN'=>['india'],
+        'MY'=>['malaysia'],
+        'TH'=>['thailand'],
+        'TR'=>['turkey','turkiye','türkiye'],
+        'ES'=>['spain','espana'],
+        'IT'=>['italy','italia'],
+        'PT'=>['portugal'],
+        'SE'=>['sweden'],
+        'FI'=>['finland'],
+        'NO'=>['norway'],
+        'DK'=>['denmark'],
+        'AT'=>['austria'],
+        'CH'=>['switzerland'],
+        'BE'=>['belgium'],
+        'IE'=>['ireland'],
+        'CZ'=>['czechia','czechrepublic','czech'],
+        'HU'=>['hungary'],
+        'SK'=>['slovakia'],
+        'SI'=>['slovenia'],
+        'BG'=>['bulgaria'],
+        'RS'=>['serbia'],
+        'HR'=>['croatia'],
+        'GR'=>['greece'],
+        'LV'=>['latvia'],
+        'LT'=>['lithuania'],
+        'EE'=>['estonia'],
+        'MD'=>['moldova'],
+        'GE'=>['georgia'],
+        'AM'=>['armenia'],
+        'AZ'=>['azerbaijan'],
+        'UZ'=>['uzbekistan'],
+        'KG'=>['kyrgyzstan','kirgizstan'],
+        'TJ'=>['tajikistan'],
+        'TM'=>['turkmenistan'],
+        'MN'=>['mongolia'],
+        'BY'=>['belarus'],
+        'CY'=>['cyprus'],
+        'MT'=>['malta'],
+        'IS'=>['iceland'],
+        'LU'=>['luxembourg'],
+        'AL'=>['albania'],
+        'ME'=>['montenegro'],
+        'MK'=>['northmacedonia','macedonia'],
+        'BA'=>['bosnia','bosniaandherzegovina','bih'],
+        'XK'=>['kosovo'],
+        'CA'=>['canada'],
+        'BR'=>['brazil','brasil'],
+        'MX'=>['mexico'],
+        'AR'=>['argentina'],
+        'CO'=>['colombia'],
+        'CL'=>['chile'],
+        'PE'=>['peru'],
+        'VE'=>['venezuela'],
+        'EC'=>['ecuador'],
+        'BO'=>['bolivia'],
+        'PY'=>['paraguay'],
+        'UY'=>['uruguay'],
+        'GT'=>['guatemala'],
+        'HN'=>['honduras'],
+        'NI'=>['nicaragua'],
+        'SV'=>['elsalvador','salvador'],
+        'CR'=>['costarica'],
+        'PA'=>['panama'],
+        'CU'=>['cuba'],
+        'DO'=>['dominicanrepublic','dominicana','dominican'],
+        'HT'=>['haiti'],
+        'JM'=>['jamaica'],
+        'TT'=>['trinidadandtobago','trinidad'],
+        'PR'=>['puertorico'],
+        'BZ'=>['belize'],
+        'GY'=>['guyana'],
+        'SR'=>['suriname'],
+        'ZA'=>['southafrica'],
+        'NG'=>['nigeria'],
+        'KE'=>['kenya'],
+        'EG'=>['egypt'],
+        'MA'=>['morocco'],
+        'TN'=>['tunisia'],
+        'DZ'=>['algeria'],
+        'LY'=>['libya'],
+        'SD'=>['sudan'],
+        'GH'=>['ghana'],
+        'ET'=>['ethiopia'],
+        'TZ'=>['tanzania'],
+        'UG'=>['uganda'],
+        'SN'=>['senegal'],
+        'CM'=>['cameroon'],
+        'CI'=>['ivorycoast','cotedivoire'],
+        'ML'=>['mali'],
+        'BF'=>['burkinafaso','burkina'],
+        'NE'=>['niger'],
+        'TD'=>['chad'],
+        'GN'=>['guinea'],
+        'BJ'=>['benin'],
+        'TG'=>['togo'],
+        'GA'=>['gabon'],
+        'CG'=>['congo','republicofthecongo'],
+        'CD'=>['drcongo','democraticrepublicofthecongo','congokinshasa'],
+        'AO'=>['angola'],
+        'ZM'=>['zambia'],
+        'ZW'=>['zimbabwe'],
+        'MZ'=>['mozambique'],
+        'MW'=>['malawi'],
+        'RW'=>['rwanda'],
+        'BI'=>['burundi'],
+        'SO'=>['somalia'],
+        'MG'=>['madagascar'],
+        'MU'=>['mauritius'],
+        'NA'=>['namibia'],
+        'BW'=>['botswana'],
+        'SL'=>['sierraleone'],
+        'LR'=>['liberia'],
+        'GM'=>['gambia'],
+        'MR'=>['mauritania'],
+        'IL'=>['israel'],
+        'SA'=>['saudiarabia','saudi'],
+        'AE'=>['uae','unitedarabemirates','emirates'],
+        'QA'=>['qatar'],
+        'KW'=>['kuwait'],
+        'OM'=>['oman'],
+        'BH'=>['bahrain'],
+        'JO'=>['jordan'],
+        'IQ'=>['iraq'],
+        'LB'=>['lebanon'],
+        'SY'=>['syria'],
+        'YE'=>['yemen'],
+        'PS'=>['palestine'],
+        'IR'=>['iran'],
+        'AF'=>['afghanistan'],
+        'PK'=>['pakistan'],
+        'BD'=>['bangladesh'],
+        'LK'=>['srilanka'],
+        'NP'=>['nepal'],
+        'BT'=>['bhutan'],
+        'MV'=>['maldives'],
+        'MM'=>['myanmar','burma'],
+        'KH'=>['cambodia'],
+        'LA'=>['laos'],
+        'BN'=>['brunei'],
+        'TL'=>['timorleste','easttimor'],
+        'AU'=>['australia'],
+        'NZ'=>['newzealand'],
+        'PG'=>['papuanewguinea'],
+        'FJ'=>['fiji'],
+        'JP'=>['japan'],
+        'CN'=>['china'],
+        'HK'=>['hongkong'],
+        'MO'=>['macau','macao'],
+        'TW'=>['taiwan'],
+        'SG'=>['singapore'],
+        'KR'=>['southkorea','korea','republicofkorea','koreasouth'],
+        'KP'=>['northkorea','koreanorth'],
+        'GI'=>['gibraltar'],
+        'MC'=>['monaco'],
+        'AD'=>['andorra'],
+        'SM'=>['sanmarino'],
+        'LI'=>['liechtenstein'],
+        'RE'=>['reunion'],
+        'GP'=>['guadeloupe'],
+        'MQ'=>['martinique'],
+        'GF'=>['frenchguiana'],
+        'NC'=>['newcaledonia'],
+        'PF'=>['frenchpolynesia'],
+        'VG'=>['britishvirginislands'],
+        'KY'=>['caymanislands'],
+        'BB'=>['barbados'],
+        'BS'=>['bahamas'],
+        'AW'=>['aruba'],
+        'CW'=>['curacao'],
     ];
-    $k = strtolower(preg_replace('/[^a-z]/i', '', (string)$name));
-    return isset($iso[$k]) ? numFlagIso($iso[$k]) : '🌍';
+
+    // فارسی — همان کشورها، به اسمی که کاربر می‌بیند
+    $fa = [
+        'RU'=>['روسیه'],            'UA'=>['اوکراین'],        'KZ'=>['قزاقستان'],
+        'GB'=>['انگلیس','انگلستان','بریتانیا'],               'US'=>['امریکا','ایالاتمتحده'],
+        'DE'=>['المان'],            'FR'=>['فرانسه'],         'NL'=>['هلند'],
+        'PL'=>['لهستان'],           'RO'=>['رومانی'],         'ID'=>['اندونزی'],
+        'PH'=>['فیلیپین'],          'VN'=>['ویتنام'],         'IN'=>['هند'],
+        'MY'=>['مالزی'],            'TH'=>['تایلند'],         'TR'=>['ترکیه'],
+        'ES'=>['اسپانیا'],          'IT'=>['ایتالیا'],        'PT'=>['پرتغال'],
+        'SE'=>['سوئد'],             'FI'=>['فنلاند'],         'NO'=>['نروژ'],
+        'DK'=>['دانمارک'],          'AT'=>['اتریش'],          'CH'=>['سوئیس'],
+        'BE'=>['بلژیک'],            'IE'=>['ایرلند'],         'CZ'=>['چک','جمهوریچک'],
+        'HU'=>['مجارستان'],         'SK'=>['اسلواکی'],        'SI'=>['اسلوونی'],
+        'BG'=>['بلغارستان'],        'RS'=>['صربستان'],        'HR'=>['کرواسی'],
+        'GR'=>['یونان'],            'LV'=>['لتونی'],          'LT'=>['لیتوانی'],
+        'EE'=>['استونی'],           'MD'=>['مولداوی'],        'GE'=>['گرجستان'],
+        'AM'=>['ارمنستان'],         'AZ'=>['اذربایجان'],      'UZ'=>['ازبکستان'],
+        'KG'=>['قرقیزستان'],        'TJ'=>['تاجیکستان'],      'TM'=>['ترکمنستان'],
+        'MN'=>['مغولستان'],         'BY'=>['بلاروس'],         'CY'=>['قبرس'],
+        'MT'=>['مالت'],             'IS'=>['ایسلند'],         'LU'=>['لوکزامبورگ'],
+        'AL'=>['البانی'],           'ME'=>['مونتهنگرو'],      'MK'=>['مقدونیه'],
+        'BA'=>['بوسنی'],            'XK'=>['کوزوو'],          'CA'=>['کانادا'],
+        'BR'=>['برزیل'],            'MX'=>['مکزیک'],          'AR'=>['ارژانتین'],
+        'CO'=>['کلمبیا'],           'CL'=>['شیلی'],           'PE'=>['پرو'],
+        'VE'=>['ونزوئلا'],          'EC'=>['اکوادور'],        'BO'=>['بولیوی'],
+        'PY'=>['پاراگوئه'],         'UY'=>['اروگوئه'],        'GT'=>['گواتمالا'],
+        'HN'=>['هندوراس'],          'NI'=>['نیکاراگوئه'],     'SV'=>['السالوادور'],
+        'CR'=>['کاستاریکا'],        'PA'=>['پاناما'],         'CU'=>['کوبا'],
+        'DO'=>['دومینیکن'],         'HT'=>['هائیتی'],         'JM'=>['جامائیکا'],
+        'PR'=>['پورتوریکو'],        'ZA'=>['افریقایجنوبی'],   'NG'=>['نیجریه'],
+        'KE'=>['کنیا'],             'EG'=>['مصر'],            'MA'=>['مراکش'],
+        'TN'=>['تونس'],             'DZ'=>['الجزایر'],        'LY'=>['لیبی'],
+        'SD'=>['سودان'],            'GH'=>['غنا'],            'ET'=>['اتیوپی'],
+        'TZ'=>['تانزانیا'],         'UG'=>['اوگاندا'],        'SN'=>['سنگال'],
+        'CM'=>['کامرون'],           'CI'=>['ساحلعاج'],        'ML'=>['مالی'],
+        'AO'=>['انگولا'],           'ZM'=>['زامبیا'],         'ZW'=>['زیمبابوه'],
+        'MZ'=>['موزامبیک'],         'RW'=>['رواندا'],         'SO'=>['سومالی'],
+        'MG'=>['ماداگاسکار'],       'MU'=>['موریس'],          'NA'=>['نامیبیا'],
+        'BW'=>['بوتسوانا'],         'IL'=>['اسرائیل'],        'SA'=>['عربستان'],
+        'AE'=>['امارات'],           'QA'=>['قطر'],            'KW'=>['کویت'],
+        'OM'=>['عمان'],             'BH'=>['بحرین'],          'JO'=>['اردن'],
+        'IQ'=>['عراق'],             'LB'=>['لبنان'],          'SY'=>['سوریه'],
+        'YE'=>['یمن'],              'PS'=>['فلسطین'],         'IR'=>['ایران'],
+        'AF'=>['افغانستان'],        'PK'=>['پاکستان'],        'BD'=>['بنگلادش'],
+        'LK'=>['سریلانکا'],         'NP'=>['نپال'],           'MV'=>['مالدیو'],
+        'MM'=>['میانمار'],          'KH'=>['کامبوج'],         'LA'=>['لائوس'],
+        'BN'=>['برونئی'],           'AU'=>['استرالیا'],       'NZ'=>['نیوزیلند'],
+        'FJ'=>['فیجی'],             'JP'=>['ژاپن'],           'CN'=>['چین'],
+        'HK'=>['هنگکنگ'],           'MO'=>['ماکائو'],         'TW'=>['تایوان'],
+        'SG'=>['سنگاپور'],          'KR'=>['کرهجنوبی','کره'], 'KP'=>['کرهشمالی'],
+        'GI'=>['جبلالطارق'],        'MC'=>['موناکو'],         'AD'=>['اندورا'],
+        'SM'=>['سنمارینو'],         'LI'=>['لیختناشتاین'],
+    ];
+
+    $map = [];
+    foreach ([$en, $fa] as $tbl)
+        foreach ($tbl as $iso => $names)
+            foreach ($names as $n) {
+                $k = numFlagKey($n);
+                if ($k !== '' && !isset($map[$k])) $map[$k] = $iso;
+            }
+    return $map;
 }
 
 /**
@@ -1483,7 +1787,16 @@ function numImport(array $countries, array $rows, $markup = 0, $syncPrice = null
         $order = count($a['cats']);
         foreach ($countries as $code => $info) {
             $code = (string)$code;
-            if (isset($byCode[$code])) continue;     // هست — دست نمی‌زنیم
+            if (isset($byCode[$code])) {
+                // 🩹 پوشه‌ای که بارِ اول پرچمش پیدا نشده بود و 🌍 خورده،
+                //    حالا که جدولِ نام‌ها کامل‌تر است پرچمِ درستش را می‌گیرد.
+                //    ایموجیِ دلخواهِ ادمین دست نمی‌خورد؛ فقط 🌍 و خالی.
+                $k   = $byCode[$code];
+                $now = trim((string)($a['cats'][$k]['emoji'] ?? ''));
+                if (($now === '' || $now === '🌍') && ($info['flag'] ?? '🌍') !== '🌍')
+                    $a['cats'][$k]['emoji'] = $info['flag'];
+                continue;
+            }
             $a['cats'][] = [
                 'id' => 'c' . bin2hex(random_bytes(3)), 'emoji' => $info['flag'],
                 'name' => $info['name'], 'code' => $code, 'on' => true, 'order' => ++$order,
@@ -1516,6 +1829,10 @@ function numImport(array $countries, array $rows, $markup = 0, $syncPrice = null
                 $a['items'][$k]['on'] = (bool)$r['on'];
                 if ($catId !== '') $a['items'][$k]['cat'] = $catId;
                 $a['items'][$k]['prov'] = numProv();
+                // همان وصله‌ی پرچم، این بار روی خودِ ردیف
+                $ne = trim((string)($a['items'][$k]['emoji'] ?? ''));
+                if (($ne === '' || $ne === '🌍' || $ne === '☎️') && (string)($r['flag'] ?? '🌍') !== '🌍')
+                    $a['items'][$k]['emoji'] = (string)$r['flag'];
                 if ($syncPrice) $a['items'][$k]['price'] = numRound100($r['price'] * $mul);
                 // ترتیبِ نمایش هم از ۵سیم می‌آید — وگرنه کشورِ پرفروشی که
                 // بار اول آخر افتاده، برای همیشه آخر می‌ماند

@@ -209,8 +209,9 @@ __SKIN__
     <h2 id="wTtl">سفارش ثبت شد</h2>
     <p id="wSub"></p>
     <div class="code" id="wCode"></div>
-    <button class="go" id="wGo" style="max-width:280px">بازگشت به ربات</button>
+    <button class="go" id="wNote" style="max-width:280px">🔔 مشاهده فرآیند خرید</button>
     <button class="ghost" id="wBack" style="max-width:280px;margin:9px auto 0">ادامه خرید</button>
+    <button class="ghost" id="wGo" style="max-width:280px;margin:9px auto 0">بازگشت به ربات</button>
   </div>
 </div>
 
@@ -772,6 +773,21 @@ $('lnkOrd').onclick = function(){ tap(); go('ord'); };
 $('lnkShop').onclick= function(){ tap(); go('shop'); };
 $('lnkBot').onclick = function(){ if (TG) { try{ TG.close(); }catch(e){} } };
 
+/* 👤 آیدیِ خودِ کاربر برای پر کردنِ کادرِ گیرنده.
+   یوزرنیم اگر باشد بهترین است (پنل‌ها با @ کار می‌کنند)؛ نبود، شناسه‌ی
+   عددی. هیچ‌کدام نبود، دکمه اصلا ساخته نمی‌شود. */
+function selfId(){
+  var m = S.me || {};
+  if (m.uname) return '@' + String(m.uname).replace(/^@/, '');
+  return m.uid ? String(m.uid) : '';
+}
+function selfChip(){
+  var v = selfId();
+  if (!v) return '';
+  return '<div class="selfrow"><button type="button" class="self">👤 برای خودم</button>' +
+         '<em>' + esc(v) + '</em></div>';
+}
+
 /* ── شیت خرید ── */
 function open(id){
   var it = null;
@@ -822,7 +838,8 @@ function open(id){
     html += '<div class="field"><label>📎 آیدی تلگرام گیرنده</label>' +
             '<input id="fTxt" type="text" placeholder="@username" dir="ltr" style="text-align:left" ' +
             'autocomplete="off" spellcheck="false" maxlength="64">' +
-            '<div class="hint">آیدی عمومی حساب — بدون آن سفارش قابل انجام نیست.</div></div>';
+            '<div class="hint">آیدی عمومی حساب — بدون آن سفارش قابل انجام نیست.</div>' +
+            selfChip() + '</div>';
   }
   // ارز: هم مقدار می‌خواهد هم آدرس ولت مقصد
   if (it.ask === 'qty_wallet'){
@@ -836,7 +853,8 @@ function open(id){
     html += '<div class="field"><label>📎 آیدی تلگرام گیرنده</label>' +
             '<input id="fTxt" type="text" placeholder="@username" dir="ltr" style="text-align:left" ' +
             'autocomplete="off" spellcheck="false" maxlength="64">' +
-            '<div class="hint">آیدی عمومی حساب — بدون آن سفارش قابل انجام نیست.</div></div>';
+            '<div class="hint">آیدی عمومی حساب — بدون آن سفارش قابل انجام نیست.</div>' +
+            selfChip() + '</div>';
   }
   if (it.ask === 'wallet'){
     html += '<div class="field"><label>💼 آدرس ولت</label>' +
@@ -849,6 +867,21 @@ function open(id){
             '<textarea id="fTxt" maxlength="300" placeholder="هرچه لازم است بنویسید…"></textarea></div>';
   }
   f.innerHTML = html;
+
+  // 👤 «برای خودم» — آیدیِ خودِ کاربر را در کادر می‌گذارد
+  var selfBtn = f.querySelector('.self');
+  if (selfBtn) selfBtn.onclick = function(){
+    var v = selfId();
+    if (!v) return;
+    var box = $('fTxt');
+    if (box){ box.value = v; box.dispatchEvent(new Event('input')); }
+    this.classList.add('done');
+    this.textContent = '✓ برای خودم';
+    // آیدی حالا توی خودِ کادر است؛ تکرارش کنارِ دکمه فقط شلوغی است
+    var em = this.parentNode.querySelector('em');
+    if (em) em.remove();
+    tap();
+  };
 
   if (hasQty){
     f.addEventListener('click', function(ev){
@@ -1013,6 +1046,10 @@ $('sGo').onclick  = function(){
 
 $('wGo').onclick   = function(){ if (TG) { try{ TG.close(); }catch(e){} } else location.reload(); };
 $('wBack').onclick = function(){ $('win').classList.remove('on'); tap(); go('shop'); };
+/* 🔔 «مشاهده فرآیند خرید» — سفارش تازه ثبت شده و کاربر می‌خواهد
+   بداند بعدش چه می‌شود. هر تکانِ سفارش (پرداخت، تحویل، برگشت وجه)
+   یک اعلان است، پس همان‌جا کاملِ ماجرا را می‌بیند. */
+$('wNote').onclick = function(){ $('win').classList.remove('on'); tap(); go('note'); };
 
 /* ══ 👑 مدیریت محصول‌ها — فقط وقتی سرور بگوید این کاربر مدیر است ══
    سرور هم مستقل بررسی می‌کند؛ این کلاس فقط برای نمایش است و
@@ -1561,6 +1598,21 @@ body.is-admin .dock b[data-p="adm"]{display:flex}
 .field input:focus,.field textarea:focus{border-color:var(--c1);
   box-shadow:0 0 0 3px color-mix(in srgb,var(--c1) 18%,transparent)}
 .field .hint{font-size:10.5px;color:var(--dim);margin-top:6px;line-height:1.7}
+/* 👤 «برای خودم» — آیدیِ خودِ کاربر را توی کادر می‌گذارد.
+   بیشترِ خریدها برای خودِ خریدار است و تایپِ دستیِ آیدی، هم غلط
+   می‌شود هم حوصله می‌برد. */
+.field .selfrow{display:flex;align-items:center;gap:7px;margin-top:8px;flex-wrap:wrap}
+.field .self{
+  display:inline-flex;align-items:center;gap:5px;padding:7px 12px;border-radius:12px;cursor:pointer;
+  font-family:inherit;font-size:11.5px;font-weight:800;color:#fff;
+  background:linear-gradient(135deg,color-mix(in srgb,var(--c1) 70%,transparent),color-mix(in srgb,var(--c2) 55%,transparent));
+  border:1px solid color-mix(in srgb,var(--c1) 40%,transparent);
+  box-shadow:0 8px 20px -12px var(--c1);transition:transform .16s ease,filter .16s ease
+}
+.field .self:active{transform:scale(.94)}
+.field .self[disabled]{opacity:.45;pointer-events:none;box-shadow:none}
+.field .self.done{filter:saturate(.5)}
+.field .selfrow em{font-style:normal;font-size:10.5px;color:var(--dim);direction:ltr}
 /* ═══ انتخاب بسته — ردیف کامل با تیک، مثل اپ‌های گیفت ═══ */
 .lbl{font-size:10.5px;font-weight:800;letter-spacing:1.1px;color:var(--dim);margin:14px 0 9px}
 .plans{display:grid;gap:9px}
