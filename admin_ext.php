@@ -651,7 +651,13 @@ function axMarginOf($itemId = '', $category = '') {
     $marg = $c['margin'] ?? [];
     $m = $marg[axSku($category)] ?? null;
     if ($m === null) $m = $marg['_all'] ?? null;
-    return $m === null ? 0.0 : (float)$m;
+    if ($m !== null) return (float)$m;
+
+    // 🪜 آخرین پله: سودِ عمومیِ ربات، از بخش «سود روی محصولات».
+    //    تا اینجا هیچ عددِ خاص‌تری نبود، پس همان چیزی می‌نشیند که
+    //    ادمین یک بار برای کلِ فروشگاه گفته.
+    if (function_exists('pfPct')) return (float)pfPct('ma');
+    return 0.0;
 }
 
 function axSetItemMargin($itemId, $percent) {

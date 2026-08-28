@@ -102,6 +102,7 @@ require_once __DIR__ . '/prices.php';
 require_once __DIR__ . '/diamond.php';
 require_once __DIR__ . '/channels.php';
 require_once __DIR__ . '/games.php';
+require_once __DIR__ . '/profit.php';
 
 // ============================================================
 // 📚 ذخیره‌سازی اتمیک
@@ -1312,7 +1313,8 @@ function subProduct($bid, $sid, $sub = null) {
         'id'        => subProductId($bid, $sid),
         'name'      => trim((string)($sub['text'] ?? 'محصول')),
         'desc'      => (string)($sub['desc'] ?? ''),
-        'price'     => (float)($sub['price'] ?? 0),
+        'price'      => round(pfApply('member', (float)($sub['price'] ?? 0)), 2),
+        'price_base' => (float)($sub['price'] ?? 0),
         'currency'  => (string)($sub['currency'] ?? (cfg()['currency'] ?? 'تومان')),
         'limit'     => (int)($sub['limit'] ?? 0),
         'buyers'    => array_values($sub['buyers'] ?? []),
@@ -1351,11 +1353,30 @@ function saleButtons() {
 
 class Product
 {
-    public static function all() { return load('products'); }
+    /**
+     * ⚠️ قیمتی که برمی‌گردد، قیمتِ نهاییِ مشتری است — یعنی با سود.
+     *
+     *    چرا اینجا و نه ده جای دیگر: قیمتِ ممبر در فاکتور، در فهرست
+     *    تعرفه‌ها، روی دکمه، در گزارش و در محاسبه‌ی مبلغ استفاده
+     *    می‌شود. اگر سود را در هر کدام جدا سوار می‌کردیم، یکی‌شان
+     *    بالاخره جا می‌ماند و مشتری عددِ متفاوتی می‌دید.
+     *
+     *    قیمتِ خامِ ادمین زیرِ price_base می‌ماند و صفحه‌ی ویرایش
+     *    همان را نشان می‌دهد، وگرنه هر ذخیره، سود روی سود می‌نشست.
+     */
+    public static function all() {
+        $a = load('products');
+        foreach ($a as $k => $p) $a[$k] = pfProduct($p);
+        return $a;
+    }
+
+    /** قیمتِ خام، بی‌سود — برای صفحه‌های ویرایش */
+    public static function raw() { return load('products'); }
 
     public static function get($id) {
         if ($bs = parseSubProductId($id)) return subProduct($bs[0], $bs[1]);
-        $a = load('products'); return $a[$id] ?? null;
+        $a = load('products');
+        return isset($a[$id]) ? pfProduct($a[$id]) : null;
     }
 
     public static function create($name, $price, $currency, $limit = 0, $desc = '', $botId = null) {
@@ -2447,6 +2468,7 @@ function showOneProduct($uid, $chatId, $p) {
     $cap = ((int)$p['limit']) > 0 ? "{$cnt}/{$p['limit']}" : "{$cnt}/∞";
     $text  = ($p['emoji'] ?? '💠') . " <b>" . h($p['name']) . "</b>\n\n";
     if (!empty($p['desc'])) $text .= h($p['desc']) . "\n\n";
+    // 💰 برای مشتری فقط یک عدد وجود دارد: آنچه می‌پردازد
     $text .= "💰 قیمت: <b>" . fmtNum($p['price']) . ' ' . h($p['currency']) . "</b>\n";
     $text .= "👥 خریداران: {$cap}";
     panelShow($uid, $chatId, 'shop', $text,
@@ -3783,6 +3805,7 @@ function admHome($chatId, $msgId = null) {
         [btnCb('🤖 ربات‌های اپلودر', 'ag_up', 'admin'), btnCb('🎯 ممبر و قفل‌ها', 'ag_lock', 'admin')],
         [btnCb('💹 قیمت لحظه‌ای', 'px_home', 'admin'),  btnCb('💎 الماس', 'dm_home', 'admin')],
         [btnCb('☎️ شماره مجازی', 'num_home', 'admin'), btnCb('🎮 بازی‌ها', 'gm_home', 'admin')],
+        [btnCb('📈 سود روی محصولات', 'pf_home', 'admin')],
         [btnCb('💳 پرداخت', 'ag_pay', 'admin'),        btnCb('🎨 ظاهر و متن‌ها', 'ag_look', 'admin')],
         [btnCb('📡 کانال‌های متصل', 'ch_home', 'admin'),
          btnCb('📢 پیام همگانی و گزارش', 'ag_rep', 'admin')],
@@ -4964,7 +4987,11 @@ function edProduct($chatId, $msgId, $pid) {
     $f = $p['flow'] ?? [];
 
     $text  = "🛒 <b>" . h($p['name']) . "</b>\n\n";
-    $text .= "💰 قیمت: <b>" . fmtNum($p['price']) . ' ' . h($p['currency']) . "</b>\n";
+    // 💰 عددِ خام آنچه ادمین ثبت کرده؛ عددِ داخل پرانتز آنچه مشتری می‌دهد
+    $pBase = (float)($p['price_base'] ?? $p['price']);
+    $text .= "💰 قیمت: <b>" . fmtNum($pBase) . ' ' . h($p['currency']) . "</b>" .
+             (abs($pBase - (float)$p['price']) > 0.01
+              ? ' — با سود: <b>' . fmtNum($p['price']) . '</b>' : '') . "\n";
     $text .= "🎨 رنگ: " . (styleMap()[$p['color'] ?? 'none'] ?? '—') . "\n";
     $text .= "👥 خریداران: " . count($p['buyers']) . "\n";
     $text .= "🔄 جریان سفارش: " . (!empty($f['on']) ? 'روشن' : 'خاموش') . "\n";
@@ -5206,6 +5233,7 @@ function masterHandle($update) {
         if (maCallback($data, $uid, $chatId, $msgId, $cbId, $isAdmin)) return;
         if (axCallback($data, $uid, $chatId, $msgId, $cbId, $isAdmin)) return;
         if (numCallback($data, $uid, $chatId, $msgId, $cbId, $isAdmin)) return;
+        if (pfCallback($data, $uid, $chatId, $msgId, $cbId, $isAdmin)) return;
 
         // --- دکمه‌های منو در حالت شیشه‌ای ---
         if ($data === 'tariff') { answerCb(BOT_TOKEN, $cbId); showTariff($uid, $chatId); return; }
@@ -6637,6 +6665,7 @@ function masterHandle($update) {
     if (maStateHandle($action, $sd, $msg, $uid, $chatId)) return;
     if (axStateHandle($action, $sd, $msg, $uid, $chatId)) return;
     if (numStateHandle($action, $msg, $uid, $chatId)) return;
+    if (pfStateHandle($action, $msg, $uid, $chatId)) return;
 
     if ($action === 'sb_code') {
         $pid = $sd['pid'] ?? '';

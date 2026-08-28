@@ -1311,14 +1311,18 @@ foreach ($tabs as $k => $l): ?>
         <div class="note" style="margin-bottom:12px">
           💠 <b>قیمت هر ۱ ممبر: <?= h(rtrim(rtrim(number_format($perMember, 2), '0'), '.') ?: '0') ?>
           <?= h($sb['currency']) ?></b>
-          — یعنی <?= number_format((float)$sb['price']) ?> برای هر <?= number_format($perNow) ?> نفر.<br>
+          — یعنی <?= number_format((float)($sb['price_base'] ?? $sb['price'])) ?> برای هر <?= number_format($perNow) ?> نفر.<br>
           می‌خواهید ممبری قیمت بگذارید؟ «به ازای هر چند نفر» را <code>1</code> بگذارید و
           قیمت پایه را قیمت یک ممبر بنویسید.
         </div>
         <div class="grid2">
           <div><label>قیمت پایه</label>
-            <input name="price" value="<?= h((float)$sb['price'] > 0 ? (0 + $sb['price']) : '') ?>"
-                   placeholder="5000" style="direction:ltr" required></div>
+            <?php $sbBase = (float)($sb['price_base'] ?? $sb['price']); ?>
+            <input name="price" value="<?= h($sbBase > 0 ? (0 + $sbBase) : '') ?>"
+                   placeholder="5000" style="direction:ltr" required>
+            <?php if (abs($sbBase - (float)$sb['price']) > 0.01): ?>
+              <small class="muted">با سود: <?= number_format((float)$sb['price']) ?></small>
+            <?php endif; ?></div>
           <div><label>به ازای هر چند نفر؟ (۱ = قیمت هر ممبر)</label>
             <input name="per" type="number" min="1" value="<?= (int)$f['per'] ?>" style="direction:ltr"></div>
           <div><label>واحد پول</label><select name="currency">
@@ -1553,7 +1557,10 @@ foreach ($tabs as $k => $l): ?>
       <input type="hidden" name="action" value="link_product"><input type="hidden" name="id" value="<?= h($p['id']) ?>">
       <div class="grid2">
         <div><label>نام</label><input name="name" value="<?= h($p['name']) ?>"></div>
-        <div><label>قیمت (<?= h($p['currency']) ?>)</label><input name="price" value="<?= h(fmtNum($p['price'])) ?>"></div>
+        <div><label>قیمت (<?= h($p['currency']) ?>)</label><input name="price" value="<?= h(fmtNum($p['price_base'] ?? $p['price'])) ?>">
+          <?php if (isset($p['price_base']) && abs((float)$p['price_base'] - (float)$p['price']) > 0.01): ?>
+            <small class="muted">با سود: <?= h(fmtNum($p['price'])) ?></small>
+          <?php endif; ?></div>
         <div><label>ایموجی</label><input name="emoji" value="<?= h($p['emoji'] ?? '') ?>" style="text-align:center"></div>
         <div><label>رنگ دکمه</label><select name="color">
           <?php foreach (styleMap() as $sk => $sl): ?>
