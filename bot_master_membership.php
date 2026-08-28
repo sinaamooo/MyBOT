@@ -659,7 +659,7 @@ function defaultConfig() {
             'h1'    => ['emoji' => '', 'text' => 'نوع سفارش',  'color' => 'success', 'icon' => ''],
             'h2'    => ['emoji' => '', 'text' => 'مبلغ سفارش', 'color' => 'success', 'icon' => ''],
             'next'  => ['emoji' => '', 'text' => 'صفحه بعد',   'color' => 'primary', 'icon' => ''],
-            'first' => ['emoji' => '', 'text' => 'صفحه اول',   'color' => 'primary', 'icon' => ''],
+            'first' => ['emoji' => '', 'text' => 'صفحه قبل',   'color' => 'primary', 'icon' => ''],
             'back'  => ['emoji' => '', 'text' => 'برگشت',      'color' => 'danger',  'icon' => ''],
         ],
 
@@ -2240,6 +2240,21 @@ function showProducts($uid, $chatId, $extra = [], $replyTo = null) {
     }
 
     $rows = [];
+
+    // 📋 و 🧾 اول از همه — بالای دکمه‌های مینی‌اپ و محصول‌ها.
+    //    جایشان اینجاست نه پایین، چون مینی‌اپ‌ها ممکن است از راه $extra
+    //    بیایند و آن‌وقت هرچه پایین‌تر بگذاریم زیرشان می‌افتد.
+    $tf = cfg()['tariff'] ?? [];
+    if (!empty($tf['on'])) {
+        $b = ['text' => trim(($tf['btn']['emoji'] ?? '') . ' ' . ($tf['btn']['text'] ?? 'لیست تعرفه‌ها')),
+              'callback_data' => 'tariff'];
+        if (isStyle($tf['btn']['color'] ?? '')) $b['style'] = $tf['btn']['color'];
+        if (!empty($tf['btn']['icon'])) $b['icon_custom_emoji_id'] = (string)$tf['btn']['icon'];
+        $rows[] = [$b];
+    }
+    $ol = cfg()['orders_list'] ?? [];
+    if (!empty($ol['on'])) $rows[] = [olBtn($ol['btn'] ?? [], 'ordlist_0', 'info')];
+
     foreach ($groups as $g) {
         $line = [];
         foreach ($g as $p) $line[] = productBtn($p, $uid);
@@ -2256,21 +2271,8 @@ function showProducts($uid, $chatId, $extra = [], $replyTo = null) {
     foreach ($extra as $r) {
         foreach ($r as $b) if (isset($b['web_app'])) { $mergedIn = true; break 2; }
     }
-    // 🧾 لیست سفارشات — بالای دکمه‌های مینی‌اپ
-    $ol = cfg()['orders_list'] ?? [];
-    if (!empty($ol['on'])) $rows[] = [olBtn($ol['btn'] ?? [], 'ordlist_0', 'info')];
-
     if (!$mergedIn) foreach (maRows() as $r) $rows[] = $r;
 
-    // 📋 دکمه لیست تعرفه‌ها — همیشه آخرین ردیف
-    $tf = cfg()['tariff'] ?? [];
-    if (!empty($tf['on'])) {
-        $b = ['text' => trim(($tf['btn']['emoji'] ?? '') . ' ' . ($tf['btn']['text'] ?? 'لیست تعرفه‌ها')),
-              'callback_data' => 'tariff'];
-        if (isStyle($tf['btn']['color'] ?? '')) $b['style'] = $tf['btn']['color'];
-        if (!empty($tf['btn']['icon'])) $b['icon_custom_emoji_id'] = (string)$tf['btn']['icon'];
-        $rows[] = [$b];
-    }
     panelShow($uid, $chatId, 'shop', $text, inlineKb($rows), $replyTo);
 }
 
@@ -2390,7 +2392,7 @@ function showOrderList($uid, $chatId, $page = 0, $msgId = null) {
     if ($max > 1) {
         $rows[] = [
             olBtn($ol['next']  ?? ['text' => 'صفحه بعد'], 'ordlist_' . (($page + 1) % $max), 'primary'),
-            olBtn($ol['first'] ?? ['text' => 'صفحه اول'], 'ordlist_0', 'primary'),
+            olBtn($ol['first'] ?? ['text' => 'صفحه قبل'], 'ordlist_' . (($page - 1 + $max) % $max), 'primary'),
         ];
     }
     $rows[] = [olBtn($ol['back'] ?? ['text' => 'برگشت'], 'menu_buy', 'danger')];
@@ -4164,7 +4166,8 @@ function admOrderList($chatId, $msgId) {
     $t .= "تعداد در هر صفحه: <b>" . (int)($ol['per'] ?? 3) . "</b>\n\n";
     $t .= "🔘 دکمه: " . $lbl('btn', 'لیست سفارشات') . "\n";
     $t .= "🏷 سرستون‌ها: " . $lbl('h1', 'نوع سفارش') . " · " . $lbl('h2', 'مبلغ سفارش') . "\n";
-    $t .= "➡️ صفحه بعد: " . $lbl('next', 'صفحه بعد') . " · ⏮ صفحه اول: " . $lbl('first', 'صفحه اول') . "\n";
+    $t .= "➡️ صفحه بعد (راست): " . $lbl('next', 'صفحه بعد') . "\n";
+    $t .= "⬅️ صفحه قبل (چپ): " . $lbl('first', 'صفحه قبل') . "\n";
     $t .= "◀️ برگشت: " . $lbl('back', 'برگشت') . "\n\n";
     $col = fn($k) => styleMap()[$ol[$k]['color'] ?? 'none'] ?? '—';
     $t .= "\n🎨 سرستون‌ها: " . $col('h1') . " · سوییچ: " . $col('next') .
@@ -4178,7 +4181,8 @@ function admOrderList($chatId, $msgId) {
         [btnCb('✏️ متن بالای صفحه', 'oltx', 'admin'), btnCb('✏️ متن «سفارشی نیست»', 'olem', 'admin')],
         [btnCb('🔘 دکمه‌ی اصلی', 'olb_btn', 'admin')],
         [btnCb('🏷 سرستون ۱', 'olb_h1', 'admin'), btnCb('🏷 سرستون ۲', 'olb_h2', 'admin')],
-        [btnCb('➡️ صفحه بعد', 'olb_next', 'admin'), btnCb('⏮ صفحه اول', 'olb_first', 'admin')],
+        [btnCb('➡️ صفحه بعد (راست)', 'olb_next', 'admin'),
+         btnCb('⬅️ صفحه قبل (چپ)', 'olb_first', 'admin')],
         [btnCb('◀️ دکمه برگشت', 'olb_back', 'admin')],
         [btnCb('🎨 رنگ سرستون‌ها', 'olc_h', 'admin'),
          btnCb('🎨 رنگ سوییچ', 'olc_n', 'admin')],
@@ -5860,7 +5864,8 @@ function masterHandle($update) {
             $cur = cfg()['orders_list'][$om[1]] ?? [];
             sendMsg(BOT_TOKEN, $chatId,
                 "🔘 متن این دکمه را بفرستید.\n\n" .
-                "✨ ایموجی پریمیوم را جلوی متن بگذارید — خودش برداشته و درست روی دکمه می‌نشیند.\n\n" .
+                "✨ ایموجی پریمیوم را جلوی متن بگذارید — خودش برداشته و درست روی دکمه می‌نشیند.\n" .
+                "➖ برای برگشتن به حالت اول، یک خط تیره <code>-</code> بفرستید.\n\n" .
                 "الان: <code>" . h(trim((string)($cur['emoji'] ?? '') . ' ' . (string)($cur['text'] ?? ''))) . '</code>',
                 inlineKb([[btnUI('cancel', 'adm_orderlist', 'cancel')]]));
             return;
@@ -6786,6 +6791,23 @@ function masterHandle($update) {
         if ($action === 'ol_btn') {
             $k = (string)((getState($uid)['data']['k'] ?? ''));
             if (!in_array($k, ['btn','h1','h2','next','first','back'], true)) { clearState($uid); return; }
+
+            // ➖ خط تیره یعنی «از اول». برچسب و ایموجی هر دو به حالت
+            //    کارخانه برمی‌گردند تا بشود دوباره از صفر تنظیمش کرد.
+            if ($plain === '-' || $plain === '—') {
+                $d = defaultConfig()['orders_list'][$k] ?? null;
+                if (!$d) { clearState($uid); return; }
+                cfgSet(function (&$c) use ($k, $d) {
+                    $col = $c['orders_list'][$k]['color'] ?? $d['color'];   // رنگ دستِ خودشان بماند
+                    $c['orders_list'][$k] = $d;
+                    $c['orders_list'][$k]['color'] = $col;
+                });
+                clearState($uid);
+                sendMsg(BOT_TOKEN, $chatId, "🧹 به حالت اول برگشت:",
+                    inlineKb([[olBtn(cfg()['orders_list'][$k], 'ordnop', 'info')]]));
+                sendMsg(BOT_TOKEN, $chatId, '👆', $back);
+                return;
+            }
             if ($plain === '') { sendMsg(BOT_TOKEN, $chatId, "⚠️ متن خالی است."); return; }
             // ایموجی پریمیوم جدا روی دکمه می‌نشیند؛ نویسه‌اش از متن برداشته
             // می‌شود تا کنارِ خودش دوباره دیده نشود.
@@ -8683,6 +8705,14 @@ function runBackgroundQueues() {
             foreach (['h1' => 'success', 'h2' => 'success', 'next' => 'primary',
                       'first' => 'primary', 'back' => 'danger'] as $k => $col)
                 $c['orders_list'][$k]['color'] = $col;
+        });
+    });
+
+    // ⬅️ دکمه‌ی چپ حالا «صفحه قبل» است، نه «صفحه اول»
+    migrateOnce('v8_prevlabel', function () {
+        cfgSet(function (&$c) {
+            if (trim((string)($c['orders_list']['first']['text'] ?? '')) === 'صفحه اول')
+                $c['orders_list']['first']['text'] = 'صفحه قبل';
         });
     });
 
