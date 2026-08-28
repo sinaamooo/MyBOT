@@ -169,15 +169,73 @@ function dmUser($uid) {
 }
 
 function dmUserSet($uid, callable $fn) {
-    return mutate('diamond_users', function (&$a) use ($uid, $fn) {
+    $dPts = 0.0; $dHops = 0; $dUsers = 0;
+
+    $out = mutate('diamond_users', function (&$a) use ($uid, $fn, &$dPts, &$dHops, &$dUsers) {
         $k = (string)$uid;
         if (!isset($a[$k])) {
             $a[$k] = ['id' => (int)$uid, 'name' => '', 'username' => '',
                       'points' => 0, 'total' => 0, 'level' => 1, 'last' => 0,
                       'joined_at' => nowStr()];
+            $dUsers = 1;
         }
-        return $fn($a[$k]);
+        $wasP = (float)($a[$k]['points'] ?? 0);
+        $wasH = (int)  ($a[$k]['total']  ?? 0);
+        $r = $fn($a[$k]);
+        $dPts  = (float)($a[$k]['points'] ?? 0) - $wasP;
+        $dHops = (int)  ($a[$k]['total']  ?? 0) - $wasH;
+        return $r;
     });
+
+    dmSumBump($dPts, $dHops, $dUsers);
+    return $out;
+}
+
+// ============================================================
+// 🧮 شمارنده‌ی کل
+// ============================================================
+//
+// مجموعِ الماسِ همه‌ی کاربران یک عدد است که ذخیره می‌شود، نه چیزی که
+// هر بار از روی همه‌ی بازیکن‌ها حساب شود.
+//
+// چرا: با ده هزار بازیکن، هر باز کردنِ صفحه‌ی الماس یعنی خواندن و
+// decode کردنِ کلِ فایل و پیمایشش. حالا یک فایلِ چندبایتی خوانده
+// می‌شود و تمام. عددِ ذخیره‌شده با هر تغییرِ الماس به‌روز می‌شود، پس
+// همیشه تازه است.
+
+/** [users, points, total] — از روی شمارنده، نه پیمایش */
+function dmSum() {
+    $s = load('diamond_sum');
+    if (!is_array($s) || !isset($s['points'])) return dmSumRebuild();
+    return ['users'  => (int)($s['users'] ?? 0),
+            'points' => (float)($s['points'] ?? 0),
+            'total'  => (int)($s['total'] ?? 0)];
+}
+
+/** شمارنده را با اختلافِ همین تغییر جلو ببر */
+function dmSumBump($dPts, $dHops, $dUsers = 0) {
+    if ((float)$dPts == 0.0 && (int)$dHops === 0 && (int)$dUsers === 0) return;
+    mutate('diamond_sum', function (&$s) use ($dPts, $dHops, $dUsers) {
+        if (!is_array($s) || !isset($s['points'])) { $s = dmSumWalk(); return; }
+        $s['points'] = max(0, (float)$s['points'] + (float)$dPts);
+        $s['total']  = max(0, (int)$s['total']  + (int)$dHops);
+        $s['users']  = max(0, (int)$s['users']  + (int)$dUsers);
+        $s['at']     = time();
+    });
+}
+
+/** پیمایشِ کامل — فقط وقتی شمارنده نیست یا ادمین گفت «دوباره بشمار» */
+function dmSumWalk() {
+    $a = load('diamond_users');
+    $sum = 0.0; $hops = 0;
+    foreach ($a as $u) { $sum += (float)($u['points'] ?? 0); $hops += (int)($u['total'] ?? 0); }
+    return ['users' => count($a), 'points' => $sum, 'total' => $hops, 'at' => time()];
+}
+
+function dmSumRebuild() {
+    $s = dmSumWalk();
+    save('diamond_sum', $s);
+    return ['users' => (int)$s['users'], 'points' => (float)$s['points'], 'total' => (int)$s['total']];
 }
 
 /** برترین‌ها */
@@ -187,12 +245,7 @@ function dmTop($n = 10) {
     return array_slice($a, 0, max(1, (int)$n));
 }
 
-function dmStats() {
-    $a = load('diamond_users');
-    $sum = 0; $hops = 0;
-    foreach ($a as $u) { $sum += (float)($u['points'] ?? 0); $hops += (int)($u['total'] ?? 0); }
-    return ['users' => count($a), 'points' => $sum, 'total' => $hops];
-}
+function dmStats() { return dmSum(); }
 
 // ============================================================
 // 🎮 خودِ بازی
@@ -486,8 +539,12 @@ function dmAdminHome($chatId, $msgId = null) {
     $t .= '🎁 جایزه پایه: <b>' . $c['base'] . '</b> · ضریب رشد: <b>' . $c['ratio'] . "</b>\n";
     $t .= '📍 جای بازی: ' . (!empty($c['group_only']) ? 'فقط گروه' : 'گروه و خصوصی') . "\n\n";
     $t .= "👥 بازیکن‌ها: <b>" . number_format($s['users']) . "</b>\n";
-    $t .= "💎 مجموع الماس: <b>" . number_format($s['points']) . "</b>\n";
-    $t .= "🔁 مجموع دفعات: <b>" . number_format($s['total']) . "</b>\n\n";
+    $t .= "💎 مجموع الماسِ همه: <b>" . number_format($s['points']) . "</b>\n";
+    $t .= "🔁 مجموع دفعات: <b>" . number_format($s['total']) . "</b>\n";
+    if ((float)$c['to_wallet'] > 0)
+        $t .= "💰 ارزشِ تومانیِ کلِ الماس‌ها: <b>" .
+              number_format($s['points'] * (float)$c['to_wallet']) . "</b>\n";
+    $t .= "\n";
     $t .= '🔁 تبدیل به کیف پول: ' . ((float)$c['to_wallet'] > 0
             ? 'هر ۱ الماس = <b>' . $c['to_wallet'] . '</b> تومان (حداقل ' . number_format((float)$c['min_swap']) . ')'
             : '❌ خاموش');
@@ -501,6 +558,7 @@ function dmAdminHome($chatId, $msgId = null) {
         [btnCb('🔁 نرخ تبدیل', 'dmsw', 'admin'), btnCb('🔢 حداقل تبدیل', 'dmms', 'admin')],
         [btnCb('✏️ متن‌ها', 'dmt_home', 'admin'), btnCb('🏆 برترین‌ها', 'dmtop', 'confirm')],
         [btnCb('🎁 دادن الماس به کاربر', 'dmgive', 'admin')],
+        [btnCb('🧮 شمارش دوباره', 'dmsum', 'confirm')],
         [btnCb('🛍 هدیه با الماس', 'dmgift', 'confirm')],
         [btnCb(UT('back'), 'adm_home', 'nav')],
     ];
@@ -560,6 +618,14 @@ function dmAdminCallback($data, $chatId, $msgId, $cbId) {
     if ($data === 'dmtop') {
         answerCb(BOT_TOKEN, $cbId);
         sendMsg(BOT_TOKEN, $chatId, dmTopText());
+        return true;
+    }
+    // 🧮 اگر شمارنده و واقعیت از هم دور افتادند (مثلا بعد از دست‌کاری
+    //    دستیِ فایل داده)، این دکمه از نو می‌شمارد
+    if ($data === 'dmsum') {
+        $s = dmSumRebuild();
+        answerCb(BOT_TOKEN, $cbId, '💎 ' . number_format($s['points']), true);
+        dmAdminHome($chatId, $msgId);
         return true;
     }
     if ($data === 'dmt_home') { answerCb(BOT_TOKEN, $cbId); dmAdminTexts($chatId, $msgId); return true; }

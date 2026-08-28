@@ -61,9 +61,10 @@ function gmDefaults() {
                             "<blockquote>🟢 {p1}\n🔴 {p2}\n" .
                             "🏆 جایزه: <b>{prize}</b> الماس</blockquote>\n\n" .
                             "نوبت: {turn}",
+            // {wname} و {lname} رنگِ خودِ بازیکن را هم با خودشان می‌آورند
             'duel_win'   => "🎉 <b>نتیجه بازی مشخص شد</b>\n\n" .
-                            "<blockquote>🏆 کاربر برنده: <code>{winner}</code>\n" .
-                            "❌ کاربر بازنده: <code>{loser}</code></blockquote>",
+                            "<blockquote>🏆 برنده: {wname}  <code>{winner}</code>\n" .
+                            "❌ بازنده: {lname}  <code>{loser}</code></blockquote>",
             'duel_draw'  => "🤝 <b>مساوی شد</b>\n\nشرطِ هر دو نفر برگشت.",
             'duel_join'  => "✅ پیوستن",
             'duel_cancel'=> "❌ لغو",
@@ -75,8 +76,8 @@ function gmDefaults() {
                             "🏆 جایزه‌ی برنده:\n{prize_big}\n" .
                             "🧾 مالیات:\n{tax_big}</blockquote>",
             'rand_win'   => "🎉 <b>نتیجه بازی مشخص شد</b>\n\n" .
-                            "<blockquote>🏆 کاربر برنده: <code>{winner}</code>\n" .
-                            "❌ کاربر بازنده: <code>{loser}</code></blockquote>",
+                            "<blockquote>🏆 برنده: {wname}  <code>{winner}</code>\n" .
+                            "❌ بازنده: {lname}  <code>{loser}</code></blockquote>",
             'rand_none'  => "😔 <b>بازی باطل شد</b>\n\nکسی وارد نشد؛ شرط برگشت.",
             'rand_join'  => "🎲 شرکت در بازی",
 
@@ -294,6 +295,73 @@ function gmAdd($uid, $delta, $name = '', $uname = '') {
 }
 
 // ============================================================
+// 🎨 رنگِ هر بازیکن
+// ============================================================
+//
+// هر کسی که بازی می‌کند یک رنگ می‌گیرد و آن رنگ مالِ خودش می‌ماند —
+// روی صفحه‌ی دوز، کنارِ اسمش، و در پیام نتیجه.
+//
+// چرا: قبلا نفر اول همیشه سبز بود و نفر دوم همیشه قرمز. یعنی رنگ
+// چیزی درباره‌ی «کی» نمی‌گفت، فقط «کدام‌طرفِ میز». وقتی چند بازی پشت
+// سرِ هم در یک گروه می‌چرخد، آدم نمی‌فهمد کدام سبز خودش بوده.
+
+function gmPalette() {
+    return [
+        'red'    => ['e' => '🔴', 'n' => 'قرمز',    's' => 'danger'],
+        'blue'   => ['e' => '🔵', 'n' => 'آبی',     's' => 'primary'],
+        'green'  => ['e' => '🟢', 'n' => 'سبز',     's' => 'success'],
+        'yellow' => ['e' => '🟡', 'n' => 'زرد',     's' => 'primary'],
+        'purple' => ['e' => '🟣', 'n' => 'بنفش',    's' => 'primary'],
+        'orange' => ['e' => '🟠', 'n' => 'نارنجی',  's' => 'danger'],
+        'brown'  => ['e' => '🟤', 'n' => 'قهوه‌ای', 's' => 'primary'],
+        'black'  => ['e' => '⚫️', 'n' => 'مشکی',    's' => 'primary'],
+        'white'  => ['e' => '⚪️', 'n' => 'سفید',    's' => 'primary'],
+    ];
+}
+
+/** رنگِ ثابتِ یک کاربر — بار اول رندوم انتخاب و ذخیره می‌شود */
+function gmColor($uid) {
+    $pal = gmPalette();
+    $u   = function_exists('dmUser') ? dmUser($uid) : null;
+    $k   = (string)($u['color'] ?? '');
+    if (isset($pal[$k])) return $k;
+
+    $keys = array_keys($pal);
+    $k = $keys[random_int(0, count($keys) - 1)];
+    if (function_exists('dmUserSet'))
+        dmUserSet($uid, function (&$x) use ($k) { $x['color'] = $k; return true; });
+    return $k;
+}
+
+/** ایموجیِ رنگ */
+function gmColorEmoji($k) { return (string)(gmPalette()[$k]['e'] ?? '⚪️'); }
+/** نامِ فارسیِ رنگ */
+function gmColorName($k)  { return (string)(gmPalette()[$k]['n'] ?? ''); }
+/** سبکِ دکمه‌ای که به این رنگ می‌خورد */
+function gmColorStyle($k) { return (string)(gmPalette()[$k]['s'] ?? 'primary'); }
+
+/**
+ * رنگِ یک بازیکن داخلِ یک بازی.
+ *
+ * ⚠️ اگر دو حریف اتفاقا یک رنگ داشته باشند، صفحه‌ی دوز بی‌معنی می‌شود.
+ *    پس رنگِ نفرِ دوم فقط برای همین بازی عوض می‌شود — رنگِ همیشگی‌اش
+ *    دست نمی‌خورد، چون کاربر رنگِ خودش را حفظ می‌کند نه بازی.
+ */
+function gmPickColor($uid, array $taken) {
+    $k = gmColor($uid);
+    if (!in_array($k, $taken, true)) return $k;
+    foreach (array_keys(gmPalette()) as $alt)
+        if (!in_array($alt, $taken, true)) return $alt;
+    return $k;
+}
+
+/** رنگی که این بازی برای این بازیکن ثبت کرده */
+function gmPlayerColor($g, $uid) {
+    $k = (string)($g['players'][(string)$uid]['color'] ?? '');
+    return isset(gmPalette()[$k]) ? $k : gmColor($uid);
+}
+
+// ============================================================
 // 🗄 انبار بازی‌ها
 // ============================================================
 
@@ -379,7 +447,8 @@ function gmCreate($kind, $stake, $uid, $chat, $name, $uname, $thread = 0) {
         'msg'     => 0,
         'host'    => (int)$uid,
         'stake'   => (float)$stake,
-        'players' => [(string)$uid => ['id' => (int)$uid, 'name' => $name, 'uname' => $uname]],
+        'players' => [(string)$uid => ['id' => (int)$uid, 'name' => $name, 'uname' => $uname,
+                                      'color' => gmColor($uid)]],
         'board'   => array_fill(0, 9, 0),
         'turn'    => (int)$uid,
         'status'  => 'open',
@@ -409,11 +478,20 @@ function gmPrize($g) {
 // 🖼 نمایش
 // ============================================================
 
+/**
+ * اسمِ بازیکن، با رنگِ خودش جلویش.
+ *
+ * رنگ فقط وقتی می‌آید که بازی ثبتش کرده باشد — پیام‌های قدیمی و
+ * جاهایی که فقط یک شناسه داریم، مثل قبل می‌مانند.
+ */
 function gmName($p) {
+    $c = (string)($p['color'] ?? '');
+    $dot = isset(gmPalette()[$c]) ? gmColorEmoji($c) . ' ' : '';
+
     $u = trim((string)($p['uname'] ?? ''));
-    if ($u !== '') return '@' . ltrim($u, '@');
+    if ($u !== '') return $dot . '@' . ltrim($u, '@');
     $n = trim((string)($p['name'] ?? ''));
-    return $n !== '' ? h($n) : ('<code>' . (int)($p['id'] ?? 0) . '</code>');
+    return $dot . ($n !== '' ? h($n) : ('<code>' . (int)($p['id'] ?? 0) . '</code>'));
 }
 
 function gmEmoji() { return (string)gmVal('emoji', '💎'); }
@@ -463,16 +541,21 @@ function gmKb($g) {
     }
     if ($g['kind'] !== 'duel' || $g['status'] !== 'playing') return null;
 
+    // 🎨 هر خانه رنگِ همان بازیکنی را می‌گیرد که زده — رنگِ خودش، نه
+    //    «سبزِ نفر اول». پس در یک گروهِ شلوغ هم معلوم است کی کجا زده.
+    $ps  = array_values($g['players']);
+    $col = [1 => gmPlayerColor($g, (int)($ps[0]['id'] ?? 0)),
+            2 => gmPlayerColor($g, (int)($ps[1]['id'] ?? 0))];
+
     $rows = [];
     for ($r = 0; $r < 3; $r++) {
         $line = [];
         for ($c = 0; $c < 3; $c++) {
             $i = $r * 3 + $c;
             $v = (int)$g['board'][$i];
-            $b = ['text' => $v === 0 ? '·' : ($v === 1 ? '🟢' : '🔴'),
+            $b = ['text' => $v === 0 ? '·' : gmColorEmoji($col[$v] ?? ''),
                   'callback_data' => 'gmm_' . $g['id'] . '_' . $i];
-            if ($v === 1) $b['style'] = 'success';    // بازیکن اول — سبز
-            if ($v === 2) $b['style'] = 'danger';     // بازیکن دوم — قرمز
+            if ($v !== 0) $b['style'] = gmColorStyle($col[$v] ?? '');
             $line[] = $b;
         }
         $rows[] = $line;
@@ -854,10 +937,12 @@ function gmCallback($data, $uid, $chatId, $msgId, $cbId, $from = []) {
     if (preg_match('/^gmb_(\d+)$/', (string)$data, $bm)) {
         $who = (int)$bm[1];
         $u   = function_exists('dmUser') ? dmUser($who) : null;
+        // 🎨 همین‌جا رنگش را هم بگو — تنها جایی که کاربر می‌پرسد «مالِ من کدام بود؟»
+        $ck  = gmColor($who);
         answerCb(BOT_TOKEN, $cbId, gmT('bal_pop', [
             'name'   => trim((string)($u['name'] ?? '')) !== '' ? (string)$u['name'] : (string)$who,
             'points' => gmNum(gmPoints($who)),
-        ]), true);
+        ]) . "\n" . gmColorEmoji($ck) . ' ' . gmColorName($ck), true);
         return true;
     }
 
@@ -927,7 +1012,10 @@ function gmCallback($data, $uid, $chatId, $msgId, $cbId, $from = []) {
         gmSetGame($gid, function (&$x) use ($uid, $name, $uname, &$joined) {
             if (isset($x['players'][(string)$uid])) return false;
             if ($x['kind'] === 'duel' && count($x['players']) >= 2) return false;
-            $x['players'][(string)$uid] = ['id' => (int)$uid, 'name' => $name, 'uname' => $uname];
+            $taken = [];
+            foreach ($x['players'] as $pp) if (!empty($pp['color'])) $taken[] = (string)$pp['color'];
+            $x['players'][(string)$uid] = ['id' => (int)$uid, 'name' => $name, 'uname' => $uname,
+                                           'color' => gmPickColor($uid, $taken)];
             if ($x['kind'] === 'duel') {
                 $x['status'] = 'playing'; $x['turn'] = (int)$x['host']; $x['moved'] = time();
             }

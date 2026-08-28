@@ -8796,6 +8796,11 @@ function runBackgroundQueues() {
         if (function_exists('numForceTelegramOnly')) numForceTelegramOnly();
     });
 
+    // 💎 شمارنده‌ی کلِ الماس‌ها یک بار از روی بازیکن‌های موجود ساخته شود
+    migrateOnce('v12_dmsum', function () {
+        if (function_exists('dmSumRebuild')) dmSumRebuild();
+    });
+
     // 🎨 لیست سفارشات بی‌رنگ شود.
     //
     //    مهاجرتِ قبلی (v8_ordcolors) این دکمه‌ها را سبز و آبی و قرمز کرده
