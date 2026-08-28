@@ -329,6 +329,7 @@ body::before{
     <div class="cats" id="cats"></div>
     <div class="grid" id="grid"></div>
     <button class="btn ghost" id="more" hidden></button>
+    <p class="ohint" id="gridHint" hidden></p>
     <div class="empty" id="gridEmpty" hidden><i>🔍</i><span></span></div>
   </section>
 
@@ -417,7 +418,7 @@ async function api(action, data) {
 
 /* ── وضعیت ───────────────────────────────── */
 const S = { me: null, cat: 'all', live: null, tick: 0, poll: 0, page: 'home',
-            q: '', shown: 0 };
+            q: '', shown: 0, hits: [] };
 
 /* ── ساخت کارت محصول ─────────────────────── */
 function catIndex(id) {
@@ -472,14 +473,30 @@ function cardEl(it) {
    پس یک صفحه می‌سازیم و بقیه با اسکرول می‌آیند. */
 const PAGE = 40;
 
+/* صفحه فقط چند ده‌تای اول را دارد؛ نتیجه‌ی جستجو از سرور می‌آید و
+   همان‌جا در S.hits می‌نشیند. */
 function visibleItems() {
   const q = (S.q || '').trim().toLowerCase();
-  return (B.items || []).filter(i => {
-    if (S.cat !== 'all' && i.cat !== S.cat) return false;
-    if (!q) return true;
-    return (i.name || '').toLowerCase().includes(q)
-        || (i.desc || '').toLowerCase().includes(q);
-  });
+  if (q) return S.hits || [];
+  return (B.items || []).filter(i => S.cat === 'all' || i.cat === S.cat);
+}
+
+/* 🔎 جستجو روی سرور.
+   با چند هزار کشور، فهرستِ کامل داخل صفحه نیست — پس نمی‌شود محلی گشت.
+   هر تایپ یک درخواست نمی‌فرستد: ۲۵۰ms صبر می‌کند و نتیجه‌ی کهنه را هم
+   دور می‌ریزد تا پاسخِ دیرتر جای تازه‌تر را نگیرد. */
+let qSeq = 0;
+async function runSearch(q) {
+  q = (q || '').trim();
+  S.q = q;
+  if (!q) { S.hits = []; paintGrid(); return; }
+
+  const mine = ++qSeq;
+  $('#gridEmpty').hidden = true;
+  const r = await api('num_search', { q });
+  if (mine !== qSeq) return;                 // جوابِ یک تایپِ قدیمی‌تر
+  S.hits = (r && r.ok && Array.isArray(r.items)) ? r.items : [];
+  paintGrid();
 }
 
 function paintGrid(reset) {
@@ -505,6 +522,13 @@ function paintGrid(reset) {
   const more = $('#more');
   more.hidden = left <= 0;
   if (left > 0) more.textContent = U('more', 'بیشتر') + ' (' + fmt(left) + ')';
+
+  // 💡 وقتی صفحه فقط بخشی از کشورها را دارد، کاربر باید بداند بقیه هم
+  //    هستند — وگرنه فکر می‌کند فقط همین‌قدر می‌فروشیم.
+  const hint = $('#gridHint');
+  const rest = (B.total || 0) - (B.items || []).length;
+  hint.hidden = !!S.q || rest <= 0 || left > 0;
+  if (!hint.hidden) hint.textContent = U('search_rest', '').replace('{n}', fmt(rest));
 }
 
 function paintCats() {
@@ -966,7 +990,7 @@ function boot() {
   let qT = 0;
   q.addEventListener('input', () => {
     clearTimeout(qT);
-    qT = setTimeout(() => { S.q = q.value; paintGrid(); }, 160);
+    qT = setTimeout(() => runSearch(q.value), 250);
   });
   $('#more').addEventListener('click', () => { buzz(); paintGrid(false); });
 

@@ -953,6 +953,29 @@ function numFetch($path) {
     return maHttp($url, 'GET', $hd, '', (int)numVal('api.timeout', 15));
 }
 
+/**
+ * 🏆 رتبه‌ی یک کشور — کوچک‌تر یعنی بالاتر در مینی‌اپ.
+ *
+ * صفحه فقط چهل‌تای اول را نشان می‌دهد، پس «کدام چهل‌تا» مهم است: اگر
+ * ترتیب همانی باشد که پنل داده، ممکن است چهل کشوری بیاید که کسی
+ * نمی‌خرد و روسیه‌ی پرفروش صفحه‌ی دوم بماند. پس کشورهای پرتقاضا اول
+ * می‌آیند و بقیه پشتشان، به ترتیبِ الفبا.
+ */
+function numRank($nameEn) {
+    static $top = ['russia','ukraine','kazakhstan','england','unitedkingdom','uk','usa','unitedstates',
+                   'america','germany','france','netherlands','poland','romania','indonesia','philippines',
+                   'vietnam','india','malaysia','thailand','turkey','spain','italy','portugal','sweden',
+                   'finland','norway','denmark','austria','switzerland','belgium','ireland','czechia',
+                   'czechrepublic','hungary','slovakia','bulgaria','serbia','croatia','greece','latvia',
+                   'lithuania','estonia','moldova','georgia','armenia','azerbaijan','uzbekistan',
+                   'kyrgyzstan','tajikistan','canada','brazil','mexico','argentina','colombia',
+                   'southafrica','nigeria','kenya','egypt','morocco','israel','australia','newzealand',
+                   'japan','southkorea','korea','taiwan','hongkong','singapore','china'];
+    $k = strtolower(preg_replace('/[^a-z]/i', '', (string)$nameEn));
+    $i = array_search($k, $top, true);
+    return $i === false ? 500 : $i;
+}
+
 /** پرچمِ یک کشور از روی نامِ انگلیسی‌اش — هرچه نشناسیم 🌍 می‌شود */
 function numFlag($nameEn) {
     static $map = [
@@ -1043,6 +1066,7 @@ function numCatalog() {
             'flag'    => $flag,
             'cname'   => $cName,
             'single'  => $single,
+            'rank'    => numRank($ctryEn[$cc] ?? ''),
             'name'    => $single ? $cName
                                  : (($svcName[$ss] ?? ('سرویس ' . $ss)) . ' — ' . $cName),
             'price'   => (float)($r['amount'] ?? 0),
@@ -1051,6 +1075,8 @@ function numCatalog() {
             'on'      => (string)($r['active'] ?? '1') !== '0' && (int)($r['count'] ?? 0) > 0,
         ];
     }
+    // پرتقاضاها اول، بعد بقیه به ترتیبِ الفبا — همین ترتیب در مینی‌اپ می‌نشیند
+    usort($out, fn($x, $y) => [$x['rank'], $x['cname']] <=> [$y['rank'], $y['cname']]);
     return [$countries, $out, ''];
 }
 
@@ -1102,8 +1128,9 @@ function numImport(array $countries, array $rows, $markup = 0, $syncPrice = null
             if ($svc !== '') $bySid[$svc] = $i;
         }
         $seen = [];
-        $iOrder = count($a['items']);
+        $iOrder = 0;
         foreach ($rows as $r) {
+            $iOrder++;
             $seen[$r['sid']] = true;
             $catIdx = $single ? null : ($byCode[$r['country']] ?? null);
             $catId  = $catIdx !== null ? (string)$a['cats'][$catIdx]['id'] : '';
@@ -1118,6 +1145,9 @@ function numImport(array $countries, array $rows, $markup = 0, $syncPrice = null
                 $a['items'][$k]['on'] = (bool)$r['on'];
                 if ($catId !== '') $a['items'][$k]['cat'] = $catId;
                 if ($syncPrice) $a['items'][$k]['price'] = round($r['price'] * $mul);
+                // ترتیبِ نمایش هم از پنل می‌آید — وگرنه کشورِ پرفروشی که
+                // بار اول آخر افتاده، برای همیشه آخر می‌ماند
+                $a['items'][$k]['order'] = $iOrder;
                 if ($was && !$r['on']) $off++; else $upd++;
                 continue;
             }
@@ -1129,7 +1159,7 @@ function numImport(array $countries, array $rows, $markup = 0, $syncPrice = null
                 'name' => $r['name'], 'desc' => '',
                 'price' => round($r['price'] * $mul), 'unit' => '', 'badge' => '',
                 'ask' => 'none', 'min' => 1, 'max' => 1,
-                'on' => (bool)$r['on'], 'order' => ++$iOrder,
+                'on' => (bool)$r['on'], 'order' => $iOrder,
             ];
             $newI++;
         }
@@ -1222,7 +1252,8 @@ function numAdmHome($chatId, $msgId) {
         [btnCb(!empty($api['on']) ? '❌ خاموش کن' : '✅ روشن کن', 'numtog', 'info')],
         [btnCb('⚡️ آماده‌سازی خودکار پنل', 'numpre', 'confirm')],
         [btnCb('📥 وارد کردن کشورها و سرویس‌ها', 'numimp', 'buy')],
-        [btnCb('🎯 چه چیزی می‌فروشید؟', 'numsvc', 'admin')],
+        [btnCb('🎯 چه چیزی می‌فروشید؟', 'numsvc', 'admin'),
+         btnCb('🧹 پاک‌سازی', 'numclean', 'reject')],
         [btnCb('🧪 تست خام (هر متدی)', 'numraw', 'confirm')],
         [btnCb('📖 خواندن مستندات API', 'numspec', 'confirm')],
         [btnCb('💰 تست موجودی پنل', 'numtest', 'confirm')],
@@ -1393,6 +1424,115 @@ function numPruneCatalog(array $keepSids) {
         $a['cats'] = array_values($cats);
     });
     return [$delI, $delC];
+}
+
+/**
+ * 🧹 صفحه‌ی پاک‌سازی.
+ *
+ * وقتی یک بار بدونِ فیلتر وارد کرده‌اید، چند هزار محصول در ربات نشسته و
+ * دو چیز را خراب می‌کند: مینی‌اپ (چون کلِ فهرست داخل صفحه می‌رود) و کلِ
+ * ربات (چون config.json بزرگ می‌شود و هر تغییرِ تنظیمات آن را از نو
+ * می‌نویسد). این صفحه راهِ برگشت است.
+ */
+function numAdmClean($chatId, $msgId) {
+    $a  = maGet('num');
+    $n  = count((array)($a['items'] ?? []));
+    $nc = count((array)($a['cats'] ?? []));
+    $on = maCountOn($a);
+    $sz = @filesize(DATA_DIR . '/config.json') ?: 0;
+
+    $t  = "🧹 <b>پاک‌سازی کاتالوگ</b>\n\n";
+    $t .= "الان: <b>" . fmtNum($n) . "</b> محصول (<b>" . fmtNum($on) . "</b> روشن) · <b>" .
+          fmtNum($nc) . "</b> دسته\n";
+    $t .= "اندازه‌ی تنظیمات: <b>" . number_format($sz / 1024, 1) . "</b> کیلوبایت\n\n";
+
+    if ($n > 500) {
+        $t .= "⚠️ این تعداد هم مینی‌اپ را سنگین می‌کند هم کلِ ربات را: هر تغییرِ " .
+              "تنظیمات، این فایل را از نو می‌نویسد.\n\n";
+    }
+
+    $only = numSvcOnly();
+    $t .= "🎯 سرویس‌های مجاز: <b>" . ($only ? h(implode('، ', $only)) : 'همه') . "</b>\n\n";
+    $t .= "<b>دو راه:</b>\n";
+    $t .= "۱️⃣ <b>هرچه بی‌ربط است برود</b> — فهرستِ مجاز را از پنل می‌گیرد و بقیه را حذف می‌کند. " .
+          "قیمت و نامی که خودتان ست کرده‌اید سرِ جایش می‌ماند.\n";
+    $t .= "۲️⃣ <b>از صفر</b> — همه‌ی کشورها و سرویس‌ها پاک می‌شوند و بعد دوباره وارد می‌کنید. " .
+          "وقتی به پنل دسترسی نیست یا کاتالوگ خیلی به‌هم‌ریخته، این تمیزتر است.\n\n";
+    $t .= "<i>در هر دو حالت، محصول‌های دستیِ خودتان (بدون کد سرویس) دست نمی‌خورند.</i>";
+
+    editMsg(BOT_TOKEN, $chatId, $msgId, $t, inlineKb([
+        [btnCb('🧹 هرچه بی‌ربط است برود', 'numclean1', 'confirm')],
+        [btnCb('🗑 از صفر شروع کن', 'numclean2', 'reject')],
+        [btnCb('🔙 بازگشت', 'num_home', 'nav')],
+    ]));
+}
+
+/** ۱️⃣ فهرستِ مجاز را از پنل بگیر و بقیه را حذف کن */
+function numAdmCleanKeep($chatId, $msgId) {
+    $back = inlineKb([[btnCb('☎️ شماره مجازی', 'num_home', 'admin')]]);
+    $only = numSvcOnly();
+    if (!$only) {
+        editMsg(BOT_TOKEN, $chatId, $msgId,
+            "⚠️ اول در «🎯 چه چیزی می‌فروشید؟» مشخص کنید کدام سرویس‌ها بمانند.\n\n" .
+            "وگرنه «بی‌ربط» معنی ندارد — همه‌چیز مجاز است.",
+            inlineKb([[btnCb('🎯 چه چیزی می‌فروشید؟', 'numsvc', 'admin')],
+                      [btnCb('🔙 بازگشت', 'numclean', 'nav')]]));
+        return;
+    }
+
+    [$co, $rows, $err] = numCatalog();
+    if ($err !== '') {
+        editMsg(BOT_TOKEN, $chatId, $msgId,
+            "❌ <b>فهرست از پنل نیامد</b>\n<code>" . h(mb_substr($err, 0, 240)) . "</code>\n\n" .
+            "بدون آن نمی‌دانیم کدام محصول مجاز است. اگر پنل در دسترس نیست، " .
+            "«🗑 از صفر» را بزنید و بعد دوباره وارد کنید.",
+            inlineKb([[btnCb('🗑 از صفر شروع کن', 'numclean2', 'reject')],
+                      [btnCb('🔙 بازگشت', 'numclean', 'nav')]]));
+        return;
+    }
+
+    [$delI, $delC] = numPruneCatalog(array_column($rows, 'sid'));
+    $a = maGet('num');
+    editMsg(BOT_TOKEN, $chatId, $msgId,
+        "✅ <b>پاک شد</b>\n\n" .
+        "🗑 <b>" . fmtNum($delI) . "</b> محصول و <b>" . fmtNum($delC) . "</b> دسته حذف شد.\n" .
+        "الان: <b>" . fmtNum(count((array)($a['items'] ?? []))) . "</b> محصول.\n\n" .
+        "حالا «📥 وارد کردن» را بزنید تا قیمت‌ها هم تازه شوند.",
+        inlineKb([[btnCb('📥 وارد کردن', 'numimp', 'buy')],
+                  [btnCb('☎️ شماره مجازی', 'num_home', 'admin')]]));
+}
+
+/** ۲️⃣ کاتالوگ را خالی کن — جز ردیف‌های دستی */
+function numAdmCleanAll($chatId, $msgId) {
+    $delI = $delC = 0;
+    maSet('num', function (&$a) use (&$delI, &$delC) {
+        $keep = [];
+        foreach ((array)($a['items'] ?? []) as $it) {
+            // بدونِ کد سرویس یعنی ادمین خودش ساخته — مالِ ما نیست که پاکش کنیم
+            if (trim((string)($it['svc'] ?? '')) === '') { $keep[] = $it; continue; }
+            $delI++;
+        }
+        $a['items'] = array_values($keep);
+
+        $used = [];
+        foreach ($a['items'] as $it) $used[(string)($it['cat'] ?? '')] = 1;
+        $cats = [];
+        foreach ((array)($a['cats'] ?? []) as $c) {
+            if (trim((string)($c['code'] ?? '')) !== '' && !isset($used[(string)($c['id'] ?? '')])) { $delC++; continue; }
+            $cats[] = $c;
+        }
+        $a['cats'] = array_values($cats);
+    });
+
+    $sz = @filesize(DATA_DIR . '/config.json') ?: 0;
+    editMsg(BOT_TOKEN, $chatId, $msgId,
+        "✅ <b>کاتالوگ خالی شد</b>\n\n" .
+        "🗑 <b>" . fmtNum($delI) . "</b> محصول و <b>" . fmtNum($delC) . "</b> دسته حذف شد.\n" .
+        "اندازه‌ی تنظیمات: <b>" . number_format($sz / 1024, 1) . "</b> کیلوبایت\n\n" .
+        "حالا مطمئن شوید «🎯 چه چیزی می‌فروشید؟» درست است، بعد «📥 وارد کردن».",
+        inlineKb([[btnCb('🎯 چه چیزی می‌فروشید؟', 'numsvc', 'admin')],
+                  [btnCb('📥 وارد کردن', 'numimp', 'buy')],
+                  [btnCb('☎️ شماره مجازی', 'num_home', 'admin')]]));
 }
 
 /**
@@ -1684,6 +1824,9 @@ function numCallback($data, $uid, $chatId, $msgId, $cbId, $isAdmin) {
         return true;
     }
     if ($data === 'numsvc')  { $ack('⏳ خواندن فهرست…'); numAdmServices($chatId, $msgId); return true; }
+    if ($data === 'numclean')  { $ack(); numAdmClean($chatId, $msgId); return true; }
+    if ($data === 'numclean1') { $ack('⏳ خواندن فهرست…'); numAdmCleanKeep($chatId, $msgId); return true; }
+    if ($data === 'numclean2') { $ack('⏳ پاک کردن…'); numAdmCleanAll($chatId, $msgId); return true; }
     if ($data === 'numsvcx') {
         numSet(function (&$c) { $c['svc_only'] = ''; });
         $ack('همه‌ی سرویس‌ها');

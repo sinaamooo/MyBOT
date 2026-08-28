@@ -432,6 +432,7 @@ function maDefaultNum() {
             'search'   => 'جستجوی کشور…',
             'more'     => 'نمایش بیشتر',
             'no_match' => 'چیزی با این نام پیدا نشد.',
+            'search_rest' => '💡 {n} کشور دیگر هم داریم — اسمش را در جستجو بنویسید.',
             'empty'    => 'فعلا شماره‌ای در این بخش نیست.',
             'pay_wallet' => 'پرداخت از کیف پول',
             'pay_other'  => 'روش‌های دیگر پرداخت',
@@ -493,6 +494,11 @@ function maDefaultNum() {
             'open'    => ['emoji' => '☎️', 'text' => 'باز کردن مینی‌اپ',   'color' => 'primary', 'icon' => ''],
         ],
         'glass_layout' => '1,1,1',
+
+        // 🔢 چند کشور داخل خودِ صفحه بیاید. بقیه با جستجو.
+        //    این عدد فقط زیبایی نیست: کلِ این فهرست داخل HTML تزریق
+        //    می‌شود و با چند هزار ردیف، مینی‌اپ اصلا باز نمی‌شود.
+        'top_n' => 40,
 
         // 🌍 کشورها — `code` همان چیزی است که پنل فروشنده می‌شناسد
         'cats' => [
@@ -2168,10 +2174,27 @@ function maBoot($key, $a) {
         'currency' => (string)($a['currency'] ?? 'تومان'),
         'ui'       => maUiAll($key),
         'cats'     => maCatsPublic($a),
-        'items'    => maItemsPublic($a),
+        'items'    => maItemsPublic($a, maTopN($key)),
+        // چندتا محصولِ روشن داریم؟ صفحه با این می‌فهمد که «بقیه» هم هست
+        'total'    => maCountOn($a),
+        'top'      => maTopN($key),
         'topup'    => maTopupInfo(),
         'api'      => maApiUrl(),
     ];
+}
+
+/** چند محصول در خودِ صفحه بیاید — ۰ یعنی همه */
+function maTopN($key) {
+    if ($key !== 'num') return 0;
+    $n = (int)(maGet('num')['top_n'] ?? 40);
+    return $n > 0 ? max(8, min(200, $n)) : 0;
+}
+
+/** چند محصولِ روشن داریم */
+function maCountOn($a) {
+    $n = 0;
+    foreach ((array)($a['items'] ?? []) as $i) if (!empty($i['on'])) $n++;
+    return $n;
 }
 
 /** ثبت در دفترچه‌ی افزونه، اگر بود */
@@ -2202,7 +2225,15 @@ function maCatsPublic($a) {
     return $out;
 }
 
-function maItemsPublic($a) {
+/**
+ * محصول‌هایی که به صفحه فرستاده می‌شوند.
+ *
+ * ⚠️ $limit جدی است، نه احتیاط: این آرایه داخل خودِ HTML تزریق می‌شود.
+ *    با ۳٬۳۷۳ محصول، بسته‌ی boot می‌شود ۸۵۰ کیلوبایت و صفحه ۸۹۵ — روی
+ *    گوشی یعنی مینی‌اپ اصلا باز نمی‌شود. پس فقط چند ده‌تای اول می‌روند
+ *    و بقیه با جستجو از سرور می‌آیند (اکشنِ num_search).
+ */
+function maItemsPublic($a, $limit = 0) {
     // ترتیب دسته‌ها، تا در تب «همه» سرویس‌های یک دسته کنار هم بمانند
     $catPos = []; $n = 0;
     foreach ($a['cats'] ?? [] as $c) $catPos[(string)$c['id']] = $n++;
@@ -2229,7 +2260,56 @@ function maItemsPublic($a) {
         ];
     }
     usort($items, fn($x, $y) => [$x['cpos'], $x['order']] <=> [$y['cpos'], $y['order']]);
+    if ($limit > 0 && count($items) > $limit) $items = array_slice($items, 0, $limit);
     return $items;
+}
+
+/**
+ * 🔎 جستجو در همه‌ی محصول‌ها — سمتِ سرور.
+ *
+ * چیزی که در صفحه نیست را از اینجا می‌گیریم. کاربر اسمِ کشور را
+ * می‌نویسد و همین‌جا میان همه‌ی چند هزار ردیف می‌گردیم، نه در مرورگر.
+ */
+function maSearchItems($a, $q, $limit = 60) {
+    $q = trim(mb_strtolower((string)$q));
+    if ($q === '') return [];
+
+    $catPos = []; $n = 0;
+    foreach ($a['cats'] ?? [] as $c) $catPos[(string)$c['id']] = $n++;
+
+    $hits = [];
+    foreach ($a['items'] ?? [] as $i) {
+        if (empty($i['on'])) continue;
+        $name = mb_strtolower((string)($i['name'] ?? ''));
+        $desc = mb_strtolower((string)($i['desc'] ?? ''));
+        if (!str_contains($name, $q) && !str_contains($desc, $q)) continue;
+        // آنکه از اولِ نامش می‌خواند، بالاتر — «روسیه» قبل از «بلاروسیه»
+        $hits[] = [str_starts_with($name, $q) ? 0 : 1, (int)($i['order'] ?? 99), $i];
+        if (count($hits) >= $limit * 6) break;      // سقفِ کارِ بی‌فایده
+    }
+    usort($hits, fn($x, $y) => [$x[0], $x[1]] <=> [$y[0], $y[1]]);
+
+    $out = [];
+    foreach (array_slice($hits, 0, max(1, (int)$limit)) as [$_, $__, $i]) {
+        $out[] = [
+            'id'    => (string)$i['id'],
+            'cat'   => (string)($i['cat'] ?? ''),
+            'emoji' => (string)($i['emoji'] ?? '💠'),
+            'name'  => (string)$i['name'],
+            'desc'  => (string)($i['desc'] ?? ''),
+            'badge' => (string)($i['badge'] ?? ''),
+            'price' => maItemPrice($i),
+            'live'  => maIsLive($i) ? 1 : 0,
+            'stale' => maPriceStale($i) ? 1 : 0,
+            'unit'  => (string)($i['unit'] ?? ''),
+            'ask'   => (string)($i['ask'] ?? 'none'),
+            'min'   => (float)($i['min'] ?? 1),
+            'max'   => (float)($i['max'] ?? 1),
+            'order' => (int)($i['order'] ?? 99),
+            'cpos'  => $catPos[(string)($i['cat'] ?? '')] ?? 999,
+        ];
+    }
+    return $out;
 }
 
 /** صفحه «موقتا بسته است» */
@@ -2684,6 +2764,18 @@ function maApi() {
         if (!$st) maApiOut(['ok' => false, 'error' => 'not_found'], 404);
         maApiOut(['ok' => true, 'active' => true, 'num' => $st,
                   'balance' => (float)(getUser($uid)['balance'] ?? 0)]);
+    }
+
+    // ---- 🔎 شماره مجازی: جستجو در همه‌ی کشورها ----
+    //
+    // صفحه فقط چند ده‌تای اول را دارد؛ بقیه از اینجا می‌آیند. با چند
+    // هزار محصول، فرستادنِ همه‌شان داخل صفحه یعنی مینی‌اپی که باز نمی‌شود.
+    if ($action === 'num_search') {
+        if ($key !== 'num') maApiOut(['ok' => false, 'error' => 'bad_app'], 400);
+        $q = trim((string)($body['q'] ?? ''));
+        if (mb_strlen($q) < 1) maApiOut(['ok' => true, 'items' => []]);
+        if (mb_strlen($q) > 40) $q = mb_substr($q, 0, 40);
+        maApiOut(['ok' => true, 'items' => maSearchItems($a, $q, 60)]);
     }
 
     // ---- 📋 شماره مجازی: سفارش‌های من ----
@@ -3688,8 +3780,22 @@ function maAdmItems($chatId, $msgId, $key, $catFilter = '') {
     }
     $rows[] = [btnCb('➕ سرویس جدید', 'maadm_itemnew_' . $key, 'confirm')];
     $rows[] = [btnCb(UT('back'), 'maadm_app_' . $key, 'nav')];
-    editMsg(BOT_TOKEN, $chatId, $msgId,
-        "🛒 <b>سرویس‌های " . h($a['title']) . "</b>\n\nروی هرکدام بزنید تا ویرایش شود:", inlineKb($rows));
+
+    // فهرست سقف دارد (تلگرام بیش از این دکمه را رد می‌کند). سکوت درباره‌ی
+    // بقیه، ادمین را گیج می‌کند: «پس آن سه هزارتای دیگر کجا رفتند؟»
+    $all = 0;
+    foreach ((array)($a['items'] ?? []) as $i)
+        if ($catFilter === '' || (string)($i['cat'] ?? '') === $catFilter) $all++;
+
+    $t = "🛒 <b>سرویس‌های " . h($a['title']) . "</b>\n\n";
+    $t .= "روی هرکدام بزنید تا ویرایش شود:";
+    if ($all > $n) {
+        $t .= "\n\n<i>" . fmtNum($n) . " تا از " . fmtNum($all) . " نشان داده شده.</i>";
+        if ($key === 'num')
+            $t .= "\n💡 برای این تعداد، ویرایشِ تک‌تک راه نیست — از «☎️ شماره مجازی ← " .
+                  "🧹 پاک‌سازی» و بعد «📥 وارد کردن» استفاده کنید.";
+    }
+    editMsg(BOT_TOKEN, $chatId, $msgId, $t, inlineKb($rows));
 }
 
 function maItemsSorted($a) {
