@@ -4041,6 +4041,7 @@ function admGroups() {
         'look' => ['🎨 <b>ظاهر و متن‌ها</b>', 'هرچه کاربر می‌بیند: دکمه‌ها، متن‌ها، رنگ‌ها.', [
             [['🎨 دکمه‌ها', 'ebuttons'], ['📝 متن‌ها', 'etexts']],
             [['💠 رنگ دکمه‌های شیشه‌ای', 'eglass']],
+            [['📞 دکمه‌های پشتیبانی', 'esup']],
         ]],
         'rep' => ['📢 <b>گزارش و پیام همگانی</b>', 'اعلام فروش و پیام به همه.', [
             [['📢 گزارش خرید در گروه', 'adm_reports']],
@@ -4708,6 +4709,8 @@ function edReport($chatId, $msgId, $pid) {
         [btnCb((!isset($r['btn_row']) || !empty($r['btn_row']))
                ? 'چیدمان: کنار هم' : 'چیدمان: زیر هم', 'rprow_' . $pid, 'info')],
         [btnCb('🧪 ارسال آزمایشی', 'rptest_' . $pid, 'confirm')],
+        // 🧹 برای کانالی که همه‌چیزش باید پریمیوم باشد
+        [btnCb('🧹 پاک کردن ایموجی‌های معمولی', 'rpclr_' . $pid, 'reject')],
     ];
     $bs = parseSubProductId($pid);
     $rows[] = [btnUI('back', $bs ? 'sb_' . $bs[0] . '|' . $bs[1] : 'ep_' . $pid, 'nav')];
@@ -4738,6 +4741,85 @@ function edReportBtn($chatId, $msgId, $pid, $i) {
         [btnUI('back', 'rp_' . $pid, 'nav')],
     ];
     editMsg(BOT_TOKEN, $chatId, $msgId, $text, inlineKb($rows));
+}
+
+/**
+ * 📞 دو دکمه‌ی پشتیبانی — با ایموجی پریمیوم.
+ *
+ * تا حالا فقط از پنلِ وب ویرایش می‌شدند، و پنلِ وب نمی‌تواند ایموجی
+ * پریمیوم بگیرد: شناسه‌اش را فقط وقتی می‌شود خواند که خودِ ایموجی
+ * داخلِ یک پیامِ تلگرام بیاید. پس اینجا، داخلِ ربات.
+ */
+function edSupMain($chatId, $msgId) {
+    $c = cfg()['support_main'] ?? [];
+    $t = "📞 <b>دکمه‌های پشتیبانی</b>\n\n";
+    foreach (['direct' => 'ارتباط مستقیم', 'indirect' => 'ارتباط غیر مستقیم'] as $k => $lbl) {
+        $m = $c[$k] ?? [];
+        $t .= '🔘 <b>' . $lbl . "</b>\n";
+        $t .= '   نمایش: ' . h(trim((string)($m['emoji'] ?? '') . ' ' . (string)($m['text'] ?? ''))) . "\n";
+        $t .= '   ایموجی معمولی: ' . (trim((string)($m['emoji'] ?? '')) !== ''
+              ? h($m['emoji']) : '<b>ندارد</b>') . "\n";
+        $t .= '   ✨ پریمیوم: ' . (!empty($m['icon']) ? '<code>' . h($m['icon']) . '</code>' : '—') . "\n";
+        $t .= '   رنگ: ' . (styleMap()[$m['color'] ?? 'none'] ?? '—') . "\n";
+        if ($k === 'direct')
+            $t .= '   لینک: ' . (trim((string)($m['value'] ?? '')) !== ''
+                  ? '<code>' . h($m['value']) . '</code>' : '<b>ثبت نشده</b>') . "\n";
+        $t .= "\n";
+    }
+    $t .= "💡 برای ایموجی پریمیوم، خودِ ایموجی را بفرستید — شناسه‌اش خودکار خوانده می‌شود.\n";
+    $t .= "برچسبِ دکمه HTML نمی‌پذیرد، پس ایموجیِ معمولی و پریمیوم با هم جا نمی‌شوند: " .
+          "اگر پریمیوم گذاشتید، معمولی را پاک کنید.";
+
+    editMsg(BOT_TOKEN, $chatId, $msgId, $t, inlineKb([
+        [btnCb('🔘 ارتباط مستقیم', 'esup_direct', 'admin')],
+        [btnCb('🔘 ارتباط غیر مستقیم', 'esup_indirect', 'admin')],
+        [btnCb('🧹 پاک کردن همه‌ی ایموجی‌های معمولی', 'esupclr', 'reject')],
+        [btnUI('back', 'ag_look', 'nav')],
+    ]));
+}
+
+/** 📞 ویرایش یکی از دو دکمه‌ی پشتیبانی */
+function edSupOne($chatId, $msgId, $which) {
+    if (!in_array($which, ['direct', 'indirect'], true)) { edSupMain($chatId, $msgId); return; }
+    $m   = cfg()['support_main'][$which] ?? [];
+    $lbl = $which === 'direct' ? 'ارتباط مستقیم' : 'ارتباط غیر مستقیم';
+
+    $t  = "🔘 <b>" . $lbl . "</b>\n\n";
+    $t .= 'متن: ' . h(trim((string)($m['text'] ?? '')) ?: '—') . "\n";
+    $t .= 'ایموجی معمولی: ' . (trim((string)($m['emoji'] ?? '')) !== ''
+          ? h($m['emoji']) : '<b>ندارد</b>') . "\n";
+    $t .= '✨ پریمیوم: ' . (!empty($m['icon']) ? '<code>' . h($m['icon']) . '</code>' : '—') . "\n";
+    $t .= 'رنگ: ' . (styleMap()[$m['color'] ?? 'none'] ?? '—') . "\n";
+    if ($which === 'direct')
+        $t .= 'لینک: ' . (trim((string)($m['value'] ?? '')) !== ''
+              ? '<code>' . h($m['value']) . '</code>' : '<b>ثبت نشده</b>') . "\n";
+
+    $rows = [
+        [btnCb('✏️ متن', 'esupt_' . $which, 'admin'),
+         btnCb('😀 ایموجی معمولی', 'esupe_' . $which, 'admin')],
+        [btnCb('✨ ایموجی پریمیوم', 'esupi_' . $which, 'admin'),
+         btnCb('🎨 رنگ', 'esupc_' . $which, 'admin')],
+    ];
+    if ($which === 'direct') $rows[] = [btnCb('🔗 لینک', 'esupu_' . $which, 'admin')];
+    $rows[] = [btnUI('back', 'esup', 'nav')];
+    editMsg(BOT_TOKEN, $chatId, $msgId, $t, inlineKb($rows));
+}
+
+/**
+ * 🧹 ایموجی‌های معمولی را از یک متن بردار.
+ *
+ * ایموجی پریمیوم در تلگرام یک «موجودیت» روی متن است، نه خودِ نویسه —
+ * پس این تابع فقط نویسه‌های ایموجیِ ساده را می‌برد و به پریمیوم کاری
+ * ندارد. برای کانالی که همه‌چیزش باید پریمیوم باشد، همین لازم است.
+ */
+function stripPlainEmoji($s) {
+    $s = preg_replace('/[\x{1F000}-\x{1FAFF}\x{2600}-\x{27BF}\x{2B00}-\x{2BFF}' .
+                      '\x{FE00}-\x{FE0F}\x{1F1E6}-\x{1F1FF}\x{200D}\x{20E3}\x{2190}-\x{21FF}' .
+                      '\x{2300}-\x{23FF}\x{25A0}-\x{25FF}\x{2900}-\x{297F}]/u', '', (string)$s);
+    // فاصله‌های جامانده جمع شوند، ولی خطوط سرِ جایشان بمانند
+    $s = preg_replace('/[ \t]{2,}/u', ' ', $s);
+    $s = preg_replace('/^[ \t]+|[ \t]+$/mu', '', $s);
+    return trim($s);
 }
 
 /** بهترین دکمه برای الگو گرفتن — اولی که قیمت دارد، وگرنه اولی */
@@ -5653,8 +5735,8 @@ function masterHandle($update) {
         // هر پیشوند تازه‌ای که اینجا نباشد، بی‌صدا دور ریخته می‌شود —
         // نه خطایی، نه پیامی. پس با هر بخش تازه این فهرست هم باید کامل شود.
         $adminPrefixes = ['aok_', 'ano_', 'adm_', 'ag_', 'eb', 'et', 'eg', 'eu', 'sb', 'ep', 'esp',
-                          'rp', 'tf', 'jn', 'gw', 'pay', 'px', 'dm', 'ch', 'gma', 'gm_', 'ol',
-                          'reply_', 'setup'];
+                          'esup', 'rp', 'tf', 'jn', 'gw', 'pay', 'px', 'dm', 'ch', 'gma', 'gm_', 'ol',
+                          'pf_', 'num', 'reply_', 'setup'];
         $isAdminCb = false;
         foreach ($adminPrefixes as $pref) {
             if (str_starts_with($data, $pref)) { $isAdminCb = true; break; }
@@ -6065,6 +6147,27 @@ function masterHandle($update) {
                       (empty($rr['on']) ? "\n\n⚠️ ضمنا گزارش این محصول <b>خاموش</b> است؛ خریدهای واقعی گزارش نمی‌شوند." : ''));
             return;
         }
+        // 🧹 هیچ ایموجیِ معمولی در گزارش نماند — نه در متن، نه روی دکمه‌ها
+        if (str_starts_with($data, 'rpclr_')) {
+            $pid = substr($data, 6);
+            $n = 0;
+            reportMutate($pid, function (&$r) use (&$n) {
+                $was = (string)($r['text'] ?? '');
+                $now = stripPlainEmoji($was);
+                if ($now !== $was) $n++;
+                $r['text'] = $now;
+                foreach ((array)($r['buttons'] ?? []) as $i => $b) {
+                    $wt = (string)($b['text'] ?? '');
+                    $nt = stripPlainEmoji($wt);
+                    if ($nt !== $wt) $n++;
+                    $r['buttons'][$i]['text'] = $nt;
+                }
+            });
+            answerCb(BOT_TOKEN, $cbId, $n ? '🧹 ' . $n . ' جا پاک شد' : '✅ از قبل تمیز بود', true);
+            edReport($chatId, $msgId, $pid);
+            return;
+        }
+
         if (str_starts_with($data, 'rpb_')) {
             $rest = substr($data, 4); $pos = strrpos($rest, '|');
             answerCb(BOT_TOKEN, $cbId);
@@ -6598,6 +6701,57 @@ function masterHandle($update) {
         }
 
         if ($data === 'adm_wallets') { answerCb(BOT_TOKEN, $cbId); admPay($chatId, $msgId); return; }
+        // 📞 دکمه‌های پشتیبانی
+        if ($data === 'esup')  { answerCb(BOT_TOKEN, $cbId); edSupMain($chatId, $msgId); return; }
+        if (str_starts_with($data, 'esup_')) {
+            answerCb(BOT_TOKEN, $cbId);
+            edSupOne($chatId, $msgId, substr($data, 5));
+            return;
+        }
+        if ($data === 'esupclr') {
+            cfgSet(function (&$c) {
+                foreach (['direct', 'indirect'] as $k) {
+                    $c['support_main'][$k]['emoji'] = '';
+                    $c['support_main'][$k]['text']  = stripPlainEmoji($c['support_main'][$k]['text'] ?? '');
+                }
+            });
+            answerCb(BOT_TOKEN, $cbId, '🧹 پاک شد');
+            edSupMain($chatId, $msgId);
+            return;
+        }
+        if (preg_match('/^esup([teicu])_(direct|indirect)$/', $data, $em)) {
+            static $ask = [
+                't' => ["✏️ متنِ دکمه را بفرستید.", 'sup_text'],
+                'e' => ["😀 ایموجیِ معمولی را بفرستید.\n\n<code>-</code> بفرستید تا پاک شود.", 'sup_emoji'],
+                'i' => ["✨ <b>ایموجی پریمیوم</b>\n\nخودِ ایموجی را بفرستید — شناسه‌اش خودکار خوانده می‌شود.\n\n" .
+                        "<code>-</code> بفرستید تا برداشته شود.", 'sup_icon'],
+                'u' => ["🔗 لینک را بفرستید. مثلا <code>https://t.me/username</code>", 'sup_url'],
+            ];
+            if ($em[1] === 'c') {
+                // 🎨 رنگ — همان‌جا، بدون ورودیِ متنی
+                answerCb(BOT_TOKEN, $cbId);
+                $rows = [];
+                foreach (styleMap() as $sk => $sl)
+                    $rows[] = [btnCb($sl, 'esupC_' . $em[2] . '_' . $sk, 'info')];
+                $rows[] = [btnUI('back', 'esup_' . $em[2], 'nav')];
+                editMsg(BOT_TOKEN, $chatId, $msgId, "🎨 <b>رنگ دکمه</b>", inlineKb($rows));
+                return;
+            }
+            [$txt, $st] = $ask[$em[1]];
+            setState($uid, $st, ['which' => $em[2]]);
+            answerCb(BOT_TOKEN, $cbId);
+            sendMsg(BOT_TOKEN, $chatId, $txt,
+                    inlineKb([[btnUI('cancel', 'esup_' . $em[2], 'cancel')]]));
+            return;
+        }
+        if (preg_match('/^esupC_(direct|indirect)_(\w+)$/', $data, $em)) {
+            $col = isStyle($em[2]) ? $em[2] : 'none';
+            cfgSet(function (&$c) use ($em, $col) { $c['support_main'][$em[1]]['color'] = $col; });
+            answerCb(BOT_TOKEN, $cbId, '✅');
+            edSupOne($chatId, $msgId, $em[1]);
+            return;
+        }
+
         if ($data === 'adm_wtest') {
             answerCb(BOT_TOKEN, $cbId);
             admWriteTest($chatId);
@@ -6824,6 +6978,59 @@ function masterHandle($update) {
                     ? "\n\n📡 این آدرس را در پنل درگاه به‌عنوان Callback/IPN بگذارید:\n<code>" .
                       h(gwCallbackUrl()) . "</code>" : ''), $back);
             return;
+        }
+        clearState($uid);
+        return;
+    }
+
+    // 📞 ورودی‌های دکمه‌های پشتیبانی
+    if (str_starts_with($action, 'sup_')) {
+        $st    = getState($uid);
+        $which = (string)(($st['data'] ?? [])['which'] ?? 'direct');
+        if (!in_array($which, ['direct', 'indirect'], true)) { clearState($uid); return; }
+        $plain = trim((string)($msg['text'] ?? ''));
+        $blank = ($plain === '-' || $plain === '—');
+        $back  = inlineKb([[btnCb('📞 دکمه‌های پشتیبانی', 'esup', 'admin')]]);
+
+        if ($action === 'sup_text') {
+            if ($plain === '') { sendMsg(BOT_TOKEN, $chatId, "⚠️ یک متن بفرستید."); return; }
+            $v = mb_substr($plain, 0, 40);
+            cfgSet(function (&$c) use ($which, $v) { $c['support_main'][$which]['text'] = $v; });
+            clearState($uid); sendMsg(BOT_TOKEN, $chatId, '✅ ثبت شد.', $back); return;
+        }
+        if ($action === 'sup_emoji') {
+            $v = $blank ? '' : mb_substr($plain, 0, 8);
+            cfgSet(function (&$c) use ($which, $v) { $c['support_main'][$which]['emoji'] = $v; });
+            clearState($uid);
+            sendMsg(BOT_TOKEN, $chatId, $v === '' ? '✅ ایموجی معمولی پاک شد.' : '✅ ثبت شد.', $back);
+            return;
+        }
+        if ($action === 'sup_icon') {
+            // ✨ شناسه‌ی ایموجی پریمیوم فقط از داخلِ خودِ پیام خوانده می‌شود
+            $ids = customEmojiIds($msg);
+            $v   = $blank ? '' : (string)($ids[0] ?? '');
+            if (!$blank && $v === '') {
+                sendMsg(BOT_TOKEN, $chatId,
+                    "⚠️ ایموجی پریمیوم پیدا نشد.\n\n" .
+                    "باید خودِ ایموجیِ پریمیوم را بفرستید (با اکانت پریمیوم)، نه شناسه‌اش را.");
+                return;
+            }
+            cfgSet(function (&$c) use ($which, $v) { $c['support_main'][$which]['icon'] = $v; });
+            clearState($uid);
+            sendMsg(BOT_TOKEN, $chatId,
+                $v === '' ? '✅ پریمیوم برداشته شد.'
+                          : "✅ ثبت شد: <code>" . h($v) . "</code>\n\n" .
+                            "<i>اگر ایموجیِ معمولی هم دارد، پاکش کنید — با هم جا نمی‌شوند.</i>",
+                $back);
+            return;
+        }
+        if ($action === 'sup_url') {
+            if (!$blank && !preg_match('#^https?://[^\s]+$#i', $plain)) {
+                sendMsg(BOT_TOKEN, $chatId, "⚠️ لینک باید با <code>https://</code> شروع شود."); return;
+            }
+            $v = $blank ? '' : $plain;
+            cfgSet(function (&$c) use ($which, $v) { $c['support_main'][$which]['value'] = $v; });
+            clearState($uid); sendMsg(BOT_TOKEN, $chatId, '✅ ثبت شد.', $back); return;
         }
         clearState($uid);
         return;
