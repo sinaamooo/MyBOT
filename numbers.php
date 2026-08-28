@@ -120,16 +120,37 @@ function numReady() {
  */
 function numCall($op, array $vars = []) {
     $api = numVal('api', []);
-    $base = rtrim(trim((string)($api['base'] ?? '')), '/');
-    if ($base === '') return [null, 'آدرس پنل ثبت نشده'];
-
     $cfgOp = $api['ops'][$op] ?? null;
     if (!is_array($cfgOp)) return [null, 'عملیات «' . $op . '» تعریف نشده'];
 
-    $path = numFill((string)($cfgOp['path'] ?? ''), $vars);
-    $body = numFill((string)($cfgOp['body'] ?? ''), $vars);
-    $url  = $base . '/' . ltrim($path, '/');
-    $method = strtoupper((string)($cfgOp['method'] ?? 'POST'));
+    [$url, $method, $headers, $body, $err] = numRequest(
+        (string)($cfgOp['path'] ?? ''),
+        strtoupper((string)($cfgOp['method'] ?? 'POST')),
+        (string)($cfgOp['body'] ?? ''),
+        $vars
+    );
+    if ($err !== '') return [null, $err];
+
+    return maHttp($url, $method, $headers, $body, (int)($api['timeout'] ?? 15));
+}
+
+/**
+ * آدرس و سرآیندِ یک درخواست را می‌سازد — با کلید، هرجا که پنل می‌خواهدش.
+ *
+ * جدا از numCall نوشته شده چون «تست خام» هم دقیقا همین را لازم دارد:
+ * همان آدرس، همان کلید، ولی یک مسیر دلخواه که ادمین تایپ می‌کند.
+ *
+ * برگشت: [آدرس, متد, سرآیند, بدنه, خطا]
+ */
+function numRequest($path, $method, $body, array $vars = []) {
+    $api  = numVal('api', []);
+    $base = rtrim(trim((string)($api['base'] ?? '')), '/');
+    if ($base === '') return ['', '', '', '', 'آدرس پنل ثبت نشده'];
+
+    $path   = numFill((string)$path, $vars);
+    $body   = numFill((string)$body, $vars);
+    $url    = $base . '/' . ltrim($path, '/');
+    $method = strtoupper((string)$method) ?: 'GET';
 
     $headers = '';
     $ak = trim((string)($api['auth_key'] ?? ''));
@@ -152,12 +173,22 @@ function numCall($op, array $vars = []) {
 
     // متغیری که پر نشده، خام نرود — وگرنه پنل جواب گنگ می‌دهد
     if (preg_match('/\{([a-z_][a-z0-9_]*)\}/i', $url . ' ' . $body, $m))
-        return [null, 'متغیر {' . $m[1] . '} پر نشد — تنظیمات این عملیات را ببینید'];
+        return ['', '', '', '', 'متغیر {' . $m[1] . '} پر نشد — تنظیمات این عملیات را ببینید'];
 
-    return maHttp($url, $method, $headers, $body, (int)($api['timeout'] ?? 15));
+    return [$url, $method, $headers, $body, ''];
+}
+
+/** آدرس بدون کلید — برای نشان دادن به ادمین، تا کلید در گفتگو نیفتد */
+function numSafeUrl($url) {
+    $ak = trim((string)numVal('api.auth_key', ''));
+    if ($ak === '' || (string)numVal('api.auth_type', '') !== 'query') return $url;
+    return preg_replace('/([?&]' . preg_quote(rawurlencode($ak), '/') . '=)[^&]*/i', '$1***', $url);
 }
 
 function numFill($tpl, array $vars) {
+    // پنل‌هایی که سرویس و کشور را یکی می‌کنند، اسمش را sid می‌گذارند —
+    // هم‌معنی می‌گیریمش تا ادمین لازم نباشد اسم ما را حفظ کند.
+    if (isset($vars['service']) && !isset($vars['sid'])) $vars['sid'] = $vars['service'];
     $map = [];
     foreach ($vars as $k => $v) $map['{' . $k . '}'] = (string)$v;
     return strtr((string)$tpl, $map);
@@ -166,10 +197,68 @@ function numFill($tpl, array $vars) {
 /** آیا پاسخ خطا دارد؟ همان منطق مینی‌اپ‌ها — آرایه هم خطاست، نه فقط رشته */
 function numErr($resp, $cfgOp) {
     if (!is_array($resp)) return 'پاسخ نامعتبر';
+
+    // 🚦 بعضی پنل‌ها اصلا فیلد «خطا» ندارند و موفقیت را با یک کد اعلام
+    //    می‌کنند — مثلا RESULT=1 یعنی شد، هر چیز دیگری یعنی نشد. بدون
+    //    این، پاسخِ ناموفق «بی‌خطا» خوانده می‌شد و بعد سر شماره‌ی نیامده
+    //    یک پیام گنگ می‌گرفتیم.
+    $okP = trim((string)($cfgOp['ok_path'] ?? ''));
+    $okV = trim((string)($cfgOp['ok_val'] ?? ''));
+    if ($okP !== '' && $okV !== '') {
+        $got = maJsonPath($resp, $okP);
+        if (!is_scalar($got) || trim((string)$got) !== $okV) {
+            $seen = is_scalar($got) ? trim((string)$got) : 'نبود';
+            // اگر پنل توضیحی هم داده، همان را بگو — گویاتر از یک عدد است
+            $why = '';
+            $ep = (string)($cfgOp['err_path'] ?? '');
+            if ($ep !== '' && function_exists('maErrLooksReal')) {
+                $ev = maJsonPath($resp, $ep);
+                if (maErrLooksReal($ev)) $why = ' — ' . maErrText($ev);
+            }
+            return 'پنل ' . $okP . '=' . $seen . ' داد (انتظار ' . $okV . ')' . $why;
+        }
+    }
+
     $p = (string)($cfgOp['err_path'] ?? '');
     if ($p !== '' && function_exists('maErrLooksReal')) {
         $v = maJsonPath($resp, $p);
         if (maErrLooksReal($v)) return maErrText($v);
+    }
+    return '';
+}
+
+/**
+ * 🔑 کد را از پاسخ بیرون می‌کشد.
+ *
+ * سه لایه، چون پنل‌ها سه جور جواب می‌دهند:
+ *   ۱. مسیری که ادمین داده
+ *   ۲. کلیدهای متداول، اگر مسیر خالی بود یا چیزی نداشت
+ *   ۳. اگر آنچه آمد خودِ متنِ پیامک بود («کد شما 12345 است»)، رقم‌ها را
+ *      از دلش درمی‌آوریم — چون کاربر کدِ خالی می‌خواهد نه یک جمله.
+ */
+function numExtractCode($resp, $cfgOp) {
+    if (!is_array($resp)) return '';
+
+    $cands = [];
+    $p = trim((string)($cfgOp['code_path'] ?? ''));
+    if ($p !== '') $cands[] = maJsonPath($resp, $p);
+    foreach (['SMS', 'sms', 'code', 'CODE', 'Code', 'pin', 'PIN',
+              'data.code', 'data.sms', 'text', 'TEXT'] as $k)
+        $cands[] = maJsonPath($resp, $k);
+
+    foreach ($cands as $v) {
+        if (!is_scalar($v)) continue;
+        $v = trim((string)$v);
+        if ($v === '' || strtolower($v) === 'null') continue;
+
+        // خودش کد است؟ (فقط رقم، ۳ تا ۸ رقمی)
+        if (preg_match('/^\d{3,8}$/', $v)) return $v;
+
+        // وگرنه متنِ پیامک است — بلندترین رشته‌ی رقمیِ ۳ تا ۸ رقمی را بردار
+        if (preg_match_all('/\d{3,8}/', $v, $m)) {
+            usort($m[0], fn($a, $b) => strlen($b) <=> strlen($a));
+            return $m[0][0];
+        }
     }
     return '';
 }
@@ -268,8 +357,11 @@ function numBuy($order) {
 
     $meta = numItemMeta((string)($order['item_id'] ?? ''));
     if (!$meta) return [false, 'این سرویس دیگر تعریف نشده است'];
-    if ($meta['service'] === '' || $meta['country'] === '')
-        return [false, 'کد سرویس یا کشور برای این ردیف تنظیم نشده است'];
+
+    // کشور اختیاری است: بعضی پنل‌ها (مثل نامبرلند) سرویس و کشور را با هم
+    // در یک شناسه می‌دهند، پس فقط همان شناسه لازم است.
+    if ($meta['service'] === '')
+        return [false, 'کد سرویس برای این ردیف تنظیم نشده است'];
 
     // 🔒 ادعای اتمی: فقط یک اجرا شماره می‌خرد، حتی اگر دو درخواست هم‌زمان بیاید
     $claimed = false;
@@ -390,18 +482,15 @@ function numPoll($orderId) {
     $ops = numVal('api.ops.status', []);
     if (numErr($resp, $ops) !== '') return;
 
-    $code = maJsonPath($resp, (string)($ops['code_path'] ?? 'code'));
-    if (is_scalar($code)) {
-        $code = trim((string)$code);
-        if ($code !== '' && strtolower($code) !== 'null') {
-            numSetAct($orderId, function (&$x) use ($code) {
-                if ($x['status'] !== 'waiting') return false;
-                $x['code'] = $code; $x['status'] = 'done';
-                return true;
-            });
-            numOrderDone($orderId);
-            return;
-        }
+    $code = numExtractCode($resp, $ops);
+    if ($code !== '') {
+        numSetAct($orderId, function (&$x) use ($code) {
+            if ($x['status'] !== 'waiting') return false;
+            $x['code'] = $code; $x['status'] = 'done';
+            return true;
+        });
+        numOrderDone($orderId);
+        return;
     }
 
     // بعضی پنل‌ها به‌جای کد، وضعیت می‌دهند — «لغو شده» را هم بفهمیم
@@ -513,6 +602,68 @@ function numTick($limit = 10) {
 // بقیه‌ی پنل زندگی می‌کند: هیچ صفحه‌ای از جاهای دیگر داخلش ساخته نمی‌شود
 // و خودش هم چیزی به صفحه‌های دیگر اضافه نمی‌کند.
 
+/**
+ * ⚡️ آماده‌سازی یک‌ضربه‌ای برای پنل‌های شناخته‌شده.
+ *
+ * پر کردن دستیِ چهار عملیات، ده‌تا ورودی است و یک اشتباه تایپی کافی است
+ * تا هیچ‌چیز کار نکند. برای پنل‌هایی که ساختارشان را می‌دانیم، همه‌اش با
+ * یک دکمه ست می‌شود و ادمین فقط کلید API را می‌دهد.
+ *
+ * نامبرلند با بقیه دو فرق دارد و هر دو اینجا لحاظ شده:
+ *   • کلید در خودِ آدرس می‌آید (apikey=…)، نه در سرآیند
+ *   • سرویس و کشور یک شناسه‌ی واحدند (sid)، نه دوتا
+ */
+function numPresets() {
+    return [
+        'numberland' => [
+            'label' => '🇮🇷 نامبرلند (numberland.ir)',
+            'name'  => 'نامبرلند',
+            'base'  => 'https://api.numberland.ir',
+            'auth_type'  => 'query',
+            'auth_key'   => 'apikey',
+            'sid_only'   => true,
+            'ops' => [
+                'buy' => [
+                    'method' => 'GET', 'path' => '/v2.php/?method=getnum&sid={service}', 'body' => '',
+                    'id_path' => 'ID', 'phone_path' => 'NUMBER',
+                    'ok_path' => 'RESULT', 'ok_val' => '1', 'err_path' => 'MESSAGE',
+                ],
+                'status' => [
+                    'method' => 'GET', 'path' => '/v2.php/?method=getsms&id={id}', 'body' => '',
+                    'code_path' => 'SMS', 'state_path' => 'RESULT', 'err_path' => '',
+                ],
+                'cancel' => [
+                    'method' => 'GET', 'path' => '/v2.php/?method=cancel&id={id}', 'body' => '',
+                    'err_path' => 'MESSAGE', 'ok_path' => '', 'ok_val' => '',
+                ],
+                'balance' => [
+                    'method' => 'GET', 'path' => '/v2.php/?method=getcredit', 'body' => '',
+                    'val_path' => 'AMOUNT', 'err_path' => 'MESSAGE',
+                ],
+            ],
+            // متدهایی که در «🧪 تست خام» به درد می‌خورند
+            'probe' => ['getservice', 'getinfo', 'getcredit'],
+        ],
+    ];
+}
+
+/** پیکربندی را از روی یک قالب پر می‌کند — کلید API دست‌نخورده می‌ماند */
+function numApplyPreset($key) {
+    $p = numPresets()[$key] ?? null;
+    if (!$p) return false;
+    numSet(function (&$c) use ($p) {
+        $c['api']['on']        = true;
+        $c['api']['name']      = $p['name'];
+        $c['api']['base']      = $p['base'];
+        $c['api']['auth_type'] = $p['auth_type'];
+        $c['api']['auth_key']  = $p['auth_key'];
+        foreach ($p['ops'] as $op => $fields)
+            $c['api']['ops'][$op] = array_replace((array)($c['api']['ops'][$op] ?? []), $fields);
+        $c['api']['preset'] = $p['label'];
+    });
+    return true;
+}
+
 /** برچسب فارسی هر عملیات */
 function numOpLabels() {
     return [
@@ -540,6 +691,8 @@ function numAdmHome($chatId, $msgId) {
     $t  = "☎️ <b>شماره مجازی — اتصال به پنل</b>\n\n";
     $t .= "وضعیت: " . (!empty($api['on']) ? '✅ روشن' : '❌ خاموش') . "\n";
     $t .= "نام پنل: " . h((string)($api['name'] ?? '—')) . "\n";
+    if (trim((string)($api['preset'] ?? '')) !== '')
+        $t .= "قالب: " . h((string)$api['preset']) . "\n";
     $t .= "آدرس: " . (trim((string)($api['base'] ?? '')) !== ''
           ? '<code>' . h((string)$api['base']) . '</code>' : '<b>ثبت نشده</b>') . "\n";
     $t .= "احراز هویت: <b>" . h((string)($api['auth_type'] ?? '—')) . "</b>";
@@ -562,6 +715,8 @@ function numAdmHome($chatId, $msgId) {
 
     $rows = [
         [btnCb(!empty($api['on']) ? '❌ خاموش کن' : '✅ روشن کن', 'numtog', 'info')],
+        [btnCb('⚡️ آماده‌سازی خودکار پنل', 'numpre', 'confirm')],
+        [btnCb('🧪 تست خام (هر متدی)', 'numraw', 'confirm')],
         [btnCb('📖 خواندن مستندات API', 'numspec', 'confirm')],
         [btnCb('💰 تست موجودی پنل', 'numtest', 'confirm')],
         [btnCb('🔗 آدرس پنل', 'nums_base', 'admin'), btnCb('🏷 نام', 'nums_name', 'admin')],
@@ -626,11 +781,13 @@ function numAdmOp($chatId, $msgId, $op) {
 function numOpFields($op) {
     switch ($op) {
         case 'buy':     return ['id_path' => '🧾 مسیر شناسه', 'phone_path' => '☎️ مسیر شماره',
-                                'err_path' => '⚠️ مسیر خطا'];
+                                'err_path' => '⚠️ مسیر خطا',
+                                'ok_path' => '🚦 مسیر کد موفقیت', 'ok_val' => '🚦 مقدار موفقیت'];
         case 'status':  return ['code_path' => '🔑 مسیر کد', 'state_path' => '📊 مسیر وضعیت',
                                 'err_path' => '⚠️ مسیر خطا'];
         case 'balance': return ['val_path' => '💠 مسیر مقدار', 'err_path' => '⚠️ مسیر خطا'];
-        default:        return ['err_path' => '⚠️ مسیر خطا'];
+        default:        return ['err_path' => '⚠️ مسیر خطا',
+                                'ok_path' => '🚦 مسیر کد موفقیت', 'ok_val' => '🚦 مقدار موفقیت'];
     }
 }
 
@@ -644,11 +801,21 @@ function numAdmSpec($chatId) {
     [$url, $j, $log] = maSpecDiscover(trim((string)numVal('api.spec_url', '')), $base);
 
     if (!$j) {
-        $t = "❌ <b>مستندات پیدا نشد</b>\n\nاین آدرس‌ها امتحان شد:\n";
-        foreach (array_slice($log, 0, 14) as $l) $t .= "• <code>" . h(mb_substr($l, 0, 76)) . "</code>\n";
-        $t .= "\nصفحه‌ی مستندات پنل را در مرورگر باز کنید و آدرسی که به <code>.json</code> " .
-              "ختم می‌شود در «📄 آدرس مستندات» بگذارید.";
-        sendMsg(BOT_TOKEN, $chatId, $t, $back);
+        // 📌 خیلی از پنل‌ها اصلا OpenAPI ندارند — مستنداتشان یک صفحه‌ی
+        //    فارسیِ ساده است. ریختنِ ۱۲ خط ۴۰۴ جلوی ادمین فقط می‌ترساندش؛
+        //    راهِ درست را می‌گوییم و فهرست تلاش‌ها را کوتاه نگه می‌داریم.
+        $t  = "ℹ️ <b>این پنل مستندات ماشین‌خوان (OpenAPI) ندارد</b>\n\n";
+        $t .= "اشکالی ندارد — بیشتر پنل‌های شماره همین‌طورند. دو راه دارید:\n\n";
+        $t .= "۱️⃣ <b>⚡️ آماده‌سازی خودکار</b> — اگر پنلتان در فهرست هست، همه‌چیز یک‌جا ست می‌شود.\n\n";
+        $t .= "۲️⃣ <b>🧪 تست خام</b> — مسیر را از مستنداتِ سایتِ پنل بردارید، اینجا صدایش بزنید، " .
+              "و کلیدهای پاسخ را در «مسیر»های همان عملیات بنویسید.\n\n";
+        $t .= "<i>امتحان شد: " . h(implode('، ', array_slice(array_map(
+                fn($l) => trim(explode('→', $l)[0]), $log), 0, 5))) . " …</i>";
+        sendMsg(BOT_TOKEN, $chatId, $t, inlineKb([
+            [btnCb('⚡️ آماده‌سازی خودکار', 'numpre', 'confirm')],
+            [btnCb('🧪 تست خام', 'numraw', 'confirm')],
+            [btnCb('☎️ شماره مجازی', 'num_home', 'admin')],
+        ]));
         return;
     }
 
@@ -722,6 +889,57 @@ function numCallback($data, $uid, $chatId, $msgId, $cbId, $isAdmin) {
 
     if ($data === 'num_home') { $ack(); numAdmHome($chatId, $msgId); return true; }
     if ($data === 'numspec')  { $ack('⏳ در حال خواندن…'); numAdmSpec($chatId); return true; }
+
+    if ($data === 'numpre') {
+        $rows = [];
+        foreach (numPresets() as $k => $p) $rows[] = [btnCb($p['label'], 'numpre_' . $k, 'admin')];
+        $rows[] = [btnCb('🔙 بازگشت', 'num_home', 'nav')];
+        $ack();
+        editMsg(BOT_TOKEN, $chatId, $msgId,
+            "⚡️ <b>آماده‌سازی خودکار</b>\n\n" .
+            "پنلتان را انتخاب کنید تا آدرس، نوع احراز و هر چهار عملیات یک‌جا ست شود.\n" .
+            "بعدش فقط «🔑 کلید API» را بدهید.\n\n" .
+            "⚠️ کلید API دست‌نخورده می‌ماند — این دکمه پاکش نمی‌کند.", inlineKb($rows));
+        return true;
+    }
+    if (str_starts_with($data, 'numpre_')) {
+        $k = substr($data, 7);
+        if (!numApplyPreset($k)) { $ack('⚠️ پیدا نشد'); return true; }
+        $p = numPresets()[$k];
+        $ack('✅ ست شد');
+        sendMsg(BOT_TOKEN, $chatId,
+            "✅ <b>" . h($p['label']) . " ست شد</b>\n\n" .
+            (trim((string)numVal('api.auth_value', '')) === ''
+                ? "حالا «🔑 کلید API» را بدهید.\n\n"
+                : "کلید API از قبل ثبت است.\n\n") .
+            (!empty($p['sid_only'])
+                ? "📌 این پنل سرویس و کشور را با هم در یک شناسه می‌دهد. پس:\n" .
+                  "• «کد کشور» در دسته‌ها را <b>خالی بگذارید</b>\n" .
+                  "• همان <code>sid</code> را در «📱 کد سرویس» هر محصول بنویسید\n\n"
+                : '') .
+            "بعد با «🧪 تست خام» مطمئن شوید متدها درست‌اند.",
+            inlineKb([[btnCb('☎️ شماره مجازی', 'num_home', 'admin')]]));
+        return true;
+    }
+
+    if ($data === 'numraw') {
+        setState($uid, 'num_raw', []);
+        $ack();
+        $hint = '';
+        foreach (numPresets() as $p) {
+            if (rtrim((string)numVal('api.base', ''), '/') !== rtrim($p['base'], '/')) continue;
+            $hint = "\n\nبرای این پنل اینها را امتحان کنید:\n";
+            foreach ((array)($p['probe'] ?? []) as $m)
+                $hint .= '<code>/v2.php/?method=' . h($m) . "</code>\n";
+        }
+        sendMsg(BOT_TOKEN, $chatId,
+            "🧪 <b>تست خام</b>\n\n" .
+            "یک مسیر بفرستید تا همان‌طور که هست صدا زده شود و پاسخِ خام را ببینید — " .
+            "کلید API خودکار اضافه می‌شود.\n\n" .
+            "مثال:\n<code>/v2.php/?method=getservice</code>" . $hint,
+            inlineKb([[btnCb('🔙 بازگشت', 'num_home', 'nav')]]));
+        return true;
+    }
     if ($data === 'numtest')  { $ack('⏳ تماس با پنل…'); numAdmTest($chatId); return true; }
     if ($data === 'numopen')  { $ack(); numAdmOpen($chatId, $msgId); return true; }
 
@@ -813,8 +1031,15 @@ function numFieldOk($op, $field) {
 function numFieldAsk($op, $field) {
     switch ($field) {
         case 'method': return "📮 متد را بفرستید: <code>GET</code> یا <code>POST</code> یا <code>PUT</code>.";
-        case 'path':   return "📂 مسیر این عملیات را بفرستید — بدون آدرس پایه.\nمثال: <code>/api/v1/number</code>\n\nمتغیرها هم مجازند: <code>/status/{id}</code>";
+        case 'path':   return "📂 مسیر این عملیات را بفرستید — بدون آدرس پایه.\n" .
+                              "مثال: <code>/api/v1/number</code>\n\n" .
+                              "پارامتر هم می‌شود گذاشت:\n<code>/v2.php/?method=getnum&sid={service}</code>\n\n" .
+                              "متغیرها: <code>{service}</code> <code>{sid}</code> <code>{country}</code> <code>{id}</code>";
         case 'body':   return "📦 بدنه‌ی JSON را بفرستید.\nمثال: <code>{\"country\":\"{country}\",\"service\":\"{service}\"}</code>\n\nبرای خالی کردن، یک خط تیره بفرستید: <code>-</code>";
+        case 'ok_path': return "🚦 اگر پنل موفقیت را با یک کد اعلام می‌کند، نامِ آن فیلد را بفرستید.\n" .
+                               "مثال نامبرلند: <code>RESULT</code>\n\nبرای خالی کردن: <code>-</code>";
+        case 'ok_val':  return "🚦 مقداری که یعنی «موفق» را بفرستید.\n" .
+                               "مثال نامبرلند: <code>1</code>\n\nبرای خالی کردن: <code>-</code>";
         default:
             return "🧭 مسیر این مقدار داخل پاسخِ پنل را بفرستید.\n" .
                    "برای فیلدهای تودرتو با نقطه: <code>data.activation.id</code>\n" .
@@ -894,6 +1119,31 @@ function numStateHandle($action, $msg, $uid, $chatId) {
             $v = max(3, min(60, (int)numDigits($plain)));
             numSet(function (&$c) use ($v) { $c['api']['timeout'] = $v; });
             $done('✅ مهلت تماس: <b>' . $v . '</b> ثانیه');
+            return true;
+
+        case 'num_raw':
+            if ($plain === '') { sendMsg(BOT_TOKEN, $chatId, "⚠️ یک مسیر بفرستید.", $back); return true; }
+            [$url, $m, $hd, $bd, $er] = numRequest($plain, 'GET', '');
+            if ($er !== '') { sendMsg(BOT_TOKEN, $chatId, "❌ " . h($er), $back); return true; }
+            [$resp, $err] = maHttp($url, 'GET', $hd, '', (int)numVal('api.timeout', 15));
+
+            $t  = "🧪 <b>پاسخ خام</b>\n<code>" . h(mb_substr(numSafeUrl($url), 0, 120)) . "</code>\n\n";
+            if (!$resp) {
+                $t .= "❌ " . h(mb_substr((string)$err, 0, 600));
+            } else {
+                $j = json_encode($resp, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
+                $t .= "<code>" . h(mb_substr((string)$j, 0, 2800)) . "</code>";
+                // کلیدهای سطح اول را جدا بگو — همان‌هایی که باید در «مسیر»ها بنویسد
+                if (is_array($resp) && !array_is_list($resp)) {
+                    $keys = array_slice(array_keys($resp), 0, 20);
+                    $t .= "\n\n🔑 کلیدها: <code>" . h(implode('</code> <code>', $keys)) . "</code>";
+                }
+            }
+            clearState($uid);
+            sendMsg(BOT_TOKEN, $chatId, $t, inlineKb([
+                [btnCb('🧪 یکی دیگر', 'numraw', 'confirm')],
+                [btnCb('☎️ شماره مجازی', 'num_home', 'admin')],
+            ]));
             return true;
 
         case 'num_op':
