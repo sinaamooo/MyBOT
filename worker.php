@@ -818,6 +818,8 @@ final class Worker
     {
         $timeframes = Config::signalTimeframes();
         $symbols = $this->symbolRepo->universe(Config::signalMaxSymbolsPerPass());
+        $this->signalGenerator->resetObservations();
+        $evaluated = 0;
         $best = null;
 
         foreach ($symbols as $row) {
@@ -844,6 +846,7 @@ final class Worker
                     'volume_24h' => (float) ($row['volume_24h'] ?? 0),
                 ];
                 foreach ($timeframes as $timeframe) {
+                    $evaluated++;
                     $candidate = $this->signalGenerator->evaluate($snapshot, $timeframe, $meta);
                     if ($candidate !== null && ($best === null || $candidate->score > $best->score)) {
                         $best = $candidate;
@@ -854,7 +857,29 @@ final class Worker
             }
         }
 
+        $this->saveScanReport($evaluated, count($symbols), $best !== null);
         return $best;
+    }
+
+    /**
+     * Records what the pass saw, so a bot that is simply not finding setups
+     * can say so with numbers instead of staying silent and looking broken.
+     */
+    private function saveScanReport(int $evaluated, int $symbolCount, bool $published): void
+    {
+        $observation = $this->signalGenerator->bestObservation();
+        $report = [
+            'at' => time(),
+            'symbols' => $symbolCount,
+            'evaluated' => $evaluated,
+            'published' => $published,
+            'min_score' => Config::minSignalScore(),
+            'best' => $observation,
+        ];
+        Database::pdo()->prepare(
+            'INSERT INTO bot_settings (setting_key, setting_value, updated_at) VALUES (\'last_scan_report\', :v, :now)
+             ON CONFLICT(setting_key) DO UPDATE SET setting_value = excluded.setting_value, updated_at = excluded.updated_at'
+        )->execute([':v' => json_encode($report, JSON_UNESCAPED_UNICODE), ':now' => date('Y-m-d H:i:s')]);
     }
 
     private function processQueue(): void

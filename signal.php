@@ -3744,6 +3744,44 @@ final class SignalGenerator
     private FvgRepository $fvgRepo;
     private SignalRepository $signalRepo;
 
+    /**
+     * The strongest setup seen since the last reset, whether or not it was
+     * publishable, plus why it was turned down.
+     *
+     * Without this a quiet bot is indistinguishable from a broken one: the
+     * pass just returns null and the operator has no number to act on. With
+     * it the panel can say "best of this pass was 28.4 on BTCUSDT, minimum
+     * is 45", which is a decision they can actually make.
+     *
+     * @var array{symbol:string,timeframe:string,score:float,bias:string,reason:string}|null
+     */
+    private ?array $bestObservation = null;
+
+    public function resetObservations(): void
+    {
+        $this->bestObservation = null;
+    }
+
+    /** @return array{symbol:string,timeframe:string,score:float,bias:string,reason:string}|null */
+    public function bestObservation(): ?array
+    {
+        return $this->bestObservation;
+    }
+
+    private function observe(MarketSnapshot $snapshot, string $timeframe, float $score, string $bias, string $reason): void
+    {
+        if ($this->bestObservation !== null && $this->bestObservation['score'] >= $score) {
+            return;
+        }
+        $this->bestObservation = [
+            'symbol' => $snapshot->symbol,
+            'timeframe' => $timeframe,
+            'score' => round($score, 1),
+            'bias' => $bias,
+            'reason' => $reason,
+        ];
+    }
+
     public function __construct(private IndicatorEngine $indicatorEngine)
     {
         $this->srEngine = new SupportResistanceEngine();
@@ -3781,6 +3819,7 @@ final class SignalGenerator
     ): ?Signal {
         $candles = $snapshot->candlesFor($timeframe);
         if (count($candles) < 30) {
+            $this->observe($snapshot, $timeframe, 0.0, 'neutral', sprintf('کندل کافی نیست (%d از ۳۰)', count($candles)));
             return null;
         }
 
@@ -3816,6 +3855,13 @@ final class SignalGenerator
             }
             $setup = $strategy->evaluate($snapshot, $timeframe, $zones, $orderBlocks, $fvgs, $confluence);
             if ($setup === null) {
+                $this->observe(
+                    $snapshot,
+                    $timeframe,
+                    $confluence['score'],
+                    $confluence['bias'],
+                    $confluence['bias'] === 'neutral' ? 'بازار جهت مشخصی ندارد' : 'ساختار قیمت پلن معامله نداد'
+                );
                 return null;
             }
 
@@ -3830,6 +3876,7 @@ final class SignalGenerator
                 (float) ($meta['volume_24h'] ?? 0.0),
             );
             if ($plan === null) {
+                $this->observe($snapshot, $timeframe, $confluence['score'], $confluence['bias'], 'اهرم جایی برای حد ضرر نگذاشت');
                 return null;
             }
 
@@ -3842,6 +3889,7 @@ final class SignalGenerator
                 $plan['entry']
             );
             if ($this->deduplicator->isDuplicate($fingerprint, Config::cooldownSeconds())) {
+                $this->observe($snapshot, $timeframe, $confluence['score'], $confluence['bias'], 'تکراری است (Cooldown)');
                 return null;
             }
 
@@ -3874,9 +3922,11 @@ final class SignalGenerator
             $validation = $this->validator->validate($signal, $snapshot);
             if (!$validation['valid']) {
                 Logger::debug('signal', 'signal rejected by validator', ['symbol' => $snapshot->symbol, 'reasons' => $validation['reasons']]);
+                $this->observe($snapshot, $timeframe, $signal->score, $confluence['bias'], $validation['reasons'][0] ?? 'رد شد');
                 return null;
             }
 
+            $this->observe($snapshot, $timeframe, $signal->score, $confluence['bias'], 'قابل انتشار');
             return $signal;
         } catch (Throwable $e) {
             Logger::error('signal', 'signal generation failed', ['symbol' => $snapshot->symbol, 'timeframe' => $timeframe, 'error' => $e->getMessage()]);

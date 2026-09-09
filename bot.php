@@ -1109,6 +1109,62 @@ final class AdminPanel
         'signal_short'    => '🟡 عنوان SHORT',
     ];
 
+    /**
+     * Placeholders each text understands, with what they mean. Shown on the
+     * edit screen so the tokens are visible at the moment they are needed.
+     *
+     * @return array<string,string>
+     */
+    private static function placeholdersFor(string $key): array
+    {
+        $signal = [
+            '{symbol}' => 'نماد ارز',
+            '{direction_fa}' => 'جهت — خرید / فروش',
+            '{direction}' => 'جهت — LONG / SHORT',
+            '{leverage}' => 'اهرم',
+            '{entry}' => 'نقطه ورود',
+            '{sl}' => 'حد ضرر',
+            '{tp1}' => 'تارگت ۱',
+            '{tp2}' => 'تارگت ۲',
+            '{tp1_profit}' => 'سود تارگت ۱ با اهرم',
+            '{tp2_profit}' => 'سود تارگت ۲ با اهرم',
+            '{sl_loss}' => 'ضرر حد ضرر با اهرم',
+            '{rr}' => 'ریسک به ریوارد',
+            '{risk_pct}' => 'فاصله حد ضرر (درصد)',
+            '{score}' => 'امتیاز سیگنال',
+            '{confidence_fa}' => 'اعتبار — بالا / متوسط / پایین',
+            '{tier}' => 'نوع ارز',
+            '{exchange}' => 'صرافی',
+            '{timeframe}' => 'تایم‌فریم',
+            '{time}' => 'زمان',
+            '{reasons}' => 'دلایل تحلیل',
+        ];
+
+        $result = [
+            '{symbol}' => 'نماد ارز',
+            '{direction_fa}' => 'جهت — خرید / فروش',
+            '{leverage}' => 'اهرم',
+            '{entry}' => 'نقطه ورود',
+            '{exit}' => 'قیمت خروج',
+            '{pnl}' => 'سود/ضرر با اهرم',
+            '{move}' => 'حرکت خام قیمت',
+            '{sl}' => 'حد ضرر اولیه',
+            '{tp1}' => 'تارگت ۱',
+            '{tp2}' => 'تارگت ۲',
+            '{timeframe}' => 'تایم‌فریم',
+            '{exchange}' => 'صرافی',
+            '{time}' => 'زمان',
+        ];
+
+        return match ($key) {
+            'signal_template' => $signal,
+            'result_tp1', 'result_tp2', 'result_sl', 'result_be' => $result,
+            'signal_long', 'signal_short' => ['{symbol}' => 'نماد ارز'],
+            'scanner_status' => ['{status}' => 'وضعیت اسکنر'],
+            default => [],
+        };
+    }
+
     private function renderTexts(int $chatId, int $messageId, array $parts, int $userId): void
     {
         $action = $parts[2] ?? null;
@@ -1117,14 +1173,27 @@ final class AdminPanel
             $key = $parts[3];
             $this->states->set($userId, 'awaiting_text_input', ['key' => $key]);
             $label = self::TEXT_LABELS[$key] ?? $key;
-            $this->render(
-                $chatId,
-                $messageId,
-                "✏️ ویرایش «$label»\n\nپیام جدید را همان‌طور که می‌خواهید منتشر شود بفرستید — "
-                . "متن را انتخاب کنید و Quote بزنید، ایموجی پریمیوم بگذارید، بولد و اسپویلر هم آزاد است.\n\n"
-                . "فقط {placeholder}ها را دست‌نخورده بگذارید؛ ربات آن‌ها را با مقدار واقعی جایگزین می‌کند.",
-                ['inline_keyboard' => [$this->backRow('admin:texts')]]
-            );
+
+            $lines = ["✏️ $label", ''];
+            $vars = self::placeholdersFor($key);
+            if (!empty($vars)) {
+                $lines[] = 'دستورها:';
+                foreach ($vars as $token => $meaning) {
+                    $lines[] = $token . ' — ' . $meaning;
+                }
+                $lines[] = '';
+            }
+            $lines[] = 'پیام جدید را بفرستید.';
+
+            $this->render($chatId, $messageId, implode("\n", $lines), ['inline_keyboard' => [$this->backRow('admin:texts')]]);
+
+            // The current text, sent as its own message so it can be copied,
+            // edited and sent straight back with its formatting intact —
+            // otherwise every edit means retyping the whole thing.
+            $current = $this->texts->get($key);
+            if ($current['text'] !== '') {
+                $this->telegram->sendMessage($chatId, $current['text'], $current['entities']);
+            }
             return;
         }
 
@@ -1208,6 +1277,64 @@ final class AdminPanel
         'MIN_SIGNAL_SCORE'            => ['📊 حداقل امتیاز سیگنال', 'مثال: 45'],
     ];
 
+    /**
+     * Why the bot is quiet, in plain terms.
+     *
+     * "No signal yet" has half a dozen causes that look identical from the
+     * outside — no symbols, not enough candles, a market with no direction,
+     * or setups that are simply weaker than the threshold. The worker
+     * records what each pass saw; this turns that into one readable line and
+     * a number the operator can act on.
+     */
+    private function scanVerdict(): string
+    {
+        $raw = $this->getSetting('last_scan_report', '');
+        $report = $raw !== '' ? json_decode($raw, true) : null;
+
+        if (!is_array($report)) {
+            $symbols = (new SymbolRepository())->countActive();
+            if ($symbols === 0) {
+                return "🔴 هنوز هیچ اسکنی انجام نشده و نماد فعالی نیست.\nیعنی یا کرون اجرا نمی‌شود، یا هیچ صرافی‌ای در دسترس نیست (📊 Scanner → 🔍 تست اتصال).";
+            }
+            return "🟡 اسکنر نماد دارد ولی هنوز پاس سیگنالی ثبت نشده. چند دقیقه به کرون فرصت بدهید.";
+        }
+
+        $ago = max(0, time() - (int) ($report['at'] ?? 0));
+        $when = $ago < 120 ? 'همین الان' : sprintf('%d دقیقه پیش', (int) round($ago / 60));
+
+        if (!empty($report['published'])) {
+            return sprintf('🟢 آخرین پاس (%s): سیگنال منتشر شد.', $when);
+        }
+
+        $symbols = (int) ($report['symbols'] ?? 0);
+        if ($symbols === 0) {
+            return sprintf("🔴 آخرین پاس (%s): هیچ نماد فعالی نبود.\nاسکنر چیزی پیدا نکرده — از 📊 Scanner اتصال صرافی‌ها را تست کنید.", $when);
+        }
+
+        $best = $report['best'] ?? null;
+        $min = (float) ($report['min_score'] ?? 45);
+        if (!is_array($best)) {
+            return sprintf('🟡 آخرین پاس (%s): %d نماد بررسی شد، هیچ ستاپی حتی نیمه‌کاره پیدا نشد.', $when, $symbols);
+        }
+
+        $verdict = sprintf(
+            "🟡 آخرین پاس (%s): %d نماد بررسی شد، سیگنالی منتشر نشد.\nبهترین چیزی که دید: %s (%s) با امتیاز %.1f — حداقل لازم %.1f\nدلیل رد شدن: %s",
+            $when,
+            $symbols,
+            (string) $best['symbol'],
+            (string) $best['timeframe'],
+            (float) $best['score'],
+            $min,
+            (string) $best['reason']
+        );
+
+        if ((float) $best['score'] > 0 && (float) $best['score'] < $min) {
+            $verdict .= sprintf("\n\n💡 اگر می‌خواهید زودتر سیگنال بگیرید، «📊 حداقل امتیاز سیگنال» را کمی زیر %.0f بگذارید.", (float) $best['score']);
+        }
+
+        return $verdict;
+    }
+
     private function renderAuto(int $chatId, int $messageId, array $parts, int $userId): void
     {
         $action = $parts[2] ?? null;
@@ -1233,6 +1360,8 @@ final class AdminPanel
 
         $lines = [
             '🤖 حالت اتومات',
+            '',
+            $this->scanVerdict(),
             '',
             sprintf('معامله باز: %d از %d', $open, Config::maxOpenPositions()),
             $wait > 0
