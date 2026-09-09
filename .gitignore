@@ -1,0 +1,14 @@
+# Real credentials. Copy env.example.php to env.php on the server and fill it
+# in there — env.php must never be committed.
+env.php
+.env
+
+# SQLite database, WAL/journal siblings, worker lock, logs.
+storage/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+
+# Local scratch
+*.log
+.DS_Store
