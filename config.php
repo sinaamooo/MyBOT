@@ -358,17 +358,35 @@ final class Config
         return $override !== null ? (float) $override : Env::getFloat('MAX_SPREAD_PERCENT', 0.5);
     }
 
-    /** @return string[] allowed quote assets, e.g. ["USDT","USDC"] — empty means no filter (all quote assets allowed) */
+    /**
+     * Quote assets a pair may be priced in. Returning [] means no filter at
+     * all, which only happens when the value is the explicit '*' sentinel.
+     *
+     * An EMPTY setting resolves to the dollar-stablecoin set rather than to
+     * "allow everything". Allowing everything sounds harmless and is not:
+     * regional exchanges list fiat pairs, so an unfiltered scan ranks things
+     * like USDTTMN — Tether priced in Iranian toman — as a tradable symbol
+     * and happily publishes leveraged "signals" on a currency peg. This bot
+     * trades crypto against a dollar stablecoin; that is the default.
+     *
+     * @return string[]
+     */
+    public const DEFAULT_QUOTE_ASSETS = ['USDT', 'USDC', 'FDUSD', 'BUSD', 'TUSD', 'DAI'];
+
     public static function allowedQuoteAssets(): array
     {
         $override = self::dbOverride('ALLOWED_QUOTE_ASSETS');
-        if ($override !== null) {
-            if ($override === '*') {
-                return [];
-            }
-            return array_values(array_filter(array_map('trim', explode(',', $override)), static fn($x) => $x !== ''));
+        $raw = $override ?? (Env::get('ALLOWED_QUOTE_ASSETS', '') ?? '');
+
+        if (trim($raw) === '*') {
+            return []; // explicit "no filter"
         }
-        return Env::getList('ALLOWED_QUOTE_ASSETS', 'USDT');
+        $list = array_values(array_filter(array_map(
+            static fn($x) => strtoupper(trim($x)),
+            explode(',', $raw)
+        ), static fn($x) => $x !== ''));
+
+        return empty($list) ? self::DEFAULT_QUOTE_ASSETS : $list;
     }
 
     public static function includeStablecoinPairs(): bool

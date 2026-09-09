@@ -56,8 +56,17 @@ return [
     'SCANNER_INTERVAL_SECONDS' => '900',
     'MIN_VOLUME_USDT' => '0',
     'MAX_SPREAD_PERCENT' => '10',
-    'ALLOWED_QUOTE_ASSETS' => '',
-    'INCLUDE_STABLECOIN_PAIRS' => 'true',
+    // Quote assets a pair may be priced in. Leave empty for the dollar
+    // stablecoin set (USDT, USDC, FDUSD, BUSD, TUSD, DAI) — do NOT expect an
+    // empty value to mean "everything". Regional exchanges list fiat pairs,
+    // and without this filter the scanner ranks things like USDTTMN (Tether
+    // priced in Iranian toman) as tradable. Use '*' if you really want no
+    // filter at all.
+    'ALLOWED_QUOTE_ASSETS' => 'USDT',
+
+    // Whether stablecoin-vs-stablecoin pairs (USDCUSDT and friends) count as
+    // tradable. They are pegs; leveraged signals on them are meaningless.
+    'INCLUDE_STABLECOIN_PAIRS' => 'false',
 
     // Timeframes to COLLECT candles for. Must be a superset of
     // SIGNAL_TIMEFRAMES below, or those timeframes have no data to work with.

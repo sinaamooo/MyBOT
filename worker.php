@@ -405,6 +405,9 @@ final class Worker
     /** Unix time this invocation must be finished by (cron mode); PHP_INT_MAX in daemon mode. */
     private int $deadline = PHP_INT_MAX;
 
+    /** Seconds held back from market-data collection so the tick loop always runs. */
+    private const TICK_RESERVE_SECONDS = 15;
+
     /** @var array<string,int> timeframe => unix timestamp of next due scan */
     private array $nextTimeframeRun = [];
 
@@ -508,6 +511,11 @@ final class Worker
         // Market Data before entering the steady-state loop. Gated the same
         // way as every later tick, so a cron invocation doesn't re-scan or
         // re-prime data that's already fresh from the previous minute.
+        // Written before the expensive work, so the panel can tell "the
+        // worker is running" apart from "cron never fired" even while an
+        // invocation is still busy collecting data.
+        $this->heartbeat();
+
         $this->maybeRunScanner();
         $this->primeMarketData();
 
@@ -601,20 +609,52 @@ final class Worker
      */
     private function primeMarketData(): void
     {
-        $symbols = $this->symbolRepo->listActive();
         $candleManager = $this->marketData->candleManager();
-        foreach ($symbols as $row) {
-            if (!$this->running) {
+        foreach ($this->tradingUniverse() as $row) {
+            if (!$this->running || $this->outOfDataBudget()) {
                 break;
             }
             $missing = array_values(array_filter(
-                Config::timeframes(),
+                Config::signalTimeframes(),
                 static fn(string $tf) => !$candleManager->hasAny($row['exchange'], $row['symbol'], $tf)
             ));
             if (!empty($missing)) {
                 $this->syncSymbolCandles($row['exchange'], $row['symbol'], $missing, 200);
             }
         }
+    }
+
+    /**
+     * The symbols this worker actually trades — the same slice the signal
+     * pass evaluates, majors first.
+     *
+     * Collecting data for every symbol the scanner ranked was the single
+     * thing keeping this bot silent. With seven exchanges the scanner banks
+     * ~800 symbols; priming all of them across all six timeframes is ~4800
+     * HTTP round trips, and a cron invocation has about fifty seconds. The
+     * pre-loop priming therefore consumed every invocation forever and the
+     * tick loop — which writes the heartbeat, resolves open trades and
+     * publishes signals — never ran at all. Only ~60 symbols are ever
+     * evaluated, so only those need data.
+     *
+     * @return array<int,array<string,mixed>>
+     */
+    private function tradingUniverse(): array
+    {
+        return $this->symbolRepo->universe(Config::signalMaxSymbolsPerPass());
+    }
+
+    /**
+     * Market-data collection stops early enough to leave the tick loop room
+     * to run. Publishing a signal matters more than having one more symbol
+     * primed.
+     */
+    private function outOfDataBudget(): bool
+    {
+        if ($this->deadline === PHP_INT_MAX) {
+            return false;
+        }
+        return time() >= ($this->deadline - self::TICK_RESERVE_SECONDS);
     }
 
     /**
@@ -628,7 +668,7 @@ final class Worker
     {
         $now = time();
         $dueTimeframes = [];
-        foreach (Config::timeframes() as $tf) {
+        foreach (Config::signalTimeframes() as $tf) {
             if ($now >= ($this->nextTimeframeRun[$tf] ?? 0)) {
                 $dueTimeframes[] = $tf;
                 $this->nextTimeframeRun[$tf] = $now + $this->timeframeSeconds($tf);
@@ -642,17 +682,30 @@ final class Worker
         // the only place "when is each timeframe next due" survives.
         $this->saveTimeframeSchedule($this->nextTimeframeRun);
 
-        $symbols = $this->symbolRepo->listActive();
-        foreach ($symbols as $row) {
-            if (!$this->running) {
+        // One ticker fetch per exchange, reused for every symbol on it. This
+        // used to call fetchTicker24h() per symbol, and that endpoint returns
+        // the exchange's WHOLE ticker list — so a 60-symbol pass downloaded
+        // the same multi-megabyte payload 60 times.
+        $tickerCache = [];
+
+        foreach ($this->tradingUniverse() as $row) {
+            if (!$this->running || $this->outOfDataBudget()) {
                 break;
             }
-            $exchange = $row['exchange'];
+            $exchange = (string) $row['exchange'];
             if (!$this->exchangeManager->isHealthy($exchange)) {
                 continue; // circuit open — skip this tick for this exchange only
             }
-            $this->syncSymbolCandles($exchange, $row['symbol'], $dueTimeframes, 200);
-            $this->syncSymbolTicker($exchange, $row['symbol']);
+            $this->syncSymbolCandles($exchange, (string) $row['symbol'], $dueTimeframes, 200);
+
+            if (!array_key_exists($exchange, $tickerCache)) {
+                $fetched = $this->exchangeManager->withIsolation($exchange, fn(ExchangeAdapter $a) => $a->fetchTicker24h());
+                $tickerCache[$exchange] = is_array($fetched) ? $fetched : [];
+            }
+            $ticker = $tickerCache[$exchange][$row['symbol']] ?? null;
+            if ($ticker !== null) {
+                $this->marketData->upsertTicker($exchange, (string) $row['symbol'], $ticker['lastPrice'], $ticker['bid'], $ticker['ask'], $ticker['volume']);
+            }
         }
     }
 
@@ -664,15 +717,6 @@ final class Worker
                 $this->marketData->candleManager()->upsertMany($exchange, $symbol, $tf, $candles);
                 $this->exchangeBackoff[$exchange]->reset();
             }
-        }
-    }
-
-    private function syncSymbolTicker(string $exchange, string $symbol): void
-    {
-        $tickers = $this->exchangeManager->withIsolation($exchange, fn(ExchangeAdapter $a) => $a->fetchTicker24h());
-        if (is_array($tickers) && isset($tickers[$symbol])) {
-            $t = $tickers[$symbol];
-            $this->marketData->upsertTicker($exchange, $symbol, $t['lastPrice'], $t['bid'], $t['ask'], $t['volume']);
         }
     }
 

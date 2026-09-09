@@ -1870,13 +1870,29 @@ final class AdminPanel
         ]]);
     }
 
+    /**
+     * Worker liveness, said in terms of what to do about it. A bare
+     * "unknown" is the least useful thing this screen can print: it is the
+     * symptom of the single most common deployment mistake — the cron job
+     * not running — and it should say so.
+     */
     private function workerHeartbeatStatus(): string
     {
         $v = $this->getSetting('worker_heartbeat', '');
         if ($v === '') {
-            return '⚪️ نامشخص';
+            return "🔴 هرگز اجرا نشده\n"
+                . "   کرون اجرا نمی‌شود. این دستور را هر دقیقه تنظیم کنید:\n"
+                . '   php ' . __DIR__ . '/worker.php';
         }
-        return (time() - (int) $v) < 120 ? '🟢' : '🔴';
+
+        $ago = time() - (int) $v;
+        if ($ago < 180) {
+            return sprintf('🟢 فعال (%d ثانیه پیش)', max(0, $ago));
+        }
+        if ($ago < 3600) {
+            return sprintf("🟡 %d دقیقه پیش\n   یعنی کرون کند اجرا می‌شود یا هر بار قبل از پایان قطع می‌شود.", (int) round($ago / 60));
+        }
+        return sprintf("🔴 %d ساعت پیش — کرون متوقف شده\n   php %s/worker.php را هر دقیقه اجرا کنید.", (int) round($ago / 3600), __DIR__);
     }
 
     /**
