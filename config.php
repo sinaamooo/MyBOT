@@ -493,6 +493,58 @@ final class Config
         return Env::getBool('RISK_FREE_ENABLED', true);
     }
 
+    // -- Message appearance ------------------------------------------------
+
+    /**
+     * Wraps outgoing signal/result text in a Telegram quote box.
+     * 'none' | 'quote' | 'expandable' (the collapsible variant).
+     */
+    public static function messageQuoteStyle(): string
+    {
+        $override = self::dbOverride('MESSAGE_QUOTE_STYLE');
+        $v = strtolower($override ?? (Env::get('MESSAGE_QUOTE_STYLE', 'none') ?? 'none'));
+        return in_array($v, ['quote', 'expandable'], true) ? $v : 'none';
+    }
+
+    /**
+     * Premium (custom) emoji set, as plain emoji => custom_emoji_id. Filled
+     * from the admin panel by forwarding a message that contains the
+     * premium emoji; applied to every template automatically, so templates
+     * keep their ordinary emoji and still render as premium ones.
+     *
+     * @return array<string,string>
+     */
+    public static function customEmojiMap(): array
+    {
+        $raw = self::dbOverride('CUSTOM_EMOJI_MAP');
+        if ($raw === null || $raw === '') {
+            return [];
+        }
+        $decoded = json_decode($raw, true);
+        if (!is_array($decoded)) {
+            return [];
+        }
+        $map = [];
+        foreach ($decoded as $emoji => $id) {
+            $emoji = (string) $emoji;
+            $id = (string) $id;
+            if ($emoji !== '' && $id !== '') {
+                $map[$emoji] = $id;
+            }
+        }
+        return $map;
+    }
+
+    /** Master switch for the premium emoji set, so it can be turned off without losing the map. */
+    public static function customEmojiEnabled(): bool
+    {
+        $override = self::dbOverride('CUSTOM_EMOJI_ENABLED');
+        if ($override !== null) {
+            return in_array(strtolower($override), ['1', 'true', 'yes', 'on'], true);
+        }
+        return Env::getBool('CUSTOM_EMOJI_ENABLED', true);
+    }
+
     // -- Leverage ----------------------------------------------------------
 
     /** @return string[] base assets that get the high-leverage treatment */
@@ -1428,5 +1480,199 @@ final class TelegramEntityUtils
         $workingEntities = array_values(array_filter($workingEntities, static fn($e) => ((int) ($e['length'] ?? 0)) > 0));
 
         return ['text' => $text, 'entities' => $workingEntities];
+    }
+
+    // ------------------------------------------------------------------
+    // UTF-16 addressing helpers
+    //
+    // Telegram addresses text in UTF-16 code units while PHP addresses it
+    // in bytes, and the two only agree for ASCII. Every emoji in these
+    // templates is outside the BMP or carries a variation selector, so the
+    // conversion has to be explicit rather than assumed.
+    // ------------------------------------------------------------------
+
+    /**
+     * Byte offset in $text of a given UTF-16 offset, or null when the
+     * offset falls outside the string.
+     */
+    public static function utf16ToByteOffset(string $text, int $utf16Offset): ?int
+    {
+        if ($utf16Offset <= 0) {
+            return $utf16Offset === 0 ? 0 : null;
+        }
+        $units = 0;
+        $bytes = strlen($text);
+        $i = 0;
+        while ($i < $bytes) {
+            if ($units === $utf16Offset) {
+                return $i;
+            }
+            $step = self::charByteLength($text, $i);
+            $units += self::utf16Length(substr($text, $i, $step));
+            $i += $step;
+        }
+        return $units === $utf16Offset ? $i : null;
+    }
+
+    /** Substring addressed the way Telegram addresses entities. */
+    public static function utf16Substr(string $text, int $offset, int $length): string
+    {
+        $start = self::utf16ToByteOffset($text, $offset);
+        if ($start === null) {
+            return '';
+        }
+        $end = self::utf16ToByteOffset($text, $offset + $length);
+        return $end === null ? substr($text, $start) : substr($text, $start, $end - $start);
+    }
+
+    /** Byte length of the UTF-8 character starting at $i (1 on malformed input, so scans always advance). */
+    private static function charByteLength(string $text, int $i): int
+    {
+        $ord = ord($text[$i]);
+        return match (true) {
+            $ord < 0x80 => 1,
+            ($ord & 0xE0) === 0xC0 => 2,
+            ($ord & 0xF0) === 0xE0 => 3,
+            ($ord & 0xF8) === 0xF0 => 4,
+            default => 1,
+        };
+    }
+
+    /**
+     * UTF-16 offsets of every occurrence of $needle in $text.
+     *
+     * @return int[]
+     */
+    public static function findUtf16Offsets(string $text, string $needle): array
+    {
+        if ($needle === '') {
+            return [];
+        }
+        $offsets = [];
+        $units = 0;
+        $bytes = strlen($text);
+        $needleLen = strlen($needle);
+        $i = 0;
+        while ($i < $bytes) {
+            if (substr_compare($text, $needle, $i, $needleLen) === 0) {
+                $offsets[] = $units;
+                $units += self::utf16Length($needle);
+                $i += $needleLen;
+                continue;
+            }
+            $step = self::charByteLength($text, $i);
+            $units += self::utf16Length(substr($text, $i, $step));
+            $i += $step;
+        }
+        return $offsets;
+    }
+
+    // ------------------------------------------------------------------
+    // Styling
+    // ------------------------------------------------------------------
+
+    /**
+     * Adds a custom_emoji entity over every occurrence of each mapped
+     * emoji, so a premium emoji set can be applied to templates that were
+     * written with ordinary emoji — no need to retype them.
+     *
+     * @param array<string,string> $map plain emoji text => custom_emoji_id
+     * @param array<int,array<string,mixed>> $entities
+     * @return array<int,array<string,mixed>>
+     */
+    public static function applyCustomEmoji(string $text, array $entities, array $map): array
+    {
+        if (empty($map)) {
+            return $entities;
+        }
+
+        // Positions already claimed by a custom_emoji entity (a template the
+        // admin formatted by hand) must not be claimed a second time.
+        $taken = [];
+        foreach ($entities as $e) {
+            if (($e['type'] ?? '') === 'custom_emoji') {
+                $start = (int) ($e['offset'] ?? 0);
+                $taken[] = [$start, $start + (int) ($e['length'] ?? 0)];
+            }
+        }
+
+        foreach ($map as $emoji => $id) {
+            $emoji = (string) $emoji;
+            $id = (string) $id;
+            if ($emoji === '' || $id === '') {
+                continue;
+            }
+            $length = self::utf16Length($emoji);
+            foreach (self::findUtf16Offsets($text, $emoji) as $offset) {
+                foreach ($taken as [$s, $e]) {
+                    if ($offset < $e && ($offset + $length) > $s) {
+                        continue 2;
+                    }
+                }
+                $entities[] = [
+                    'type' => 'custom_emoji',
+                    'offset' => $offset,
+                    'length' => $length,
+                    'custom_emoji_id' => $id,
+                ];
+                $taken[] = [$offset, $offset + $length];
+            }
+        }
+
+        return $entities;
+    }
+
+    /**
+     * Wraps the whole message in a quote box.
+     *
+     * @param string $style 'quote', 'expandable', or anything else for no quote
+     * @param array<int,array<string,mixed>> $entities
+     * @return array<int,array<string,mixed>>
+     */
+    public static function wrapBlockquote(string $text, array $entities, string $style): array
+    {
+        $type = match ($style) {
+            'quote' => 'blockquote',
+            'expandable' => 'expandable_blockquote',
+            default => null,
+        };
+        if ($type === null) {
+            return $entities;
+        }
+        $length = self::utf16Length($text);
+        if ($length <= 0) {
+            return $entities;
+        }
+        // Prepended so the quote encloses everything already there; Telegram
+        // allows other entities to nest inside a blockquote.
+        array_unshift($entities, ['type' => $type, 'offset' => 0, 'length' => $length]);
+        return $entities;
+    }
+
+    /**
+     * Removes custom_emoji entities, leaving the fallback emoji characters
+     * in place. Used to re-send a message that Telegram rejected because
+     * the bot is not allowed to use custom emoji in that chat.
+     *
+     * @param array<int,array<string,mixed>> $entities
+     * @return array<int,array<string,mixed>>
+     */
+    public static function stripCustomEmoji(array $entities): array
+    {
+        return array_values(array_filter(
+            $entities,
+            static fn($e) => ($e['type'] ?? '') !== 'custom_emoji'
+        ));
+    }
+
+    /** @param array<int,array<string,mixed>> $entities */
+    public static function hasCustomEmoji(array $entities): bool
+    {
+        foreach ($entities as $e) {
+            if (($e['type'] ?? '') === 'custom_emoji') {
+                return true;
+            }
+        }
+        return false;
     }
 }

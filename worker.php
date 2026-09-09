@@ -285,7 +285,7 @@ final class TelegramDispatcher
         return $messageId;
     }
 
-    private function sendPhotoWithRetry(int $chatId, string $photo, string $caption, array $captionEntities, array $opts, int $signalId, int $channelId, int $maxAttempts = 2): ?int
+    private function sendPhotoWithRetry(int $chatId, string $photo, string $caption, array $captionEntities, array $opts, int $signalId, int $channelId, int $maxAttempts = 3): ?int
     {
         for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
             $result = $this->telegram->sendPhoto($chatId, $photo, $caption, $captionEntities, $opts);
@@ -294,11 +294,9 @@ final class TelegramDispatcher
                 $this->logEvent($signalId, $channelId, 'sent', $messageId, null, $attempt);
                 return $messageId;
             }
-            Logger::warning('dispatcher', 'photo send failed', [
-                'chat_id' => $chatId,
-                'attempt' => $attempt,
-                'error' => (string) ($result['description'] ?? 'unknown error'),
-            ]);
+            $error = (string) ($result['description'] ?? 'unknown error');
+            Logger::warning('dispatcher', 'photo send failed', ['chat_id' => $chatId, 'attempt' => $attempt, 'error' => $error]);
+            $captionEntities = $this->degradeEntities($captionEntities, $error, $chatId);
             usleep(500_000 * $attempt);
         }
         return null;
@@ -316,10 +314,34 @@ final class TelegramDispatcher
             $error = (string) ($result['description'] ?? 'unknown error');
             $this->logEvent($signalId, $channelId, 'retry', null, $error, $attempt);
             Logger::warning('dispatcher', 'send failed, retrying', ['chat_id' => $chatId, 'attempt' => $attempt, 'error' => $error]);
+            $entities = $this->degradeEntities($entities, $error, $chatId);
             usleep(500_000 * $attempt);
         }
         $this->logEvent($signalId, $channelId, 'failed', null, 'max attempts reached', $maxAttempts);
         return null;
+    }
+
+    /**
+     * Drops custom emoji from a message Telegram just refused, so the retry
+     * goes out as plain text rather than failing again for the same reason.
+     *
+     * A bot may only use custom emoji if it bought a username on Fragment,
+     * or when writing to a private/group/supergroup chat and its owner has
+     * Premium — CHANNELS are not covered by the owner-Premium route. Since
+     * this bot's whole job is posting to a channel, a premium emoji set is
+     * exactly the kind of setting that could silently stop every signal.
+     * Losing the fancy emoji is always better than losing the signal.
+     *
+     * @param array<int,array<string,mixed>> $entities
+     * @return array<int,array<string,mixed>>
+     */
+    private function degradeEntities(array $entities, string $error, int $chatId): array
+    {
+        if (!TelegramEntityUtils::hasCustomEmoji($entities)) {
+            return $entities;
+        }
+        Logger::warning('dispatcher', 'retrying without custom emoji', ['chat_id' => $chatId, 'error' => $error]);
+        return TelegramEntityUtils::stripCustomEmoji($entities);
     }
 
     private function logEvent(int $signalId, int $channelId, string $type, ?int $messageId, ?string $error, int $attempt): void
