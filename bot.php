@@ -1087,6 +1087,28 @@ final class AdminPanel
     }
 
     // -- ✏️ Text Management ------------------------------------------------
+    /**
+     * Human names for the editable texts. The stop/target announcements are
+     * ordinary rows in text_formats, so they were always editable — but
+     * "result_be" tells nobody what it is.
+     *
+     * @var array<string,string>
+     */
+    private const TEXT_LABELS = [
+        'signal_template' => '📨 متن سیگنال',
+        'result_tp1'      => '✅ متن تارگت ۱ + ریسک‌فری',
+        'result_tp2'      => '🏆 متن تارگت ۲',
+        'result_sl'       => '❌ متن حد ضرر',
+        'result_be'       => '🛡 متن بسته شدن بدون ضرر',
+        'welcome'         => '👋 خوش‌آمدگویی (/start)',
+        'help'            => 'ℹ️ راهنما (/help)',
+        'error'           => '⚠️ پیام خطا',
+        'channel_added'   => '📺 تأیید افزودن کانال',
+        'scanner_status'  => '📊 وضعیت اسکنر',
+        'signal_long'     => '🟢 عنوان LONG',
+        'signal_short'    => '🟡 عنوان SHORT',
+    ];
+
     private function renderTexts(int $chatId, int $messageId, array $parts, int $userId): void
     {
         $action = $parts[2] ?? null;
@@ -1094,14 +1116,26 @@ final class AdminPanel
         if ($action === 'edit' && isset($parts[3])) {
             $key = $parts[3];
             $this->states->set($userId, 'awaiting_text_input', ['key' => $key]);
-            $this->render($chatId, $messageId, "✏️ ویرایش متن «$key»\n\nپیام جدید را (با فرمت/ایموجی اختصاصی دلخواه) ارسال کنید.", ['inline_keyboard' => [$this->backRow('admin:texts')]]);
+            $label = self::TEXT_LABELS[$key] ?? $key;
+            $this->render(
+                $chatId,
+                $messageId,
+                "✏️ ویرایش «$label»\n\nپیام جدید را همان‌طور که می‌خواهید منتشر شود بفرستید — "
+                . "متن را انتخاب کنید و Quote بزنید، ایموجی پریمیوم بگذارید، بولد و اسپویلر هم آزاد است.\n\n"
+                . "فقط {placeholder}ها را دست‌نخورده بگذارید؛ ربات آن‌ها را با مقدار واقعی جایگزین می‌کند.",
+                ['inline_keyboard' => [$this->backRow('admin:texts')]]
+            );
             return;
         }
 
+        // Known texts first, in a sensible order; anything unrecognised after.
         $keys = $this->texts->listKeys();
+        $ordered = array_values(array_filter(array_keys(self::TEXT_LABELS), static fn($k) => in_array($k, $keys, true)));
+        $ordered = array_merge($ordered, array_values(array_diff($keys, $ordered)));
+
         $keyboard = [];
-        foreach ($keys as $key) {
-            $keyboard[] = [['text' => $key, 'callback_data' => "admin:texts:edit:$key"]];
+        foreach ($ordered as $key) {
+            $keyboard[] = [['text' => self::TEXT_LABELS[$key] ?? $key, 'callback_data' => "admin:texts:edit:$key"]];
         }
         $keyboard[] = $this->backRow();
         $this->render($chatId, $messageId, "✏️ مدیریت متن‌ها\n\nیکی از متن‌ها را برای ویرایش انتخاب کنید:", ['inline_keyboard' => $keyboard]);
@@ -1253,10 +1287,15 @@ final class AdminPanel
             $this->runTemplatePreview($chatId);
             return;
         }
-        $this->render($chatId, $messageId, "🧪 Test Signal\n\n▶️ اجرای تست: یک سیگنال واقعی از روی بازار تولید می‌کنه (نیاز به نماد فعال داره).\n🎨 پیش‌نمایش قالب: بدون نیاز به داده بازار، بلافاصله قالب فعلی رو با داده فرضی ارسال می‌کنه — برای چک کردن سریع ایموجی پرمیوم/فرمت.", [
+        if ($action === 'channel') {
+            $this->runChannelTest($chatId);
+            return;
+        }
+        $this->render($chatId, $messageId, "🧪 Test Signal\n\n▶️ اجرای تست: یک سیگنال واقعی از روی بازار تولید می‌کنه (نیاز به نماد فعال داره).\n🎨 پیش‌نمایش قالب: همین‌جا در چت خصوصی، قالب فعلی رو با داده فرضی می‌فرسته.\n📢 تست روی کانال: همون پیام رو واقعاً به کانال‌های فعال می‌فرسته و گزارش می‌ده که ایموجی پریمیوم توی کانال قبول شد یا نه — و جواب تارگت رو هم به‌صورت ریپلای می‌فرسته تا زنجیره ریپلای رو ببینید.", [
             'inline_keyboard' => [
                 [['text' => '▶️ اجرای تست (با بازار)', 'callback_data' => 'admin:test_signal:run']],
                 [['text' => '🎨 پیش‌نمایش قالب (فوری)', 'callback_data' => 'admin:test_signal:preview']],
+                [['text' => '📢 تست روی کانال', 'callback_data' => 'admin:test_signal:channel']],
                 $this->backRow(),
             ],
         ]);
@@ -1269,15 +1308,19 @@ final class AdminPanel
      * checked immediately, without depending on the scanner having found
      * any symbols yet.
      */
-    private function runTemplatePreview(int $chatId): void
+    /**
+     * A stand-in signal with numbers shaped like a real BTC trade at the
+     * configured major leverage, so a preview shows the true stop distance
+     * and the true leveraged profit each target is worth — not a cosmetic
+     * sample. Shared by the private preview and the channel test so the two
+     * can never disagree about what they are demonstrating.
+     */
+    private function previewSignal(): Signal
     {
-        // Numbers shaped like a real BTC trade at the configured major
-        // leverage, so the preview shows the true stop distance and the true
-        // leveraged profit each target is worth — not a cosmetic sample.
         $leverage = Config::leverageMajor();
         $entry = 65000.5;
         $risk = $entry * (Config::leverageLiquidationBuffer() * (100.0 / max(1, $leverage))) / 100;
-        $dummy = new Signal(
+        return new Signal(
             uuid: SignalGenerator::uuid4(),
             exchange: 'binance',
             symbol: 'BTCUSDT',
@@ -1298,6 +1341,22 @@ final class AdminPanel
             leverage: $leverage,
             tier: SymbolClassifier::TIER_MAJOR,
         );
+    }
+
+    /** The same stand-in trade shaped as a signals-table row, for result rendering. */
+    private function previewRow(Signal $signal): array
+    {
+        return [
+            'id' => 0, 'symbol' => $signal->symbol, 'exchange' => $signal->exchange,
+            'direction' => $signal->direction->value, 'timeframe' => $signal->timeframe,
+            'entry_price' => $signal->entry, 'stop_loss' => $signal->stopLoss,
+            'tp1' => $signal->tp1, 'tp2' => $signal->tp2, 'leverage' => $signal->leverage,
+        ];
+    }
+
+    private function runTemplatePreview(int $chatId): void
+    {
+        $dummy = $this->previewSignal();
 
         $template = $this->texts->get('signal_template');
         if ($template['text'] === '') {
@@ -1320,12 +1379,7 @@ final class AdminPanel
         // Second half of the preview: what a TP1 fill will look like, so the
         // "profit shot" and the risk-free wording can be checked too.
         $exit = (float) $dummy->tp1;
-        $row = [
-            'id' => 0, 'symbol' => $dummy->symbol, 'exchange' => $dummy->exchange,
-            'direction' => $dummy->direction->value, 'timeframe' => $dummy->timeframe,
-            'entry_price' => $dummy->entry, 'stop_loss' => $dummy->stopLoss,
-            'tp1' => $dummy->tp1, 'tp2' => $dummy->tp2, 'leverage' => $dummy->leverage,
-        ];
+        $row = $this->previewRow($dummy);
         $resultTemplate = $this->texts->get('result_tp1');
         if ($resultTemplate['text'] !== '') {
             $resultRendered = $formatter->formatResult($row, 'tp1', $exit, $resultTemplate['text'], $resultTemplate['entities']);
@@ -1339,6 +1393,105 @@ final class AdminPanel
                 $this->telegram->sendMessage($chatId, $resultRendered['text'], $resultRendered['entities']);
             }
         }
+    }
+
+    /**
+     * Sends the current templates to the real channels and reports what
+     * Telegram did with them.
+     *
+     * The useful part is the verdict on premium emoji: Telegram echoes the
+     * message it stored back in the sendPhoto response, so counting the
+     * custom_emoji entities that come back says whether the channel kept
+     * them — which the docs and the community disagree about, and which no
+     * amount of reading settles for a particular bot and channel.
+     *
+     * It also sends the target announcement as a reply to the signal, so the
+     * reply chain the live bot uses is visible end to end.
+     */
+    private function runChannelTest(int $chatId): void
+    {
+        $channels = $this->channels->listActiveWithSettings();
+        if (empty($channels)) {
+            $this->telegram->sendMessage(
+                $chatId,
+                "هیچ کانال فعالی پیدا نشد.\n\nاز «📺 کانال‌ها» کانال را اضافه کنید، ربات را در آن ادمین کنید، و بعد کانال را فعال کنید."
+            );
+            return;
+        }
+
+        $dummy = $this->previewSignal();
+        $formatter = new SignalFormatter();
+
+        $signalTemplate = $this->texts->get('signal_template');
+        $signalRendered = $formatter->format($dummy, $signalTemplate['text'], $signalTemplate['entities']);
+        $signalCard = SignalCardFactory::entry($dummy);
+        $sentEmoji = $this->countCustomEmoji($signalRendered['entities']);
+
+        $row = $this->previewRow($dummy);
+        $exit = (float) $dummy->tp1;
+        $resultTemplate = $this->texts->get('result_tp1');
+        $resultRendered = $formatter->formatResult($row, 'tp1', $exit, $resultTemplate['text'], $resultTemplate['entities']);
+        $resultCard = SignalCardFactory::result($row, 'tp1', $exit);
+
+        $report = ["📢 نتیجه تست روی کانال‌ها:", ''];
+
+        foreach ($channels as $channel) {
+            $title = (string) ($channel['title'] ?? $channel['chat_id']);
+            $chat = (int) $channel['chat_id'];
+
+            $res = $signalCard !== null
+                ? $this->telegram->sendPhoto($chat, $signalCard, $signalRendered['text'], $signalRendered['entities'])
+                : $this->telegram->sendMessage($chat, $signalRendered['text'], $signalRendered['entities']);
+
+            if (!($res['ok'] ?? false)) {
+                $report[] = sprintf("❌ %s — ارسال نشد: %s", $title, (string) ($res['description'] ?? 'خطای نامشخص'));
+                $report[] = '';
+                continue;
+            }
+
+            $messageId = (int) ($res['result']['message_id'] ?? 0);
+            $report[] = sprintf('✅ %s — سیگنال ارسال شد', $title);
+
+            if ($sentEmoji > 0) {
+                // Telegram returns the message as it stored it.
+                $echoed = $this->countCustomEmoji(
+                    $res['result']['caption_entities'] ?? $res['result']['entities'] ?? []
+                );
+                $report[] = $echoed >= $sentEmoji
+                    ? sprintf('   ✨ ایموجی پریمیوم قبول شد (%d از %d)', $echoed, $sentEmoji)
+                    : sprintf('   ⚠️ ایموجی پریمیوم در کانال حذف شد (%d از %d باقی ماند)', $echoed, $sentEmoji);
+            } else {
+                $report[] = '   ℹ️ در قالب فعلی هیچ ایموجی پریمیومی نیست';
+            }
+
+            // The announcement replies to the signal, exactly like the live bot.
+            $opts = $messageId > 0
+                ? ['reply_parameters' => ['message_id' => $messageId, 'allow_sending_without_reply' => true]]
+                : [];
+            $replyRes = $resultCard !== null
+                ? $this->telegram->sendPhoto($chat, $resultCard, $resultRendered['text'], $resultRendered['entities'], $opts)
+                : $this->telegram->sendMessage($chat, $resultRendered['text'], $resultRendered['entities'], $opts);
+
+            $report[] = ($replyRes['ok'] ?? false)
+                ? '   ↩️ اعلام تارگت به‌صورت ریپلای ارسال شد'
+                : sprintf('   ❌ ریپلای ارسال نشد: %s', (string) ($replyRes['description'] ?? 'خطای نامشخص'));
+            $report[] = '';
+        }
+
+        $report[] = 'اگر ایموجی پریمیوم حذف شده باشد، ربات در ارسال واقعی هم خودکار بدون آن می‌فرستد تا سیگنال از دست نرود.';
+        $this->telegram->sendMessage($chatId, implode("\n", $report));
+    }
+
+    /** @param array<int,array<string,mixed>> $entities */
+    private function countCustomEmoji(array $entities): int
+    {
+        $n = 0;
+        foreach ($entities as $entity) {
+            if (($entity['type'] ?? '') === 'custom_emoji') {
+                $n++;
+            }
+        }
+        return $n;
     }
 
     private function runTestSignal(int $chatId): void

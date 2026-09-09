@@ -3061,16 +3061,12 @@ final class SignalCardFactory
         }
         return SignalCard::render([
             'symbol' => self::displaySymbol($signal->symbol),
-            'exchange' => $signal->exchange,
             'direction' => $signal->direction->value,
-            'timeframe' => $signal->timeframe,
             'leverage' => $signal->leverage . 'X',
             'entry' => self::fmt($signal->entry),
             'sl' => self::fmt($signal->stopLoss),
             'tp1' => $signal->tp1 !== null ? self::fmt($signal->tp1) : '-',
             'tp2' => $signal->tp2 !== null ? self::fmt($signal->tp2) : '-',
-            'rr' => number_format($signal->riskReward, 2),
-            'score' => number_format($signal->score, 0),
             'time' => date('Y-m-d H:i') . ' ' . date('T'),
         ]);
     }
@@ -3092,7 +3088,6 @@ final class SignalCardFactory
             'kind' => $kind,
             'symbol' => self::displaySymbol((string) $row['symbol']),
             'direction' => (string) $row['direction'],
-            'timeframe' => (string) $row['timeframe'],
             'leverage' => $stats['leverage'] . 'X',
             'headline' => $stats['pnl_signed'] . '%',
             'move' => $stats['move_signed'] . '%',
