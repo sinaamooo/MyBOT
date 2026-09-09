@@ -612,8 +612,7 @@ final class AdminPanel
             [['text' => '📊 Scanner', 'callback_data' => 'admin:scanner'], ['text' => '🧠 Strategies', 'callback_data' => 'admin:strategies']],
             [['text' => '📈 Indicators', 'callback_data' => 'admin:indicators'], ['text' => '📝 Signal Template', 'callback_data' => 'admin:template']],
             [['text' => '✏️ مدیریت متن‌ها', 'callback_data' => 'admin:texts'], ['text' => '🎯 تنظیمات Signal', 'callback_data' => 'admin:signal_settings']],
-            [['text' => '🤖 اتومات', 'callback_data' => 'admin:auto'], ['text' => '🎨 ظاهر پیام', 'callback_data' => 'admin:style']],
-            [['text' => '🧪 Test Signal', 'callback_data' => 'admin:test_signal']],
+            [['text' => '🤖 اتومات', 'callback_data' => 'admin:auto'], ['text' => '🧪 Test Signal', 'callback_data' => 'admin:test_signal']],
             [['text' => '📜 Signal History', 'callback_data' => 'admin:history'], ['text' => '❤️ وضعیت سیستم', 'callback_data' => 'admin:health']],
         ]];
     }
@@ -656,7 +655,6 @@ final class AdminPanel
                 'texts' => $this->renderTexts($chatId, $messageId, $parts, $userId),
                 'signal_settings' => $this->renderSignalSettings($chatId, $messageId, $parts),
                 'auto' => $this->renderAuto($chatId, $messageId, $parts, $userId),
-                'style' => $this->renderStyle($chatId, $messageId, $parts, $userId),
                 'test_signal' => $this->renderTestSignal($chatId, $messageId, $parts),
                 'history' => $this->renderHistory($chatId, $messageId),
                 'health' => $this->renderHealth($chatId, $messageId, $parts),
@@ -1243,99 +1241,6 @@ final class AdminPanel
         $this->render($chatId, $messageId, implode("\n", $lines), ['inline_keyboard' => $keyboard]);
     }
 
-    // -- 🎨 Message appearance ---------------------------------------------
-
-    /**
-     * Quote box + premium (custom) emoji.
-     *
-     * The emoji set is captured rather than typed: the admin sends one
-     * message containing the premium emoji they want, and every
-     * custom_emoji entity in it is paired with the plain emoji character
-     * sitting underneath it. That pairing is what lets the existing
-     * templates stay exactly as they are and still render as premium —
-     * nothing has to be retyped.
-     */
-    private function renderStyle(int $chatId, int $messageId, array $parts, int $userId): void
-    {
-        $action = $parts[2] ?? null;
-
-        if ($action === 'quote') {
-            $next = match (Config::messageQuoteStyle()) {
-                'none' => 'quote',
-                'quote' => 'expandable',
-                default => 'none',
-            };
-            $this->setSetting('MESSAGE_QUOTE_STYLE', $next);
-        }
-
-        if ($action === 'emoji_toggle') {
-            $this->setSetting('CUSTOM_EMOJI_ENABLED', Config::customEmojiEnabled() ? 'false' : 'true');
-        }
-
-        if ($action === 'emoji_clear') {
-            Database::pdo()->prepare('DELETE FROM bot_settings WHERE setting_key = :k')
-                ->execute([':k' => 'CUSTOM_EMOJI_MAP']);
-        }
-
-        if ($action === 'emoji_set') {
-            $this->states->set($userId, 'awaiting_premium_emoji', []);
-            $this->telegram->sendMessage(
-                $chatId,
-                "یک پیام بفرستید که ایموجی‌های پریمیوم دلخواهتان را داشته باشد.\n\n"
-                . "نکته مهم: هر ایموجی پریمیوم را دقیقاً جای همان ایموجی معمولی بگذارید که در قالب استفاده می‌شود، "
-                . "و ایموجی معمولی را هم کنارش نگذارید. مثلاً اگر می‌خواهید 🎯 در سیگنال‌ها پریمیوم بشود، "
-                . "ایموجی پریمیومی بفرستید که ایموجی پایه‌اش 🎯 باشد.\n\n"
-                . "می‌توانید چند تا را در یک پیام کنار هم بفرستید."
-            );
-            return;
-        }
-
-        $style = Config::messageQuoteStyle();
-        $map = Config::customEmojiMap();
-        $enabled = Config::customEmojiEnabled();
-
-        $styleLabel = match ($style) {
-            'quote' => 'باکس نقل‌قول (quote)',
-            'expandable' => 'باکس بازشونده (expandable)',
-            default => 'خاموش',
-        };
-
-        $lines = [
-            '🎨 ظاهر پیام',
-            '',
-            sprintf('📦 باکس متن: %s', $styleLabel),
-            sprintf('✨ ایموجی پریمیوم: %s', $enabled ? 'فعال' : 'خاموش'),
-            sprintf('🎭 ایموجی ثبت‌شده: %d عدد', count($map)),
-        ];
-
-        if (!empty($map)) {
-            $lines[] = '';
-            $lines[] = 'ایموجی‌های ثبت‌شده: ' . implode(' ', array_keys($map));
-        }
-
-        $lines[] = '';
-        $lines[] = '⚠️ محدودیت تلگرام: ربات فقط وقتی می‌تواند ایموجی پریمیوم بفرستد که یا برای رباتتان '
-            . 'یوزرنیم از Fragment خریده باشید، یا پیام به چت خصوصی/گروه/سوپرگروه برود و صاحب ربات '
-            . 'پریمیوم باشد. برای «کانال» با اکانت پریمیوم تنها کافی نیست.';
-        $lines[] = '';
-        $lines[] = 'اگر تلگرام پیام را رد کند، ربات خودش دوباره بدون ایموجی پریمیوم می‌فرستد تا سیگنال از دست نرود.';
-
-        $keyboard = [
-            [['text' => '📦 تغییر باکس متن', 'callback_data' => 'admin:style:quote']],
-            [
-                ['text' => $enabled ? '✨ خاموش کردن ایموجی' : '✨ روشن کردن ایموجی', 'callback_data' => 'admin:style:emoji_toggle'],
-                ['text' => '🎭 ثبت ایموجی پریمیوم', 'callback_data' => 'admin:style:emoji_set'],
-            ],
-        ];
-        if (!empty($map)) {
-            $keyboard[] = [['text' => '🗑 پاک کردن ایموجی‌ها', 'callback_data' => 'admin:style:emoji_clear']];
-        }
-        $keyboard[] = [['text' => '👁 پیش‌نمایش', 'callback_data' => 'admin:test_signal:preview']];
-        $keyboard[] = $this->backRow();
-
-        $this->render($chatId, $messageId, implode("\n", $lines), ['inline_keyboard' => $keyboard]);
-    }
-
     // -- 🧪 Test Signal ---------------------------------------------------
     private function renderTestSignal(int $chatId, int $messageId, array $parts): void
     {
@@ -1765,55 +1670,6 @@ final class AdminPanel
             }
             $this->setSetting($setting, $value);
             $this->telegram->sendMessage($chatId, "✅ ذخیره شد. برای اعمال، «▶️ اسکن الان» رو بزنید.");
-            return true;
-        }
-
-        if ($state['state'] === 'awaiting_premium_emoji') {
-            $this->states->clear($userId);
-            $entityList = is_array($entities) ? $entities : [];
-
-            // A custom_emoji entity carries the id; the plain emoji it should
-            // replace is the text sitting underneath it, addressed in UTF-16
-            // units the way Telegram counts.
-            $map = Config::customEmojiMap();
-            $added = 0;
-            foreach ($entityList as $entity) {
-                if (($entity['type'] ?? '') !== 'custom_emoji') {
-                    continue;
-                }
-                $id = (string) ($entity['custom_emoji_id'] ?? '');
-                $base = TelegramEntityUtils::utf16Substr(
-                    $text,
-                    (int) ($entity['offset'] ?? 0),
-                    (int) ($entity['length'] ?? 0)
-                );
-                if ($id === '' || trim($base) === '') {
-                    continue;
-                }
-                $map[$base] = $id;
-                $added++;
-            }
-
-            if ($added === 0) {
-                $this->telegram->sendMessage(
-                    $chatId,
-                    "توی این پیام هیچ ایموجی پریمیومی پیدا نشد.\n\n"
-                    . "ایموجی پریمیوم آن‌هایی هستند که با اشتراک تلگرام پریمیوم از بخش ایموجی‌های اختصاصی انتخاب می‌شوند "
-                    . "(نه ایموجی‌های معمولی و نه استیکر). دوباره از «🎭 ثبت ایموجی پریمیوم» امتحان کنید."
-                );
-                return true;
-            }
-
-            $this->setSetting('CUSTOM_EMOJI_MAP', json_encode($map, JSON_UNESCAPED_UNICODE) ?: '{}');
-            $this->setSetting('CUSTOM_EMOJI_ENABLED', 'true');
-            $this->telegram->sendMessage(
-                $chatId,
-                sprintf(
-                    "✅ %d ایموجی پریمیوم ثبت شد. مجموع: %d\n\nاز این به بعد هرجا در قالب‌ها این ایموجی‌ها باشند، خودکار پریمیوم فرستاده می‌شوند.\nبا «🧪 Test Signal → 🎨 پیش‌نمایش قالب» نتیجه را ببینید.",
-                    $added,
-                    count($map)
-                )
-            );
             return true;
         }
 

@@ -119,23 +119,6 @@ return [
     'MIN_STOP_PERCENT' => '0.12',
 
     // ---------------------------------------------------------------------
-    // Message appearance (both panel-editable under 🎨 ظاهر پیام)
-    // ---------------------------------------------------------------------
-    // Wrap outgoing text in a Telegram quote box:
-    // 'none' | 'quote' | 'expandable' (collapsible).
-    'MESSAGE_QUOTE_STYLE' => 'none',
-
-    // Master switch for the premium (custom) emoji set. The set itself is
-    // captured from the admin panel, not written here.
-    //
-    // Telegram only lets a bot send custom emoji if it bought a username on
-    // Fragment, or when writing to a private/group/supergroup chat whose bot
-    // owner has Premium — channels are NOT covered by the owner-Premium
-    // route. If Telegram refuses, the bot automatically re-sends the message
-    // without them so the signal still goes out.
-    'CUSTOM_EMOJI_ENABLED' => 'true',
-
-    // ---------------------------------------------------------------------
     // Signal cards (the images posted with every signal)
     // ---------------------------------------------------------------------
     'SIGNAL_CARD_ENABLED' => 'true',

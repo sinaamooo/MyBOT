@@ -2907,34 +2907,6 @@ final class PriceFormatter
     }
 }
 
-/**
- * Applies the presentation layer that is common to every outgoing message:
- * the premium emoji set and the quote box.
- *
- * Kept separate from SignalFormatter so the entry caption and the trade
- * result announcements are styled by exactly the same code, and so the
- * dispatcher can re-style a message it needs to re-send.
- */
-final class MessageStyler
-{
-    /**
-     * @param array{text:string, entities:array<int,array<string,mixed>>} $rendered
-     * @return array{text:string, entities:array<int,array<string,mixed>>}
-     */
-    public static function style(array $rendered): array
-    {
-        $text = $rendered['text'];
-        $entities = $rendered['entities'];
-
-        if (Config::customEmojiEnabled()) {
-            $entities = TelegramEntityUtils::applyCustomEmoji($text, $entities, Config::customEmojiMap());
-        }
-        $entities = TelegramEntityUtils::wrapBlockquote($text, $entities, Config::messageQuoteStyle());
-
-        return ['text' => $text, 'entities' => $entities];
-    }
-}
-
 final class SignalFormatter
 {
     /**
@@ -2976,9 +2948,7 @@ final class SignalFormatter
             'reasons' => empty($signal->reasons) ? '-' : ('• ' . implode("\n• ", $signal->reasons)),
         ];
 
-        return MessageStyler::style(
-            TelegramEntityUtils::renderTemplate($templateText, $templateEntities, $placeholders)
-        );
+        return TelegramEntityUtils::renderTemplate($templateText, $templateEntities, $placeholders);
     }
 
     /**
@@ -3011,9 +2981,7 @@ final class SignalFormatter
             'time' => date('Y-m-d H:i'),
         ];
 
-        return MessageStyler::style(
-            TelegramEntityUtils::renderTemplate($templateText, $templateEntities, $placeholders)
-        );
+        return TelegramEntityUtils::renderTemplate($templateText, $templateEntities, $placeholders);
     }
 
     /**
