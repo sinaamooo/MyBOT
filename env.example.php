@@ -126,11 +126,12 @@ return [
     'CARD_RENDER_SCALE' => '2',
     // Wordmark printed in the card footer.
     'CARD_BRAND' => 'AUTO SIGNAL',
-    // Fonts. Leave these empty to use the Vazirmatn shipped in fonts/, which
-    // is what lets the cards carry Persian labels. Set them to point at any
-    // other .ttf you prefer. If neither the configured font nor the bundled
-    // one is readable (or FreeType is missing), the cards fall back to the
-    // vector font built into card.php and switch their labels to English.
+    // Fonts. Leave these empty to use the Vazirmatn-*.ttf shipped alongside
+    // the PHP files, which is what lets the cards carry Persian labels. Set
+    // them to point at any other .ttf you prefer. If neither the configured
+    // font nor the bundled one is readable (or FreeType is missing), the
+    // cards fall back to the vector font built into card.php and switch
+    // their labels to English.
     'CARD_FONT_PATH' => '',
     'CARD_FONT_PATH_BOLD' => '',
 

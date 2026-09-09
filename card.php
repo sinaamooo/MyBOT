@@ -867,9 +867,9 @@ final class CardConfig
     }
 
     /**
-     * TTF used for card text. Defaults to the Vazirmatn shipped in fonts/,
-     * which is what lets the cards carry Persian labels rather than the
-     * Latin-only built-in vector font.
+     * TTF used for card text. Defaults to the Vazirmatn shipped alongside
+     * this file, which is what lets the cards carry Persian labels rather
+     * than the Latin-only built-in vector font.
      *
      * Resolution order per weight: the configured path, then the bundled
      * font, then (for bold) the regular weight, then null. Null means the
@@ -887,9 +887,12 @@ final class CardConfig
             return self::$fontCache[$key] = null;
         }
 
+        // The project deploys as a flat pile of files next to each other, so
+        // the font sits beside card.php; the fonts/ path is kept as a second
+        // candidate for installs that already put it in a subfolder.
         $candidates = $bold
-            ? [self::env('CARD_FONT_PATH_BOLD', ''), __DIR__ . '/fonts/Vazirmatn-Bold.ttf']
-            : [self::env('CARD_FONT_PATH', ''), __DIR__ . '/fonts/Vazirmatn-Regular.ttf'];
+            ? [self::env('CARD_FONT_PATH_BOLD', ''), __DIR__ . '/Vazirmatn-Bold.ttf', __DIR__ . '/fonts/Vazirmatn-Bold.ttf']
+            : [self::env('CARD_FONT_PATH', ''), __DIR__ . '/Vazirmatn-Regular.ttf', __DIR__ . '/fonts/Vazirmatn-Regular.ttf'];
 
         foreach ($candidates as $path) {
             $path = (string) ($path ?? '');
