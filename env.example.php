@@ -126,10 +126,13 @@ return [
     'CARD_RENDER_SCALE' => '2',
     // Wordmark printed in the card footer.
     'CARD_BRAND' => 'AUTO SIGNAL',
-    // Optional. Leave empty to use the built-in vector font (Latin labels,
-    // no font file needed). Point it at a .ttf to render Persian on the card
-    // itself — Persian is shaped and reordered automatically.
+    // Fonts. Leave these empty to use the Vazirmatn shipped in fonts/, which
+    // is what lets the cards carry Persian labels. Set them to point at any
+    // other .ttf you prefer. If neither the configured font nor the bundled
+    // one is readable (or FreeType is missing), the cards fall back to the
+    // vector font built into card.php and switch their labels to English.
     'CARD_FONT_PATH' => '',
+    'CARD_FONT_PATH_BOLD' => '',
 
     // ---------------------------------------------------------------------
     // Runtime

@@ -668,14 +668,14 @@ final class CardCanvas
         float $weight = 0.115,
         float $tracking = 1.0,
     ): float {
-        $width = $this->textWidth($text, $size, $tracking);
+        $width = $this->textWidth($text, $size, $tracking, $weight);
         $startX = match ($align) {
             'center' => $x - $width / 2,
             'right' => $x - $width,
             default => $x,
         };
 
-        $ttf = CardConfig::fontPath();
+        $ttf = CardConfig::fontPath($this->isBold($weight));
         if ($ttf !== null) {
             $this->drawTtf($text, $startX, $y, $size, $rgb, $ttf);
             return $width;
@@ -684,9 +684,9 @@ final class CardCanvas
         return $width;
     }
 
-    public function textWidth(string $text, float $size, float $tracking = 1.0): float
+    public function textWidth(string $text, float $size, float $tracking = 1.0, float $weight = 0.115): float
     {
-        $ttf = CardConfig::fontPath();
+        $ttf = CardConfig::fontPath($this->isBold($weight));
         if ($ttf !== null) {
             $box = @imagettfbbox($this->ttfSize($size, $ttf), 0, $ttf, $this->ttfText($text));
             return $box === false ? 0.0 : (float) abs($box[2] - $box[0]);
@@ -703,6 +703,16 @@ final class CardCanvas
             }
         }
         return $w;
+    }
+
+    /**
+     * The vector font expresses weight as a stroke thickness; the TTF
+     * backend has to pick a different face for it instead. This is the one
+     * mapping between the two, so callers keep using a single $weight.
+     */
+    private function isBold(float $weight): bool
+    {
+        return $weight >= 0.125;
     }
 
     /** @param array{0:int,1:int,2:int} $rgb */
@@ -821,8 +831,8 @@ final class CardCanvas
 
 final class CardConfig
 {
-    private static ?string $fontPathCache = null;
-    private static bool $fontResolved = false;
+    /** @var array<string,string|null> resolved font paths, keyed by weight */
+    private static array $fontCache = [];
 
     private static function env(string $key, ?string $default = null): ?string
     {
@@ -857,23 +867,49 @@ final class CardConfig
     }
 
     /**
-     * Optional TTF. Only used if it actually exists AND FreeType is
-     * compiled in — otherwise the built-in vector font takes over, which
-     * is the path that needs no files on disk at all.
+     * TTF used for card text. Defaults to the Vazirmatn shipped in fonts/,
+     * which is what lets the cards carry Persian labels rather than the
+     * Latin-only built-in vector font.
+     *
+     * Resolution order per weight: the configured path, then the bundled
+     * font, then (for bold) the regular weight, then null. Null means the
+     * vector font takes over — which still needs no files on disk at all,
+     * so deleting fonts/ degrades the cards instead of breaking them.
      */
-    public static function fontPath(): ?string
+    public static function fontPath(bool $bold = false): ?string
     {
-        if (self::$fontResolved) {
-            return self::$fontPathCache;
+        $key = $bold ? 'bold' : 'regular';
+        if (array_key_exists($key, self::$fontCache)) {
+            return self::$fontCache[$key];
         }
-        self::$fontResolved = true;
-        self::$fontPathCache = null;
 
-        $path = (string) (self::env('CARD_FONT_PATH', '') ?? '');
-        if ($path !== '' && is_file($path) && is_readable($path) && function_exists('imagettftext')) {
-            self::$fontPathCache = $path;
+        if (!function_exists('imagettftext') || !function_exists('imagettfbbox')) {
+            return self::$fontCache[$key] = null;
         }
-        return self::$fontPathCache;
+
+        $candidates = $bold
+            ? [self::env('CARD_FONT_PATH_BOLD', ''), __DIR__ . '/fonts/Vazirmatn-Bold.ttf']
+            : [self::env('CARD_FONT_PATH', ''), __DIR__ . '/fonts/Vazirmatn-Regular.ttf'];
+
+        foreach ($candidates as $path) {
+            $path = (string) ($path ?? '');
+            if ($path !== '' && is_file($path) && is_readable($path)) {
+                return self::$fontCache[$key] = $path;
+            }
+        }
+
+        // A bold-less install still renders; it just renders in one weight.
+        return self::$fontCache[$key] = ($bold ? self::fontPath(false) : null);
+    }
+
+    /**
+     * True when card text can be written in Persian. The built-in vector
+     * font is Latin-only by design, so the labels have to fall back to
+     * English whenever no TTF is available.
+     */
+    public static function supportsPersian(): bool
+    {
+        return self::fontPath() !== null;
     }
 
     /** Small wordmark printed in the card footer. */
@@ -885,43 +921,110 @@ final class CardConfig
     /** Resets memoized state — used by tests that flip CARD_FONT_PATH between renders. */
     public static function resetFontCache(): void
     {
-        self::$fontResolved = false;
-        self::$fontPathCache = null;
+        self::$fontCache = [];
     }
 }
 
 // ============================================================================
-// SECTION 6 — SHARED CARD CHROME
+// SECTION 6 — LABELS
+//
+// The built-in vector font is Latin-only, so the wording on a card depends
+// on whether a Persian-capable TTF is actually available. With the bundled
+// Vazirmatn present (the normal case) the cards speak Persian; strip fonts/
+// out and they fall back to English rather than rendering empty boxes.
+// ============================================================================
+
+final class CardLabels
+{
+    /** @var array<string,array{0:string,1:string}> key => [persian, english] */
+    private const LABELS = [
+        'signal'      => ['سیگنال جدید', 'SIGNAL'],
+        'entry'       => ['نقطه ورود', 'ENTRY'],
+        'stop'        => ['حد ضرر', 'STOP LOSS'],
+        'tp1'         => ['تارگت ۱', 'TARGET 1'],
+        'tp2'         => ['تارگت ۲', 'TARGET 2'],
+        'exit'        => ['خروج', 'EXIT'],
+        'entry_short' => ['ورود', 'ENTRY'],
+        'move'        => ['حرکت قیمت', 'PRICE MOVE'],
+        'score'       => ['امتیاز', 'SCORE'],
+        'leverage'    => ['اهرم', ''],
+        'risk_free'   => ['ریسک فری', 'RISK FREE'],
+        'closed'      => ['بسته شد', 'CLOSED'],
+        'no_loss'     => ['بدون ضرر', 'NO LOSS'],
+        'tp1_hit'     => ['تارگت ۱ زده شد', 'TP1 HIT'],
+        'tp2_hit'     => ['تارگت ۲ زده شد', 'TP2 HIT'],
+        'sl_hit'      => ['حد ضرر خورد', 'SL HIT'],
+        'title_tp1'   => ['سود گرفته شد', 'PROFIT SHOT'],
+        'title_tp2'   => ['تارگت ۲ فعال شد', 'TARGET 2 HIT'],
+        'title_sl'    => ['حد ضرر فعال شد', 'STOP LOSS'],
+        'title_be'    => ['بدون سود و ضرر', 'BREAK EVEN'],
+        'roi_with'    => ['سود با اهرم', 'ROI WITH'],
+        'result_with' => ['نتیجه با اهرم', 'RESULT WITH'],
+    ];
+
+    public static function get(string $key): string
+    {
+        $pair = self::LABELS[$key] ?? [$key, $key];
+        return CardConfig::supportsPersian() ? $pair[0] : $pair[1];
+    }
+
+    /** "اهرم 150x" in Persian, "150X" on its own in English — the word is redundant there. */
+    public static function leverage(string $leverage): string
+    {
+        return CardConfig::supportsPersian()
+            ? self::get('leverage') . ' ' . strtolower($leverage)
+            : strtoupper($leverage);
+    }
+
+    public static function score(string $score): string
+    {
+        return self::get('score') . ' ' . $score;
+    }
+
+    /** Trailing "LEVERAGE" only reads right in English; Persian puts the word first. */
+    public static function roi(string $leverage, bool $profitable): string
+    {
+        $lead = self::get($profitable ? 'roi_with' : 'result_with');
+        return CardConfig::supportsPersian()
+            ? $lead . ' ' . strtolower($leverage)
+            : $lead . ' ' . strtoupper($leverage) . ' LEVERAGE';
+    }
+}
+
+// ============================================================================
+// SECTION 7 — SHARED CARD CHROME
 // ============================================================================
 
 final class CardChrome
 {
     /**
      * Backdrop shared by every card: a near-black vertical gradient lit by
-     * one green and one yellow bloom, then the main glass pane on top.
+     * one bloom in the card's accent and one in its complement, then the
+     * main glass pane on top.
      *
      * @param array{0:int,1:int,2:int} $accent
      */
     public static function backdrop(CardCanvas $c, int $w, int $h, array $accent, float $margin, float $radius): void
     {
+        // Pair each card's accent with its complement so both cards read as
+        // green AND yellow. A SHORT card lit only by yellow came out muddy.
         $complement = $accent === CardPalette::GREEN ? CardPalette::YELLOW : CardPalette::GREEN;
         $c->backdrop(CardPalette::BG_TOP, CardPalette::BG_BOTTOM, [
-            [$w * 0.08, $h * 0.03, $w * 0.62, $accent, 0.52],
-            [$w * 1.00, $h * 0.96, $w * 0.60, $complement, 0.40],
-            [$w * 0.54, $h * 0.44, $w * 0.80, CardPalette::GREEN_DEEP, 0.20],
-            [$w * 0.04, $h * 0.76, $w * 0.42, CardPalette::GREEN_DEEP, 0.18],
+            [$w * 0.08, $h * 0.03, $w * 0.52, $accent, 0.52],
+            [$w * 1.00, $h * 0.96, $w * 0.50, $complement, 0.40],
+            [$w * 0.54, $h * 0.44, $w * 0.66, CardPalette::GREEN_DEEP, 0.20],
+            [$w * 0.04, $h * 0.76, $w * 0.36, CardPalette::GREEN_DEEP, 0.18],
         ]);
 
-        // The pane itself is tinted with the direction accent rather than
-        // plain white: a neutral pane over a coloured bloom washes out to
-        // grey, which is exactly what the first render looked like.
+        // The pane is tinted with the direction accent rather than plain
+        // white: a neutral pane over a coloured bloom washes out to grey.
         $tint = CardCanvas::mix(CardPalette::GLASS, $accent, 0.30);
         $c->glassPanel($margin, $margin, $w - 2 * $margin, $h - 2 * $margin, $radius, $tint, 0.07, 0.20, 1.8);
     }
 
     /**
-     * A pill with a label inside. Returns its width so a row of them can
-     * be laid out left to right without measuring twice.
+     * A pill with a label inside. Returns its width so a row of them can be
+     * laid out left to right without measuring twice.
      *
      * @param array{0:int,1:int,2:int} $rgb
      */
@@ -931,18 +1034,81 @@ final class CardChrome
         float $y,
         string $label,
         array $rgb,
-        float $textSize = 23,
-        float $height = 54,
-        float $padding = 24,
+        float $textSize = 22,
+        float $height = 50,
+        float $padding = 22,
         float $fillOpacity = 0.13,
         float $borderOpacity = 0.34,
         float $tracking = 1.4,
+        float $weight = 0.125,
     ): float {
-        $tw = $c->textWidth($label, $textSize, $tracking);
+        $tw = $c->textWidth($label, $textSize, $tracking, $weight);
         $w = $tw + $padding * 2;
         $c->glassPanel($x, $y, $w, $height, $height / 2, $rgb, $fillOpacity, $borderOpacity, 1.5, false);
-        $c->text($label, $x + $padding, $y + ($height - $textSize) / 2, $textSize, $rgb, 'left', 0.125, $tracking);
+        $c->text($label, $x + $padding, $y + ($height - $textSize) / 2, $textSize, $rgb, 'left', $weight, $tracking);
         return $w;
+    }
+
+    /** Centers a row of chips as a group — widths must be measured before the first one is drawn. */
+    public static function chipRow(
+        CardCanvas $c,
+        float $centerX,
+        float $y,
+        array $chips,
+        float $textSize = 22,
+        float $height = 50,
+        float $padding = 22,
+        float $fillOpacity = 0.13,
+        float $borderOpacity = 0.34,
+    ): void {
+        $gap = 14.0;
+        $chips = array_values(array_filter($chips, static fn($ch) => trim((string) $ch[0]) !== ''));
+        if (empty($chips)) {
+            return;
+        }
+        $total = -$gap;
+        foreach ($chips as $ch) {
+            $total += $c->textWidth((string) $ch[0], $textSize, 1.4, 0.125) + $padding * 2 + $gap;
+        }
+
+        $x = $centerX - $total / 2;
+        foreach ($chips as [$label, $rgb]) {
+            $x += self::chip($c, $x, $y, (string) $label, $rgb, $textSize, $height, $padding, $fillOpacity, $borderOpacity) + $gap;
+        }
+    }
+
+    /**
+     * A recessed tile with a muted label above a large value. This is the
+     * unit the landscape layout is built from — four of them across for the
+     * entry card, three for the result card.
+     *
+     * @param array{0:int,1:int,2:int} $rgb
+     */
+    public static function tile(
+        CardCanvas $c,
+        float $x,
+        float $y,
+        float $w,
+        float $h,
+        string $label,
+        string $value,
+        array $rgb,
+        float $labelSize = 19,
+        float $valueSize = 36,
+    ): void {
+        $muted = CardCanvas::mix(CardPalette::MUTED, CardPalette::BG_BOTTOM, 0.96);
+        $c->insetPanel($x, $y, $w, $h, 22, CardPalette::GLASS, 0.40, 0.16);
+        // Accent bar across the top of the tile: the row's colour identity,
+        // read before the text is.
+        $c->roundRect($x + $w * 0.30, $y + 14, $w * 0.40, 5, 2.5, $rgb, 0.9);
+        $c->text($label, $x + $w / 2, $y + $h * 0.26, $labelSize, $muted, 'center', 0.11, 1.6);
+
+        // 8-decimal shitcoin prices have to shrink rather than overflow.
+        $maxWidth = $w - 28;
+        while ($valueSize > 18 && $c->textWidth($value, $valueSize, 0.8, 0.125) > $maxWidth) {
+            $valueSize -= 2;
+        }
+        $c->text($value, $x + $w / 2, $y + $h * 0.52, $valueSize, $rgb, 'center', 0.125, 0.8);
     }
 
     /** Footer wordmark + timestamp, on a hairline rule. */
@@ -950,22 +1116,22 @@ final class CardChrome
     {
         $muted = CardCanvas::mix(CardPalette::MUTED, CardPalette::BG_BOTTOM, 0.92);
         $c->rule($left, $y, $right - $left, CardPalette::GLASS, 0.10);
-        $c->text(CardConfig::brand(), $left, $y + 30, 20, CardCanvas::mix(CardPalette::GREEN, CardPalette::BG_BOTTOM, 0.9), 'left', 0.13, 3.0);
-        $c->text($time, $right, $y + 30, 20, $muted, 'right', 0.12, 1.6);
+        $c->text(CardConfig::brand(), $left, $y + 26, 18, CardCanvas::mix(CardPalette::GREEN, CardPalette::BG_BOTTOM, 0.9), 'left', 0.11, 3.0);
+        $c->text($time, $right, $y + 26, 18, $muted, 'right', 0.11, 1.6);
     }
 }
 
 // ============================================================================
-// SECTION 7 — ENTRY SIGNAL CARD
+// SECTION 8 — ENTRY SIGNAL CARD (landscape)
 // ============================================================================
 
 final class SignalCard
 {
-    private const W = 1000;
-    private const H = 1250;
-    private const MARGIN = 44.0;
-    private const RADIUS = 44.0;
-    private const PAD = 52.0;
+    private const W = 1200;
+    private const H = 660;
+    private const MARGIN = 32.0;
+    private const RADIUS = 40.0;
+    private const PAD = 50.0;
 
     /**
      * All values arrive pre-formatted as display strings — this class is
@@ -993,70 +1159,53 @@ final class SignalCard
             $left = self::MARGIN + self::PAD;
             $right = self::W - self::MARGIN - self::PAD;
             $inner = $right - $left;
-            $muted = CardCanvas::mix(CardPalette::MUTED, CardPalette::BG_BOTTOM, 0.96);
 
             // -- header --------------------------------------------------
-            $c->text('SIGNAL', $left, 100, 22, CardPalette::TEXT, 'left', 0.14, 3.6);
+            $c->text(CardLabels::get('signal'), $left, 64, 20, CardPalette::TEXT, 'left', 0.11, 3.2);
             $exchange = strtoupper((string) ($d['exchange'] ?? ''));
             if ($exchange !== '') {
-                $ew = $c->textWidth($exchange, 21, 2.2) + 44;
-                CardChrome::chip($c, $right - $ew, 86, $exchange, CardPalette::GLASS, 21, 50, 22, 0.08, 0.18, 2.2);
+                $ew = $c->textWidth($exchange, 19, 2.2, 0.125) + 40;
+                CardChrome::chip($c, $right - $ew, 52, $exchange, CardPalette::GLASS, 19, 44, 20, 0.08, 0.18, 2.2);
             }
 
-            // -- direction + symbol --------------------------------------
-            CardChrome::chip($c, $left, 158, $direction, $accent, 28, 66, 30, 0.18, 0.46, 2.4);
-            $c->text((string) ($d['symbol'] ?? ''), $left, 268, 76, CardPalette::TEXT, 'left', 0.135, 0.7);
+            // -- symbol, with the direction badge alongside it -----------
+            $symbol = (string) ($d['symbol'] ?? '');
+            $symbolWidth = $c->text($symbol, $left, 112, 54, CardPalette::TEXT, 'left', 0.135, 0.7);
+            CardChrome::chip($c, $left + $symbolWidth + 26, 118, $direction, $accent, 24, 50, 26, 0.18, 0.46, 2.4);
 
             // -- meta chips ----------------------------------------------
-            $chips = [
-                [strtoupper((string) ($d['timeframe'] ?? '')), CardPalette::GLASS],
-                [strtoupper((string) ($d['leverage'] ?? '')), CardPalette::YELLOW],
-                ['R:R ' . (string) ($d['rr'] ?? ''), CardPalette::GREEN],
-                ['SCORE ' . (string) ($d['score'] ?? ''), CardPalette::GLASS],
-            ];
             $x = $left;
-            foreach ($chips as [$label, $rgb]) {
-                if (trim($label) === '' || str_ends_with(trim($label), ' ')) {
+            foreach ([
+                [strtoupper((string) ($d['timeframe'] ?? '')), CardPalette::GLASS],
+                [CardLabels::leverage((string) ($d['leverage'] ?? '')), CardPalette::YELLOW],
+                ['R:R ' . (string) ($d['rr'] ?? ''), CardPalette::GREEN],
+                [CardLabels::score((string) ($d['score'] ?? '')), CardPalette::GLASS],
+            ] as [$label, $rgb]) {
+                if (trim($label) === '') {
                     continue;
                 }
-                $x += CardChrome::chip($c, $x, 392, $label, $rgb, 23, 54, 24, 0.13, 0.34, 1.4) + 14;
+                $x += CardChrome::chip($c, $x, 208, $label, $rgb, 22, 50, 22) + 14;
             }
 
-            // -- price rows ----------------------------------------------
-            $rows = [
-                ['ENTRY', (string) ($d['entry'] ?? '-'), CardPalette::TEXT],
-                ['STOP LOSS', (string) ($d['sl'] ?? '-'), CardPalette::AMBER],
-                ['TARGET 1', (string) ($d['tp1'] ?? '-'), CardPalette::GREEN],
+            // -- price tiles, four across --------------------------------
+            $tiles = [
+                [CardLabels::get('entry'), (string) ($d['entry'] ?? '-'), CardPalette::TEXT],
+                [CardLabels::get('stop'), (string) ($d['sl'] ?? '-'), CardPalette::AMBER],
+                [CardLabels::get('tp1'), (string) ($d['tp1'] ?? '-'), CardPalette::GREEN],
             ];
             $tp2 = trim((string) ($d['tp2'] ?? ''));
             if ($tp2 !== '' && $tp2 !== '-') {
-                $rows[] = ['TARGET 2', $tp2, CardPalette::GREEN];
+                $tiles[] = [CardLabels::get('tp2'), $tp2, CardPalette::GREEN];
             }
 
-            $blockTop = 494.0;
-            $blockBottom = 1042.0;
             $gap = 16.0;
-            $n = count($rows);
-            $rowH = ($blockBottom - $blockTop - $gap * ($n - 1)) / $n;
-
-            foreach ($rows as $i => [$label, $value, $rgb]) {
-                $y = $blockTop + $i * ($rowH + $gap);
-                $c->insetPanel($left, $y, $inner, $rowH, 22, CardPalette::GLASS, 0.40, 0.16);
-                // Accent bar: the row's colour identity, read before the text is.
-                $c->roundRect($left + 20, $y + $rowH * 0.24, 6, $rowH * 0.52, 3, $rgb, 0.9);
-                $c->text($label, $left + 44, $y + ($rowH - 21) / 2, 21, $muted, 'left', 0.13, 2.4);
-
-                // Long values (8-decimal shitcoin prices) get stepped down
-                // until they fit, so the card never overflows its own panel.
-                $valueSize = 42.0;
-                $maxWidth = $inner - 220;
-                while ($valueSize > 22 && $c->textWidth($value, $valueSize, 0.8) > $maxWidth) {
-                    $valueSize -= 2;
-                }
-                $c->text($value, $right - 30, $y + ($rowH - $valueSize) / 2, $valueSize, $rgb, 'right', 0.125, 0.8);
+            $n = count($tiles);
+            $tileW = ($inner - $gap * ($n - 1)) / $n;
+            foreach ($tiles as $i => [$label, $value, $rgb]) {
+                CardChrome::tile($c, $left + $i * ($tileW + $gap), 306, $tileW, 186, $label, $value, $rgb);
             }
 
-            CardChrome::footer($c, $left, $right, 1090, (string) ($d['time'] ?? ''));
+            CardChrome::footer($c, $left, $right, 546, (string) ($d['time'] ?? ''));
 
             $png = $c->toPng();
             $c->destroy();
@@ -1071,22 +1220,26 @@ final class SignalCard
 }
 
 // ============================================================================
-// SECTION 8 — RESULT / "PROFIT SHOT" CARD
+// SECTION 9 — RESULT / "PROFIT SHOT" CARD (landscape)
 // ============================================================================
 
 final class ResultCard
 {
-    private const W = 1000;
-    private const H = 1120;
-    private const MARGIN = 44.0;
-    private const RADIUS = 44.0;
-    private const PAD = 52.0;
+    private const W = 1200;
+    private const H = 660;
+    private const MARGIN = 32.0;
+    private const RADIUS = 40.0;
+    private const PAD = 50.0;
 
     /**
+     * Title, subtitle and badges are derived here from $kind rather than
+     * passed in, so their wording follows the card's own language (see
+     * CardLabels) instead of being fixed by the caller.
+     *
      * @param array{
-     *   kind:string, title:string, symbol:string, direction:string,
-     *   timeframe:string, leverage:string, headline:string, subtitle:string,
-     *   move:string, entry:string, exit:string, badges:array<int,string>, time:string
+     *   kind:string, symbol:string, direction:string, timeframe:string,
+     *   leverage:string, headline:string, move:string, entry:string,
+     *   exit:string, time:string
      * } $d  kind: tp1|tp2|sl|be
      * @return string|null PNG bytes, or null when the card cannot be drawn
      */
@@ -1105,6 +1258,12 @@ final class ResultCard
                 'be' => CardPalette::YELLOW,
                 default => CardPalette::GREEN,
             };
+            $badges = match ($kind) {
+                'tp1' => ['tp1_hit', 'risk_free'],
+                'tp2' => ['tp2_hit', 'closed'],
+                'sl' => ['sl_hit', 'closed'],
+                default => ['risk_free', 'no_loss'],
+            };
 
             $c = new CardCanvas(self::W, self::H);
             CardChrome::backdrop($c, self::W, self::H, $accent, self::MARGIN, self::RADIUS);
@@ -1113,49 +1272,55 @@ final class ResultCard
             $right = self::W - self::MARGIN - self::PAD;
             $inner = $right - $left;
             $centerX = self::W / 2;
-            $muted = CardCanvas::mix(CardPalette::MUTED, CardPalette::BG_BOTTOM, 0.96);
 
-            $c->text((string) ($d['title'] ?? ''), $centerX, 98, 22, CardCanvas::mix($accent, CardPalette::BG_BOTTOM, 0.95), 'center', 0.14, 3.6);
+            $c->text(CardLabels::get('title_' . $kind), $centerX, 60, 20, CardCanvas::mix($accent, CardPalette::BG_BOTTOM, 0.95), 'center', 0.11, 3.2);
 
-            self::chipRow($c, $centerX, 148, [
+            CardChrome::chipRow($c, $centerX, 96, [
                 [strtoupper((string) ($d['symbol'] ?? '')), CardPalette::GLASS],
                 [strtoupper((string) ($d['direction'] ?? '')), $accent],
                 [strtoupper((string) ($d['timeframe'] ?? '')), CardPalette::GLASS],
-            ]);
+            ], 20, 46, 20);
 
             // -- the number the whole card exists for --------------------
             $headline = (string) ($d['headline'] ?? '');
-            $headSize = 138.0;
-            while ($headSize > 60 && $c->textWidth($headline, $headSize, 0.6) > $inner) {
+            $headSize = 92.0;
+            while ($headSize > 44 && $c->textWidth($headline, $headSize, 0.6, 0.165) > $inner) {
                 $headSize -= 4;
             }
-            $c->text($headline, $centerX, 262 + (138 - $headSize) / 2, $headSize, $accent, 'center', 0.165, 0.6);
-            $c->text((string) ($d['subtitle'] ?? ''), $centerX, 430, 24, $muted, 'center', 0.13, 2.4);
+            $c->text($headline, $centerX, 178 + (92 - $headSize) / 2, $headSize, $accent, 'center', 0.165, 0.6);
 
-            $badges = array_values(array_filter(array_map('strval', (array) ($d['badges'] ?? []))));
-            if (!empty($badges)) {
-                self::chipRow($c, $centerX, 492, array_map(static fn($b) => [strtoupper($b), $accent], $badges), 24, 58, 26, 0.18, 0.44);
+            $profitable = !str_starts_with(trim($headline), '-');
+            $c->text(
+                CardLabels::roi((string) ($d['leverage'] ?? ''), $profitable),
+                $centerX,
+                300,
+                21,
+                CardCanvas::mix(CardPalette::MUTED, CardPalette::BG_BOTTOM, 0.96),
+                'center',
+                0.11,
+                2.2
+            );
+
+            // Persian badges are read right to left, so the first badge has
+            // to sit on the right of the row. The chip row above is left in
+            // source order because its contents (symbol, LONG/SHORT, 4H) are
+            // Latin either way.
+            if (CardConfig::supportsPersian()) {
+                $badges = array_reverse($badges);
             }
+            CardChrome::chipRow($c, $centerX, 340, array_map(
+                static fn(string $b): array => [CardLabels::get($b), $accent],
+                $badges
+            ), 21, 50, 24, 0.18, 0.44);
 
-            // -- entry -> exit -------------------------------------------
-            $panelY = 596.0;
-            $panelH = 166.0;
-            $c->insetPanel($left, $panelY, $inner, $panelH, 26, CardPalette::GLASS, 0.40, 0.16);
-            $colW = $inner / 2;
-            $c->text('ENTRY', $left + $colW * 0.5, $panelY + 34, 20, $muted, 'center', 0.13, 2.6);
-            $c->text('EXIT', $left + $colW * 1.5, $panelY + 34, 20, $muted, 'center', 0.13, 2.6);
-            self::fitted($c, (string) ($d['entry'] ?? '-'), $left + $colW * 0.5, $panelY + 84, 40, $colW - 60, CardPalette::TEXT);
-            self::fitted($c, (string) ($d['exit'] ?? '-'), $left + $colW * 1.5, $panelY + 84, 40, $colW - 60, $accent);
-            $c->roundRect($centerX - 1, $panelY + 28, 2, $panelH - 56, 1, CardPalette::GLASS, 0.14);
+            // -- entry / exit / move -------------------------------------
+            $gap = 16.0;
+            $tileW = ($inner - $gap * 2) / 3;
+            CardChrome::tile($c, $left, 424, $tileW, 124, CardLabels::get('entry_short'), (string) ($d['entry'] ?? '-'), CardPalette::TEXT, 17, 32);
+            CardChrome::tile($c, $left + $tileW + $gap, 424, $tileW, 124, CardLabels::get('exit'), (string) ($d['exit'] ?? '-'), $accent, 17, 32);
+            CardChrome::tile($c, $left + 2 * ($tileW + $gap), 424, $tileW, 124, CardLabels::get('move'), (string) ($d['move'] ?? '-'), $accent, 17, 32);
 
-            // -- unleveraged price move ----------------------------------
-            $moveY = 790.0;
-            $moveH = 104.0;
-            $c->insetPanel($left, $moveY, $inner, $moveH, 24, CardPalette::GLASS, 0.40, 0.16);
-            $c->text('PRICE MOVE', $left + 40, $moveY + (($moveH - 21) / 2), 21, $muted, 'left', 0.13, 2.4);
-            $c->text((string) ($d['move'] ?? '-'), $right - 40, $moveY + (($moveH - 38) / 2), 38, $accent, 'right', 0.13, 0.9);
-
-            CardChrome::footer($c, $left, $right, 950, (string) ($d['time'] ?? ''));
+            CardChrome::footer($c, $left, $right, 578, (string) ($d['time'] ?? ''));
 
             $png = $c->toPng();
             $c->destroy();
@@ -1166,43 +1331,5 @@ final class ResultCard
             }
             return null;
         }
-    }
-
-    /** Centers a row of chips as a group — widths have to be measured before the first one is drawn. */
-    private static function chipRow(
-        CardCanvas $c,
-        float $centerX,
-        float $y,
-        array $chips,
-        float $textSize = 23,
-        float $height = 54,
-        float $padding = 24,
-        float $fillOpacity = 0.13,
-        float $borderOpacity = 0.34,
-    ): void {
-        $gap = 14.0;
-        $chips = array_values(array_filter($chips, static fn($ch) => trim((string) $ch[0]) !== ''));
-        if (empty($chips)) {
-            return;
-        }
-        $total = 0.0;
-        foreach ($chips as $ch) {
-            $total += $c->textWidth((string) $ch[0], $textSize, 1.4) + $padding * 2 + $gap;
-        }
-        $total -= $gap;
-
-        $x = $centerX - $total / 2;
-        foreach ($chips as [$label, $rgb]) {
-            $x += CardChrome::chip($c, $x, $y, (string) $label, $rgb, $textSize, $height, $padding, $fillOpacity, $borderOpacity, 1.4) + $gap;
-        }
-    }
-
-    /** @param array{0:int,1:int,2:int} $rgb */
-    private static function fitted(CardCanvas $c, string $text, float $centerX, float $y, float $size, float $maxWidth, array $rgb): void
-    {
-        while ($size > 20 && $c->textWidth($text, $size, 0.8) > $maxWidth) {
-            $size -= 2;
-        }
-        $c->text($text, $centerX, $y, $size, $rgb, 'center', 0.125, 0.8);
     }
 }

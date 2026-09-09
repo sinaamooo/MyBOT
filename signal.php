@@ -3088,26 +3088,16 @@ final class SignalCardFactory
         }
         $stats = SignalFormatter::resultStats($row, $exitPrice);
 
-        [$title, $badges] = match ($kind) {
-            'tp1' => ['PROFIT SHOT', ['TP1 HIT', 'RISK FREE']],
-            'tp2' => ['TARGET 2 HIT', ['TP2 HIT', 'CLOSED']],
-            'sl' => ['STOP LOSS', ['SL HIT', 'CLOSED']],
-            default => ['BREAK EVEN', ['RISK FREE', 'NO LOSS']],
-        };
-
         return ResultCard::render([
             'kind' => $kind,
-            'title' => $title,
             'symbol' => self::displaySymbol((string) $row['symbol']),
             'direction' => (string) $row['direction'],
             'timeframe' => (string) $row['timeframe'],
             'leverage' => $stats['leverage'] . 'X',
             'headline' => $stats['pnl_signed'] . '%',
-            'subtitle' => 'ROI WITH ' . $stats['leverage'] . 'X LEVERAGE',
             'move' => $stats['move_signed'] . '%',
             'entry' => self::fmt((float) $row['entry_price']),
             'exit' => self::fmt($exitPrice),
-            'badges' => $badges,
             'time' => date('Y-m-d H:i') . ' ' . date('T'),
         ]);
     }
