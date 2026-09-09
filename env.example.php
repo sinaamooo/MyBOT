@@ -25,7 +25,7 @@ return [
     // Each exchange is isolated by a circuit breaker: one being blocked or
     // down just means it contributes 0 symbols.
     // ---------------------------------------------------------------------
-    'ENABLED_EXCHANGES' => 'binance,mexc,wallex,bybit,okx,kucoin,cryptocompare',
+    'ENABLED_EXCHANGES' => 'binance,mexc,bybit,okx,kucoin,gate,bitget,htx,cryptocompare',
 
     'BINANCE_API_KEY' => '',
     'BINANCE_API_SECRET' => '',
@@ -37,12 +37,12 @@ return [
     'MEXC_REST_BASE' => 'https://api.mexc.com',
     'MEXC_WS_BASE' => 'wss://wbs.mexc.com',
 
-    'WALLEX_API_KEY' => '',
-    'WALLEX_REST_BASE' => 'https://api.wallex.ir',
-
     'BYBIT_REST_BASE' => 'https://api.bybit.com',
     'OKX_REST_BASE' => 'https://www.okx.com',
     'KUCOIN_REST_BASE' => 'https://api.kucoin.com',
+    'GATE_REST_BASE' => 'https://api.gateio.ws',
+    'BITGET_REST_BASE' => 'https://api.bitget.com',
+    'HTX_REST_BASE' => 'https://api.huobi.pro',
 
     'CRYPTOCOMPARE_API_KEY' => '',
     'CRYPTOCOMPARE_REST_BASE' => 'https://min-api.cryptocompare.com',

@@ -703,7 +703,7 @@ final class AdminPanel
             ];
         }
         $keyboard[] = $this->backRow();
-        $this->render($chatId, $messageId, "📡 صرافی‌ها\n\nبرای فعال/غیرفعال کردن روی نامش بزنید. برای تنظیم API Key دکمه 🔑 رو بزنید (فعلاً فقط Wallex واقعاً ازش استفاده می‌کنه — Binance/MEXC برای داده بازار نیازی به کلید ندارن، ذخیره می‌شه برای استفاده‌های بعدی).", ['inline_keyboard' => $keyboard]);
+        $this->render($chatId, $messageId, "📡 صرافی‌ها\n\nبرای فعال/غیرفعال کردن روی نامش بزنید. همه صرافی‌ها برای داده بازار به کلید API نیازی ندارند؛ دکمه 🔑 فقط برای ذخیره کلید جهت استفاده‌های بعدی است.", ['inline_keyboard' => $keyboard]);
     }
 
     private function renderExchangeApiKey(int $chatId, int $messageId, string $exchange): void
@@ -853,10 +853,6 @@ final class AdminPanel
             return;
         }
 
-        if ($action === 'wallex_raw') {
-            $this->render($chatId, $messageId, $this->wallexRawSample(), ['inline_keyboard' => [$this->backRow('admin:scanner')]]);
-            return;
-        }
 
         if ($action === 'filter_set' && isset($parts[3])) {
             $this->states->set($userId, 'awaiting_scanner_filter', ['setting' => $parts[3]]);
@@ -886,36 +882,10 @@ final class AdminPanel
             [['text' => '🔍 تست اتصال صرافی‌ها', 'callback_data' => 'admin:scanner:test']],
             [['text' => '▶️ اسکن الان', 'callback_data' => 'admin:scanner:run']],
             [['text' => '⚙️ تنظیمات فیلتر', 'callback_data' => 'admin:scanner:filters']],
-            [['text' => '🔬 نمونه خام Wallex', 'callback_data' => 'admin:scanner:wallex_raw']],
             $this->backRow(),
         ];
         $this->render($chatId, $messageId, $text, ['inline_keyboard' => $keyboard]);
     }
-
-    /**
-     * Raw JSON of the first Wallex market's `stats` object, straight from
-     * the API — the ground truth needed to fix WallexAdapter's volume/price
-     * field-name guessing precisely instead of trying variants blind
-     * (this sandbox's own network can't reach Wallex to check directly).
-     */
-    private function wallexRawSample(): string
-    {
-        $res = HttpClient::request('GET', Config::wallexRestBase() . '/v1/markets', [], null, 0);
-        if ($res['status'] !== 200 || !is_array($res['json'])) {
-            return "❌ درخواست ناموفق (HTTP {$res['status']}).";
-        }
-        $symbols = $res['json']['result']['symbols'] ?? $res['json']['result'] ?? $res['json'];
-        if (!is_array($symbols) || empty($symbols)) {
-            return "⚠️ ساختار پاسخ غیرمنتظره بود:\n" . mb_strimwidth(json_encode($res['json'], JSON_UNESCAPED_UNICODE), 0, 3800, '…');
-        }
-        $firstKey = array_key_first($symbols);
-        $sample = $symbols[$firstKey];
-        $pretty = json_encode($sample, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        return "🔬 نمونه خام Wallex (نماد: $firstKey)\n\n" . mb_strimwidth((string) $pretty, 0, 3800, '…');
-    }
-
-    /** Scanner/signal settings that can be overridden live via the panel — used by both display and reset. */
-    private const OVERRIDABLE_SETTINGS = ['MIN_VOLUME_USDT', 'MAX_SPREAD_PERCENT', 'ALLOWED_QUOTE_ASSETS', 'SCANNER_TOP_N', 'MIN_SIGNAL_SCORE'];
 
     private function renderScannerFilters(int $chatId, int $messageId, array $parts = []): void
     {
@@ -968,7 +938,9 @@ final class AdminPanel
         $pingUrls = [
             'binance' => Config::binanceRestBase() . '/api/v3/exchangeInfo',
             'mexc' => Config::mexcRestBase() . '/api/v3/exchangeInfo',
-            'wallex' => Config::wallexRestBase() . '/v1/markets',
+            'gate' => Config::gateRestBase() . '/api/v4/spot/currency_pairs',
+            'bitget' => Config::bitgetRestBase() . '/api/v2/spot/public/symbols',
+            'htx' => Config::htxRestBase() . '/v1/common/symbols',
             'bybit' => Config::bybitRestBase() . '/v5/market/instruments-info?category=spot',
             'okx' => Config::okxRestBase() . '/api/v5/public/instruments?instType=SPOT',
             'kucoin' => Config::kucoinRestBase() . '/api/v1/symbols',
@@ -1810,7 +1782,7 @@ final class AdminPanel
 
         $exHealth = $this->exchangeManager->healthSnapshot();
         $exLines = [];
-        foreach (['binance', 'mexc', 'wallex', 'bybit', 'okx', 'kucoin', 'cryptocompare'] as $ex) {
+        foreach (['binance', 'mexc', 'bybit', 'okx', 'kucoin', 'gate', 'bitget', 'htx', 'cryptocompare'] as $ex) {
             $exLines[] = ($exHealth[$ex] ?? '⚪️') . ' ' . ucfirst($ex);
         }
 

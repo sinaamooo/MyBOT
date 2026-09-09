@@ -662,7 +662,7 @@ final class Worker
      * whose candle would plausibly have closed since the last check), plus
      * best-effort WebSocket polling for exchanges that support it. A given
      * exchange failing here only affects that exchange (per-exchange
-     * Backoff), Binance/MEXC/Wallex are otherwise fully independent.
+     * Backoff); the exchanges are otherwise fully independent.
      */
     private function updateMarketData(): void
     {

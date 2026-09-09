@@ -9,7 +9,7 @@ require_once __DIR__ . '/card.php';
  * ============================================================================
  * signal.php — Core analysis engine.
  *
- * Exchange Manager / Binance-MEXC-Wallex Adapters -> MarketSnapshot
+ * Exchange Manager / per-exchange Adapters -> MarketSnapshot
  *   -> Candle/Ticker/Orderbook managers
  *   -> Indicator Engine (empty registry, plug-in point)
  *   -> Support/Resistance, Order Block, FVG engines
@@ -76,6 +76,36 @@ final class Candle
     public function range(): float
     {
         return $this->high - $this->low;
+    }
+
+    /**
+     * Whether this candle is internally consistent.
+     *
+     * Every adapter maps a different response shape onto these six fields,
+     * and the shapes are not consistent between exchanges — Gate.io returns
+     * [time, quoteVolume, close, high, low, open, baseVolume], which is not
+     * OHLCV at all. A mis-mapped feed does not throw; it produces
+     * plausible-looking numbers in the wrong slots and quietly poisons every
+     * signal derived from them. Cheaper to refuse the candle.
+     */
+    public function isSane(): bool
+    {
+        foreach ([$this->open, $this->high, $this->low, $this->close] as $price) {
+            if (!is_finite($price) || $price <= 0) {
+                return false;
+            }
+        }
+        if ($this->volume < 0 || !is_finite($this->volume)) {
+            return false;
+        }
+        if ($this->high < $this->low) {
+            return false;
+        }
+        if ($this->high < max($this->open, $this->close) || $this->low > min($this->open, $this->close)) {
+            return false;
+        }
+        // Milliseconds since 2010, and not implausibly far in the future.
+        return $this->openTime > 1_262_304_000_000 && $this->openTime < (time() + 86_400) * 1000;
     }
 }
 
@@ -877,137 +907,300 @@ final class MexcAdapter extends AbstractExchangeAdapter
 }
 
 // ============================================================================
-// SECTION 6 — WALLEX ADAPTER (REST only — public WS is Socket.IO framed,
-// not raw RFC6455; see architecture note. Interface stays WS-ready.)
+// SECTION 6 — GATE.IO / BITGET / HTX ADAPTERS
+//
+// Three large spot venues whose public market-data endpoints need no API
+// key. Response shapes were taken from ccxt's parsers rather than from
+// memory, which matters most for Gate: its candlestick array is NOT in
+// OHLCV order — it is [time, quoteVolume, close, high, low, open,
+// baseVolume]. Reading it as OHLCV would have produced plausible-looking
+// but completely wrong candles, which is worse than having no exchange.
 // ============================================================================
 
-final class WallexAdapter extends AbstractExchangeAdapter
+final class GateAdapter extends AbstractExchangeAdapter
 {
     protected array $timeframeMap = [
-        '1m' => '1', '5m' => '5', '15m' => '15', '1h' => '60', '4h' => '240', '1D' => '1D',
+        '1m' => '1m', '5m' => '5m', '15m' => '15m', '1h' => '1h', '4h' => '4h', '1D' => '1d',
     ];
-
-    private function headers(): array
-    {
-        $key = Config::wallexApiKey();
-        return $key !== '' ? ['x-api-key' => $key] : [];
-    }
 
     public function name(): string
     {
-        return 'wallex';
+        return 'gate';
     }
 
     public function fetchExchangeSymbols(): array
     {
-        RateLimiter::acquire('wallex', 300);
-        $res = HttpClient::request('GET', Config::wallexRestBase() . '/v1/markets', $this->headers());
+        RateLimiter::acquire('gate', 600);
+        $res = HttpClient::request('GET', Config::gateRestBase() . '/api/v4/spot/currency_pairs');
         $out = [];
-        $symbols = $res['json']['result']['symbols'] ?? [];
-        foreach ($symbols as $key => $s) {
-            $base = (string) ($s['baseAsset'] ?? '');
-            $quote = (string) ($s['quoteAsset'] ?? '');
-            if ($base === '' || $quote === '') {
+        foreach ($res['json'] ?? [] as $s) {
+            if (($s['trade_status'] ?? '') !== 'tradable') {
                 continue;
             }
-            $out[] = [
-                'symbol' => (string) ($s['symbol'] ?? $key),
-                'base' => $base,
-                'quote' => $quote,
-                'status' => 'TRADING',
-            ];
+            $base = strtoupper((string) ($s['base'] ?? ''));
+            $quote = strtoupper((string) ($s['quote'] ?? ''));
+            $id = (string) ($s['id'] ?? '');
+            if ($base === '' || $quote === '' || $id === '') {
+                continue;
+            }
+            $out[] = ['symbol' => $id, 'base' => $base, 'quote' => $quote, 'status' => 'TRADING'];
         }
         return $out;
     }
 
     public function fetchTicker24h(): array
     {
-        RateLimiter::acquire('wallex', 300);
-        $res = HttpClient::request('GET', Config::wallexRestBase() . '/v1/markets', $this->headers());
+        RateLimiter::acquire('gate', 600);
+        $res = HttpClient::request('GET', Config::gateRestBase() . '/api/v4/spot/tickers');
         $out = [];
-        $symbols = $res['json']['result']['symbols'] ?? [];
-        foreach ($symbols as $key => $s) {
-            $symbol = (string) ($s['symbol'] ?? $key);
-            $stats = $s['stats'] ?? [];
+        foreach ($res['json'] ?? [] as $t) {
+            $symbol = (string) ($t['currency_pair'] ?? '');
+            if ($symbol === '') {
+                continue;
+            }
+            $last = (float) ($t['last'] ?? 0);
+            $bid = (float) ($t['highest_bid'] ?? 0);
+            $ask = (float) ($t['lowest_ask'] ?? 0);
             $out[$symbol] = [
-                'volume' => self::firstNumeric($stats, ['24h_quoteVolume', '24h_volume', 'quoteVolume24h', 'volume24h', 'quoteVolume', 'volume']),
-                'lastPrice' => self::firstNumeric($stats, ['lastPrice']) ?: self::firstNumeric($s, ['price']),
-                'bid' => self::firstNumeric($stats, ['bidPrice', 'bestBuy']),
-                'ask' => self::firstNumeric($stats, ['askPrice', 'bestSell']),
-                'priceChangePercent' => self::firstNumeric($stats, ['24h_ch', 'priceChangePercent']),
+                'volume' => (float) ($t['quote_volume'] ?? 0),
+                'lastPrice' => $last,
+                'bid' => $bid > 0 ? $bid : $last,
+                'ask' => $ask > 0 ? $ask : $last,
+                'priceChangePercent' => (float) ($t['change_percentage'] ?? 0),
             ];
         }
         return $out;
     }
 
-    /**
-     * Tries several plausible field-name variants and returns the first
-     * numeric one found -- a defensive best-effort guess where the exact
-     * live schema can't be verified from here (this sandbox's own network
-     * is fully blocked). See AdminPanel::renderWallexRawSample() for the
-     * ground-truth diagnostic this should eventually be replaced with an
-     * exact field name from.
-     */
-    private static function firstNumeric(array $data, array $keys): float
-    {
-        foreach ($keys as $key) {
-            if (isset($data[$key]) && is_numeric($data[$key])) {
-                return (float) $data[$key];
-            }
-        }
-        return 0.0;
-    }
-
     public function fetchCandles(string $symbol, string $timeframe, int $limit): array
     {
-        RateLimiter::acquire('wallex', 300);
-        $resolution = $this->mapTimeframe($timeframe);
-        $to = time();
-        $barSeconds = match ($timeframe) {
-            '1m' => 60, '5m' => 300, '15m' => 900, '1h' => 3600, '4h' => 14400, default => 86400,
-        };
-        $from = $to - ($barSeconds * $limit);
-        $url = Config::wallexRestBase() . '/v1/udf/history?' . http_build_query([
-            'symbol' => $symbol, 'resolution' => $resolution, 'from' => $from, 'to' => $to,
+        RateLimiter::acquire('gate', 600);
+        $url = Config::gateRestBase() . '/api/v4/spot/candlesticks?' . http_build_query([
+            'currency_pair' => $symbol,
+            'interval' => $this->mapTimeframe($timeframe),
+            'limit' => min($limit, 1000),
         ]);
-        $res = HttpClient::request('GET', $url, $this->headers());
-        $json = $res['json'] ?? [];
+        $res = HttpClient::request('GET', $url);
         $out = [];
-        if (($json['s'] ?? '') === 'ok') {
-            $t = $json['t'] ?? [];
-            for ($i = 0; $i < count($t); $i++) {
-                $out[] = new Candle(
-                    openTime: ((int) $t[$i]) * 1000,
-                    open: (float) ($json['o'][$i] ?? 0),
-                    high: (float) ($json['h'][$i] ?? 0),
-                    low: (float) ($json['l'][$i] ?? 0),
-                    close: (float) ($json['c'][$i] ?? 0),
-                    volume: (float) ($json['v'][$i] ?? 0),
-                    timeframe: $timeframe,
-                );
+        foreach ($res['json'] ?? [] as $row) {
+            if (!is_array($row) || count($row) < 7) {
+                continue;
             }
+            // [0] seconds, [1] quote vol, [2] close, [3] high, [4] low, [5] open, [6] base vol
+            $out[] = new Candle(
+                openTime: ((int) $row[0]) * 1000,
+                open: (float) $row[5],
+                high: (float) $row[3],
+                low: (float) $row[4],
+                close: (float) $row[2],
+                volume: (float) $row[6],
+                timeframe: $timeframe,
+            );
         }
         return $out;
     }
 
     public function fetchOrderBook(string $symbol, int $depth): array
     {
-        RateLimiter::acquire('wallex', 300);
-        $url = Config::wallexRestBase() . '/v1/depth?' . http_build_query(['symbol' => $symbol]);
-        $res = HttpClient::request('GET', $url, $this->headers());
-        $result = $res['json']['result'] ?? [];
-        $bids = array_slice($result['bid'] ?? $result['bids'] ?? [], 0, $depth);
-        $asks = array_slice($result['ask'] ?? $result['asks'] ?? [], 0, $depth);
+        RateLimiter::acquire('gate', 600);
+        $url = Config::gateRestBase() . '/api/v4/spot/order_book?' . http_build_query([
+            'currency_pair' => $symbol, 'limit' => min($depth, 100),
+        ]);
+        $res = HttpClient::request('GET', $url);
         return [
-            'bids' => array_map(static fn($b) => [(float) ($b['price'] ?? $b[0] ?? 0), (float) ($b['quantity'] ?? $b[1] ?? 0)], $bids),
-            'asks' => array_map(static fn($a) => [(float) ($a['price'] ?? $a[0] ?? 0), (float) ($a['quantity'] ?? $a[1] ?? 0)], $asks),
+            'bids' => array_map(static fn($b) => [(float) $b[0], (float) $b[1]], $res['json']['bids'] ?? []),
+            'asks' => array_map(static fn($a) => [(float) $a[0], (float) $a[1]], $res['json']['asks'] ?? []),
         ];
     }
+}
 
-    // supportsWebSocket() stays false (AbstractExchangeAdapter default):
-    // Wallex's public real-time feed is Socket.IO, not raw WebSocket — REST
-    // polling (initial sync / historical / fallback, per architecture) is
-    // the deliberate, documented choice here, not an omission.
+final class BitgetAdapter extends AbstractExchangeAdapter
+{
+    protected array $timeframeMap = [
+        '1m' => '1min', '5m' => '5min', '15m' => '15min', '1h' => '1h', '4h' => '4h', '1D' => '1day',
+    ];
+
+    public function name(): string
+    {
+        return 'bitget';
+    }
+
+    public function fetchExchangeSymbols(): array
+    {
+        RateLimiter::acquire('bitget', 600);
+        $res = HttpClient::request('GET', Config::bitgetRestBase() . '/api/v2/spot/public/symbols');
+        $out = [];
+        foreach ($res['json']['data'] ?? [] as $s) {
+            if (($s['status'] ?? '') !== 'online') {
+                continue;
+            }
+            $base = strtoupper((string) ($s['baseCoin'] ?? ''));
+            $quote = strtoupper((string) ($s['quoteCoin'] ?? ''));
+            $symbol = (string) ($s['symbol'] ?? '');
+            if ($base === '' || $quote === '' || $symbol === '') {
+                continue;
+            }
+            $out[] = ['symbol' => $symbol, 'base' => $base, 'quote' => $quote, 'status' => 'TRADING'];
+        }
+        return $out;
+    }
+
+    public function fetchTicker24h(): array
+    {
+        RateLimiter::acquire('bitget', 600);
+        $res = HttpClient::request('GET', Config::bitgetRestBase() . '/api/v2/spot/market/tickers');
+        $out = [];
+        foreach ($res['json']['data'] ?? [] as $t) {
+            $symbol = (string) ($t['symbol'] ?? '');
+            if ($symbol === '') {
+                continue;
+            }
+            $last = (float) ($t['lastPr'] ?? 0);
+            $bid = (float) ($t['bidPr'] ?? 0);
+            $ask = (float) ($t['askPr'] ?? 0);
+            $out[$symbol] = [
+                'volume' => (float) ($t['quoteVolume'] ?? 0),
+                'lastPrice' => $last,
+                'bid' => $bid > 0 ? $bid : $last,
+                'ask' => $ask > 0 ? $ask : $last,
+                'priceChangePercent' => ((float) ($t['change24h'] ?? 0)) * 100,
+            ];
+        }
+        return $out;
+    }
+
+    public function fetchCandles(string $symbol, string $timeframe, int $limit): array
+    {
+        RateLimiter::acquire('bitget', 600);
+        $url = Config::bitgetRestBase() . '/api/v2/spot/market/candles?' . http_build_query([
+            'symbol' => $symbol,
+            'granularity' => $this->mapTimeframe($timeframe),
+            'limit' => min($limit, 1000),
+        ]);
+        $res = HttpClient::request('GET', $url);
+        $out = [];
+        foreach ($res['json']['data'] ?? [] as $row) {
+            if (!is_array($row) || count($row) < 6) {
+                continue;
+            }
+            $out[] = new Candle(
+                openTime: (int) $row[0],
+                open: (float) $row[1], high: (float) $row[2], low: (float) $row[3], close: (float) $row[4],
+                volume: (float) $row[5], timeframe: $timeframe,
+            );
+        }
+        return $out;
+    }
+
+    public function fetchOrderBook(string $symbol, int $depth): array
+    {
+        RateLimiter::acquire('bitget', 600);
+        $url = Config::bitgetRestBase() . '/api/v2/spot/market/orderbook?' . http_build_query([
+            'symbol' => $symbol, 'limit' => min($depth, 150),
+        ]);
+        $res = HttpClient::request('GET', $url);
+        return [
+            'bids' => array_map(static fn($b) => [(float) $b[0], (float) $b[1]], $res['json']['data']['bids'] ?? []),
+            'asks' => array_map(static fn($a) => [(float) $a[0], (float) $a[1]], $res['json']['data']['asks'] ?? []),
+        ];
+    }
+}
+
+final class HtxAdapter extends AbstractExchangeAdapter
+{
+    protected array $timeframeMap = [
+        '1m' => '1min', '5m' => '5min', '15m' => '15min', '1h' => '60min', '4h' => '4hour', '1D' => '1day',
+    ];
+
+    public function name(): string
+    {
+        return 'htx';
+    }
+
+    /** HTX symbol ids are lowercase throughout its public API. */
+    public function fetchExchangeSymbols(): array
+    {
+        RateLimiter::acquire('htx', 600);
+        $res = HttpClient::request('GET', Config::htxRestBase() . '/v1/common/symbols');
+        $out = [];
+        foreach ($res['json']['data'] ?? [] as $s) {
+            if (($s['state'] ?? '') !== 'online') {
+                continue;
+            }
+            $base = strtoupper((string) ($s['base-currency'] ?? ''));
+            $quote = strtoupper((string) ($s['quote-currency'] ?? ''));
+            $symbol = (string) ($s['symbol'] ?? '');
+            if ($base === '' || $quote === '' || $symbol === '') {
+                continue;
+            }
+            $out[] = ['symbol' => $symbol, 'base' => $base, 'quote' => $quote, 'status' => 'TRADING'];
+        }
+        return $out;
+    }
+
+    public function fetchTicker24h(): array
+    {
+        RateLimiter::acquire('htx', 600);
+        $res = HttpClient::request('GET', Config::htxRestBase() . '/market/tickers');
+        $out = [];
+        foreach ($res['json']['data'] ?? [] as $t) {
+            $symbol = (string) ($t['symbol'] ?? '');
+            if ($symbol === '') {
+                continue;
+            }
+            $last = (float) ($t['close'] ?? 0);
+            $open = (float) ($t['open'] ?? 0);
+            $bid = (float) ($t['bid'] ?? 0);
+            $ask = (float) ($t['ask'] ?? 0);
+            $out[$symbol] = [
+                // "vol" is turnover in the quote currency; "amount" is base volume.
+                'volume' => (float) ($t['vol'] ?? 0),
+                'lastPrice' => $last,
+                'bid' => $bid > 0 ? $bid : $last,
+                'ask' => $ask > 0 ? $ask : $last,
+                'priceChangePercent' => $open > 0 ? (($last - $open) / $open) * 100 : 0.0,
+            ];
+        }
+        return $out;
+    }
+
+    public function fetchCandles(string $symbol, string $timeframe, int $limit): array
+    {
+        RateLimiter::acquire('htx', 600);
+        $url = Config::htxRestBase() . '/market/history/kline?' . http_build_query([
+            'symbol' => $symbol,
+            'period' => $this->mapTimeframe($timeframe),
+            'size' => min($limit, 2000),
+        ]);
+        $res = HttpClient::request('GET', $url);
+        $out = [];
+        // HTX returns newest-first; reverse to chronological order like every other adapter.
+        foreach (array_reverse($res['json']['data'] ?? []) as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $out[] = new Candle(
+                openTime: ((int) ($row['id'] ?? 0)) * 1000,
+                open: (float) ($row['open'] ?? 0), high: (float) ($row['high'] ?? 0),
+                low: (float) ($row['low'] ?? 0), close: (float) ($row['close'] ?? 0),
+                volume: (float) ($row['vol'] ?? 0), timeframe: $timeframe,
+            );
+        }
+        return $out;
+    }
+
+    public function fetchOrderBook(string $symbol, int $depth): array
+    {
+        RateLimiter::acquire('htx', 600);
+        $url = Config::htxRestBase() . '/market/depth?' . http_build_query([
+            'symbol' => $symbol, 'type' => 'step0', 'depth' => in_array($depth, [5, 10, 20], true) ? $depth : 20,
+        ]);
+        $res = HttpClient::request('GET', $url);
+        return [
+            'bids' => array_map(static fn($b) => [(float) $b[0], (float) $b[1]], $res['json']['tick']['bids'] ?? []),
+            'asks' => array_map(static fn($a) => [(float) $a[0], (float) $a[1]], $res['json']['tick']['asks'] ?? []),
+        ];
+    }
 }
 
 // ============================================================================
@@ -1448,8 +1641,14 @@ final class ExchangeManager
         if (in_array('mexc', $enabled, true)) {
             $this->register(new MexcAdapter());
         }
-        if (in_array('wallex', $enabled, true)) {
-            $this->register(new WallexAdapter());
+        if (in_array('gate', $enabled, true)) {
+            $this->register(new GateAdapter());
+        }
+        if (in_array('bitget', $enabled, true)) {
+            $this->register(new BitgetAdapter());
+        }
+        if (in_array('htx', $enabled, true)) {
+            $this->register(new HtxAdapter());
         }
         if (in_array('cryptocompare', $enabled, true)) {
             $this->register(new CryptoCompareAdapter());
@@ -1558,6 +1757,22 @@ final class CandleManager
 {
     public function upsertMany(string $exchange, string $symbol, string $timeframe, array $candles): void
     {
+        // Single choke point for every adapter's output — see Candle::isSane().
+        $total = count($candles);
+        $candles = array_values(array_filter($candles, static fn(Candle $c) => $c->isSane()));
+        if ($total > 0 && count($candles) < $total) {
+            Logger::warning('market_data', 'discarded malformed candles', [
+                'exchange' => $exchange,
+                'symbol' => $symbol,
+                'timeframe' => $timeframe,
+                'discarded' => $total - count($candles),
+                'of' => $total,
+            ]);
+        }
+        if (empty($candles)) {
+            return;
+        }
+
         $exchangeId = ExchangeRepository::idForName($exchange);
         if ($exchangeId === null || empty($candles)) {
             return;

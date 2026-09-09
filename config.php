@@ -271,14 +271,19 @@ final class Config
         return Env::get('MEXC_WS_BASE', 'wss://wbs.mexc.com') ?? 'wss://wbs.mexc.com';
     }
 
-    public static function wallexApiKey(): string
+    public static function gateRestBase(): string
     {
-        return self::dbOverride('WALLEX_API_KEY') ?? (Env::get('WALLEX_API_KEY', '') ?? '');
+        return Env::get('GATE_REST_BASE', 'https://api.gateio.ws') ?? 'https://api.gateio.ws';
     }
 
-    public static function wallexRestBase(): string
+    public static function bitgetRestBase(): string
     {
-        return Env::get('WALLEX_REST_BASE', 'https://api.wallex.ir') ?? 'https://api.wallex.ir';
+        return Env::get('BITGET_REST_BASE', 'https://api.bitget.com') ?? 'https://api.bitget.com';
+    }
+
+    public static function htxRestBase(): string
+    {
+        return Env::get('HTX_REST_BASE', 'https://api.huobi.pro') ?? 'https://api.huobi.pro';
     }
 
     /**
@@ -300,12 +305,9 @@ final class Config
 
     /**
      * Bybit / OKX / KuCoin: large, high-volume exchanges whose public spot
-     * market-data endpoints need no API key. Added alongside Wallex because
-     * Wallex's own volume is too thin for reliable signals on its own, and
-     * because unlike Binance/MEXC they are not (as of writing) known to
-     * geo-block this host -- each is still isolated via ExchangeManager, so
-     * if one turns out to be blocked too it just contributes 0 symbols
-     * instead of breaking anything else.
+     * market-data endpoints need no API key. Every exchange is isolated via
+     * ExchangeManager's circuit breaker, so one being blocked or down just
+     * means it contributes 0 symbols instead of breaking anything else.
      */
     public static function bybitRestBase(): string
     {
@@ -325,7 +327,7 @@ final class Config
     /** @return string[] enabled exchange names, in priority order */
     public static function enabledExchanges(): array
     {
-        return Env::getList('ENABLED_EXCHANGES', 'binance,mexc,wallex,bybit,okx,kucoin,cryptocompare');
+        return Env::getList('ENABLED_EXCHANGES', 'binance,mexc,bybit,okx,kucoin,gate,bitget,htx,cryptocompare');
     }
 
     // -- Scanner -------------------------------------------------------
@@ -1118,7 +1120,14 @@ final class Database
         $now = date('Y-m-d H:i:s');
 
         // Exchanges
-        $exchangeNames = ['binance' => 'Binance', 'mexc' => 'MEXC', 'wallex' => 'Wallex', 'bybit' => 'Bybit', 'okx' => 'OKX', 'kucoin' => 'KuCoin', 'cryptocompare' => 'CryptoCompare'];
+        $exchangeNames = [
+            'binance' => 'Binance', 'mexc' => 'MEXC', 'bybit' => 'Bybit', 'okx' => 'OKX',
+            'kucoin' => 'KuCoin', 'gate' => 'Gate.io', 'bitget' => 'Bitget', 'htx' => 'HTX',
+            'cryptocompare' => 'CryptoCompare',
+        ];
+        // Wallex was removed; drop any row a previous install left behind so
+        // it stops showing in the panel and the health screen.
+        $pdo->prepare('DELETE FROM exchanges WHERE name = :n')->execute([':n' => 'wallex']);
         $stmt = $pdo->prepare(
             'INSERT INTO exchanges (name, display_name, is_enabled, priority)
              VALUES (:name, :display_name, :enabled, :priority)
