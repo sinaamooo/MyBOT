@@ -1322,6 +1322,9 @@ final class AdminPanel
         'RISK_PER_TRADE_PCT'          => ['🎚 ریسک هر معامله', 'درصد سرمایه. مثال: 2'],
         'MAX_DAILY_LOSSES'            => ['🚧 سقف ضرر روزانه', 'بعد از این تعداد باخت، تا فردا سیگنال نمی‌دهد. مثال: 3'],
         'MAX_DAILY_SIGNALS'           => ['📈 سقف سیگنال روزانه', '۰ یعنی بدون سقف. مثال: 8'],
+        'MIN_CONFLUENCE_SCORE'        => ['🧠 حداقل امتیاز هم‌گرایی', 'چند ماژول باید موافق باشند. مثال: 55'],
+        'ZONE_REACH_ATR'              => ['📦 حداکثر فاصله ناحیه حمایتی', 'بر حسب ATR. مثال: 2.5'],
+        'SETUP_VOLUME_MULT'           => ['📶 حجم لازم ستاپ‌ها', 'چند برابر میانگین ۲۰. مثال: 1'],
         'BREAK_VOLUME_RATIO'          => ['📶 حجم لازم روی شکست', 'چند برابر میانگین. مثال: 1.3'],
         'MAX_CHASE_ATR'               => ['🏃 حداکثر فاصله از سطح شکست', 'بر حسب ATR. مثال: 1.5'],
         'REVERSAL_RUN_PCT'            => ['📉 حداقل رشد برای سیگنال برگشتی', 'درصد. مثال: 12'],
@@ -1467,7 +1470,8 @@ final class AdminPanel
                 Config::tp1LeveragedPercent(), Config::tp2LeveragedPercent(), Config::maxStopLeveragedPercent()),
             sprintf('⚖️ یعنی ریسک به ریوارد %.2f و %.2f', Config::tp1RiskReward(), Config::tp2RiskReward()),
             sprintf('🏦 صرافی اصلی: %s', Config::primaryExchange()),
-            sprintf('🧠 استراتژی: %s', Config::strategyName()),
+            sprintf('🧠 استراتژی: %s (حداقل امتیاز هم‌گرایی %.0f)', Config::strategyName(), Config::minConfluenceScore()),
+            '   ماژول‌ها: شش ستاپ + رنج خودکار + ساختار BOS/CHoCH + موج ALMA + نقدینگی + اوردر بلاک/عرضه و تقاضا',
             sprintf('💎 %s → اهرم %dx', implode(',', Config::majorAssets()), Config::leverageMajor()),
             sprintf('🪙 بقیه ارزها → اهرم %dx تا %dx (خودکار بر اساس نقدینگی و نوسان)', Config::leverageAltMin(), Config::leverageAltMax()),
             sprintf('🔍 ارز در هر اسکن: %d (%.0f%% پررشدترین، %.0f%% پرضررترین، بقیه پرحجم‌ترین)',
@@ -2091,7 +2095,7 @@ final class AdminPanel
                         'ACCOUNT_BALANCE', 'RISK_PER_TRADE_PCT', 'MAX_DAILY_LOSSES', 'MAX_DAILY_SIGNALS',
                         'BREAK_VOLUME_RATIO', 'MAX_CHASE_ATR', 'REVERSAL_RUN_PCT', 'BASE_RANGE_PCT',
                         'SCANNER_GAINER_SHARE', 'SCANNER_LOSER_SHARE', 'SCANNER_MIN_MOVE_PCT',
-                        'SIGNALS_PER_PASS'];
+                        'SIGNALS_PER_PASS', 'MIN_CONFLUENCE_SCORE', 'ZONE_REACH_ATR', 'SETUP_VOLUME_MULT'];
             if (in_array($key, $numeric, true) && !is_numeric($value)) {
                 $this->telegram->sendMessage($chatId, "این مقدار باید عدد باشه.");
                 return true;

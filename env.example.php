@@ -160,10 +160,51 @@ return [
     // Strategy — the quality gate. Every knob here trades signal COUNT for
     // win rate; loosening them produces more signals and worse ones.
     // ---------------------------------------------------------------------
-    // structure_break: a coiled coin taking out a small ceiling (long), or a
-    // coin that already ran and then prints a CHoCH down / loses a small
-    // floor (short). default_structure is the older, looser strategy.
-    'STRATEGY' => 'structure_break',
+    // confluence_pro combines all six ported indicators and only takes a
+    // trade several of them agree on. structure_break is the simpler
+    // CHoCH/breakout strategy; default_structure is the original.
+    'STRATEGY' => 'confluence_pro',
+
+    // ---------------------------------------------------------------------
+    // Confluence engine — how much each module's agreement is worth, and the
+    // total a setup must reach. Raising MIN_CONFLUENCE_SCORE means fewer,
+    // better-supported signals; lowering it means more, thinner ones.
+    //
+    // Reaching 55 needs roughly: a zone behind the stop (14, and required
+    // outright) plus a trigger and one confirmation — e.g. a range breakout
+    // (16) with a structure shift (14) and trend agreement (12).
+    // ---------------------------------------------------------------------
+    'MIN_CONFLUENCE_SCORE' => '55',
+    'CONFLUENCE_SETUP_WEIGHT' => '18',      // each of the six entry setups
+    'CONFLUENCE_RANGE_WEIGHT' => '16',      // qualified range breakout
+    'CONFLUENCE_STRUCTURE_WEIGHT' => '14',  // BOS / CHoCH
+    'CONFLUENCE_ZONE_WEIGHT' => '14',       // order block / FVG / supply-demand
+    'CONFLUENCE_TREND_WEIGHT' => '12',      // ALMA wave + EMA band agree
+    'CONFLUENCE_LIQUIDITY_WEIGHT' => '12',  // sweep, or untapped liquidity ahead
+
+    // How far a protective zone may sit from price and still count, and the
+    // breathing room added beyond it when the stop is placed.
+    'ZONE_REACH_ATR' => '2.5',
+    'STOP_PAD_ATR' => '0.25',
+    // How many candles old a BOS / CHoCH may be and still be tradable.
+    'STRUCTURE_MAX_AGE' => '3',
+
+    // Setup scanner tuning (the six triggers).
+    'SETUP_VOLUME_MULT' => '1.0',      // volume vs its 20-candle average
+    'VWAP_AWAY_BARS' => '6',           // bars on one side before a reclaim counts
+    'EMA_TOUCH_WINDOW' => '3',         // recency of the 21 EMA touch
+    'SETUP_PIVOT_LENGTH' => '5',
+    'RETEST_TOLERANCE_ATR' => '0.3',
+    'RETEST_WINDOW' => '20',
+    'SWEEP_LOOKBACK' => '20',
+    'DIVERGENCE_GAP' => '60',
+
+    // Range detector. A band under RANGE_ABS_COMPRESSION x ATR*sqrt(len) is a
+    // range outright (a random walk sits near 1.0); RANGE_BREAK_LOOKBACK is
+    // how many recent candles are held back so the breakout is judged against
+    // the box instead of being absorbed into it.
+    'RANGE_ABS_COMPRESSION' => '0.75',
+    'RANGE_BREAK_LOOKBACK' => '3',
 
     // Volume on the breaking candle as a multiple of the previous 20-candle
     // average. A break nobody participated in is a trap.

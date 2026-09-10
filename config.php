@@ -627,6 +627,162 @@ final class Config
         return max(300, $override !== null ? (int) $override : Env::getInt('VENUE_LISTINGS_TTL', 21600));
     }
 
+    // -- Confluence engine ------------------------------------------------
+    //
+    // The combination strategy scores a setup by how many independent
+    // modules agree with it. These are the weights and the bar it has to
+    // clear. Raising MIN_CONFLUENCE_SCORE means fewer, better-supported
+    // signals; lowering it means more, thinner ones.
+
+    /** Points for each of the six entry setups that fires. */
+    public static function setupWeight(): float
+    {
+        return self::weight('CONFLUENCE_SETUP_WEIGHT', 18.0);
+    }
+
+    /** Points for a breakout from a statistically qualified range. */
+    public static function rangeWeight(): float
+    {
+        return self::weight('CONFLUENCE_RANGE_WEIGHT', 16.0);
+    }
+
+    /** Points for a BOS / CHoCH agreeing with the trade. */
+    public static function structureWeight(): float
+    {
+        return self::weight('CONFLUENCE_STRUCTURE_WEIGHT', 14.0);
+    }
+
+    /** Points for a liquidity sweep, or untapped liquidity ahead. */
+    public static function liquidityWeight(): float
+    {
+        return self::weight('CONFLUENCE_LIQUIDITY_WEIGHT', 12.0);
+    }
+
+    /** Points for the ALMA wave and the EMA band pointing the same way. */
+    public static function trendWeight(): float
+    {
+        return self::weight('CONFLUENCE_TREND_WEIGHT', 12.0);
+    }
+
+    /** Points for an order block / FVG / supply-demand zone behind the stop. */
+    public static function zoneWeight(): float
+    {
+        return self::weight('CONFLUENCE_ZONE_WEIGHT', 14.0);
+    }
+
+    /** The bar a setup's total has to clear before it is published. */
+    public static function minConfluenceScore(): float
+    {
+        $override = self::dbOverride('MIN_CONFLUENCE_SCORE');
+        return max(0.0, $override !== null ? (float) $override : Env::getFloat('MIN_CONFLUENCE_SCORE', 55.0));
+    }
+
+    /**
+     * Band height over ATR*sqrt(length) below which a window counts as a
+     * range outright, regardless of how it ranks against its own history.
+     * A random walk sits near 1.0, so the default is a genuinely tight box.
+     */
+    public static function rangeAbsoluteCompression(): float
+    {
+        $override = self::dbOverride('RANGE_ABS_COMPRESSION');
+        return max(0.05, $override !== null ? (float) $override : Env::getFloat('RANGE_ABS_COMPRESSION', 0.75));
+    }
+
+    /**
+     * How many recent candles are held back when measuring a range, so the
+     * breakout itself is judged against the box rather than absorbed into it.
+     */
+    public static function rangeBreakLookback(): int
+    {
+        $override = self::dbOverride('RANGE_BREAK_LOOKBACK');
+        return max(1, $override !== null ? (int) $override : Env::getInt('RANGE_BREAK_LOOKBACK', 3));
+    }
+
+    /** How far from price a protective zone may sit, in ATR, and still count. */
+    public static function zoneReachAtr(): float
+    {
+        $override = self::dbOverride('ZONE_REACH_ATR');
+        return max(0.2, $override !== null ? (float) $override : Env::getFloat('ZONE_REACH_ATR', 2.5));
+    }
+
+    /** Breathing room added beyond the protective zone, in ATR. */
+    public static function stopPadAtr(): float
+    {
+        $override = self::dbOverride('STOP_PAD_ATR');
+        return max(0.0, $override !== null ? (float) $override : Env::getFloat('STOP_PAD_ATR', 0.25));
+    }
+
+    /** How many candles old a structure shift may be and still be tradable. */
+    public static function structureMaxAge(): int
+    {
+        $override = self::dbOverride('STRUCTURE_MAX_AGE');
+        return max(1, $override !== null ? (int) $override : Env::getInt('STRUCTURE_MAX_AGE', 3));
+    }
+
+    private static function weight(string $key, float $default): float
+    {
+        $override = self::dbOverride($key);
+        return max(0.0, $override !== null ? (float) $override : Env::getFloat($key, $default));
+    }
+
+    // -- Setup scanner tuning ---------------------------------------------
+
+    /** Volume a setup's candle needs, as a multiple of the 20-candle average. */
+    public static function setupVolumeMultiple(): float
+    {
+        $override = self::dbOverride('SETUP_VOLUME_MULT');
+        return max(0.0, $override !== null ? (float) $override : Env::getFloat('SETUP_VOLUME_MULT', 1.0));
+    }
+
+    /** Bars price must spend on one side of VWAP before a reclaim counts. */
+    public static function vwapAwayBars(): int
+    {
+        $override = self::dbOverride('VWAP_AWAY_BARS');
+        return max(1, $override !== null ? (int) $override : Env::getInt('VWAP_AWAY_BARS', 6));
+    }
+
+    /** How recently price must have touched the 21 EMA for a pullback entry. */
+    public static function emaTouchWindow(): int
+    {
+        $override = self::dbOverride('EMA_TOUCH_WINDOW');
+        return max(1, $override !== null ? (int) $override : Env::getInt('EMA_TOUCH_WINDOW', 3));
+    }
+
+    /** Swing length used by the setup scanner's pivots. */
+    public static function setupPivotLength(): int
+    {
+        $override = self::dbOverride('SETUP_PIVOT_LENGTH');
+        return max(2, $override !== null ? (int) $override : Env::getInt('SETUP_PIVOT_LENGTH', 5));
+    }
+
+    /** How close a retest has to come to the broken level, in ATR. */
+    public static function retestTolerance(): float
+    {
+        $override = self::dbOverride('RETEST_TOLERANCE_ATR');
+        return max(0.01, $override !== null ? (float) $override : Env::getFloat('RETEST_TOLERANCE_ATR', 0.3));
+    }
+
+    /** How many bars a break stays eligible for its retest. */
+    public static function retestWindow(): int
+    {
+        $override = self::dbOverride('RETEST_WINDOW');
+        return max(2, $override !== null ? (int) $override : Env::getInt('RETEST_WINDOW', 20));
+    }
+
+    /** Lookback for the liquidity-sweep extreme. */
+    public static function sweepLookback(): int
+    {
+        $override = self::dbOverride('SWEEP_LOOKBACK');
+        return max(5, $override !== null ? (int) $override : Env::getInt('SWEEP_LOOKBACK', 20));
+    }
+
+    /** Largest gap, in bars, between the two pivots of a divergence. */
+    public static function divergenceGap(): int
+    {
+        $override = self::dbOverride('DIVERGENCE_GAP');
+        return max(5, $override !== null ? (int) $override : Env::getInt('DIVERGENCE_GAP', 60));
+    }
+
     // -- Strategy quality gate -------------------------------------------
     //
     // These are the knobs that trade signal COUNT for win rate. Every one
@@ -637,8 +793,8 @@ final class Config
     public static function strategyName(): string
     {
         $override = self::dbOverride('STRATEGY');
-        $name = trim((string) ($override ?? Env::get('STRATEGY', 'structure_break') ?? 'structure_break'));
-        return $name === '' ? 'structure_break' : $name;
+        $name = trim((string) ($override ?? Env::get('STRATEGY', 'confluence_pro') ?? 'confluence_pro'));
+        return $name === '' ? 'confluence_pro' : $name;
     }
 
     /** Volume on the breaking candle, as a multiple of the prior 20-candle average. */
