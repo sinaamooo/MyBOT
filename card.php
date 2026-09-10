@@ -40,28 +40,41 @@ declare(strict_types=1);
 
 final class CardPalette
 {
-    // Backdrop
-    public const BG_TOP       = [10, 16, 13];
-    public const BG_BOTTOM    = [4, 6, 5];
+    // Backdrop — near-black, barely graded. Everything else is light or neon.
+    public const BG_TOP       = [11, 12, 15];
+    public const BG_BOTTOM    = [4, 4, 6];
 
-    // Accents — the green/yellow identity of every card
-    public const GREEN        = [46, 231, 150];
-    public const GREEN_DEEP   = [16, 142, 92];
-    public const YELLOW       = [245, 209, 66];
-    public const YELLOW_DEEP  = [168, 134, 18];
-    public const AMBER        = [255, 168, 46];
-    public const TEAL         = [34, 197, 194];
+    // Neon accents. Direction sets which one lights the card.
+    public const NEON_GREEN   = [57, 255, 170];
+    public const NEON_CYAN    = [56, 214, 255];
+    public const NEON_PINK    = [255, 74, 158];
+    public const NEON_AMBER   = [255, 176, 60];
+    public const NEON_VIOLET  = [166, 122, 255];
 
-    // Neutrals
+    // Monochrome scale — the type lives here, so the neon stays an accent.
     public const WHITE        = [255, 255, 255];
-    public const TEXT         = [232, 245, 238];
-    public const MUTED        = [163, 186, 175];
+    public const TEXT         = [244, 246, 250];
+    public const MUTED        = [150, 158, 172];
     public const GLASS        = [255, 255, 255];
 
-    /** Direction-driven accent: LONG is green, SHORT is yellow — the card never leaves the palette. */
+    // Kept so callers that still name them keep working.
+    public const GREEN        = self::NEON_GREEN;
+    public const GREEN_DEEP   = [16, 122, 88];
+    public const YELLOW       = self::NEON_AMBER;
+    public const YELLOW_DEEP  = [150, 104, 22];
+    public const AMBER        = self::NEON_AMBER;
+    public const TEAL         = self::NEON_CYAN;
+
+    /** LONG is lit green, SHORT pink — both neon, both on the same black glass. */
     public static function forDirection(string $direction): array
     {
-        return strtoupper($direction) === 'SHORT' ? self::YELLOW : self::GREEN;
+        return strtoupper($direction) === 'SHORT' ? self::NEON_PINK : self::NEON_GREEN;
+    }
+
+    /** The second light in the room, so a card is never one flat colour. */
+    public static function complementFor(array $accent): array
+    {
+        return $accent === self::NEON_PINK ? self::NEON_VIOLET : self::NEON_CYAN;
     }
 }
 
@@ -667,6 +680,111 @@ final class CardCanvas
         }
     }
 
+    /**
+     * Draws one of CardIcons' paths at a given size.
+     *
+     * @param array{0:int,1:int,2:int} $rgb
+     */
+    public function icon(string $name, float $x, float $y, float $size, array $rgb, float $weight = 0.11, float $opacity = 1.0): void
+    {
+        $paths = CardIcons::paths($name);
+        if (empty($paths)) {
+            return;
+        }
+        $s = $this->scale;
+        $unit = ($size / 10) * $s;
+        $color = $this->color($rgb, $opacity);
+        $stroke = max(1.0, $size * $weight * $s);
+        foreach ($paths as $path) {
+            $pts = [];
+            foreach ($path as $p) {
+                $pts[] = [($x * $s) + $p[0] * $unit, ($y * $s) + $p[1] * $unit];
+            }
+            $this->strokePath($pts, $stroke, $color);
+        }
+    }
+
+    /**
+     * Composites a PNG (the brand logo) scaled to fit a box, preserving its
+     * alpha. Silently does nothing if the file is unreadable — a missing
+     * logo must never cost a card.
+     */
+    public function image(string $path, float $x, float $y, float $boxW, float $boxH, float $opacity = 1.0): bool
+    {
+        if (!is_file($path) || !is_readable($path)) {
+            return false;
+        }
+        $src = self::loadImage($path);
+        if ($src === false) {
+            return false;
+        }
+        $sw = imagesx($src);
+        $sh = imagesy($src);
+        if ($sw < 1 || $sh < 1) {
+            imagedestroy($src);
+            return false;
+        }
+
+        $s = $this->scale;
+        $ratio = min(($boxW * $s) / $sw, ($boxH * $s) / $sh);
+        $dw = max(1, (int) round($sw * $ratio));
+        $dh = max(1, (int) round($sh * $ratio));
+        $dx = (int) round($x * $s + (($boxW * $s) - $dw) / 2);
+        $dy = (int) round($y * $s + (($boxH * $s) - $dh) / 2);
+
+        imagealphablending($src, true);
+        if ($opacity >= 1.0) {
+            imagecopyresampled($this->im, $src, $dx, $dy, 0, 0, $dw, $dh, $sw, $sh);
+        } else {
+            // imagecopymerge cannot carry alpha, so scale first and then
+            // fade by rewriting the alpha channel of the scaled copy.
+            $tmp = imagecreatetruecolor($dw, $dh);
+            imagealphablending($tmp, false);
+            imagesavealpha($tmp, true);
+            imagefilledrectangle($tmp, 0, 0, $dw, $dh, imagecolorallocatealpha($tmp, 0, 0, 0, 127));
+            imagecopyresampled($tmp, $src, 0, 0, 0, 0, $dw, $dh, $sw, $sh);
+            for ($py = 0; $py < $dh; $py++) {
+                for ($px = 0; $px < $dw; $px++) {
+                    $c = imagecolorat($tmp, $px, $py);
+                    $a = ($c >> 24) & 0x7F;
+                    $faded = min(127, (int) round($a + (127 - $a) * (1 - $opacity)));
+                    imagesetpixel($tmp, $px, $py, ($faded << 24) | ($c & 0xFFFFFF));
+                }
+            }
+            imagealphablending($this->im, true);
+            imagecopy($this->im, $tmp, $dx, $dy, 0, 0, $dw, $dh);
+            imagedestroy($tmp);
+        }
+        imagedestroy($src);
+        return true;
+    }
+
+    /**
+     * Opens whichever image format the operator's logo happens to be in.
+     * Returns false — never throws — for anything GD on this host cannot
+     * read.
+     *
+     * @return \GdImage|false
+     */
+    private static function loadImage(string $path)
+    {
+        $info = @getimagesize($path);
+        $type = is_array($info) ? ($info[2] ?? null) : null;
+        $im = match ($type) {
+            IMAGETYPE_PNG => function_exists('imagecreatefrompng') ? @imagecreatefrompng($path) : false,
+            IMAGETYPE_JPEG => function_exists('imagecreatefromjpeg') ? @imagecreatefromjpeg($path) : false,
+            IMAGETYPE_GIF => function_exists('imagecreatefromgif') ? @imagecreatefromgif($path) : false,
+            IMAGETYPE_WEBP => function_exists('imagecreatefromwebp') ? @imagecreatefromwebp($path) : false,
+            default => false,
+        };
+        if ($im === false) {
+            return false;
+        }
+        imagealphablending($im, true);
+        imagesavealpha($im, true);
+        return $im;
+    }
+
     /** Straight hairline separator. @param array{0:int,1:int,2:int} $rgb */
     public function rule(float $x, float $y, float $w, array $rgb, float $opacity = 0.12, float $thickness = 1.4): void
     {
@@ -939,16 +1057,103 @@ final class CardConfig
         return self::fontPath() !== null;
     }
 
+    /**
+     * Brand logo composited onto the result cards. Drop a PNG named
+     * logo.png beside the PHP files (transparent background works best) and
+     * it appears automatically; point CARD_LOGO_PATH somewhere else to
+     * override. Absent, the cards simply render without it.
+     */
+    public static function logoPath(): ?string
+    {
+        $candidates = [self::env('CARD_LOGO_PATH', '')];
+        // Whatever the operator actually dropped in: a transparent PNG is
+        // the best-looking option, but a JPEG straight off a phone must not
+        // silently do nothing.
+        foreach (['png', 'PNG', 'jpg', 'jpeg', 'webp', 'gif'] as $ext) {
+            $candidates[] = __DIR__ . '/logo.' . $ext;
+        }
+        foreach ($candidates as $path) {
+            $path = (string) ($path ?? '');
+            if ($path !== '' && is_file($path) && is_readable($path)) {
+                return $path;
+            }
+        }
+        return null;
+    }
+
     /** Small wordmark printed in the card footer. */
     public static function brand(): string
     {
-        return (string) (self::env('CARD_BRAND', 'AUTO SIGNAL') ?? 'AUTO SIGNAL');
+        return (string) (self::env('CARD_BRAND', 'AUTO TRADE MARKET') ?? 'AUTO TRADE MARKET');
     }
 
     /** Resets memoized state — used by tests that flip CARD_FONT_PATH between renders. */
     public static function resetFontCache(): void
     {
         self::$fontCache = [];
+    }
+}
+
+// ============================================================================
+// SECTION 5.5 — ICONS
+//
+// Drawn as stroked vector paths on the same 0..10 grid the font uses, so
+// they scale and sit on the baseline exactly like a glyph would. Emoji were
+// not an option: the built-in font has none, and a TTF's emoji coverage
+// varies per host.
+// ============================================================================
+
+final class CardIcons
+{
+    /**
+     * @return array<int,array<int,array{0:float,1:float}>> stroke paths in a 10x10 box
+     */
+    public static function paths(string $name): array
+    {
+        $ring = static function (float $cx, float $cy, float $r, int $seg = 12): array {
+            $pts = [];
+            for ($i = 0; $i <= $seg; $i++) {
+                $a = ($i / $seg) * 2 * M_PI;
+                $pts[] = [$cx + cos($a) * $r, $cy + sin($a) * $r];
+            }
+            return $pts;
+        };
+
+        return match ($name) {
+            // Entry — a crosshair over the price you take the trade at.
+            'entry' => [$ring(5, 5, 3.0), [[5, 0.6], [5, 2.2]], [[5, 7.8], [5, 9.4]], [[0.6, 5], [2.2, 5]], [[7.8, 5], [9.4, 5]]],
+            // Stop — a shield.
+            'stop' => [[[5, 0.8], [9, 2.4], [9, 5.4], [5, 9.2], [1, 5.4], [1, 2.4], [5, 0.8]]],
+            // Target — a bullseye.
+            'target' => [$ring(5, 5, 4.0), $ring(5, 5, 2.0), [[5, 4.6], [5, 5.4]]],
+            // Long / short — a directional arrow.
+            'up' => [[[5, 9.2], [5, 1.2]], [[1.6, 4.6], [5, 1.2], [8.4, 4.6]]],
+            'down' => [[[5, 0.8], [5, 8.8]], [[1.6, 5.4], [5, 8.8], [8.4, 5.4]]],
+            // Leverage — a bolt.
+            'bolt' => [[[6.4, 0.6], [2.6, 5.4], [5.2, 5.4], [3.8, 9.4], [7.6, 4.4], [5.0, 4.4], [6.4, 0.6]]],
+            // Risk free — a padlock.
+            'lock' => [[[2.2, 4.6], [7.8, 4.6], [7.8, 9.2], [2.2, 9.2], [2.2, 4.6]], [[3.4, 4.6], [3.4, 2.8], [6.6, 2.8], [6.6, 4.6]]],
+            // Market entry — a live-price pulse.
+            'pulse' => [[[0.8, 5.0], [3.0, 5.0], [4.0, 2.2], [5.8, 8.0], [6.9, 5.0], [9.2, 5.0]]],
+            // Result — a tick.
+            'check' => [[[1.4, 5.2], [4.0, 7.8], [8.8, 2.2]]],
+            // Stop-out — a cross.
+            'cross' => [[[2.0, 2.0], [8.0, 8.0]], [[8.0, 2.0], [2.0, 8.0]]],
+            // Fallback brand mark: a framed candle with a breakout arrow,
+            // drawn only when no logo.png has been dropped in beside the
+            // PHP files.
+            'mark' => [
+                [[2.6, 0.6], [7.4, 0.6], [9.4, 2.6], [9.4, 7.4], [7.4, 9.4], [2.6, 9.4], [0.6, 7.4], [0.6, 2.6], [2.6, 0.6]],
+                [[3.4, 7.4], [3.4, 4.6]], [[3.4, 3.2], [3.4, 2.2]], [[2.6, 4.6], [4.2, 4.6], [4.2, 3.2], [2.6, 3.2], [2.6, 4.6]],
+                [[6.0, 7.6], [6.0, 3.0]], [[4.6, 5.4], [6.0, 3.0], [7.4, 5.4]],
+            ],
+            default => [],
+        };
+    }
+
+    public static function has(string $name): bool
+    {
+        return !empty(self::paths($name));
     }
 }
 
@@ -966,6 +1171,8 @@ final class CardLabels
     /** @var array<string,array{0:string,1:string}> key => [persian, english] */
     private const LABELS = [
         'signal'      => ['سیگنال جدید', 'SIGNAL'],
+        'market'      => ['ورود بازار', 'MARKET'],
+        'market_note' => ['ورود در قیمت بازار', 'ENTER AT MARKET'],
         'entry'       => ['نقطه ورود', 'ENTRY'],
         'stop'        => ['حد ضرر', 'STOP LOSS'],
         'tp1'         => ['تارگت ۱', 'TARGET 1'],
@@ -1025,40 +1232,78 @@ final class CardLabels
 final class CardChrome
 {
     /**
-     * Backdrop shared by every card: a near-black vertical gradient lit by
-     * one bloom in the card's accent and one in its complement, then the
-     * main glass pane on top.
+     * Backdrop shared by every card: near-black glass lit from the corners
+     * by two neon blooms, with a HUD bracket frame on top. The glass itself
+     * stays neutral — tinting the pane as well is what used to turn these
+     * cards muddy, and it is the black-and-white contrast that makes the
+     * neon read as neon.
      *
      * @param array{0:int,1:int,2:int} $accent
      */
     public static function backdrop(CardCanvas $c, int $w, int $h, array $accent, float $margin, float $radius): void
     {
-        // Pair each card's accent with its complement so both cards read as
-        // green AND yellow. A SHORT card lit only by yellow came out muddy.
-        $complement = $accent === CardPalette::GREEN ? CardPalette::YELLOW : CardPalette::GREEN;
-        // Saturated, but pushed out to the corners. Flooding the middle with
-        // colour is what flattens a card: the figures then sit on the same
-        // brightness as everything else and nothing reads first.
+        $complement = CardPalette::complementFor($accent);
         $c->backdrop(CardPalette::BG_TOP, CardPalette::BG_BOTTOM, [
-            [$w * -0.04, $h * -0.10, $w * 0.46, $accent, 0.78],
-            [$w * 1.06, $h * 1.10, $w * 0.44, $complement, 0.64],
-            [$w * 0.98, $h * -0.06, $w * 0.26, CardPalette::TEAL, 0.34],
-            [$w * -0.02, $h * 1.04, $w * 0.24, CardPalette::TEAL, 0.24],
+            [$w * -0.05, $h * -0.16, $w * 0.40, $accent, 0.52],
+            [$w * 1.06, $h * 1.16, $w * 0.36, $complement, 0.40],
+            [$w * 1.02, $h * -0.12, $w * 0.18, $accent, 0.16],
         ]);
 
-        // The pane is tinted with the direction accent rather than plain
-        // white: a neutral pane over a coloured bloom washes out to grey.
-        $tint = CardCanvas::mix(CardPalette::GLASS, $accent, 0.30);
-        $c->glassPanel($margin, $margin, $w - 2 * $margin, $h - 2 * $margin, $radius, $tint, 0.05, 0.22, 1.8);
+        $c->glassPanel($margin, $margin, $w - 2 * $margin, $h - 2 * $margin, $radius, CardPalette::GLASS, 0.035, 0.13, 1.6);
 
-        // A bright hairline along the very top edge — the lit rim of a pane
-        // of glass, and the cheapest way to make the whole card read as one.
-        $c->roundRect($margin + $radius * 0.5, $margin + 1.5, $w - 2 * $margin - $radius, 2.0, 1.0, $accent, 0.55);
+        // A lit hairline along the top edge — the rim of a pane of glass,
+        // and the cheapest way to make the whole card read as one object.
+        $c->roundRect($margin + $radius * 0.7, $margin + 1.5, $w - 2 * $margin - $radius * 1.4, 2.0, 1.0, $accent, 0.55);
+
+        self::corners($c, $margin + 16, $margin + 16, $w - 2 * $margin - 32, $h - 2 * $margin - 32, 34, $accent);
+    }
+
+    /** Four HUD brackets, drawn as eight short bars. @param array{0:int,1:int,2:int} $rgb */
+    private static function corners(CardCanvas $c, float $x, float $y, float $w, float $h, float $len, array $rgb): void
+    {
+        $t = 2.0;
+        $o = 0.30;
+        $r = $x + $w - $len;
+        $b = $y + $h - $t;
+        foreach ([[$x, $y], [$r, $y], [$x, $b], [$r, $b]] as [$bx, $by]) {
+            $c->roundRect($bx, $by, $len, $t, $t / 2, $rgb, $o);
+        }
+        $r = $x + $w - $t;
+        $b = $y + $h - $len;
+        foreach ([[$x, $y], [$r, $y], [$x, $b], [$r, $b]] as [$bx, $by]) {
+            $c->roundRect($bx, $by, $t, $len, $t / 2, $rgb, $o);
+        }
     }
 
     /**
-     * A pill with a label inside. Returns its width so a row of them can be
-     * laid out left to right without measuring twice.
+     * The brand mark: logo.png when the operator has dropped one beside the
+     * PHP files, and a drawn fallback otherwise, so a missing file costs a
+     * bit of personality rather than a hole in the layout.
+     *
+     * @param array{0:int,1:int,2:int} $rgb
+     */
+    public static function logo(CardCanvas $c, float $x, float $y, float $size, array $rgb, float $opacity = 1.0): void
+    {
+        $path = CardConfig::logoPath();
+        if ($path !== null && $c->image($path, $x, $y, $size, $size, $opacity)) {
+            return;
+        }
+        $c->icon('mark', $x, $y, $size, $rgb, 0.07, $opacity);
+    }
+
+    /** Width a chip will occupy — needed before drawing when a row is centered. */
+    public static function chipWidth(CardCanvas $c, string $label, ?string $icon, float $textSize, float $padding): float
+    {
+        $w = $c->textWidth($label, $textSize, 1.4, 0.125) + $padding * 2;
+        if ($icon !== null && CardIcons::has($icon)) {
+            $w += $textSize * 1.05 + 9;
+        }
+        return $w;
+    }
+
+    /**
+     * A pill with an optional icon and a label inside. Returns its width so
+     * a row of them can be laid out left to right without measuring twice.
      *
      * @param array{0:int,1:int,2:int} $rgb
      */
@@ -1068,93 +1313,125 @@ final class CardChrome
         float $y,
         string $label,
         array $rgb,
-        float $textSize = 22,
-        float $height = 50,
-        float $padding = 22,
+        ?string $icon = null,
+        float $textSize = 17,
+        float $height = 38,
+        float $padding = 18,
         float $fillOpacity = 0.10,
-        float $borderOpacity = 0.40,
+        float $borderOpacity = 0.45,
         float $tracking = 1.4,
         float $weight = 0.125,
     ): float {
-        $tw = $c->textWidth($label, $textSize, $tracking, $weight);
-        $w = $tw + $padding * 2;
-        // Dark backing first: an accent-tinted pill straight over a lit
-        // backdrop comes out muddy, and yellow on green worst of all.
-        $c->roundRect($x, $y, $w, $height, $height / 2, CardPalette::BG_BOTTOM, 0.72);
-        $c->glassPanel($x, $y, $w, $height, $height / 2, $rgb, $fillOpacity, $borderOpacity, 1.5, false);
-        $c->text($label, $x + $padding, $y + ($height - $textSize) / 2, $textSize, $rgb, 'left', $weight, $tracking);
+        $w = self::chipWidth($c, $label, $icon, $textSize, $padding);
+        // Dark backing first: a neon-tinted pill straight over a lit
+        // backdrop comes out washed rather than glowing.
+        $c->roundRect($x, $y, $w, $height, $height / 2, CardPalette::BG_BOTTOM, 0.70);
+        $c->glassPanel($x, $y, $w, $height, $height / 2, $rgb, $fillOpacity, $borderOpacity, 1.4, false);
+
+        $tx = $x + $padding;
+        if ($icon !== null && CardIcons::has($icon)) {
+            $size = $textSize * 1.05;
+            $c->icon($icon, $tx, $y + ($height - $size) / 2, $size, $rgb, 0.14);
+            $tx += $size + 9;
+        }
+        $c->text($label, $tx, $y + ($height - $textSize) / 2, $textSize, $rgb, 'left', $weight, $tracking);
         return $w;
     }
 
-    /** Centers a row of chips as a group — widths must be measured before the first one is drawn. */
+    /**
+     * Centers a row of chips as a group — widths must be measured before
+     * the first one is drawn.
+     *
+     * @param array<int,array{0:string,1:array{0:int,1:int,2:int},2?:?string}> $chips
+     */
     public static function chipRow(
         CardCanvas $c,
         float $centerX,
         float $y,
         array $chips,
-        float $textSize = 22,
-        float $height = 50,
-        float $padding = 22,
-        float $fillOpacity = 0.13,
-        float $borderOpacity = 0.34,
+        float $textSize = 17,
+        float $height = 38,
+        float $padding = 18,
+        float $fillOpacity = 0.11,
+        float $borderOpacity = 0.42,
     ): void {
-        $gap = 14.0;
+        $gap = 12.0;
         $chips = array_values(array_filter($chips, static fn($ch) => trim((string) $ch[0]) !== ''));
         if (empty($chips)) {
             return;
         }
+
         $total = -$gap;
         foreach ($chips as $ch) {
-            $total += $c->textWidth((string) $ch[0], $textSize, 1.4, 0.125) + $padding * 2 + $gap;
+            $total += self::chipWidth($c, (string) $ch[0], $ch[2] ?? null, $textSize, $padding) + $gap;
         }
 
         $x = $centerX - $total / 2;
-        foreach ($chips as [$label, $rgb]) {
-            $x += self::chip($c, $x, $y, (string) $label, $rgb, $textSize, $height, $padding, $fillOpacity, $borderOpacity) + $gap;
+        foreach ($chips as $ch) {
+            $x += self::chip(
+                $c,
+                $x,
+                $y,
+                (string) $ch[0],
+                $ch[1],
+                $ch[2] ?? null,
+                $textSize,
+                $height,
+                $padding,
+                $fillOpacity,
+                $borderOpacity
+            ) + $gap;
         }
     }
 
     /**
-     * A recessed tile with a muted label above a large value. This is the
-     * unit the landscape layout is built from — four of them across for the
-     * entry card, three for the result card.
+     * One statistic: a neon icon and a muted label on top, the figure
+     * underneath in white. The neon identifies the row; the number is the
+     * only thing on the card printed at full brightness, which is what
+     * makes it the first thing read.
      *
      * @param array{0:int,1:int,2:int} $rgb
      */
-    public static function tile(
+    public static function stat(
         CardCanvas $c,
         float $x,
         float $y,
         float $w,
         float $h,
+        string $icon,
         string $label,
         string $value,
         array $rgb,
-        float $labelSize = 19,
-        float $valueSize = 36,
+        float $labelSize = 17,
+        float $valueSize = 34,
     ): void {
-        $muted = CardCanvas::mix(CardPalette::MUTED, CardPalette::BG_BOTTOM, 0.96);
-        $c->insetPanel($x, $y, $w, $h, 22, CardPalette::GLASS, 0.72, 0.20, 1.5, $rgb);
-        // Accent bar across the top of the tile: the row's colour identity,
-        // read before the text is.
-        $c->roundRect($x + $w * 0.30, $y + 14, $w * 0.40, 5, 2.5, $rgb, 0.9);
-        $c->text($label, $x + $w / 2, $y + $h * 0.26, $labelSize, $muted, 'center', 0.11, 1.6);
+        $muted = CardCanvas::mix(CardPalette::MUTED, CardPalette::BG_BOTTOM, 0.94);
+        $c->insetPanel($x, $y, $w, $h, 20, CardPalette::GLASS, 0.68, 0.13, 1.4, $rgb);
+        // Neon edge down the left of the tile: its identity, read before
+        // any of its text is.
+        $c->roundRect($x + 2.0, $y + $h * 0.20, 3.0, $h * 0.60, 1.5, $rgb, 0.85);
+
+        $pad = 22.0;
+        $iconSize = $labelSize * 1.15;
+        $c->icon($icon, $x + $pad, $y + 20 + ($labelSize - $iconSize) / 2, $iconSize, $rgb, 0.13);
+        $c->text($label, $x + $pad + $iconSize + 10, $y + 20, $labelSize, $muted, 'left', 0.11, 1.5);
 
         // 8-decimal shitcoin prices have to shrink rather than overflow.
-        $maxWidth = $w - 28;
-        while ($valueSize > 18 && $c->textWidth($value, $valueSize, 0.8, 0.125) > $maxWidth) {
+        $maxWidth = $w - $pad * 2;
+        while ($valueSize > 16 && $c->textWidth($value, $valueSize, 0.8, 0.125) > $maxWidth) {
             $valueSize -= 2;
         }
-        $c->text($value, $x + $w / 2, $y + $h * 0.52, $valueSize, $rgb, 'center', 0.125, 0.8);
+        $c->text($value, $x + $pad, $y + $h - 26 - $valueSize, $valueSize, CardPalette::TEXT, 'left', 0.125, 0.8);
     }
 
     /** Footer wordmark + timestamp, on a hairline rule. */
-    public static function footer(CardCanvas $c, float $left, float $right, float $y, string $time): void
+    public static function footer(CardCanvas $c, float $left, float $right, float $y, string $time, array $accent): void
     {
-        $muted = CardCanvas::mix(CardPalette::MUTED, CardPalette::BG_BOTTOM, 0.92);
-        $c->rule($left, $y, $right - $left, CardPalette::GLASS, 0.10);
-        $c->text(CardConfig::brand(), $left, $y + 26, 18, CardCanvas::mix(CardPalette::GREEN, CardPalette::BG_BOTTOM, 0.9), 'left', 0.11, 3.0);
-        $c->text($time, $right, $y + 26, 18, $muted, 'right', 0.11, 1.6);
+        $muted = CardCanvas::mix(CardPalette::MUTED, CardPalette::BG_BOTTOM, 0.90);
+        $c->rule($left, $y, $right - $left, CardPalette::GLASS, 0.09);
+        $c->roundRect($left, $y, 64, 2.0, 1.0, $accent, 0.7);
+        $c->text(CardConfig::brand(), $left, $y + 20, 16, CardCanvas::mix(CardPalette::TEXT, CardPalette::BG_BOTTOM, 0.72), 'left', 0.11, 2.8);
+        $c->text($time, $right, $y + 20, 16, $muted, 'right', 0.11, 1.5);
     }
 }
 
@@ -1165,10 +1442,10 @@ final class CardChrome
 final class SignalCard
 {
     private const W = 1200;
-    private const H = 660;
-    private const MARGIN = 32.0;
-    private const RADIUS = 40.0;
-    private const PAD = 50.0;
+    private const H = 460;
+    private const MARGIN = 26.0;
+    private const RADIUS = 34.0;
+    private const PAD = 42.0;
 
     /**
      * All values arrive pre-formatted as display strings — this class is
@@ -1193,48 +1470,61 @@ final class SignalCard
 
         try {
             $direction = strtoupper((string) ($d['direction'] ?? 'LONG'));
+            $isLong = $direction !== 'SHORT';
             $accent = CardPalette::forDirection($direction);
+            $complement = CardPalette::complementFor($accent);
+
             $c = new CardCanvas(self::W, self::H);
             CardChrome::backdrop($c, self::W, self::H, $accent, self::MARGIN, self::RADIUS);
 
             $left = self::MARGIN + self::PAD;
             $right = self::W - self::MARGIN - self::PAD;
             $inner = $right - $left;
+            $muted = CardCanvas::mix(CardPalette::MUTED, CardPalette::BG_BOTTOM, 0.92);
 
-            $c->text(CardLabels::get('signal'), $left, 62, 20, CardPalette::TEXT, 'left', 0.11, 3.2);
+            // -- header ---------------------------------------------------
+            CardChrome::logo($c, $left, 34, 42, $accent);
+            $c->text(CardLabels::get('signal'), $left + 56, 47, 17, $accent, 'left', 0.12, 3.2);
+            $c->text(CardLabels::get('market_note'), $right, 47, 16, $muted, 'right', 0.11, 1.6);
 
-            // -- symbol, lit from behind, with its badges alongside -------
+            // -- symbol, lit from behind, with its badges alongside --------
             $symbol = (string) ($d['symbol'] ?? '');
-            $symbolWidth = $c->textWidth($symbol, 58, 0.7, 0.135);
-            $c->halo($left + $symbolWidth * 0.45, 148, 210, $accent, 0.26);
-            $c->text($symbol, $left, 116, 58, CardPalette::TEXT, 'left', 0.135, 0.7);
+            $symbolWidth = $c->textWidth($symbol, 46, 0.7, 0.135);
+            $c->halo($left + $symbolWidth * 0.45, 124, 155, $accent, 0.22);
+            $c->text($symbol, $left, 100, 46, CardPalette::TEXT, 'left', 0.135, 0.7);
 
-            $x = $left + $symbolWidth + 28;
-            $x += CardChrome::chip($c, $x, 124, $direction, $accent, 25, 52, 27, 0.14, 0.55, 2.4) + 14;
+            $x = $left + $symbolWidth + 24;
+            $x += CardChrome::chip($c, $x, 108, $direction, $accent, $isLong ? 'up' : 'down', 17, 38, 18, 0.13, 0.55, 2.2) + 12;
+
             $leverage = CardLabels::leverage((string) ($d['leverage'] ?? ''));
             if (trim($leverage) !== '') {
-                CardChrome::chip($c, $x, 124, $leverage, CardPalette::YELLOW, 25, 52, 27, 0.14, 0.55, 1.6);
+                $x += CardChrome::chip($c, $x, 108, $leverage, CardPalette::NEON_AMBER, 'bolt', 17, 38, 18, 0.13, 0.55, 1.5) + 12;
             }
 
-            // -- price tiles, four across --------------------------------
+            // Entries are taken at the price printed on the card, not left
+            // resting as a trigger order — the badge says so on the card
+            // itself so nobody sets a limit and waits for a fill.
+            CardChrome::chip($c, $x, 108, CardLabels::get('market'), $complement, 'pulse', 17, 38, 18, 0.13, 0.55, 1.5);
+
+            // -- price tiles, across --------------------------------------
             $tiles = [
-                [CardLabels::get('entry'), (string) ($d['entry'] ?? '-'), CardPalette::TEXT],
-                [CardLabels::get('stop'), (string) ($d['sl'] ?? '-'), CardPalette::AMBER],
-                [CardLabels::get('tp1'), (string) ($d['tp1'] ?? '-'), CardPalette::GREEN],
+                ['entry', CardLabels::get('entry'), (string) ($d['entry'] ?? '-'), $complement],
+                ['stop', CardLabels::get('stop'), (string) ($d['sl'] ?? '-'), CardPalette::NEON_PINK],
+                ['target', CardLabels::get('tp1'), (string) ($d['tp1'] ?? '-'), CardPalette::NEON_GREEN],
             ];
             $tp2 = trim((string) ($d['tp2'] ?? ''));
             if ($tp2 !== '' && $tp2 !== '-') {
-                $tiles[] = [CardLabels::get('tp2'), $tp2, CardPalette::GREEN];
+                $tiles[] = ['target', CardLabels::get('tp2'), $tp2, CardPalette::NEON_GREEN];
             }
 
-            $gap = 16.0;
+            $gap = 18.0;
             $n = count($tiles);
             $tileW = ($inner - $gap * ($n - 1)) / $n;
-            foreach ($tiles as $i => [$label, $value, $rgb]) {
-                CardChrome::tile($c, $left + $i * ($tileW + $gap), 244, $tileW, 244, $label, $value, $rgb, 21, 44);
+            foreach ($tiles as $i => [$icon, $label, $value, $rgb]) {
+                CardChrome::stat($c, $left + $i * ($tileW + $gap), 186, $tileW, 132, $icon, $label, $value, $rgb);
             }
 
-            CardChrome::footer($c, $left, $right, 540, (string) ($d['time'] ?? ''));
+            CardChrome::footer($c, $left, $right, 356, (string) ($d['time'] ?? ''), $accent);
 
             $png = $c->toPng();
             $c->destroy();
@@ -1260,10 +1550,10 @@ final class SignalCard
 final class ResultCard
 {
     private const W = 1200;
-    private const H = 660;
-    private const MARGIN = 32.0;
-    private const RADIUS = 40.0;
-    private const PAD = 50.0;
+    private const H = 520;
+    private const MARGIN = 26.0;
+    private const RADIUS = 34.0;
+    private const PAD = 42.0;
 
     /**
      * Title, subtitle and badges are derived here from $kind rather than
@@ -1284,15 +1574,21 @@ final class ResultCard
         try {
             $kind = strtolower((string) ($d['kind'] ?? 'tp1'));
             $accent = match ($kind) {
-                'sl' => CardPalette::AMBER,
-                'be' => CardPalette::YELLOW,
-                default => CardPalette::GREEN,
+                'sl' => CardPalette::NEON_PINK,
+                'be' => CardPalette::NEON_CYAN,
+                default => CardPalette::NEON_GREEN,
             };
+            $mark = match ($kind) {
+                'sl' => 'cross',
+                'be' => 'lock',
+                default => 'check',
+            };
+            /** @var array<int,array{0:string,1:string}> $badges label key + icon */
             $badges = match ($kind) {
-                'tp1' => ['tp1_hit', 'risk_free'],
-                'tp2' => ['tp2_hit', 'closed'],
-                'sl' => ['sl_hit', 'closed'],
-                default => ['risk_free', 'no_loss'],
+                'tp1' => [['tp1_hit', 'check'], ['risk_free', 'lock']],
+                'tp2' => [['tp2_hit', 'check'], ['closed', 'check']],
+                'sl' => [['sl_hit', 'cross'], ['closed', 'cross']],
+                default => [['risk_free', 'lock'], ['no_loss', 'check']],
             };
 
             $c = new CardCanvas(self::W, self::H);
@@ -1300,72 +1596,90 @@ final class ResultCard
 
             $left = self::MARGIN + self::PAD;
             $right = self::W - self::MARGIN - self::PAD;
-            $muted = CardCanvas::mix(CardPalette::MUTED, CardPalette::BG_BOTTOM, 0.96);
+            $muted = CardCanvas::mix(CardPalette::MUTED, CardPalette::BG_BOTTOM, 0.94);
 
             // Right two thirds: the hero. Left third: the figures.
-            $statsW = 340.0;
+            $statsW = 300.0;
             $statsRight = $left + $statsW;
             $heroRight = $right;
-            $heroLeft = $statsRight + 46;
+            $heroLeft = $statsRight + 48;
             $heroCenter = ($heroLeft + $heroRight) / 2;
 
-            $c->text(CardLabels::get('title_' . $kind), $heroRight, 62, 20, CardCanvas::mix($accent, CardPalette::BG_BOTTOM, 0.95), 'right', 0.11, 3.2);
+            // The brand, twice: a small mark in the header and a large one
+            // washed into the glass behind the number, the way an exchange
+            // watermarks its own share cards.
+            CardChrome::logo($c, $heroCenter - 105, 140, 210, CardPalette::GLASS, 0.055);
+            CardChrome::logo($c, $left, 32, 42, $accent);
+            $c->text(CardLabels::get('title_' . $kind), $heroRight, 45, 17, $accent, 'right', 0.12, 3.2);
 
-            CardChrome::chipRow($c, $heroCenter, 108, [
-                [strtoupper((string) ($d['symbol'] ?? '')), CardPalette::GLASS],
-                [strtoupper((string) ($d['direction'] ?? '')), $accent],
-                [CardLabels::leverage((string) ($d['leverage'] ?? '')), CardPalette::YELLOW],
-            ], 21, 48, 22, 0.14, 0.50);
+            CardChrome::chipRow($c, $heroCenter, 92, [
+                [strtoupper((string) ($d['symbol'] ?? '')), CardPalette::GLASS, null],
+                [strtoupper((string) ($d['direction'] ?? '')), $accent, strtoupper((string) ($d['direction'] ?? '')) === 'SHORT' ? 'down' : 'up'],
+                [CardLabels::leverage((string) ($d['leverage'] ?? '')), CardPalette::NEON_AMBER, 'bolt'],
+            ], 17, 38, 18, 0.13, 0.48);
 
-            // -- the number the whole card exists for --------------------
+            // -- the number the whole card exists for ----------------------
             $headline = (string) ($d['headline'] ?? '');
             $heroWidth = $heroRight - $heroLeft;
-            $headSize = 108.0;
-            while ($headSize > 44 && $c->textWidth($headline, $headSize, 0.6, 0.165) > $heroWidth) {
+            $headSize = 92.0;
+            while ($headSize > 40 && $c->textWidth($headline, $headSize, 0.6, 0.165) > $heroWidth) {
                 $headSize -= 4;
             }
-            $c->halo($heroCenter, 258, 240, $accent, 0.26);
-            $c->text($headline, $heroCenter, 200 + (108 - $headSize) / 2, $headSize, $accent, 'center', 0.165, 0.6);
+            $c->halo($heroCenter, 220, 200, $accent, 0.24);
+            $c->text($headline, $heroCenter, 172 + (92 - $headSize) / 2, $headSize, $accent, 'center', 0.165, 0.6);
 
             $profitable = !str_starts_with(trim($headline), '-');
             $c->text(
                 CardLabels::roi((string) ($d['leverage'] ?? ''), $profitable),
                 $heroCenter,
-                332,
-                21,
+                288,
+                17,
                 $muted,
                 'center',
                 0.11,
-                2.2
+                2.0
             );
 
-            CardChrome::chipRow($c, $heroCenter, 396, array_map(
-                static fn(string $b): array => [CardLabels::get($b), $accent],
-                CardConfig::supportsPersian() ? array_reverse($badges) : $badges
-            ), 21, 50, 24, 0.16, 0.52);
+            $chips = array_map(
+                static fn(array $b): array => [CardLabels::get($b[0]), $accent, $b[1]],
+                $badges
+            );
+            CardChrome::chipRow(
+                $c,
+                $heroCenter,
+                334,
+                CardConfig::supportsPersian() ? array_reverse($chips) : $chips,
+                17,
+                40,
+                20,
+                0.15,
+                0.50
+            );
 
-            // -- the figures, stacked and labelled -----------------------
+            // -- the figures, stacked and labelled -------------------------
             $rows = [
-                [CardLabels::get('entry_short'), (string) ($d['entry'] ?? '-'), CardPalette::TEXT],
-                [CardLabels::get('exit'), (string) ($d['exit'] ?? '-'), $accent],
-                [CardLabels::get('move'), (string) ($d['move'] ?? '-'), $accent],
+                ['entry', CardLabels::get('entry_short'), (string) ($d['entry'] ?? '-'), CardPalette::TEXT],
+                [$mark, CardLabels::get('exit'), (string) ($d['exit'] ?? '-'), $accent],
+                ['bolt', CardLabels::get('move'), (string) ($d['move'] ?? '-'), $accent],
             ];
-            $rowTop = 112.0;
-            $rowH = 142.0;
-            foreach ($rows as $i => [$label, $value, $rgb]) {
+            $rowTop = 96.0;
+            $rowH = 108.0;
+            foreach ($rows as $i => [$icon, $label, $value, $rgb]) {
                 $y = $rowTop + $i * $rowH;
-                $c->text($label, $statsRight, $y, 19, $muted, 'right', 0.11, 1.8);
-                $size = 40.0;
-                while ($size > 20 && $c->textWidth($value, $size, 0.8, 0.125) > $statsW) {
+                $labelWidth = $c->text($label, $statsRight, $y, 17, $muted, 'right', 0.11, 1.6);
+                $c->icon($icon, $statsRight - $labelWidth - 28, $y - 1, 19, $rgb, 0.13);
+
+                $size = 36.0;
+                while ($size > 18 && $c->textWidth($value, $size, 0.8, 0.125) > $statsW) {
                     $size -= 2;
                 }
-                $c->text($value, $statsRight, $y + 34, $size, $rgb, 'right', 0.125, 0.8);
+                $c->text($value, $statsRight, $y + 30, $size, $rgb, 'right', 0.125, 0.8);
                 if ($i < count($rows) - 1) {
-                    $c->rule($left, $y + 104, $statsW, CardPalette::GLASS, 0.12);
+                    $c->rule($left, $y + 82, $statsW, CardPalette::GLASS, 0.10);
                 }
             }
 
-            CardChrome::footer($c, $left, $right, 540, (string) ($d['time'] ?? ''));
+            CardChrome::footer($c, $left, $right, 416, (string) ($d['time'] ?? ''), $accent);
 
             $png = $c->toPng();
             $c->destroy();

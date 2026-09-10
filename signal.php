@@ -3197,6 +3197,9 @@ final class SignalFormatter
             'direction' => $signal->direction->value,
             'direction_fa' => self::directionFa($signal->direction->value),
             'entry' => $this->fmt($signal->entry),
+            // Entries are market orders taken at the price the signal was
+            // built on — never a resting trigger — so the caption can say so.
+            'entry_mode' => 'مارکت (Market)',
             'sl' => $this->fmt($signal->stopLoss),
             'tp1' => $signal->tp1 !== null ? $this->fmt($signal->tp1) : '-',
             'tp2' => $signal->tp2 !== null ? $this->fmt($signal->tp2) : '-',

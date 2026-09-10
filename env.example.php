@@ -134,7 +134,12 @@ return [
     // 2 is the default; 3 is slightly smoother and roughly twice as slow.
     'CARD_RENDER_SCALE' => '2',
     // Wordmark printed in the card footer.
-    'CARD_BRAND' => 'AUTO SIGNAL',
+    'CARD_BRAND' => 'AUTO TRADE MARKET',
+    // Brand logo drawn on the cards. Leave empty and simply drop a PNG named
+    // logo.png (transparent background works best) beside the PHP files; set
+    // this only to keep it somewhere else. With no logo at all the cards fall
+    // back to a drawn mark.
+    'CARD_LOGO_PATH' => '',
     // Fonts. Leave these empty to use the Vazirmatn-*.ttf shipped alongside
     // the PHP files, which is what lets the cards carry Persian labels. Set
     // them to point at any other .ttf you prefer. If neither the configured

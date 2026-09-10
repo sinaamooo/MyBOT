@@ -223,18 +223,6 @@ final class TelegramDispatcher
      */
     public function announceResult(array $signalRow, string $kind, float $price): void
     {
-        $stmt = Database::pdo()->prepare(
-            "SELECT se.channel_id, se.message_id, c.chat_id
-             FROM signal_events se
-             JOIN channels c ON c.id = se.channel_id
-             WHERE se.signal_id = :sid AND se.event_type = 'sent' AND se.message_id IS NOT NULL"
-        );
-        $stmt->execute([':sid' => $signalRow['id']]);
-        $rows = $stmt->fetchAll();
-        if (empty($rows)) {
-            return;
-        }
-
         $template = $this->texts->get('result_' . $kind);
         if ($template['text'] === '') {
             $template = ['text' => "{symbol} {direction} — {result}\n{pnl}%", 'entities' => []];
@@ -242,13 +230,92 @@ final class TelegramDispatcher
         $rendered = $this->formatter->formatResult($signalRow, $kind, $price, $template['text'], $template['entities']);
         $card = SignalCardFactory::result($signalRow, $kind, $price);
 
-        foreach ($rows as $row) {
-            $opts = ['reply_parameters' => $this->quotes->buildReplyParameters([
-                'message_id' => (int) $row['message_id'],
-                'chat_id' => (int) $row['chat_id'],
-            ])];
-            $this->deliver((int) $row['chat_id'], $rendered['text'], $rendered['entities'], $card, $opts, (int) $signalRow['id'], (int) $row['channel_id']);
+        $targets = $this->announcementTargets((int) $signalRow['id']);
+        if (empty($targets)) {
+            Logger::error('dispatcher', 'trade result had nowhere to go', [
+                'signal_id' => $signalRow['id'] ?? null,
+                'symbol' => $signalRow['symbol'] ?? null,
+                'kind' => $kind,
+            ]);
+            return;
         }
+
+        $delivered = 0;
+        foreach ($targets as $target) {
+            $opts = [];
+            if ($target['message_id'] > 0) {
+                // Reply to the signal itself. chat_id is deliberately omitted
+                // — in reply_parameters it means "the message lives in a
+                // DIFFERENT chat", and passing the current chat can make
+                // Telegram fail to find it. allow_sending_without_reply
+                // keeps a deleted or unreachable original from swallowing the
+                // result entirely: the announcement matters more than the
+                // thread it hangs off.
+                $opts['reply_parameters'] = [
+                    'message_id' => $target['message_id'],
+                    'allow_sending_without_reply' => true,
+                ];
+            }
+            $sent = $this->deliver($target['chat_id'], $rendered['text'], $rendered['entities'], $card, $opts, (int) $signalRow['id'], $target['channel_id']);
+            if ($sent !== null) {
+                $delivered++;
+            }
+        }
+
+        if ($delivered === 0) {
+            Logger::error('dispatcher', 'trade result failed to send anywhere', [
+                'signal_id' => $signalRow['id'] ?? null,
+                'symbol' => $signalRow['symbol'] ?? null,
+                'kind' => $kind,
+                'targets' => count($targets),
+            ]);
+        }
+    }
+
+    /**
+     * Where a trade result should be announced.
+     *
+     * Normally: as a reply to the message that carried the signal, in each
+     * channel that received it. But if those events are missing — an older
+     * signal, a wiped database, a send that succeeded while its event row
+     * did not — the outcome must still reach the channel. Silence there is
+     * the worst possible failure: subscribers are left holding a position
+     * with no word on it. So fall back to the active channels with no reply.
+     *
+     * @return array<int,array{chat_id:int, channel_id:int, message_id:int}>
+     */
+    private function announcementTargets(int $signalId): array
+    {
+        $stmt = Database::pdo()->prepare(
+            "SELECT se.channel_id, MAX(se.message_id) AS message_id, c.chat_id
+             FROM signal_events se
+             JOIN channels c ON c.id = se.channel_id
+             WHERE se.signal_id = :sid AND se.event_type = 'sent' AND se.message_id IS NOT NULL
+             GROUP BY se.channel_id, c.chat_id"
+        );
+        $stmt->execute([':sid' => $signalId]);
+
+        $targets = [];
+        foreach ($stmt->fetchAll() as $row) {
+            $targets[] = [
+                'chat_id' => (int) $row['chat_id'],
+                'channel_id' => (int) $row['channel_id'],
+                'message_id' => (int) $row['message_id'],
+            ];
+        }
+        if (!empty($targets)) {
+            return $targets;
+        }
+
+        Logger::warning('dispatcher', 'no sent-event for signal, announcing without a reply', ['signal_id' => $signalId]);
+        foreach ($this->channels->listActiveWithSettings() as $channel) {
+            $targets[] = [
+                'chat_id' => (int) $channel['chat_id'],
+                'channel_id' => (int) $channel['id'],
+                'message_id' => 0,
+            ];
+        }
+        return $targets;
     }
 
     /**
@@ -648,20 +715,25 @@ final class Worker
         // latestPrice() goes stale, monitorOpenPositions() can never see TP
         // or SL, and the position stays open forever with its result never
         // announced. The slot it holds would never free either.
+        $held = [];
         $seen = [];
-        foreach ($universe as $row) {
-            $seen[$row['exchange'] . '|' . $row['symbol']] = true;
-        }
         foreach ($this->signalRepo->openPositionSymbols() as $open) {
             $key = $open['exchange'] . '|' . $open['symbol'];
+            $seen[$key] = true;
+            $held[] = ['exchange' => $open['exchange'], 'symbol' => $open['symbol'], 'base_asset' => '', 'volume_24h' => 0.0];
+        }
+        // Held symbols lead: collection stops when the data budget runs out,
+        // and the tail of the list is what gets dropped.
+        foreach ($universe as $row) {
+            $key = $row['exchange'] . '|' . $row['symbol'];
             if (isset($seen[$key])) {
                 continue;
             }
             $seen[$key] = true;
-            $universe[] = ['exchange' => $open['exchange'], 'symbol' => $open['symbol'], 'base_asset' => '', 'volume_24h' => 0.0];
+            $held[] = $row;
         }
 
-        return $universe;
+        return $held;
     }
 
     /**
@@ -694,19 +766,38 @@ final class Worker
                 $this->nextTimeframeRun[$tf] = $now + $this->timeframeSeconds($tf);
             }
         }
-        if (empty($dueTimeframes)) {
-            return;
+        if (!empty($dueTimeframes)) {
+            // Persist immediately (not just kept in memory) — cron mode
+            // restarts this whole process on the next minute's invocation,
+            // so this is the only place "when is each timeframe next due"
+            // survives.
+            $this->saveTimeframeSchedule($this->nextTimeframeRun);
         }
-        // Persist immediately (not just kept in memory) — cron mode restarts
-        // this whole process on the next minute's invocation, so this is
-        // the only place "when is each timeframe next due" survives.
-        $this->saveTimeframeSchedule($this->nextTimeframeRun);
 
         // One ticker fetch per exchange, reused for every symbol on it. This
         // used to call fetchTicker24h() per symbol, and that endpoint returns
         // the exchange's WHOLE ticker list — so a 60-symbol pass downloaded
         // the same multi-megabyte payload 60 times.
         $tickerCache = [];
+
+        // Open trades first, and on EVERY tick regardless of the candle
+        // schedule. monitorOpenPositions() decides TP and SL from the ticker
+        // alone, so a price that is only refreshed when a 15m candle happens
+        // to be due is a target hit that goes unnoticed — and, if price
+        // retraces before the next refresh, unannounced altogether. These
+        // are also placed ahead of the ranked slice so that running out of
+        // data budget can never starve exactly the symbols a subscriber is
+        // already holding a position in.
+        foreach ($this->signalRepo->openPositionSymbols() as $open) {
+            if (!$this->running || $this->outOfDataBudget()) {
+                return;
+            }
+            $this->refreshTicker($tickerCache, (string) $open['exchange'], (string) $open['symbol']);
+        }
+
+        if (empty($dueTimeframes)) {
+            return;
+        }
 
         foreach ($this->tradingUniverse() as $row) {
             if (!$this->running || $this->outOfDataBudget()) {
@@ -717,15 +808,28 @@ final class Worker
                 continue; // circuit open — skip this tick for this exchange only
             }
             $this->syncSymbolCandles($exchange, (string) $row['symbol'], $dueTimeframes, 200);
+            $this->refreshTicker($tickerCache, $exchange, (string) $row['symbol']);
+        }
+    }
 
-            if (!array_key_exists($exchange, $tickerCache)) {
-                $fetched = $this->exchangeManager->withIsolation($exchange, fn(ExchangeAdapter $a) => $a->fetchTicker24h());
-                $tickerCache[$exchange] = is_array($fetched) ? $fetched : [];
-            }
-            $ticker = $tickerCache[$exchange][$row['symbol']] ?? null;
-            if ($ticker !== null) {
-                $this->marketData->upsertTicker($exchange, (string) $row['symbol'], $ticker['lastPrice'], $ticker['bid'], $ticker['ask'], $ticker['volume']);
-            }
+    /**
+     * Stores the latest ticker for one symbol, fetching that exchange's
+     * whole ticker list at most once per tick.
+     *
+     * @param array<string,array<string,array<string,float>>> $cache
+     */
+    private function refreshTicker(array &$cache, string $exchange, string $symbol): void
+    {
+        if (!$this->exchangeManager->isHealthy($exchange)) {
+            return; // circuit open — skip this tick for this exchange only
+        }
+        if (!array_key_exists($exchange, $cache)) {
+            $fetched = $this->exchangeManager->withIsolation($exchange, fn(ExchangeAdapter $a) => $a->fetchTicker24h());
+            $cache[$exchange] = is_array($fetched) ? $fetched : [];
+        }
+        $ticker = $cache[$exchange][$symbol] ?? null;
+        if ($ticker !== null) {
+            $this->marketData->upsertTicker($exchange, $symbol, $ticker['lastPrice'], $ticker['bid'], $ticker['ask'], $ticker['volume']);
         }
     }
 
@@ -964,6 +1068,11 @@ final class Worker
 
 // ============================================================================
 // SECTION 5 — ENTRYPOINT
+//
+// Guarded so the file can also be require()d for inspection (tests, tooling)
+// without starting a worker. Running `php worker.php` is unaffected.
 // ============================================================================
 
-(new Worker())->run();
+if (!defined('WORKER_BOOTSTRAP_ONLY')) {
+    (new Worker())->run();
+}

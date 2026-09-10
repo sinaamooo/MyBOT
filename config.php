@@ -1113,8 +1113,20 @@ final class Database
     /** The pre-automation template, recognised so it can be upgraded in place. */
     private const LEGACY_SIGNAL_TEMPLATE = "🔔 سیگنال جدید\n\nنماد: {symbol}\nصرافی: {exchange}\nجهت: {direction}\nتایم‌فریم: {timeframe}\n\nورود: {entry}\nحد ضرر: {sl}\n\nهدف ۱: {tp1}\nهدف ۲: {tp2}\nهدف ۳: {tp3}\n\nامتیاز: {score}\nاستراتژی: {strategy}\n\nدلایل:\n{reasons}";
 
-    /** Default entry-signal caption for the automatic bot. */
-    private const AUTO_SIGNAL_TEMPLATE = "🚨 سیگنال جدید | {direction_fa}\n\n💎 ارز: {symbol}\n🏦 صرافی: {exchange}\n⏱ تایم‌فریم: {timeframe}\n⚡️ اهرم پیشنهادی: {leverage}\n🏷 نوع ارز: {tier}\n\n📍 نقطه ورود: {entry}\n🛑 حد ضرر: {sl}\n\n🎯 تارگت ۱: {tp1}  ({tp1_profit}% با اهرم)\n🎯 تارگت ۲: {tp2}  ({tp2_profit}% با اهرم)\n\n⚖️ ریسک به ریوارد: {rr}\n📊 امتیاز: {score} | اعتبار: {confidence_fa}\n🔻 فاصله حد ضرر: {risk_pct}%\n\n♻️ بعد از تارگت ۱ حد ضرر روی نقطه ورود منتقل می‌شود (ریسک‌فری) و معامله تا تارگت ۲ ادامه پیدا می‌کند.";
+    /**
+     * The first automatic template, superseded by the market-entry one
+     * below and recognised here so an untouched copy can be upgraded.
+     */
+    private const AUTO_SIGNAL_TEMPLATE_V1 = "🚨 سیگنال جدید | {direction_fa}\n\n💎 ارز: {symbol}\n🏦 صرافی: {exchange}\n⏱ تایم‌فریم: {timeframe}\n⚡️ اهرم پیشنهادی: {leverage}\n🏷 نوع ارز: {tier}\n\n📍 نقطه ورود: {entry}\n🛑 حد ضرر: {sl}\n\n🎯 تارگت ۱: {tp1}  ({tp1_profit}% با اهرم)\n🎯 تارگت ۲: {tp2}  ({tp2_profit}% با اهرم)\n\n⚖️ ریسک به ریوارد: {rr}\n📊 امتیاز: {score} | اعتبار: {confidence_fa}\n🔻 فاصله حد ضرر: {risk_pct}%\n\n♻️ بعد از تارگت ۱ حد ضرر روی نقطه ورود منتقل می‌شود (ریسک‌فری) و معامله تا تارگت ۲ ادامه پیدا می‌کند.";
+
+    /**
+     * Default entry-signal caption for the automatic bot.
+     *
+     * Entries are taken at the price the signal was generated on, so the
+     * caption says "market" out loud: a follower who sets a trigger order
+     * at {entry} instead simply never gets filled once price has moved on.
+     */
+    private const AUTO_SIGNAL_TEMPLATE = "🚨 سیگنال جدید | {direction_fa}\n\n💎 ارز: {symbol}\n🏦 صرافی: {exchange}\n⏱ تایم‌فریم: {timeframe}\n⚡️ اهرم پیشنهادی: {leverage}\n🏷 نوع ارز: {tier}\n\n⚡️ نوع ورود: {entry_mode} — همین الان وارد شوید\n📍 قیمت ورود: {entry}\n🛑 حد ضرر: {sl}\n\n🎯 تارگت ۱: {tp1}  ({tp1_profit}% با اهرم)\n🎯 تارگت ۲: {tp2}  ({tp2_profit}% با اهرم)\n\n⚖️ ریسک به ریوارد: {rr}\n📊 امتیاز: {score} | اعتبار: {confidence_fa}\n🔻 فاصله حد ضرر: {risk_pct}%\n\n♻️ بعد از تارگت ۱ حد ضرر روی نقطه ورود منتقل می‌شود (ریسک‌فری) و معامله تا تارگت ۲ ادامه پیدا می‌کند.";
 
     /**
      * Replaces a seeded default text with a newer one ONLY while it is
@@ -1202,6 +1214,7 @@ final class Database
         // in place here — a template the operator actually edited (or gave
         // premium-emoji entities to) is left exactly as it is.
         self::upgradeUntouchedText($pdo, 'signal_template', self::LEGACY_SIGNAL_TEMPLATE, self::AUTO_SIGNAL_TEMPLATE, $now);
+        self::upgradeUntouchedText($pdo, 'signal_template', self::AUTO_SIGNAL_TEMPLATE_V1, self::AUTO_SIGNAL_TEMPLATE, $now);
 
         // Seed admin from env (owner)
         foreach (Config::adminIds() as $adminId) {
