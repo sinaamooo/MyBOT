@@ -327,7 +327,22 @@ final class Config
     /** @return string[] enabled exchange names, in priority order */
     public static function enabledExchanges(): array
     {
-        return Env::getList('ENABLED_EXCHANGES', 'binance,mexc,bybit,okx,kucoin,gate,bitget,htx,cryptocompare');
+        return Env::getList('ENABLED_EXCHANGES', 'mexc,binance,bybit,okx,kucoin,gate,bitget,htx,cryptocompare');
+    }
+
+    /**
+     * The venue a signal is issued on when several list the same pair.
+     *
+     * MEXC leads because it lists far more of the small caps and memecoins
+     * this bot hunts than the others do — a setup found on a coin that is
+     * simply not tradable on the reader's exchange is a wasted signal. The
+     * others stay enabled as a fallback for whatever MEXC does not carry.
+     */
+    public static function primaryExchange(): string
+    {
+        $override = self::dbOverride('PRIMARY_EXCHANGE');
+        $name = strtolower(trim((string) ($override ?? Env::get('PRIMARY_EXCHANGE', 'mexc') ?? 'mexc')));
+        return $name === '' ? 'mexc' : $name;
     }
 
     // -- Scanner -------------------------------------------------------
@@ -515,18 +530,164 @@ final class Config
         return empty($list) ? ['15m', '30m', '1h', '2h'] : $list;
     }
 
-    /** Risk-multiple of the first target. Realised R:R of every signal equals this. */
-    public static function tp1RiskReward(): float
+    /**
+     * Targets and the stop are specified as LEVERAGED account percentages —
+     * "stop no worse than 30%, first target 60%, second 120%" — not as
+     * price moves and not as risk multiples. The planner converts each one
+     * with the leverage the coin actually gets, so at 20x these are price
+     * moves of 1.5% / 3% / 6%, and the realised R:R is 2 and 4 whenever the
+     * stop sits at its cap (better when structure allows a tighter one).
+     */
+    public static function tp1LeveragedPercent(): float
     {
-        $override = self::dbOverride('TP1_RR');
-        return max(0.1, $override !== null ? (float) $override : Env::getFloat('TP1_RR', 1.2));
+        $override = self::dbOverride('TP1_LEVERAGED_PCT');
+        return max(1.0, $override !== null ? (float) $override : Env::getFloat('TP1_LEVERAGED_PCT', 60.0));
     }
 
-    /** Risk-multiple of the second (final) target — the trade closes here. */
+    /** Leveraged profit at the second (final) target — the trade closes here. */
+    public static function tp2LeveragedPercent(): float
+    {
+        $override = self::dbOverride('TP2_LEVERAGED_PCT');
+        return max(1.0, $override !== null ? (float) $override : Env::getFloat('TP2_LEVERAGED_PCT', 120.0));
+    }
+
+    /** Worst leveraged loss a published stop may carry. */
+    public static function maxStopLeveragedPercent(): float
+    {
+        $override = self::dbOverride('MAX_STOP_LEVERAGED_PCT');
+        return max(1.0, $override !== null ? (float) $override : Env::getFloat('MAX_STOP_LEVERAGED_PCT', 30.0));
+    }
+
+    /** Risk-multiple of the first target, derived from the leveraged percentages above. */
+    public static function tp1RiskReward(): float
+    {
+        return round(self::tp1LeveragedPercent() / self::maxStopLeveragedPercent(), 2);
+    }
+
+    /** Risk-multiple of the second (final) target. */
     public static function tp2RiskReward(): float
     {
-        $override = self::dbOverride('TP2_RR');
-        return max(0.1, $override !== null ? (float) $override : Env::getFloat('TP2_RR', 1.3));
+        return round(self::tp2LeveragedPercent() / self::maxStopLeveragedPercent(), 2);
+    }
+
+    // -- Strategy quality gate -------------------------------------------
+    //
+    // These are the knobs that trade signal COUNT for win rate. Every one
+    // of them makes the bot pickier; loosening them produces more signals
+    // and worse ones. They are deliberately strict out of the box.
+
+    /** Which strategy the worker runs. */
+    public static function strategyName(): string
+    {
+        $override = self::dbOverride('STRATEGY');
+        $name = trim((string) ($override ?? Env::get('STRATEGY', 'structure_break') ?? 'structure_break'));
+        return $name === '' ? 'structure_break' : $name;
+    }
+
+    /** Volume on the breaking candle, as a multiple of the prior 20-candle average. */
+    public static function breakVolumeRatio(): float
+    {
+        $override = self::dbOverride('BREAK_VOLUME_RATIO');
+        return max(0.0, $override !== null ? (float) $override : Env::getFloat('BREAK_VOLUME_RATIO', 1.3));
+    }
+
+    /** How far past the broken level price may already be, in ATR, before the entry is a chase. */
+    public static function maxChaseAtr(): float
+    {
+        $override = self::dbOverride('MAX_CHASE_ATR');
+        return max(0.1, $override !== null ? (float) $override : Env::getFloat('MAX_CHASE_ATR', 1.5));
+    }
+
+    /** How far a coin must have run off its floor before a short counts as fading a pump. */
+    public static function reversalRunPercent(): float
+    {
+        $override = self::dbOverride('REVERSAL_RUN_PCT');
+        return max(0.0, $override !== null ? (float) $override : Env::getFloat('REVERSAL_RUN_PCT', 12.0));
+    }
+
+    /** How tight a 40-candle range has to be, as a percent of price, to count as a base. */
+    public static function baseRangePercent(): float
+    {
+        $override = self::dbOverride('BASE_RANGE_PCT');
+        return max(0.5, $override !== null ? (float) $override : Env::getFloat('BASE_RANGE_PCT', 12.0));
+    }
+
+    /** Refuse an entry with no order block or FVG behind it to put the stop against. */
+    public static function requireZoneConfluence(): bool
+    {
+        $override = self::dbOverride('REQUIRE_ZONE_CONFLUENCE');
+        if ($override !== null) {
+            return in_array(strtolower($override), ['1', 'true', 'yes', 'on'], true);
+        }
+        return Env::getBool('REQUIRE_ZONE_CONFLUENCE', true);
+    }
+
+    // -- Scanner buckets -------------------------------------------------
+    //
+    // The universe is not simply "the highest-volume coins": it is built
+    // from three baskets, so the pass always contains today's biggest
+    // movers in BOTH directions as well as the steady liquid names. A coin
+    // that just ran 40% and a coin that just dumped 40% are the two places
+    // a reversal or a continuation setup actually shows up; ranking on
+    // volume alone would mean neither is ever looked at.
+
+    /** Share of the universe reserved for the biggest 24h gainers, in percent. */
+    public static function scannerGainerShare(): float
+    {
+        $override = self::dbOverride('SCANNER_GAINER_SHARE');
+        return min(100.0, max(0.0, $override !== null ? (float) $override : Env::getFloat('SCANNER_GAINER_SHARE', 40.0)));
+    }
+
+    /** Share of the universe reserved for the biggest 24h losers, in percent. */
+    public static function scannerLoserShare(): float
+    {
+        $override = self::dbOverride('SCANNER_LOSER_SHARE');
+        return min(100.0, max(0.0, $override !== null ? (float) $override : Env::getFloat('SCANNER_LOSER_SHARE', 25.0)));
+    }
+
+    /** How far a coin must have moved in 24h to count as a mover at all. */
+    public static function scannerMinMovePercent(): float
+    {
+        $override = self::dbOverride('SCANNER_MIN_MOVE_PCT');
+        return max(0.0, $override !== null ? (float) $override : Env::getFloat('SCANNER_MIN_MOVE_PCT', 4.0));
+    }
+
+    // -- Money management ----------------------------------------------
+    //
+    // The bot does not place orders, so "money management" here means the
+    // numbers a reader needs to size the trade themselves: how much of the
+    // account to risk, what margin that works out to at this leverage, and
+    // when to stop trading for the day. All of it is derived from the stop
+    // distance the planner already produced — a fixed-percent-of-account
+    // risk, which is the only sizing rule that survives a losing streak.
+
+    /** Reference account size the suggested position is calculated from. */
+    public static function accountBalance(): float
+    {
+        $override = self::dbOverride('ACCOUNT_BALANCE');
+        return max(1.0, $override !== null ? (float) $override : Env::getFloat('ACCOUNT_BALANCE', 1000.0));
+    }
+
+    /** Percent of the account put at risk on a single trade. */
+    public static function riskPerTradePercent(): float
+    {
+        $override = self::dbOverride('RISK_PER_TRADE_PCT');
+        $v = $override !== null ? (float) $override : Env::getFloat('RISK_PER_TRADE_PCT', 2.0);
+        return min(100.0, max(0.1, $v));
+    }
+
+    /** Losing trades in one day after which the bot stops publishing until tomorrow. */
+    public static function maxDailyLosses(): int
+    {
+        $override = self::dbOverride('MAX_DAILY_LOSSES');
+        return max(1, $override !== null ? (int) $override : Env::getInt('MAX_DAILY_LOSSES', 3));
+    }
+
+    /** Signals published in one day after which the bot stops until tomorrow. 0 = no cap. */
+    public static function maxDailySignals(): int
+    {
+        $override = self::dbOverride('MAX_DAILY_SIGNALS');
+        return max(0, $override !== null ? (int) $override : Env::getInt('MAX_DAILY_SIGNALS', 8));
     }
 
     /** Move the stop to entry once TP1 is hit, and announce it. */
@@ -554,7 +715,7 @@ final class Config
     public static function leverageMajor(): int
     {
         $override = self::dbOverride('LEVERAGE_MAJOR');
-        return max(1, $override !== null ? (int) $override : Env::getInt('LEVERAGE_MAJOR', 150));
+        return max(1, $override !== null ? (int) $override : Env::getInt('LEVERAGE_MAJOR', 20));
     }
 
     /** Lower bound of the auto-picked range for altcoins / low-cap / high-volatility pairs. */
@@ -1075,6 +1236,13 @@ final class Database
         self::ensureColumn($pdo, 'signals', 'tp1_hit_price', 'REAL NULL');
         $pdo->exec('CREATE INDEX IF NOT EXISTS idx_signals_open ON signals (status, resolved_at)');
 
+        // Signed 24h move and which scanner bucket picked the symbol up
+        // (gainer / loser / liquid). The strategies read both: "a memecoin
+        // that has already run" is a precondition of the CHoCH setup, and
+        // abs(volatility) alone cannot tell a +40% day from a -40% one.
+        self::ensureColumn($pdo, 'symbols', 'change_24h', 'REAL NOT NULL DEFAULT 0');
+        self::ensureColumn($pdo, 'symbols', 'bucket', "TEXT NOT NULL DEFAULT 'liquid'");
+
         self::pruneLogs($pdo);
         self::seedDefaults($pdo);
     }
@@ -1120,13 +1288,22 @@ final class Database
     private const AUTO_SIGNAL_TEMPLATE_V1 = "🚨 سیگنال جدید | {direction_fa}\n\n💎 ارز: {symbol}\n🏦 صرافی: {exchange}\n⏱ تایم‌فریم: {timeframe}\n⚡️ اهرم پیشنهادی: {leverage}\n🏷 نوع ارز: {tier}\n\n📍 نقطه ورود: {entry}\n🛑 حد ضرر: {sl}\n\n🎯 تارگت ۱: {tp1}  ({tp1_profit}% با اهرم)\n🎯 تارگت ۲: {tp2}  ({tp2_profit}% با اهرم)\n\n⚖️ ریسک به ریوارد: {rr}\n📊 امتیاز: {score} | اعتبار: {confidence_fa}\n🔻 فاصله حد ضرر: {risk_pct}%\n\n♻️ بعد از تارگت ۱ حد ضرر روی نقطه ورود منتقل می‌شود (ریسک‌فری) و معامله تا تارگت ۲ ادامه پیدا می‌کند.";
 
     /**
+     * The market-entry template, superseded by the one below once money
+     * management was added, and recognised here so an untouched copy can be
+     * upgraded.
+     */
+    private const AUTO_SIGNAL_TEMPLATE_V2 = "🚨 سیگنال جدید | {direction_fa}\n\n💎 ارز: {symbol}\n🏦 صرافی: {exchange}\n⏱ تایم‌فریم: {timeframe}\n⚡️ اهرم پیشنهادی: {leverage}\n🏷 نوع ارز: {tier}\n\n⚡️ نوع ورود: {entry_mode} — همین الان وارد شوید\n📍 قیمت ورود: {entry}\n🛑 حد ضرر: {sl}\n\n🎯 تارگت ۱: {tp1}  ({tp1_profit}% با اهرم)\n🎯 تارگت ۲: {tp2}  ({tp2_profit}% با اهرم)\n\n⚖️ ریسک به ریوارد: {rr}\n📊 امتیاز: {score} | اعتبار: {confidence_fa}\n🔻 فاصله حد ضرر: {risk_pct}%\n\n♻️ بعد از تارگت ۱ حد ضرر روی نقطه ورود منتقل می‌شود (ریسک‌فری) و معامله تا تارگت ۲ ادامه پیدا می‌کند.";
+
+    /**
      * Default entry-signal caption for the automatic bot.
      *
      * Entries are taken at the price the signal was generated on, so the
      * caption says "market" out loud: a follower who sets a trigger order
      * at {entry} instead simply never gets filled once price has moved on.
+     * The money-management block is the position the reader should actually
+     * take — sized from the stop, not from the leverage.
      */
-    private const AUTO_SIGNAL_TEMPLATE = "🚨 سیگنال جدید | {direction_fa}\n\n💎 ارز: {symbol}\n🏦 صرافی: {exchange}\n⏱ تایم‌فریم: {timeframe}\n⚡️ اهرم پیشنهادی: {leverage}\n🏷 نوع ارز: {tier}\n\n⚡️ نوع ورود: {entry_mode} — همین الان وارد شوید\n📍 قیمت ورود: {entry}\n🛑 حد ضرر: {sl}\n\n🎯 تارگت ۱: {tp1}  ({tp1_profit}% با اهرم)\n🎯 تارگت ۲: {tp2}  ({tp2_profit}% با اهرم)\n\n⚖️ ریسک به ریوارد: {rr}\n📊 امتیاز: {score} | اعتبار: {confidence_fa}\n🔻 فاصله حد ضرر: {risk_pct}%\n\n♻️ بعد از تارگت ۱ حد ضرر روی نقطه ورود منتقل می‌شود (ریسک‌فری) و معامله تا تارگت ۲ ادامه پیدا می‌کند.";
+    private const AUTO_SIGNAL_TEMPLATE = "🚨 سیگنال جدید | {direction_fa}\n\n💎 ارز: {symbol}\n🏦 صرافی: {exchange}\n⏱ تایم‌فریم: {timeframe}\n⚡️ اهرم: {leverage}\n🏷 نوع ارز: {tier}\n\n⚡️ نوع ورود: {entry_mode} — همین الان وارد شوید\n📍 قیمت ورود: {entry}\n🛑 حد ضرر: {sl}  ({sl_loss}% با اهرم)\n\n🎯 تارگت ۱: {tp1}  ({tp1_profit}% با اهرم)\n🎯 تارگت ۲: {tp2}  ({tp2_profit}% با اهرم)\n\n💼 مدیریت سرمایه\n• سرمایه مرجع: {balance}\n• ریسک این معامله: {risk_per_trade} یعنی {risk_amount}\n• مارجین پیشنهادی: {margin}\n• حجم پوزیشن: {position_size}\n\n⚖️ ریسک به ریوارد: {rr}\n📊 امتیاز: {score} | اعتبار: {confidence_fa}\n\n♻️ بعد از تارگت ۱ حد ضرر روی نقطه ورود منتقل می‌شود (ریسک‌فری) و معامله تا تارگت ۲ ادامه پیدا می‌کند.";
 
     /**
      * Replaces a seeded default text with a newer one ONLY while it is
@@ -1215,6 +1392,7 @@ final class Database
         // premium-emoji entities to) is left exactly as it is.
         self::upgradeUntouchedText($pdo, 'signal_template', self::LEGACY_SIGNAL_TEMPLATE, self::AUTO_SIGNAL_TEMPLATE, $now);
         self::upgradeUntouchedText($pdo, 'signal_template', self::AUTO_SIGNAL_TEMPLATE_V1, self::AUTO_SIGNAL_TEMPLATE, $now);
+        self::upgradeUntouchedText($pdo, 'signal_template', self::AUTO_SIGNAL_TEMPLATE_V2, self::AUTO_SIGNAL_TEMPLATE, $now);
 
         // Seed admin from env (owner)
         foreach (Config::adminIds() as $adminId) {

@@ -25,7 +25,12 @@ return [
     // Each exchange is isolated by a circuit breaker: one being blocked or
     // down just means it contributes 0 symbols.
     // ---------------------------------------------------------------------
-    'ENABLED_EXCHANGES' => 'binance,mexc,bybit,okx,kucoin,gate,bitget,htx,cryptocompare',
+    'ENABLED_EXCHANGES' => 'mexc,binance,bybit,okx,kucoin,gate,bitget,htx,cryptocompare',
+
+    // The venue a signal is issued on when several list the same pair. MEXC
+    // leads because it lists far more small caps and memecoins than the
+    // others; a setup on a coin the reader cannot actually trade is wasted.
+    'PRIMARY_EXCHANGE' => 'mexc',
 
     'BINANCE_API_KEY' => '',
     'BINANCE_API_SECRET' => '',
@@ -88,10 +93,15 @@ return [
     // Timeframes a signal may be issued on.
     'SIGNAL_TIMEFRAMES' => '15m,30m,1h,2h',
 
-    // Targets, as multiples of the trade's risk. Every signal's R:R equals
-    // TP1_RR by construction.
-    'TP1_RR' => '1.2',
-    'TP2_RR' => '1.3',
+    // Targets and the stop as LEVERAGED account percentages, not price
+    // moves and not risk multiples: "first target pays 60% of margin,
+    // second pays 120%, and the stop never costs more than 30%". At 20x
+    // those are price moves of 3% / 6% / 1.5%, and the R:R works out to 2
+    // and 4 whenever the stop sits at its cap (better when structure allows
+    // a tighter one).
+    'TP1_LEVERAGED_PCT' => '60',
+    'TP2_LEVERAGED_PCT' => '120',
+    'MAX_STOP_LEVERAGED_PCT' => '30',
 
     // On TP1: move the stop to entry and announce the trade as risk free.
     'RISK_FREE_ENABLED' => 'true',
@@ -109,7 +119,7 @@ return [
     // ---------------------------------------------------------------------
     // These coins get the high-leverage tier.
     'LEVERAGE_MAJOR_ASSETS' => 'BTC,ETH',
-    'LEVERAGE_MAJOR' => '150',
+    'LEVERAGE_MAJOR' => '20',
 
     // Everything else lands inside this band automatically, by liquidity and
     // volatility: deep + calm books earn the top, thin or wild ones the
@@ -117,15 +127,70 @@ return [
     'LEVERAGE_ALT_MIN' => '20',
     'LEVERAGE_ALT_MAX' => '25',
 
-    // Fraction of the liquidation distance the stop is allowed to use.
-    // At 150x liquidation is ~0.67% away, so 0.75 caps the stop at ~0.5% and
-    // the targets (1.2R/1.3R) are measured from that. Lower it for more
-    // headroom, raise it for wider stops.
+    // Fraction of the liquidation distance the stop is allowed to use — a
+    // second ceiling on top of MAX_STOP_LEVERAGED_PCT, whichever is tighter.
+    // At 20x liquidation is ~5% away, so 0.75 allows 3.75%; the 30% risk
+    // budget caps it at 1.5% first, which is the intended binding limit.
     'LEVERAGE_LIQUIDATION_BUFFER' => '0.75',
 
     // Floor on stop distance as a percent of entry, so a stop can never land
     // inside the spread.
     'MIN_STOP_PERCENT' => '0.12',
+
+    // ---------------------------------------------------------------------
+    // Strategy — the quality gate. Every knob here trades signal COUNT for
+    // win rate; loosening them produces more signals and worse ones.
+    // ---------------------------------------------------------------------
+    // structure_break: a coiled coin taking out a small ceiling (long), or a
+    // coin that already ran and then prints a CHoCH down / loses a small
+    // floor (short). default_structure is the older, looser strategy.
+    'STRATEGY' => 'structure_break',
+
+    // Volume on the breaking candle as a multiple of the previous 20-candle
+    // average. A break nobody participated in is a trap.
+    'BREAK_VOLUME_RATIO' => '1.3',
+
+    // How far past the broken level price may already be, in ATR, before
+    // taking the entry counts as chasing.
+    'MAX_CHASE_ATR' => '1.5',
+
+    // How far a coin must have run off its floor before a short counts as
+    // fading a pump rather than shorting a base.
+    'REVERSAL_RUN_PCT' => '12',
+
+    // How tight the last 40 candles must be, as a percent of price, to call
+    // the coin "based" and take its breakout.
+    'BASE_RANGE_PCT' => '12',
+
+    // Refuse an entry that has no order block or FVG behind it to put the
+    // stop against. This is the single biggest win-rate lever here.
+    'REQUIRE_ZONE_CONFLUENCE' => 'true',
+
+    // ---------------------------------------------------------------------
+    // Scanner buckets — the universe is built from three baskets rather
+    // than one volume ranking, so every pass contains the day's biggest
+    // movers in BOTH directions as well as the steady liquid names.
+    // ---------------------------------------------------------------------
+    'SCANNER_GAINER_SHARE' => '40',
+    'SCANNER_LOSER_SHARE' => '25',
+    // A coin has to have actually moved this much in 24h to count as a
+    // mover; in a flat market the mover baskets simply come up short and
+    // the liquid basket fills the rest.
+    'SCANNER_MIN_MOVE_PCT' => '4',
+
+    // ---------------------------------------------------------------------
+    // Money management — the bot does not place orders, so these turn the
+    // stop into the numbers the reader needs to size the trade.
+    // ---------------------------------------------------------------------
+    // Reference account the suggested position is calculated from.
+    'ACCOUNT_BALANCE' => '1000',
+    // Percent of it put at risk on one trade. Position size is derived from
+    // this and the stop distance, never from the leverage.
+    'RISK_PER_TRADE_PCT' => '2',
+    // The daily circuit breaker: after this many stop-outs, or this many
+    // published signals, the bot goes quiet until tomorrow. 0 = no cap.
+    'MAX_DAILY_LOSSES' => '3',
+    'MAX_DAILY_SIGNALS' => '8',
 
     // ---------------------------------------------------------------------
     // Signal cards (the images posted with every signal)

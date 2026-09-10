@@ -478,6 +478,9 @@ final class Worker
     /** @var array<string,int> timeframe => unix timestamp of next due scan */
     private array $nextTimeframeRun = [];
 
+    /** Why publishing is paused for the rest of today, if it is: 'losses' | 'quota' | null. */
+    private ?string $dailyStop = null;
+
     /** @var array<string,Backoff> per-exchange backoff state for the outer loop */
     private array $exchangeBackoff = [];
 
@@ -962,6 +965,20 @@ final class Worker
         if ($lastAt !== null && (time() - $lastAt) < Config::signalIntervalSeconds()) {
             return;
         }
+        // The daily circuit breaker. Nothing about a bad day makes the next
+        // setup better, and a bot that keeps firing through a losing streak
+        // is how an account is lost — so it stops until tomorrow instead.
+        $today = $this->signalRepo->todayTally();
+        if ($today['losses'] >= Config::maxDailyLosses()) {
+            $this->dailyStop = 'losses';
+            return;
+        }
+        $maxSignals = Config::maxDailySignals();
+        if ($maxSignals > 0 && $today['published'] >= $maxSignals) {
+            $this->dailyStop = 'quota';
+            return;
+        }
+        $this->dailyStop = null;
 
         $best = $this->findBestCandidate();
         if ($best === null) {
@@ -1044,6 +1061,7 @@ final class Worker
             'published' => $published,
             'min_score' => Config::minSignalScore(),
             'best' => $observation,
+            'daily_stop' => $this->dailyStop,
         ];
         Database::pdo()->prepare(
             'INSERT INTO bot_settings (setting_key, setting_value, updated_at) VALUES (\'last_scan_report\', :v, :now)

@@ -1097,6 +1097,11 @@ final class AdminPanel
             '{leverage}' => 'اهرم',
             '{entry}' => 'قیمت ورود',
             '{entry_mode}' => 'نوع ورود — مارکت (Market)',
+            '{balance}' => 'سرمایه مرجع',
+            '{risk_per_trade}' => 'درصد ریسک هر معامله',
+            '{risk_amount}' => 'مبلغ ریسک این معامله',
+            '{margin}' => 'مارجین پیشنهادی',
+            '{position_size}' => 'حجم پوزیشن',
             '{sl}' => 'حد ضرر',
             '{tp1}' => 'تارگت ۱',
             '{tp2}' => 'تارگت ۲',
@@ -1241,15 +1246,28 @@ final class AdminPanel
         'SIGNAL_INTERVAL_SECONDS'     => ['⏱ فاصله بین سیگنال‌ها', 'بر حسب ثانیه. ۹۰۰ یعنی هر ۱۵ دقیقه یک سیگنال.'],
         'MAX_OPEN_POSITIONS'          => ['📌 حداکثر معامله باز', 'عدد صحیح. اگر ۱ بگذارید، تا بسته شدن معامله فعلی سیگنال جدید نمی‌آید.'],
         'SIGNAL_TIMEFRAMES'           => ['🕒 تایم‌فریم سیگنال', 'با کاما جدا کنید. مثال: 15m,1h,4h'],
-        'TP1_RR'                      => ['🎯 ریسک/ریوارد تارگت ۱', 'مثال: 1.2'],
-        'TP2_RR'                      => ['🎯 ریسک/ریوارد تارگت ۲', 'مثال: 1.3'],
+        'TP1_LEVERAGED_PCT'           => ['🎯 سود تارگت ۱ (با اهرم)', 'درصد سود روی مارجین. مثال: 60'],
+        'TP2_LEVERAGED_PCT'           => ['🎯 سود تارگت ۲ (با اهرم)', 'درصد سود روی مارجین. مثال: 120'],
+        'MAX_STOP_LEVERAGED_PCT'      => ['🛑 حداکثر ضرر حد ضرر (با اهرم)', 'درصد ضرر روی مارجین. مثال: 30'],
         'LEVERAGE_MAJOR_ASSETS'       => ['💎 ارزهای اصلی', 'با کاما جدا کنید. مثال: BTC,ETH'],
-        'LEVERAGE_MAJOR'              => ['⚡️ اهرم ارزهای اصلی', 'عدد صحیح. مثال: 150'],
+        'LEVERAGE_MAJOR'              => ['⚡️ اهرم ارزهای اصلی', 'عدد صحیح. مثال: 20'],
         'LEVERAGE_ALT_MIN'            => ['🔻 حداقل اهرم آلت/شت‌کوین', 'عدد صحیح. مثال: 20'],
         'LEVERAGE_ALT_MAX'            => ['🔺 حداکثر اهرم آلت/شت‌کوین', 'عدد صحیح. مثال: 25'],
         'LEVERAGE_LIQUIDATION_BUFFER' => ['🛡 ضریب فاصله تا لیکویید', 'بین ۰ و ۱. مثال: 0.75'],
         'SIGNAL_MAX_SYMBOLS_PER_PASS' => ['🔍 تعداد ارز در هر اسکن', 'عدد صحیح. مثال: 60'],
         'MIN_SIGNAL_SCORE'            => ['📊 حداقل امتیاز سیگنال', 'مثال: 45'],
+        'PRIMARY_EXCHANGE'            => ['🏦 صرافی اصلی', 'سیگنال روی این صرافی داده می‌شود. مثال: mexc'],
+        'ACCOUNT_BALANCE'             => ['💼 سرمایه مرجع', 'برای محاسبه حجم پوزیشن. مثال: 1000'],
+        'RISK_PER_TRADE_PCT'          => ['🎚 ریسک هر معامله', 'درصد سرمایه. مثال: 2'],
+        'MAX_DAILY_LOSSES'            => ['🚧 سقف ضرر روزانه', 'بعد از این تعداد باخت، تا فردا سیگنال نمی‌دهد. مثال: 3'],
+        'MAX_DAILY_SIGNALS'           => ['📈 سقف سیگنال روزانه', '۰ یعنی بدون سقف. مثال: 8'],
+        'BREAK_VOLUME_RATIO'          => ['📶 حجم لازم روی شکست', 'چند برابر میانگین. مثال: 1.3'],
+        'MAX_CHASE_ATR'               => ['🏃 حداکثر فاصله از سطح شکست', 'بر حسب ATR. مثال: 1.5'],
+        'REVERSAL_RUN_PCT'            => ['📉 حداقل رشد برای سیگنال برگشتی', 'درصد. مثال: 12'],
+        'BASE_RANGE_PCT'              => ['📦 حداکثر عرض کف برای شکست', 'درصد. مثال: 12'],
+        'SCANNER_GAINER_SHARE'        => ['🟢 سهم بیشترین رشد', 'درصد از لیست اسکن. مثال: 40'],
+        'SCANNER_LOSER_SHARE'         => ['🔴 سهم بیشترین ضرر', 'درصد از لیست اسکن. مثال: 25'],
+        'SCANNER_MIN_MOVE_PCT'        => ['📊 حداقل حرکت ۲۴ ساعته', 'درصد. مثال: 4'],
     ];
 
     /**
@@ -1279,6 +1297,24 @@ final class AdminPanel
 
         if (!empty($report['published'])) {
             return sprintf('🟢 آخرین پاس (%s): سیگنال منتشر شد.', $when);
+        }
+
+        // A deliberate pause is not a fault, and must not be reported as one.
+        $dailyStop = (string) ($report['daily_stop'] ?? '');
+        if ($dailyStop === 'losses') {
+            return sprintf(
+                "🟡 آخرین پاس (%s): انتشار تا فردا متوقف است.\nامروز %d معامله با حد ضرر بسته شد و سقف روزانه ضرر (%d) پر شده. این یک محافظ است، نه خطا.\nبرای تغییر: 🤖 اتومات → مدیریت سرمایه.",
+                $when,
+                Config::maxDailyLosses(),
+                Config::maxDailyLosses()
+            );
+        }
+        if ($dailyStop === 'quota') {
+            return sprintf(
+                "🟡 آخرین پاس (%s): سهمیه سیگنال امروز (%d عدد) پر شده و ربات تا فردا منتشر نمی‌کند.\nبرای تغییر: 🤖 اتومات → مدیریت سرمایه.",
+                $when,
+                Config::maxDailySignals()
+            );
         }
 
         $symbols = (int) ($report['symbols'] ?? 0);
@@ -1332,6 +1368,7 @@ final class AdminPanel
         $lastAt = $this->signalRepo->lastDispatchedAt();
         $wait = $lastAt === null ? 0 : max(0, Config::signalIntervalSeconds() - (time() - $lastAt));
         $perf = $this->signalRepo->performance();
+        $today = $this->signalRepo->todayTally();
 
         $lines = [
             '🤖 حالت اتومات',
@@ -1351,12 +1388,24 @@ final class AdminPanel
             '— تنظیمات فعلی —',
             sprintf('⏱ فاصله سیگنال: %d ثانیه', Config::signalIntervalSeconds()),
             sprintf('🕒 تایم‌فریم: %s', implode(', ', Config::signalTimeframes())),
-            sprintf('🎯 تارگت‌ها: TP1=%.2fR | TP2=%.2fR', Config::tp1RiskReward(), Config::tp2RiskReward()),
+            sprintf('🎯 تارگت‌ها با اهرم: تارگت ۱ %.0f%% | تارگت ۲ %.0f%% | حد ضرر حداکثر %.0f%%',
+                Config::tp1LeveragedPercent(), Config::tp2LeveragedPercent(), Config::maxStopLeveragedPercent()),
+            sprintf('⚖️ یعنی ریسک به ریوارد %.2f و %.2f', Config::tp1RiskReward(), Config::tp2RiskReward()),
+            sprintf('🏦 صرافی اصلی: %s', Config::primaryExchange()),
+            sprintf('🧠 استراتژی: %s', Config::strategyName()),
             sprintf('💎 %s → اهرم %dx', implode(',', Config::majorAssets()), Config::leverageMajor()),
             sprintf('🪙 بقیه ارزها → اهرم %dx تا %dx (خودکار بر اساس نقدینگی و نوسان)', Config::leverageAltMin(), Config::leverageAltMax()),
-            sprintf('🛡 ضریب فاصله تا لیکویید: %.2f', Config::leverageLiquidationBuffer()),
-            sprintf('🔍 ارز در هر اسکن: %d', Config::signalMaxSymbolsPerPass()),
+            sprintf('🔍 ارز در هر اسکن: %d (%.0f%% پررشدترین، %.0f%% پرضررترین، بقیه پرحجم‌ترین)',
+                Config::signalMaxSymbolsPerPass(), Config::scannerGainerShare(), Config::scannerLoserShare()),
             sprintf('📊 حداقل امتیاز: %.1f', Config::minSignalScore()),
+            '',
+            '— مدیریت سرمایه —',
+            sprintf('💼 سرمایه مرجع: %s USDT | ریسک هر معامله: %.1f%%',
+                MoneyManager::money(Config::accountBalance()), Config::riskPerTradePercent()),
+            sprintf('🚧 سقف روزانه: %d باخت | %s سیگنال',
+                Config::maxDailyLosses(),
+                Config::maxDailySignals() > 0 ? (string) Config::maxDailySignals() : 'بدون سقف'),
+            sprintf('📅 امروز: %d باخت، %d سیگنال', $today['losses'], $today['published']),
         ];
 
         $keyboard = [[[
@@ -1960,15 +2009,19 @@ final class AdminPanel
                 return true;
             }
 
-            $numeric = ['SIGNAL_INTERVAL_SECONDS', 'MAX_OPEN_POSITIONS', 'TP1_RR', 'TP2_RR', 'LEVERAGE_MAJOR',
+            $numeric = ['SIGNAL_INTERVAL_SECONDS', 'MAX_OPEN_POSITIONS', 'TP1_LEVERAGED_PCT', 'TP2_LEVERAGED_PCT',
+                        'MAX_STOP_LEVERAGED_PCT', 'LEVERAGE_MAJOR',
                         'LEVERAGE_ALT_MIN', 'LEVERAGE_ALT_MAX', 'LEVERAGE_LIQUIDATION_BUFFER',
-                        'SIGNAL_MAX_SYMBOLS_PER_PASS', 'MIN_SIGNAL_SCORE'];
+                        'SIGNAL_MAX_SYMBOLS_PER_PASS', 'MIN_SIGNAL_SCORE',
+                        'ACCOUNT_BALANCE', 'RISK_PER_TRADE_PCT', 'MAX_DAILY_LOSSES', 'MAX_DAILY_SIGNALS',
+                        'BREAK_VOLUME_RATIO', 'MAX_CHASE_ATR', 'REVERSAL_RUN_PCT', 'BASE_RANGE_PCT',
+                        'SCANNER_GAINER_SHARE', 'SCANNER_LOSER_SHARE', 'SCANNER_MIN_MOVE_PCT'];
             if (in_array($key, $numeric, true) && !is_numeric($value)) {
                 $this->telegram->sendMessage($chatId, "این مقدار باید عدد باشه.");
                 return true;
             }
-            if ($key === 'TP2_RR' && (float) $value <= Config::tp1RiskReward()) {
-                $this->telegram->sendMessage($chatId, "تارگت ۲ باید بزرگ‌تر از تارگت ۱ باشه (الان تارگت ۱ روی " . Config::tp1RiskReward() . " است).");
+            if ($key === 'TP2_LEVERAGED_PCT' && (float) $value <= Config::tp1LeveragedPercent()) {
+                $this->telegram->sendMessage($chatId, "تارگت ۲ باید بزرگ‌تر از تارگت ۱ باشه (الان تارگت ۱ روی " . Config::tp1LeveragedPercent() . "٪ است).");
                 return true;
             }
             if ($key === 'LEVERAGE_ALT_MAX' && (int) $value < Config::leverageAltMin()) {

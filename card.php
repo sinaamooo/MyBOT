@@ -40,41 +40,44 @@ declare(strict_types=1);
 
 final class CardPalette
 {
-    // Backdrop — near-black, barely graded. Everything else is light or neon.
-    public const BG_TOP       = [11, 12, 15];
-    public const BG_BOTTOM    = [4, 4, 6];
+    // Backdrop — black, barely graded. There is no colour anywhere on these
+    // cards: hierarchy is carried by brightness, weight and size alone,
+    // which is what keeps a monochrome card from going flat.
+    public const BG_TOP       = [16, 16, 18];
+    public const BG_BOTTOM    = [0, 0, 0];
 
-    // Neon accents. Direction sets which one lights the card.
-    public const NEON_GREEN   = [57, 255, 170];
-    public const NEON_CYAN    = [56, 214, 255];
-    public const NEON_PINK    = [255, 74, 158];
-    public const NEON_AMBER   = [255, 176, 60];
-    public const NEON_VIOLET  = [166, 122, 255];
-
-    // Monochrome scale — the type lives here, so the neon stays an accent.
+    // The one scale everything is drawn from.
     public const WHITE        = [255, 255, 255];
-    public const TEXT         = [244, 246, 250];
-    public const MUTED        = [150, 158, 172];
+    public const TEXT         = [246, 247, 249];
+    public const SOFT         = [198, 200, 206];
+    public const MUTED        = [138, 141, 148];
+    public const DIM          = [84, 87, 94];
     public const GLASS        = [255, 255, 255];
 
-    // Kept so callers that still name them keep working.
-    public const GREEN        = self::NEON_GREEN;
-    public const GREEN_DEEP   = [16, 122, 88];
-    public const YELLOW       = self::NEON_AMBER;
-    public const YELLOW_DEEP  = [150, 104, 22];
-    public const AMBER        = self::NEON_AMBER;
-    public const TEAL         = self::NEON_CYAN;
+    // Kept so any caller that still names a colour keeps working — and gets
+    // white, so a stray reference can never re-introduce a tint.
+    public const NEON_GREEN   = self::WHITE;
+    public const NEON_CYAN    = self::WHITE;
+    public const NEON_PINK    = self::WHITE;
+    public const NEON_AMBER   = self::WHITE;
+    public const NEON_VIOLET  = self::WHITE;
+    public const GREEN        = self::WHITE;
+    public const GREEN_DEEP   = self::DIM;
+    public const YELLOW       = self::WHITE;
+    public const YELLOW_DEEP  = self::DIM;
+    public const AMBER        = self::WHITE;
+    public const TEAL         = self::WHITE;
 
-    /** LONG is lit green, SHORT pink — both neon, both on the same black glass. */
+    /** Direction changes the icon and the chip, never the colour. */
     public static function forDirection(string $direction): array
     {
-        return strtoupper($direction) === 'SHORT' ? self::NEON_PINK : self::NEON_GREEN;
+        return self::WHITE;
     }
 
-    /** The second light in the room, so a card is never one flat colour. */
+    /** @param array{0:int,1:int,2:int} $accent */
     public static function complementFor(array $accent): array
     {
-        return $accent === self::NEON_PINK ? self::NEON_VIOLET : self::NEON_CYAN;
+        return self::WHITE;
     }
 }
 
@@ -625,8 +628,23 @@ final class CardCanvas
         float $borderOpacity = 0.20,
         float $borderWidth = 1.6,
         bool $topHighlight = true,
+        float $knockout = 0.0,
     ): void {
+        // The rim is drawn as a full rounded rect and then punched back out
+        // from the inside. Without the knockout the "border" layer tints the
+        // WHOLE panel — which is exactly how a black card ends up charcoal.
         $this->roundRect($x, $y, $w, $h, $r, $tint, $borderOpacity);
+        if ($knockout > 0.0) {
+            $this->roundRect(
+                $x + $borderWidth,
+                $y + $borderWidth,
+                $w - 2 * $borderWidth,
+                $h - 2 * $borderWidth,
+                max(0.0, $r - $borderWidth),
+                CardPalette::BG_BOTTOM,
+                $knockout
+            );
+        }
         $this->roundRect(
             $x + $borderWidth,
             $y + $borderWidth,
@@ -854,7 +872,10 @@ final class CardCanvas
      */
     private function isBold(float $weight): bool
     {
-        return $weight >= 0.125;
+        // One weight for the whole card: bold. A muted Persian label at
+        // regular weight, small, on black, simply disappears — and the
+        // design asks for a single voice rather than a mix of two.
+        return true;
     }
 
     /** @param array{0:int,1:int,2:int} $rgb */
@@ -1242,14 +1263,14 @@ final class CardChrome
      */
     public static function backdrop(CardCanvas $c, int $w, int $h, array $accent, float $margin, float $radius): void
     {
-        $complement = CardPalette::complementFor($accent);
+        // Two soft white lights, pushed right out to the corners. Any more
+        // than this and a black card turns grey, which is what kills it.
         $c->backdrop(CardPalette::BG_TOP, CardPalette::BG_BOTTOM, [
-            [$w * -0.05, $h * -0.16, $w * 0.40, $accent, 0.52],
-            [$w * 1.06, $h * 1.16, $w * 0.36, $complement, 0.40],
-            [$w * 1.02, $h * -0.12, $w * 0.18, $accent, 0.16],
+            [$w * -0.06, $h * -0.18, $w * 0.38, CardPalette::WHITE, 0.13],
+            [$w * 1.06, $h * 1.18, $w * 0.32, CardPalette::WHITE, 0.09],
         ]);
 
-        $c->glassPanel($margin, $margin, $w - 2 * $margin, $h - 2 * $margin, $radius, CardPalette::GLASS, 0.035, 0.13, 1.6);
+        $c->glassPanel($margin, $margin, $w - 2 * $margin, $h - 2 * $margin, $radius, CardPalette::GLASS, 0.020, 0.16, 1.6, true, 0.88);
 
         // A lit hairline along the top edge — the rim of a pane of glass,
         // and the cheapest way to make the whole card read as one object.
@@ -1317,24 +1338,33 @@ final class CardChrome
         float $textSize = 17,
         float $height = 38,
         float $padding = 18,
-        float $fillOpacity = 0.10,
-        float $borderOpacity = 0.45,
+        float $fillOpacity = 0.0,
+        float $borderOpacity = 0.55,
         float $tracking = 1.4,
         float $weight = 0.125,
+        bool $solid = false,
     ): float {
         $w = self::chipWidth($c, $label, $icon, $textSize, $padding);
-        // Dark backing first: a neon-tinted pill straight over a lit
-        // backdrop comes out washed rather than glowing.
-        $c->roundRect($x, $y, $w, $height, $height / 2, CardPalette::BG_BOTTOM, 0.70);
-        $c->glassPanel($x, $y, $w, $height, $height / 2, $rgb, $fillOpacity, $borderOpacity, 1.4, false);
+
+        // On a black card there are only two kinds of pill: one filled
+        // solid white with black type — which is as loud as this design
+        // gets — and one that is just an outline. Half-opaque white fills
+        // land in between and read as grey mush, so they are not offered.
+        $ink = $rgb;
+        if ($solid) {
+            $c->roundRect($x, $y, $w, $height, $height / 2, CardPalette::WHITE, 1.0);
+            $ink = CardPalette::BG_BOTTOM;
+        } else {
+            $c->glassPanel($x, $y, $w, $height, $height / 2, $rgb, $fillOpacity, $borderOpacity, 1.4, false, 0.94);
+        }
 
         $tx = $x + $padding;
         if ($icon !== null && CardIcons::has($icon)) {
             $size = $textSize * 1.05;
-            $c->icon($icon, $tx, $y + ($height - $size) / 2, $size, $rgb, 0.14);
+            $c->icon($icon, $tx, $y + ($height - $size) / 2, $size, $ink, 0.15);
             $tx += $size + 9;
         }
-        $c->text($label, $tx, $y + ($height - $textSize) / 2, $textSize, $rgb, 'left', $weight, $tracking);
+        $c->text($label, $tx, $y + ($height - $textSize) / 2, $textSize, $ink, 'left', $weight, $tracking);
         return $w;
     }
 
@@ -1379,7 +1409,10 @@ final class CardChrome
                 $height,
                 $padding,
                 $fillOpacity,
-                $borderOpacity
+                $borderOpacity,
+                1.4,
+                0.125,
+                (bool) ($ch[3] ?? false)
             ) + $gap;
         }
     }
@@ -1406,7 +1439,7 @@ final class CardChrome
         float $valueSize = 34,
     ): void {
         $muted = CardCanvas::mix(CardPalette::MUTED, CardPalette::BG_BOTTOM, 0.94);
-        $c->insetPanel($x, $y, $w, $h, 20, CardPalette::GLASS, 0.68, 0.13, 1.4, $rgb);
+        $c->insetPanel($x, $y, $w, $h, 20, CardPalette::GLASS, 0.92, 0.15, 1.4);
         // Neon edge down the left of the tile: its identity, read before
         // any of its text is.
         $c->roundRect($x + 2.0, $y + $h * 0.20, 3.0, $h * 0.60, 1.5, $rgb, 0.85);
@@ -1494,27 +1527,31 @@ final class SignalCard
             $c->text($symbol, $left, 100, 46, CardPalette::TEXT, 'left', 0.135, 0.7);
 
             $x = $left + $symbolWidth + 24;
-            $x += CardChrome::chip($c, $x, 108, $direction, $accent, $isLong ? 'up' : 'down', 17, 38, 18, 0.13, 0.55, 2.2) + 12;
+            // The one solid pill on the card: direction is the thing a
+            // reader must not be able to misread at a glance.
+            $x += CardChrome::chip($c, $x, 108, $direction, CardPalette::WHITE, $isLong ? 'up' : 'down', 17, 38, 18, 0.0, 0.55, 2.2, 0.125, true) + 12;
 
             $leverage = CardLabels::leverage((string) ($d['leverage'] ?? ''));
             if (trim($leverage) !== '') {
-                $x += CardChrome::chip($c, $x, 108, $leverage, CardPalette::NEON_AMBER, 'bolt', 17, 38, 18, 0.13, 0.55, 1.5) + 12;
+                $x += CardChrome::chip($c, $x, 108, $leverage, CardPalette::SOFT, 'bolt', 17, 38, 18, 0.0, 0.42, 1.5) + 12;
             }
 
             // Entries are taken at the price printed on the card, not left
             // resting as a trigger order — the badge says so on the card
             // itself so nobody sets a limit and waits for a fill.
-            CardChrome::chip($c, $x, 108, CardLabels::get('market'), $complement, 'pulse', 17, 38, 18, 0.13, 0.55, 1.5);
+            CardChrome::chip($c, $x, 108, CardLabels::get('market'), CardPalette::SOFT, 'pulse', 17, 38, 18, 0.0, 0.42, 1.5);
 
             // -- price tiles, across --------------------------------------
+            // With no colour left to separate them, the tiles are told
+            // apart by their icon and by how brightly each one is lit.
             $tiles = [
-                ['entry', CardLabels::get('entry'), (string) ($d['entry'] ?? '-'), $complement],
-                ['stop', CardLabels::get('stop'), (string) ($d['sl'] ?? '-'), CardPalette::NEON_PINK],
-                ['target', CardLabels::get('tp1'), (string) ($d['tp1'] ?? '-'), CardPalette::NEON_GREEN],
+                ['entry', CardLabels::get('entry'), (string) ($d['entry'] ?? '-'), CardPalette::WHITE],
+                ['stop', CardLabels::get('stop'), (string) ($d['sl'] ?? '-'), CardPalette::MUTED],
+                ['target', CardLabels::get('tp1'), (string) ($d['tp1'] ?? '-'), CardPalette::WHITE],
             ];
             $tp2 = trim((string) ($d['tp2'] ?? ''));
             if ($tp2 !== '' && $tp2 !== '-') {
-                $tiles[] = ['target', CardLabels::get('tp2'), $tp2, CardPalette::NEON_GREEN];
+                $tiles[] = ['target', CardLabels::get('tp2'), $tp2, CardPalette::SOFT];
             }
 
             $gap = 18.0;
