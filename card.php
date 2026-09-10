@@ -46,6 +46,15 @@ final class CardPalette
     public const BG_TOP       = [16, 16, 18];
     public const BG_BOTTOM    = [0, 0, 0];
 
+    // The result card follows the exchange share cards it is modelled on:
+    // monochrome everywhere, with exactly one accent — green in profit, red
+    // in loss. The entry card stays pure black and white.
+    public const PROFIT        = [34, 197, 94];
+    public const LOSS          = [246, 70, 93];
+    // The brand's own greens, used only inside the logo mark.
+    public const BRAND_GREEN   = [46, 230, 128];
+    public const BRAND_CYAN    = [120, 245, 205];
+
     // The one scale everything is drawn from.
     public const WHITE        = [255, 255, 255];
     public const TEXT         = [246, 247, 249];
@@ -803,6 +812,39 @@ final class CardCanvas
         return $im;
     }
 
+    /**
+     * A round-capped polyline in card coordinates — the drawing primitive
+     * behind the brand mark, where icon() 10x10 grid is too coarse.
+     *
+     * @param array<int,array{0:float,1:float}> $points
+     * @param array{0:int,1:int,2:int} $rgb
+     */
+    public function polyline(array $points, float $width, array $rgb, float $opacity = 1.0): void
+    {
+        if (count($points) < 2) {
+            return;
+        }
+        $s = $this->scale;
+        $pts = [];
+        foreach ($points as $p) {
+            $pts[] = [$p[0] * $s, $p[1] * $s];
+        }
+        $this->strokePath($pts, max(1.0, $width * $s), $this->color($rgb, $opacity));
+    }
+
+    /**
+     * A dashed rule — the separator the exchange share cards put above
+     * their footer.
+     *
+     * @param array{0:int,1:int,2:int} $rgb
+     */
+    public function dashedRule(float $x, float $y, float $w, array $rgb, float $opacity = 0.20, float $dash = 7.0, float $gap = 6.0, float $thickness = 1.6): void
+    {
+        for ($cx = $x; $cx < $x + $w; $cx += $dash + $gap) {
+            $this->roundRect($cx, $y, min($dash, $x + $w - $cx), $thickness, $thickness / 2, $rgb, $opacity);
+        }
+    }
+
     /** Straight hairline separator. @param array{0:int,1:int,2:int} $rgb */
     public function rule(float $x, float $y, float $w, array $rgb, float $opacity = 0.12, float $thickness = 1.4): void
     {
@@ -1102,6 +1144,12 @@ final class CardConfig
         return null;
     }
 
+    /** Channel handle printed under the share card's footer line. */
+    public static function handle(): string
+    {
+        return trim((string) (self::env('CARD_HANDLE', '') ?? ''));
+    }
+
     /** Small wordmark printed in the card footer. */
     public static function brand(): string
     {
@@ -1206,21 +1254,37 @@ final class CardLabels
         'risk_free'   => ['ریسک فری', 'RISK FREE'],
         'closed'      => ['بسته شد', 'CLOSED'],
         'no_loss'     => ['بدون ضرر', 'NO LOSS'],
-        'tp1_hit'     => ['تارگت ۱ زده شد', 'TP1 HIT'],
-        'tp2_hit'     => ['تارگت ۲ زده شد', 'TP2 HIT'],
-        'sl_hit'      => ['حد ضرر خورد', 'SL HIT'],
+        'tp1_hit'     => ['تارگت ۱', 'TP1 HIT'],
+        'tp2_hit'     => ['تارگت ۲', 'TP2 HIT'],
+        'sl_hit'      => ['حد ضرر', 'SL HIT'],
         'title_tp1'   => ['سود گرفته شد', 'PROFIT SHOT'],
         'title_tp2'   => ['تارگت ۲ فعال شد', 'TARGET 2 HIT'],
         'title_sl'    => ['حد ضرر فعال شد', 'STOP LOSS'],
         'title_be'    => ['بدون سود و ضرر', 'BREAK EVEN'],
         'roi_with'    => ['سود با اهرم', 'ROI WITH'],
         'result_with' => ['نتیجه با اهرم', 'RESULT WITH'],
+        // The share card is written in the exchanges' own English, in both
+        // language modes — that is the format its readers already know.
+        'footer_1'    => ['Trade with AUTO TRADE.', 'Trade with AUTO TRADE.'],
+        'footer_2'    => ['Automatic signals, every single day.', 'Automatic signals, every single day.'],
     ];
 
     public static function get(string $key): string
     {
         $pair = self::LABELS[$key] ?? [$key, $key];
         return CardConfig::supportsPersian() ? $pair[0] : $pair[1];
+    }
+
+    /**
+     * The English wording, whatever font is installed. The trade-result
+     * card is modelled on the exchanges' own share cards and reads in their
+     * language throughout; mixing one Persian pill into that layout looks
+     * like a mistake rather than a translation.
+     */
+    public static function en(string $key): string
+    {
+        $pair = self::LABELS[$key] ?? [$key, $key];
+        return $pair[1];
     }
 
     /** "اهرم 150x" in Persian, "150X" on its own in English — the word is redundant there. */
@@ -1309,7 +1373,72 @@ final class CardChrome
         if ($path !== null && $c->image($path, $x, $y, $size, $size, $opacity)) {
             return;
         }
-        $c->icon('mark', $x, $y, $size, $rgb, 0.07, $opacity);
+        self::brandMark($c, $x, $y, $size, $opacity);
+    }
+
+    /**
+     * AUTO TRADE's mark, drawn: a glass tile with an upward arrow climbing
+     * over three candles. Used whenever no logo.png has been supplied, and
+     * as the wide lockup's icon.
+     */
+    public static function brandMark(CardCanvas $c, float $x, float $y, float $size, float $opacity = 1.0, bool $tile = true): void
+    {
+        $u = $size / 100;                       // work in a 100x100 box
+        $green = CardPalette::BRAND_GREEN;
+        $cyan = CardPalette::BRAND_CYAN;
+
+        // Glass tile with a lit edge. Dropped for the watermark, where a
+        // giant rounded rectangle behind the numbers reads as a panel
+        // someone forgot to fill rather than as a brand.
+        if ($tile) {
+            $c->roundRect($x, $y, $size, $size, $size * 0.26, CardPalette::BG_BOTTOM, 0.85 * $opacity);
+            $c->glassPanel($x, $y, $size, $size, $size * 0.26, $cyan, 0.05 * $opacity, 0.55 * $opacity, max(1.0, $u * 4), false);
+        }
+
+        // Three candles, rising.
+        $bodies = [[26, 62, 18], [44, 48, 26], [62, 34, 22]];
+        foreach ($bodies as $i => [$bx, $by, $bh]) {
+            $wick = $u * 3;
+            $c->roundRect($x + ($bx + 5) * $u - $wick / 2, $y + ($by - 8) * $u, $wick, ($bh + 16) * $u, $wick / 2, $green, 0.55 * $opacity);
+            $c->roundRect($x + $bx * $u, $y + $by * $u, 11 * $u, $bh * $u, 3 * $u, $green, (0.75 + $i * 0.08) * $opacity);
+        }
+
+        // The arrow over them.
+        $c->polyline([
+            [$x + 20 * $u, $y + 66 * $u],
+            [$x + 40 * $u, $y + 44 * $u],
+            [$x + 54 * $u, $y + 56 * $u],
+            [$x + 80 * $u, $y + 24 * $u],
+        ], $u * 7, $cyan, $opacity);
+        $c->polyline([
+            [$x + 64 * $u, $y + 24 * $u],
+            [$x + 81 * $u, $y + 23 * $u],
+            [$x + 80 * $u, $y + 40 * $u],
+        ], $u * 7, $cyan, $opacity);
+    }
+
+    /**
+     * Icon plus wordmark, the way an exchange stamps its own share cards.
+     * Returns the width drawn.
+     */
+    public static function brandLockup(CardCanvas $c, float $x, float $y, float $height): float
+    {
+        $path = CardConfig::logoPath();
+        if ($path !== null) {
+            // A supplied logo usually already contains the wordmark, so it
+            // is placed on its own, at a wide aspect rather than squeezed
+            // into a square.
+            if ($c->image($path, $x, $y, $height * 6.5, $height, 1.0)) {
+                return $height * 6.5;
+            }
+        }
+
+        self::brandMark($c, $x, $y, $height, 1.0);
+        $textSize = $height * 0.52;
+        $gap = $height * 0.34;
+        $label = CardConfig::brand();
+        $c->text($label, $x + $height + $gap, $y + ($height - $textSize) / 2, $textSize, CardPalette::TEXT, 'left', 0.14, 2.6);
+        return $height + $gap + $c->textWidth($label, $textSize, 2.6, 0.14);
     }
 
     /** Width a chip will occupy — needed before drawing when a row is centered. */
@@ -1352,7 +1481,7 @@ final class CardChrome
         // land in between and read as grey mush, so they are not offered.
         $ink = $rgb;
         if ($solid) {
-            $c->roundRect($x, $y, $w, $height, $height / 2, CardPalette::WHITE, 1.0);
+            $c->roundRect($x, $y, $w, $height, $height / 2, $rgb, 1.0);
             $ink = CardPalette::BG_BOTTOM;
         } else {
             $c->glassPanel($x, $y, $w, $height, $height / 2, $rgb, $fillOpacity, $borderOpacity, 1.4, false, 0.94);
@@ -1586,19 +1715,26 @@ final class SignalCard
 
 final class ResultCard
 {
-    private const W = 1200;
-    private const H = 520;
-    private const MARGIN = 26.0;
-    private const RADIUS = 34.0;
-    private const PAD = 42.0;
+    // Portrait, the shape an exchange's own "share my position" card is:
+    // it is going to be looked at on a phone, one number at a time.
+    private const W = 900;
+    private const H = 1200;
+    private const PAD = 64.0;
 
     /**
-     * Title, subtitle and badges are derived here from $kind rather than
-     * passed in, so their wording follows the card's own language.
+     * Laid out after the position-share cards the exchanges themselves
+     * produce, because that is the format people already know how to read:
+     * brand at the top, then symbol, then the contract line, then the one
+     * number the card exists for, then the two prices that produced it,
+     * how long it was held, and a footer under a dashed rule.
+     *
+     * Monochrome throughout with a single accent — green in profit, red in
+     * loss — exactly like the card this is modelled on.
      *
      * @param array{
      *   kind:string, symbol:string, direction:string, leverage:string,
-     *   headline:string, move:string, entry:string, exit:string, time:string
+     *   headline:string, move:string, entry:string, exit:string,
+     *   duration?:string, time:string
      * } $d  kind: tp1|tp2|sl|be
      * @return string|null PNG bytes, or null when the card cannot be drawn
      */
@@ -1610,113 +1746,81 @@ final class ResultCard
 
         try {
             $kind = strtolower((string) ($d['kind'] ?? 'tp1'));
-            $accent = match ($kind) {
-                'sl' => CardPalette::NEON_PINK,
-                'be' => CardPalette::NEON_CYAN,
-                default => CardPalette::NEON_GREEN,
-            };
-            $mark = match ($kind) {
-                'sl' => 'cross',
-                'be' => 'lock',
-                default => 'check',
-            };
-            /** @var array<int,array{0:string,1:string}> $badges label key + icon */
-            $badges = match ($kind) {
-                'tp1' => [['tp1_hit', 'check'], ['risk_free', 'lock']],
-                'tp2' => [['tp2_hit', 'check'], ['closed', 'check']],
-                'sl' => [['sl_hit', 'cross'], ['closed', 'cross']],
-                default => [['risk_free', 'lock'], ['no_loss', 'check']],
-            };
+            $headline = trim((string) ($d['headline'] ?? ''));
+            $losing = $kind === 'sl' || str_starts_with($headline, '-');
+            $accent = $losing ? CardPalette::LOSS : CardPalette::PROFIT;
+            $muted = CardCanvas::mix(CardPalette::MUTED, CardPalette::BG_BOTTOM, 0.92);
 
             $c = new CardCanvas(self::W, self::H);
-            CardChrome::backdrop($c, self::W, self::H, $accent, self::MARGIN, self::RADIUS);
 
-            $left = self::MARGIN + self::PAD;
-            $right = self::W - self::MARGIN - self::PAD;
-            $muted = CardCanvas::mix(CardPalette::MUTED, CardPalette::BG_BOTTOM, 0.94);
+            // Flat near-black, with one soft light behind the headline. The
+            // reference card has no frame, no glass pane and no border —
+            // the whole image IS the card.
+            $c->backdrop(CardPalette::BG_TOP, CardPalette::BG_BOTTOM, [
+                [self::W * 0.5, self::H * 0.30, self::W * 0.55, $accent, 0.10],
+            ]);
 
-            // Right two thirds: the hero. Left third: the figures.
-            $statsW = 300.0;
-            $statsRight = $left + $statsW;
-            $heroRight = $right;
-            $heroLeft = $statsRight + 48;
-            $heroCenter = ($heroLeft + $heroRight) / 2;
+            $left = self::PAD;
+            $right = self::W - self::PAD;
 
-            // The brand, twice: a small mark in the header and a large one
-            // washed into the glass behind the number, the way an exchange
-            // watermarks its own share cards.
-            CardChrome::logo($c, $heroCenter - 105, 140, 210, CardPalette::GLASS, 0.055);
-            CardChrome::logo($c, $left, 32, 42, $accent);
-            $c->text(CardLabels::get('title_' . $kind), $heroRight, 45, 17, $accent, 'right', 0.12, 3.2);
+            // -- brand ----------------------------------------------------
+            CardChrome::brandLockup($c, $left, 56, 54);
 
-            CardChrome::chipRow($c, $heroCenter, 92, [
-                [strtoupper((string) ($d['symbol'] ?? '')), CardPalette::GLASS, null],
-                [strtoupper((string) ($d['direction'] ?? '')), $accent, strtoupper((string) ($d['direction'] ?? '')) === 'SHORT' ? 'down' : 'up'],
-                [CardLabels::leverage((string) ($d['leverage'] ?? '')), CardPalette::NEON_AMBER, 'bolt'],
-            ], 17, 38, 18, 0.13, 0.48);
+            // The logo again, very faint, filling the space the reference
+            // card gives to its artwork.
+            $logo = CardConfig::logoPath();
+            if ($logo !== null) {
+                $c->image($logo, self::W * 0.24, self::H * 0.30, self::W * 0.80, self::H * 0.34, 0.06);
+            } else {
+                CardChrome::brandMark($c, self::W * 0.32, self::H * 0.32, self::W * 0.66, 0.07, false);
+            }
 
-            // -- the number the whole card exists for ----------------------
-            $headline = (string) ($d['headline'] ?? '');
-            $heroWidth = $heroRight - $heroLeft;
-            $headSize = 92.0;
-            while ($headSize > 40 && $c->textWidth($headline, $headSize, 0.6, 0.165) > $heroWidth) {
+            // -- symbol and contract line ---------------------------------
+            $c->text(strtoupper((string) ($d['symbol'] ?? '')), $left, 196, 62, CardPalette::TEXT, 'left', 0.14, 1.0);
+
+            $side = strtoupper((string) ($d['direction'] ?? '')) === 'SHORT' ? 'Short' : 'Long';
+            $contract = 'Perp  |  ' . $side . '  |  ' . strtoupper((string) ($d['leverage'] ?? ''));
+            $c->text($contract, $left, 292, 28, $muted, 'left', 0.11, 1.4);
+
+            // -- the number the card exists for ---------------------------
+            $headSize = 118.0;
+            while ($headSize > 56 && $c->textWidth($headline, $headSize, 0.8, 0.16) > $right - $left) {
                 $headSize -= 4;
             }
-            $c->halo($heroCenter, 220, 200, $accent, 0.24);
-            $c->text($headline, $heroCenter, 172 + (92 - $headSize) / 2, $headSize, $accent, 'center', 0.165, 0.6);
+            $c->halo($left + 180, 424, 210, $accent, 0.16);
+            $c->text($headline, $left, 366 + (118 - $headSize) / 2, $headSize, $accent, 'left', 0.16, 0.8);
 
-            $profitable = !str_starts_with(trim($headline), '-');
-            $c->text(
-                CardLabels::roi((string) ($d['leverage'] ?? ''), $profitable),
-                $heroCenter,
-                288,
-                17,
-                $muted,
-                'center',
-                0.11,
-                2.0
-            );
+            // -- the badge pair, as on the reference -----------------------
+            $badge = CardLabels::en($kind === 'sl' ? 'sl_hit' : ($kind === 'be' ? 'no_loss' : ($kind === 'tp2' ? 'tp2_hit' : 'risk_free')));
+            $x = $left;
+            $x += CardChrome::chip($c, $x, 522, $badge, $accent, null, 25, 52, 22, 0.0, 0.0, 1.4, 0.125, true) + 12;
+            CardChrome::chip($c, $x, 522, (string) ($d['move'] ?? '-'), CardPalette::SOFT, null, 25, 52, 22, 0.10, 0.28, 1.4);
 
-            $chips = array_map(
-                static fn(array $b): array => [CardLabels::get($b[0]), $accent, $b[1]],
-                $badges
-            );
-            CardChrome::chipRow(
-                $c,
-                $heroCenter,
-                334,
-                CardConfig::supportsPersian() ? array_reverse($chips) : $chips,
-                17,
-                40,
-                20,
-                0.15,
-                0.50
-            );
-
-            // -- the figures, stacked and labelled -------------------------
+            // -- the two prices -------------------------------------------
             $rows = [
-                ['entry', CardLabels::get('entry_short'), (string) ($d['entry'] ?? '-'), CardPalette::TEXT],
-                [$mark, CardLabels::get('exit'), (string) ($d['exit'] ?? '-'), $accent],
-                ['bolt', CardLabels::get('move'), (string) ($d['move'] ?? '-'), $accent],
+                ['Avg Entry Price', (string) ($d['entry'] ?? '-')],
+                ['Avg Close Price', (string) ($d['exit'] ?? '-')],
             ];
-            $rowTop = 96.0;
-            $rowH = 108.0;
-            foreach ($rows as $i => [$icon, $label, $value, $rgb]) {
-                $y = $rowTop + $i * $rowH;
-                $labelWidth = $c->text($label, $statsRight, $y, 17, $muted, 'right', 0.11, 1.6);
-                $c->icon($icon, $statsRight - $labelWidth - 28, $y - 1, 19, $rgb, 0.13);
-
-                $size = 36.0;
-                while ($size > 18 && $c->textWidth($value, $size, 0.8, 0.125) > $statsW) {
-                    $size -= 2;
-                }
-                $c->text($value, $statsRight, $y + 30, $size, $rgb, 'right', 0.125, 0.8);
-                if ($i < count($rows) - 1) {
-                    $c->rule($left, $y + 82, $statsW, CardPalette::GLASS, 0.10);
-                }
+            $y = 646.0;
+            foreach ($rows as [$label, $value]) {
+                $labelWidth = $c->text($label, $left, $y, 28, $muted, 'left', 0.11, 1.2);
+                $c->text($value, $left + $labelWidth + 34, $y, 28, CardPalette::TEXT, 'left', 0.135, 1.0);
+                $y += 62;
             }
 
-            CardChrome::footer($c, $left, $right, 416, (string) ($d['time'] ?? ''), $accent);
+            // -- how long it was held --------------------------------------
+            $c->text((string) ($d['duration'] ?? '00H 00M'), $left, 880, 28, CardCanvas::mix(CardPalette::DIM, CardPalette::BG_BOTTOM, 0.9), 'left', 0.11, 2.0);
+
+            // -- footer ----------------------------------------------------
+            $c->dashedRule($left, 986, $right - $left, CardPalette::GLASS, 0.16);
+            $c->text(CardLabels::en('footer_1'), $left, 1032, 30, CardPalette::TEXT, 'left', 0.135, 1.0);
+            $c->text(CardLabels::en('footer_2'), $left, 1078, 30, CardPalette::TEXT, 'left', 0.135, 1.0);
+
+            $handle = CardConfig::handle();
+            if ($handle !== '') {
+                $c->text($handle, $left, 1132, 24, $muted, 'left', 0.11, 1.6);
+            }
+            $c->text((string) ($d['time'] ?? ''), $right, 1132, 22, CardCanvas::mix(CardPalette::DIM, CardPalette::BG_BOTTOM, 0.9), 'right', 0.11, 1.2);
 
             $png = $c->toPng();
             $c->destroy();

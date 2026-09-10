@@ -32,6 +32,19 @@ return [
     // others; a setup on a coin the reader cannot actually trade is wasted.
     'PRIMARY_EXCHANGE' => 'mexc',
 
+    // Where YOU actually place the trades. Only coins listed on at least
+    // one of these are signalled, so a setup never lands on a coin your
+    // exchange does not carry. Set to 'off' to disable the filter.
+    //
+    // It fails OPEN on purpose: if a listing endpoint moves or is blocked,
+    // the filter switches itself off rather than silencing the bot. Check
+    // 📊 Scanner -> 🏦 صرافی‌های معاملاتی to see whether it actually loaded,
+    // and override a URL below if one has changed.
+    'TRADABLE_VENUES' => 'toobit,ourbit',
+    'TOOBIT_LISTINGS_URL' => '',
+    'OURBIT_LISTINGS_URL' => '',
+    'VENUE_LISTINGS_TTL' => '21600',
+
     'BINANCE_API_KEY' => '',
     'BINANCE_API_SECRET' => '',
     'BINANCE_REST_BASE' => 'https://api.binance.com',
@@ -88,7 +101,13 @@ return [
     // time (no new signal until the current one closes at TP2/SL). The
     // default of 3 keeps the 15-minute cadence meaningful when a trade runs
     // for hours; a symbol can never have two open trades either way.
-    'MAX_OPEN_POSITIONS' => '3',
+    'MAX_OPEN_POSITIONS' => '8',
+
+    // How many of a pass's qualifying candidates may go out at once. This
+    // is the throughput lever that costs nothing in quality: each one has
+    // already cleared the identical filters and used to be discarded only
+    // for not being the single best score of the pass.
+    'SIGNALS_PER_PASS' => '3',
 
     // Timeframes a signal may be issued on.
     'SIGNAL_TIMEFRAMES' => '15m,30m,1h,2h',
@@ -200,6 +219,8 @@ return [
     'CARD_RENDER_SCALE' => '2',
     // Wordmark printed in the card footer.
     'CARD_BRAND' => 'AUTO TRADE MARKET',
+    // Printed under the trade-result card's footer line, e.g. '@yourchannel'.
+    'CARD_HANDLE' => '',
     // Brand logo drawn on the cards. Leave empty and simply drop a PNG named
     // logo.png (transparent background works best) beside the PHP files; set
     // this only to keep it somewhere else. With no logo at all the cards fall

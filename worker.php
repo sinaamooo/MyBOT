@@ -980,33 +980,50 @@ final class Worker
         }
         $this->dailyStop = null;
 
-        $best = $this->findBestCandidate();
-        if ($best === null) {
+        // How many of this pass's qualifying candidates may go out. Room
+        // is left for the open-position and daily caps, which are the real
+        // risk limits — this only decides how much of a good pass is used.
+        $room = min(
+            Config::signalsPerPass(),
+            max(0, Config::maxOpenPositions() - $this->signalRepo->countOpen()),
+            $maxSignals > 0 ? max(0, $maxSignals - $today['published']) : PHP_INT_MAX
+        );
+        if ($room < 1) {
             return;
         }
 
-        Logger::info('worker', 'signal selected', [
-            'symbol' => $best->symbol,
-            'direction' => $best->direction->value,
-            'timeframe' => $best->timeframe,
-            'leverage' => $best->leverage,
-            'score' => $best->score,
-        ]);
-        $this->queue->push($this->signalGenerator->persist($best));
+        foreach ($this->findBestCandidates($room) as $candidate) {
+            Logger::info('worker', 'signal selected', [
+                'symbol' => $candidate->symbol,
+                'direction' => $candidate->direction->value,
+                'timeframe' => $candidate->timeframe,
+                'leverage' => $candidate->leverage,
+                'score' => $candidate->score,
+            ]);
+            $this->queue->push($this->signalGenerator->persist($candidate));
+        }
     }
 
     /**
-     * Highest-scoring candidate across every active symbol and every signal
-     * timeframe. Candidates are built without being persisted, so the ones
+     * The pass's best candidates, highest score first, at most one per
+     * symbol. Candidates are built without being persisted, so the ones
      * that lose leave no trace.
+     *
+     * Taking several per pass rather than only the single best is what
+     * raises the signal count without touching a quality gate: every one
+     * returned here already cleared the same filters the old single winner
+     * did — they were simply thrown away for not being first.
+     *
+     * @return Signal[]
      */
-    private function findBestCandidate(): ?Signal
+    private function findBestCandidates(int $limit): array
     {
         $timeframes = Config::signalTimeframes();
         $symbols = $this->symbolRepo->universe(Config::signalMaxSymbolsPerPass());
         $this->signalGenerator->resetObservations();
         $evaluated = 0;
-        $best = null;
+        /** @var array<string,Signal> $bySymbol */
+        $bySymbol = [];
 
         foreach ($symbols as $row) {
             // A full pass over a few hundred symbols x 3 timeframes can
@@ -1034,8 +1051,14 @@ final class Worker
                 foreach ($timeframes as $timeframe) {
                     $evaluated++;
                     $candidate = $this->signalGenerator->evaluate($snapshot, $timeframe, $meta);
-                    if ($candidate !== null && ($best === null || $candidate->score > $best->score)) {
-                        $best = $candidate;
+                    if ($candidate === null) {
+                        continue;
+                    }
+                    // One per symbol: the same setup seen on 15m and on 1h
+                    // is one trade, not two.
+                    $key = $exchange . '|' . $candidate->symbol;
+                    if (!isset($bySymbol[$key]) || $candidate->score > $bySymbol[$key]->score) {
+                        $bySymbol[$key] = $candidate;
                     }
                 }
             } catch (Throwable $e) {
@@ -1043,15 +1066,19 @@ final class Worker
             }
         }
 
-        $this->saveScanReport($evaluated, count($symbols), $best !== null);
-        return $best;
+        $ranked = array_values($bySymbol);
+        usort($ranked, static fn(Signal $a, Signal $b) => $b->score <=> $a->score);
+        $chosen = array_slice($ranked, 0, max(1, $limit));
+
+        $this->saveScanReport($evaluated, count($symbols), !empty($chosen), count($ranked));
+        return $chosen;
     }
 
     /**
      * Records what the pass saw, so a bot that is simply not finding setups
      * can say so with numbers instead of staying silent and looking broken.
      */
-    private function saveScanReport(int $evaluated, int $symbolCount, bool $published): void
+    private function saveScanReport(int $evaluated, int $symbolCount, bool $published, int $qualified = 0): void
     {
         $observation = $this->signalGenerator->bestObservation();
         $report = [
@@ -1059,6 +1086,7 @@ final class Worker
             'symbols' => $symbolCount,
             'evaluated' => $evaluated,
             'published' => $published,
+            'qualified' => $qualified,
             'min_score' => Config::minSignalScore(),
             'best' => $observation,
             'daily_stop' => $this->dailyStop,

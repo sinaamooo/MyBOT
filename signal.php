@@ -3762,6 +3762,247 @@ final class SignalFormatter
 // the picture and the caption are always generated from the same numbers.
 // ============================================================================
 
+/**
+ * Which coins the reader can actually trade.
+ *
+ * MEXC is where the analysis happens (deepest small-cap coverage), but the
+ * signals are taken on Toobit and Ourbit — so a setup on a coin neither of
+ * those lists is a signal nobody can act on. This fetches each venue's
+ * listing once every few hours, caches it in bot_settings, and hands back
+ * the set of base assets they carry between them.
+ *
+ * It FAILS OPEN, deliberately and loudly: if a venue cannot be reached, or
+ * its response parses to nothing, that venue simply does not contribute a
+ * restriction. A tradability filter that failed closed would silence the
+ * whole bot the first time an endpoint moved.
+ */
+final class VenueListings
+{
+    private const CACHE_KEY = 'venue_listings';
+
+    /** @var array{assets:array<string,bool>, venues:array<string,array<string,mixed>>}|null */
+    private static ?array $memo = null;
+
+    /**
+     * @return array{
+     *   assets:array<string,bool>,
+     *   venues:array<string,array{ok:bool,count:int,error:?string,url:string}>,
+     *   active:bool,
+     *   fetched_at:int
+     * }
+     */
+    public static function current(bool $forceRefresh = false): array
+    {
+        if (!$forceRefresh && self::$memo !== null) {
+            return self::$memo;
+        }
+
+        $venues = Config::tradableVenues();
+        if (empty($venues)) {
+            return self::$memo = ['assets' => [], 'venues' => [], 'active' => false, 'fetched_at' => 0];
+        }
+
+        if (!$forceRefresh) {
+            $cached = self::readCache();
+            if ($cached !== null) {
+                return self::$memo = $cached;
+            }
+        }
+
+        $assets = [];
+        $report = [];
+        foreach ($venues as $venue) {
+            $url = Config::venueListingUrl($venue);
+            $found = self::fetchVenue($url);
+            $report[$venue] = [
+                'ok' => $found !== null,
+                'count' => $found === null ? 0 : count($found),
+                'error' => $found === null ? 'unreachable or unrecognised response' : null,
+                'url' => $url,
+            ];
+            foreach ($found ?? [] as $asset) {
+                $assets[$asset] = true;
+            }
+        }
+
+        $result = [
+            'assets' => $assets,
+            'venues' => $report,
+            'active' => !empty($assets),
+            'fetched_at' => time(),
+        ];
+        self::writeCache($result);
+
+        if (!$result['active']) {
+            Logger::warning('venues', 'no venue listing could be loaded — tradability filter is off', ['venues' => array_keys($report)]);
+        }
+
+        return self::$memo = $result;
+    }
+
+    /** True when $baseAsset is listed on at least one configured venue, or when the filter is off. */
+    public static function allows(string $baseAsset): bool
+    {
+        $state = self::current();
+        if (!$state['active']) {
+            return true;
+        }
+        return isset($state['assets'][strtoupper($baseAsset)]);
+    }
+
+    /** Drops the cache so the next call refetches. */
+    public static function forget(): void
+    {
+        self::$memo = null;
+        try {
+            Database::pdo()->prepare('DELETE FROM bot_settings WHERE setting_key = :k')->execute([':k' => self::CACHE_KEY]);
+        } catch (Throwable) {
+            // A cache that will not clear is not worth failing over.
+        }
+    }
+
+    /**
+     * Pulls one venue's listing and reduces it to a set of base assets.
+     *
+     * The response shape is deliberately not assumed: exchanges put their
+     * instrument list under "symbols", "contracts", "data" or at the root,
+     * and name the base asset half a dozen ways. Anything that yields no
+     * assets returns null so the caller can treat the venue as unavailable.
+     *
+     * @return array<int,string>|null
+     */
+    private static function fetchVenue(string $url): ?array
+    {
+        if (trim($url) === '') {
+            return null;
+        }
+        try {
+            $res = HttpClient::request('GET', $url, ['Accept' => 'application/json'], null, 1);
+        } catch (Throwable $e) {
+            Logger::warning('venues', 'venue listing fetch failed', ['url' => $url, 'error' => $e->getMessage()]);
+            return null;
+        }
+        if ($res['status'] < 200 || $res['status'] >= 300 || !is_array($res['json'])) {
+            return null;
+        }
+
+        $assets = [];
+        foreach (self::instrumentLists($res['json']) as $list) {
+            foreach ($list as $row) {
+                if (!is_array($row)) {
+                    continue;
+                }
+                $asset = self::baseAssetOf($row);
+                if ($asset !== null) {
+                    $assets[$asset] = true;
+                }
+            }
+        }
+        return empty($assets) ? null : array_keys($assets);
+    }
+
+    /**
+     * Every list-of-objects in the response that could be an instrument
+     * list, in the order exchanges tend to nest them.
+     *
+     * @param array<mixed> $json
+     * @return array<int,array<int,mixed>>
+     */
+    private static function instrumentLists(array $json): array
+    {
+        $lists = [];
+        foreach (['symbols', 'contracts', 'data', 'result', 'list'] as $key) {
+            $candidate = $json[$key] ?? null;
+            if (is_array($candidate) && isset($candidate[0]) && is_array($candidate[0])) {
+                $lists[] = $candidate;
+            }
+            // One more level down: {"data": {"list": [...]}}
+            if (is_array($candidate)) {
+                foreach (['list', 'symbols', 'contracts'] as $inner) {
+                    $nested = $candidate[$inner] ?? null;
+                    if (is_array($nested) && isset($nested[0]) && is_array($nested[0])) {
+                        $lists[] = $nested;
+                    }
+                }
+            }
+        }
+        if (isset($json[0]) && is_array($json[0])) {
+            $lists[] = $json;
+        }
+        return $lists;
+    }
+
+    /** @param array<string,mixed> $row */
+    private static function baseAssetOf(array $row): ?string
+    {
+        // A status field, when present, must say the instrument is live.
+        foreach (['status', 'state', 'contractStatus'] as $key) {
+            $status = $row[$key] ?? null;
+            if (is_string($status) && $status !== '' && !in_array(strtoupper($status), ['TRADING', 'ENABLED', 'ONLINE', 'NORMAL', 'LIVE', '1'], true)) {
+                return null;
+            }
+        }
+
+        foreach (['baseAsset', 'baseCoin', 'baseCurrency', 'baseCoinName', 'base'] as $key) {
+            $v = $row[$key] ?? null;
+            if (is_string($v) && trim($v) !== '') {
+                // Toobit spells a contract's base asset as the whole
+                // instrument name ("BTC-SWAP-USDT"), so it still goes
+                // through the splitter rather than being trusted whole.
+                return SymbolClassifier::baseAsset(strtoupper(trim($v)));
+            }
+        }
+        foreach (['symbol', 'symbolName', 'name', 'instId', 'contract'] as $key) {
+            $v = $row[$key] ?? null;
+            if (is_string($v) && trim($v) !== '') {
+                return SymbolClassifier::baseAsset(strtoupper(trim($v)));
+            }
+        }
+        return null;
+    }
+
+    /** @return array{assets:array<string,bool>, venues:array<string,mixed>, active:bool, fetched_at:int}|null */
+    private static function readCache(): ?array
+    {
+        try {
+            $stmt = Database::pdo()->prepare('SELECT setting_value FROM bot_settings WHERE setting_key = :k');
+            $stmt->execute([':k' => self::CACHE_KEY]);
+            $raw = $stmt->fetchColumn();
+        } catch (Throwable) {
+            return null;
+        }
+        if ($raw === false || $raw === null) {
+            return null;
+        }
+        $decoded = json_decode((string) $raw, true);
+        if (!is_array($decoded) || !isset($decoded['fetched_at'], $decoded['assets'])) {
+            return null;
+        }
+        if ((time() - (int) $decoded['fetched_at']) > Config::venueListingTtlSeconds()) {
+            return null;
+        }
+        return [
+            'assets' => is_array($decoded['assets']) ? $decoded['assets'] : [],
+            'venues' => is_array($decoded['venues'] ?? null) ? $decoded['venues'] : [],
+            'active' => (bool) ($decoded['active'] ?? false),
+            'fetched_at' => (int) $decoded['fetched_at'],
+        ];
+    }
+
+    /** @param array<string,mixed> $state */
+    private static function writeCache(array $state): void
+    {
+        try {
+            Database::pdo()->prepare(
+                "INSERT INTO bot_settings (setting_key, setting_value, updated_at) VALUES (:k, :v, :now)
+                 ON CONFLICT(setting_key) DO UPDATE SET setting_value = excluded.setting_value, updated_at = excluded.updated_at"
+            )->execute([':k' => self::CACHE_KEY, ':v' => json_encode($state), ':now' => date('Y-m-d H:i:s')]);
+        } catch (Throwable $e) {
+            Logger::warning('venues', 'could not cache venue listings', ['error' => $e->getMessage()]);
+        }
+    }
+}
+
 final class SignalCardFactory
 {
     /** PNG bytes for the entry card, or null when cards are off/unavailable. */
@@ -3797,15 +4038,37 @@ final class SignalCardFactory
 
         return ResultCard::render([
             'kind' => $kind,
-            'symbol' => self::displaySymbol((string) $row['symbol']),
+            // The share card speaks the exchanges' own language, so the
+            // symbol keeps its raw exchange spelling rather than the
+            // prettified BTC/USDT form used in the Persian caption.
+            'symbol' => strtoupper((string) $row['symbol']),
             'direction' => (string) $row['direction'],
             'leverage' => $stats['leverage'] . 'X',
             'headline' => $stats['pnl_signed'] . '%',
             'move' => $stats['move_signed'] . '%',
             'entry' => self::fmt((float) $row['entry_price']),
             'exit' => self::fmt($exitPrice),
+            'duration' => self::holdTime($row),
             'time' => date('Y-m-d H:i') . ' ' . date('T'),
         ]);
+    }
+
+    /**
+     * How long the trade was open, in the exchanges' own "00H 00M" form.
+     * Falls back to zero rather than guessing when the row predates the
+     * timestamp columns.
+     *
+     * @param array<string,mixed> $row
+     */
+    private static function holdTime(array $row): string
+    {
+        $opened = strtotime((string) ($row['created_at'] ?? ''));
+        if ($opened === false) {
+            return '00H 00M';
+        }
+        $closed = strtotime((string) ($row['resolved_at'] ?? '')) ?: time();
+        $seconds = max(0, $closed - $opened);
+        return sprintf('%02dH %02dM', intdiv($seconds, 3600), intdiv($seconds % 3600, 60));
     }
 
     /** BTCUSDT / BTC-USDT / BTC_USDT all display as BTC/USDT. */
@@ -4431,7 +4694,7 @@ final class MarketScanner
 
         $funnel = [
             'total' => count($symbols), 'quote_ok' => 0, 'stable_ok' => 0,
-            'has_ticker' => 0, 'volume_ok' => 0, 'spread_ok' => 0,
+            'tradable_ok' => 0, 'has_ticker' => 0, 'volume_ok' => 0, 'spread_ok' => 0,
         ];
 
         $candidates = [];
@@ -4450,6 +4713,13 @@ final class MarketScanner
                 continue;
             }
             $funnel['stable_ok']++;
+            // A setup on a coin the reader's exchange does not list is a
+            // signal nobody can act on. Inactive (and therefore harmless)
+            // whenever the venue listings could not be loaded.
+            if (!VenueListings::allows($base)) {
+                continue;
+            }
+            $funnel['tradable_ok']++;
             $ticker = $tickers[$s['symbol']] ?? null;
             if ($ticker === null) {
                 continue;

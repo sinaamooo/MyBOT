@@ -848,6 +848,12 @@ final class AdminPanel
             return;
         }
 
+        if ($action === 'venues') {
+            $this->render($chatId, $messageId, "🏦 در حال گرفتن لیست صرافی‌ها… چند ثانیه صبر کنید.", ['inline_keyboard' => []]);
+            $this->renderVenues($chatId, $messageId, $parts);
+            return;
+        }
+
         if ($action === 'filters') {
             $this->renderScannerFilters($chatId, $messageId, $parts);
             return;
@@ -881,10 +887,59 @@ final class AdminPanel
         $keyboard = [
             [['text' => '🔍 تست اتصال صرافی‌ها', 'callback_data' => 'admin:scanner:test']],
             [['text' => '▶️ اسکن الان', 'callback_data' => 'admin:scanner:run']],
+            [['text' => '🏦 صرافی‌های معاملاتی', 'callback_data' => 'admin:scanner:venues']],
             [['text' => '⚙️ تنظیمات فیلتر', 'callback_data' => 'admin:scanner:filters']],
             $this->backRow(),
         ];
         $this->render($chatId, $messageId, $text, ['inline_keyboard' => $keyboard]);
+    }
+
+    /**
+     * Which exchanges the reader trades on, and whether their listings
+     * actually loaded. This screen exists because the tradability filter
+     * fails open: without it, "the filter is off because Ourbit did not
+     * answer" is invisible and looks like the filter working.
+     */
+    private function renderVenues(int $chatId, int $messageId, array $parts): void
+    {
+        $refresh = ($parts[3] ?? null) === 'refresh';
+        if ($refresh) {
+            VenueListings::forget();
+        }
+
+        $state = VenueListings::current($refresh);
+        $venues = Config::tradableVenues();
+
+        $lines = ['🏦 صرافی‌های معاملاتی', ''];
+        if (empty($venues)) {
+            $lines[] = 'فیلتر خاموش است: سیگنال روی هر ارزی که تحلیل اجازه بدهد داده می‌شود.';
+        } else {
+            $lines[] = 'فقط ارزهایی سیگنال می‌شوند که در این صرافی‌ها لیست شده باشند:';
+            $lines[] = '';
+            foreach ($venues as $venue) {
+                $row = $state['venues'][$venue] ?? null;
+                if ($row === null) {
+                    $lines[] = sprintf('• %s — هنوز خوانده نشده', $venue);
+                    continue;
+                }
+                $lines[] = $row['ok']
+                    ? sprintf('✅ %s — %d ارز', $venue, $row['count'])
+                    : sprintf('⚠️ %s — در دسترس نبود', $venue);
+                $lines[] = '   ' . $row['url'];
+            }
+            $lines[] = '';
+            $lines[] = $state['active']
+                ? sprintf('مجموع ارزهای قابل معامله: %d', count($state['assets']))
+                : '⚠️ هیچ لیستی خوانده نشد، پس فیلتر فعلاً خاموش است و ربات ساکت نمی‌شود. اگر آدرس API عوض شده، از تنظیمات «TOOBIT_LISTINGS_URL» یا «OURBIT_LISTINGS_URL» آدرس درست را بگذارید.';
+            if ($state['fetched_at'] > 0) {
+                $lines[] = sprintf('آخرین به‌روزرسانی: %s', date('Y-m-d H:i', $state['fetched_at']));
+            }
+        }
+
+        $this->render($chatId, $messageId, implode("\n", $lines), ['inline_keyboard' => [
+            [['text' => '🔄 گرفتن دوباره لیست‌ها', 'callback_data' => 'admin:scanner:venues:refresh']],
+            $this->backRow('admin:scanner'),
+        ]]);
     }
 
     private function renderScannerFilters(int $chatId, int $messageId, array $parts = []): void
@@ -983,9 +1038,13 @@ final class AdminPanel
                 if ($diag['ok'] ?? false) {
                     $f = $diag['funnel'];
                     $lines[] = sprintf(
-                        "فیلتر: %d کل → %d ارز مجاز → %d غیراستیبل‌کوین → %d با تیکر → %d حجم کافی → %d اسپرد مناسب",
-                        $f['total'], $f['quote_ok'], $f['stable_ok'], $f['has_ticker'], $f['volume_ok'], $f['spread_ok']
+                        "فیلتر: %d کل → %d ارز مجاز → %d غیراستیبل‌کوین → %d قابل معامله در صرافی شما → %d با تیکر → %d حجم کافی → %d اسپرد مناسب",
+                        $f['total'], $f['quote_ok'], $f['stable_ok'], $f['tradable_ok'] ?? $f['stable_ok'],
+                        $f['has_ticker'], $f['volume_ok'], $f['spread_ok']
                     );
+                    if (($f['stable_ok'] ?? 0) > 0 && ($f['tradable_ok'] ?? 0) === 0) {
+                        $lines[] = "⚠️ هیچ ارزی در لیست صرافی‌های شما (" . implode('، ', Config::tradableVenues()) . ") پیدا نشد. از «🏦 صرافی‌های معاملاتی» وضعیت لیست‌ها رو ببینید.";
+                    }
                     if ($f['total'] > 0 && $f['quote_ok'] === 0) {
                         $sampleQuotes = implode(', ', array_unique(array_column($diag['sample'], 'quote')));
                         $lines[] = "⚠️ هیچ نمادی از ارزهای مجاز (" . implode(',', Config::allowedQuoteAssets()) . ") پیدا نشد. نمونه quote واقعی این صرافی: $sampleQuotes";
@@ -1245,6 +1304,8 @@ final class AdminPanel
     private const AUTO_SETTINGS = [
         'SIGNAL_INTERVAL_SECONDS'     => ['⏱ فاصله بین سیگنال‌ها', 'بر حسب ثانیه. ۹۰۰ یعنی هر ۱۵ دقیقه یک سیگنال.'],
         'MAX_OPEN_POSITIONS'          => ['📌 حداکثر معامله باز', 'عدد صحیح. اگر ۱ بگذارید، تا بسته شدن معامله فعلی سیگنال جدید نمی‌آید.'],
+        'SIGNALS_PER_PASS'            => ['📤 سیگنال در هر پاس', 'چند تا از بهترین‌های هر اسکن منتشر شوند. مثال: 3'],
+        'TRADABLE_VENUES'             => ['🏦 صرافی‌های معاملاتی', 'با کاما. مثال: toobit,ourbit — یا off برای خاموش کردن فیلتر.'],
         'SIGNAL_TIMEFRAMES'           => ['🕒 تایم‌فریم سیگنال', 'با کاما جدا کنید. مثال: 15m,1h,4h'],
         'TP1_LEVERAGED_PCT'           => ['🎯 سود تارگت ۱ (با اهرم)', 'درصد سود روی مارجین. مثال: 60'],
         'TP2_LEVERAGED_PCT'           => ['🎯 سود تارگت ۲ (با اهرم)', 'درصد سود روی مارجین. مثال: 120'],
@@ -1322,6 +1383,19 @@ final class AdminPanel
             return sprintf("🔴 آخرین پاس (%s): هیچ نماد فعالی نبود.\nاسکنر چیزی پیدا نکرده — از 📊 Scanner اتصال صرافی‌ها را تست کنید.", $when);
         }
 
+        // A pass that found setups but published none is a different
+        // situation from one that found nothing, and says so.
+        $qualified = (int) ($report['qualified'] ?? 0);
+        if ($qualified > 0) {
+            return sprintf(
+                "🟡 آخرین پاس (%s): %d ستاپ قابل انتشار پیدا شد ولی هیچ‌کدام ارسال نشد.\nمعمولاً یعنی سقف معامله باز (%d) یا فاصله بین سیگنال‌ها (%d ثانیه) اجازه نداده.",
+                $when,
+                $qualified,
+                Config::maxOpenPositions(),
+                Config::signalIntervalSeconds()
+            );
+        }
+
         $best = $report['best'] ?? null;
         $min = (float) ($report['min_score'] ?? 45);
         if (!is_array($best)) {
@@ -1386,7 +1460,8 @@ final class AdminPanel
                 $perf['total'], $perf['wins'], $perf['losses'], $perf['breakeven'], $perf['win_rate']),
             '',
             '— تنظیمات فعلی —',
-            sprintf('⏱ فاصله سیگنال: %d ثانیه', Config::signalIntervalSeconds()),
+            sprintf('⏱ فاصله سیگنال: %d ثانیه | تا %d سیگنال در هر پاس', Config::signalIntervalSeconds(), Config::signalsPerPass()),
+            sprintf('🏦 فقط ارزهای قابل معامله در: %s', empty(Config::tradableVenues()) ? 'همه (فیلتر خاموش)' : implode('، ', Config::tradableVenues())),
             sprintf('🕒 تایم‌فریم: %s', implode(', ', Config::signalTimeframes())),
             sprintf('🎯 تارگت‌ها با اهرم: تارگت ۱ %.0f%% | تارگت ۲ %.0f%% | حد ضرر حداکثر %.0f%%',
                 Config::tp1LeveragedPercent(), Config::tp2LeveragedPercent(), Config::maxStopLeveragedPercent()),
@@ -2015,7 +2090,8 @@ final class AdminPanel
                         'SIGNAL_MAX_SYMBOLS_PER_PASS', 'MIN_SIGNAL_SCORE',
                         'ACCOUNT_BALANCE', 'RISK_PER_TRADE_PCT', 'MAX_DAILY_LOSSES', 'MAX_DAILY_SIGNALS',
                         'BREAK_VOLUME_RATIO', 'MAX_CHASE_ATR', 'REVERSAL_RUN_PCT', 'BASE_RANGE_PCT',
-                        'SCANNER_GAINER_SHARE', 'SCANNER_LOSER_SHARE', 'SCANNER_MIN_MOVE_PCT'];
+                        'SCANNER_GAINER_SHARE', 'SCANNER_LOSER_SHARE', 'SCANNER_MIN_MOVE_PCT',
+                        'SIGNALS_PER_PASS'];
             if (in_array($key, $numeric, true) && !is_numeric($value)) {
                 $this->telegram->sendMessage($chatId, "این مقدار باید عدد باشه.");
                 return true;
@@ -2045,6 +2121,9 @@ final class AdminPanel
             }
 
             $this->setSetting($key, $value);
+            if ($key === 'TRADABLE_VENUES') {
+                VenueListings::forget();
+            }
             $this->telegram->sendMessage($chatId, "✅ ذخیره شد. از همین الان اعمال می‌شود.");
             return true;
         }

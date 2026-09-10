@@ -355,7 +355,7 @@ final class Config
     public static function scannerTopN(): int
     {
         $override = self::dbOverride('SCANNER_TOP_N');
-        return $override !== null ? (int) $override : Env::getInt('SCANNER_TOP_N', 200);
+        return $override !== null ? (int) $override : Env::getInt('SCANNER_TOP_N', 300);
     }
 
     public static function scannerIntervalSeconds(): int
@@ -462,7 +462,7 @@ final class Config
 
     public static function cooldownSeconds(): int
     {
-        return Env::getInt('SIGNAL_COOLDOWN_SECONDS', 1800);
+        return Env::getInt('SIGNAL_COOLDOWN_SECONDS', 900);
     }
 
     public static function minRiskReward(): float
@@ -498,7 +498,7 @@ final class Config
     public static function signalIntervalSeconds(): int
     {
         $override = self::dbOverride('SIGNAL_INTERVAL_SECONDS');
-        return $override !== null ? max(60, (int) $override) : max(60, Env::getInt('SIGNAL_INTERVAL_SECONDS', 900));
+        return $override !== null ? max(60, (int) $override) : max(60, Env::getInt('SIGNAL_INTERVAL_SECONDS', 300));
     }
 
     /**
@@ -511,7 +511,7 @@ final class Config
     public static function maxOpenPositions(): int
     {
         $override = self::dbOverride('MAX_OPEN_POSITIONS');
-        return $override !== null ? max(1, (int) $override) : max(1, Env::getInt('MAX_OPEN_POSITIONS', 3));
+        return $override !== null ? max(1, (int) $override) : max(1, Env::getInt('MAX_OPEN_POSITIONS', 8));
     }
 
     /**
@@ -568,6 +568,63 @@ final class Config
     public static function tp2RiskReward(): float
     {
         return round(self::tp2LeveragedPercent() / self::maxStopLeveragedPercent(), 2);
+    }
+
+    // -- Where the reader actually trades --------------------------------
+    //
+    // Analysis runs on MEXC (deepest small-cap coverage), but the trades
+    // are taken on Toobit and Ourbit, so a setup on a coin neither of them
+    // lists is a signal nobody can act on. These listings are fetched once
+    // every few hours and cached. Leave the list empty to disable the
+    // filter entirely.
+
+    /** @return string[] */
+    public static function tradableVenues(): array
+    {
+        $override = self::dbOverride('TRADABLE_VENUES');
+        $raw = $override ?? (Env::get('TRADABLE_VENUES', 'toobit,ourbit') ?? '');
+        $list = array_values(array_filter(array_map(
+            static fn(string $v): string => strtolower(trim($v)),
+            explode(',', $raw)
+        )));
+        return $list === ['off'] || $list === ['none'] ? [] : $list;
+    }
+
+    /**
+     * Where a venue's instrument list lives. The defaults follow each
+     * exchange's documented convention; if one moves, point this at the new
+     * URL from the panel rather than waiting for a code change — the parser
+     * does not care about the response's exact shape.
+     */
+    public static function venueListingUrl(string $venue): string
+    {
+        $key = strtoupper($venue) . '_LISTINGS_URL';
+        $override = self::dbOverride($key);
+        if ($override !== null && trim($override) !== '') {
+            return trim($override);
+        }
+        $configured = Env::get($key, '') ?? '';
+        if (trim($configured) !== '') {
+            return trim($configured);
+        }
+        return match (strtolower($venue)) {
+            // Toobit publishes spot symbols and USDT-M contracts in one
+            // document (ccxt reads the same endpoint).
+            'toobit' => 'https://api.toobit.com/api/v1/exchangeInfo',
+            // Ourbit is built on the MEXC codebase and follows its futures
+            // contract-detail path.
+            'ourbit' => 'https://contract.ourbit.com/api/v1/contract/detail',
+            'mexc' => 'https://contract.mexc.com/api/v1/contract/detail',
+            'bitunix' => 'https://fapi.bitunix.com/api/v1/futures/market/trading_pairs',
+            default => '',
+        };
+    }
+
+    /** How long a fetched venue listing stays good for. */
+    public static function venueListingTtlSeconds(): int
+    {
+        $override = self::dbOverride('VENUE_LISTINGS_TTL');
+        return max(300, $override !== null ? (int) $override : Env::getInt('VENUE_LISTINGS_TTL', 21600));
     }
 
     // -- Strategy quality gate -------------------------------------------
@@ -680,14 +737,28 @@ final class Config
     public static function maxDailyLosses(): int
     {
         $override = self::dbOverride('MAX_DAILY_LOSSES');
-        return max(1, $override !== null ? (int) $override : Env::getInt('MAX_DAILY_LOSSES', 3));
+        return max(1, $override !== null ? (int) $override : Env::getInt('MAX_DAILY_LOSSES', 6));
     }
 
     /** Signals published in one day after which the bot stops until tomorrow. 0 = no cap. */
     public static function maxDailySignals(): int
     {
         $override = self::dbOverride('MAX_DAILY_SIGNALS');
-        return max(0, $override !== null ? (int) $override : Env::getInt('MAX_DAILY_SIGNALS', 8));
+        return max(0, $override !== null ? (int) $override : Env::getInt('MAX_DAILY_SIGNALS', 24));
+    }
+
+    /**
+     * How many of a pass's qualifying candidates may be published at once.
+     *
+     * This is the throughput lever that costs nothing in quality: every
+     * candidate counted here already cleared the identical filters, and was
+     * previously discarded only for not being the single highest score of
+     * the pass. The open-position and daily caps still bind above it.
+     */
+    public static function signalsPerPass(): int
+    {
+        $override = self::dbOverride('SIGNALS_PER_PASS');
+        return max(1, $override !== null ? (int) $override : Env::getInt('SIGNALS_PER_PASS', 3));
     }
 
     /** Move the stop to entry once TP1 is hit, and announce it. */
@@ -758,7 +829,7 @@ final class Config
     public static function signalMaxSymbolsPerPass(): int
     {
         $override = self::dbOverride('SIGNAL_MAX_SYMBOLS_PER_PASS');
-        return max(1, $override !== null ? (int) $override : Env::getInt('SIGNAL_MAX_SYMBOLS_PER_PASS', 60));
+        return max(1, $override !== null ? (int) $override : Env::getInt('SIGNAL_MAX_SYMBOLS_PER_PASS', 110));
     }
 
     /**
