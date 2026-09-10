@@ -591,9 +591,18 @@ abstract class AbstractExchangeAdapter implements ExchangeAdapter
     /** @var array<string,string> maps internal timeframe -> exchange-native interval */
     protected array $timeframeMap = [];
 
-    protected function mapTimeframe(string $timeframe): string
+    /**
+     * The exchange's own name for a timeframe, or null when it does not
+     * offer one. Not every venue has every interval — HTX has no 2h, for
+     * instance — and passing our name through would just spend a request to
+     * be told so.
+     */
+    protected function mapTimeframe(string $timeframe): ?string
     {
-        return $this->timeframeMap[$timeframe] ?? $timeframe;
+        if (empty($this->timeframeMap)) {
+            return $timeframe;
+        }
+        return $this->timeframeMap[$timeframe] ?? null;
     }
 
     public function supportsWebSocket(): bool
@@ -619,7 +628,7 @@ abstract class AbstractExchangeAdapter implements ExchangeAdapter
 final class BinanceAdapter extends AbstractExchangeAdapter
 {
     protected array $timeframeMap = [
-        '1m' => '1m', '5m' => '5m', '15m' => '15m', '1h' => '1h', '4h' => '4h', '1D' => '1d',
+        '1m' => '1m', '5m' => '5m', '15m' => '15m', '30m' => '30m', '1h' => '1h', '2h' => '2h', '4h' => '4h', '1D' => '1d',
     ];
 
     public function name(): string
@@ -669,6 +678,10 @@ final class BinanceAdapter extends AbstractExchangeAdapter
 
     public function fetchCandles(string $symbol, string $timeframe, int $limit): array
     {
+        $interval = $this->mapTimeframe($timeframe);
+        if ($interval === null) {
+            return []; // this exchange has no such interval
+        }
         RateLimiter::acquire('binance', 1000);
         $interval = $this->mapTimeframe($timeframe);
         $url = Config::binanceRestBase() . '/api/v3/klines?' . http_build_query([
@@ -716,7 +729,11 @@ final class BinanceAdapter extends AbstractExchangeAdapter
             $lower = strtolower($symbol);
             $streams[] = "$lower@ticker";
             foreach ($timeframes as $tf) {
-                $streams[] = "$lower@kline_" . $this->mapTimeframe($tf);
+                $mapped = $this->mapTimeframe($tf);
+                if ($mapped === null) {
+                    continue;
+                }
+                $streams[] = "$lower@kline_" . $mapped;
             }
         }
         if (empty($streams)) {
@@ -767,7 +784,7 @@ final class BinanceAdapter extends AbstractExchangeAdapter
 final class MexcAdapter extends AbstractExchangeAdapter
 {
     protected array $timeframeMap = [
-        '1m' => '1m', '5m' => '5m', '15m' => '15m', '1h' => '60m', '4h' => '4h', '1D' => '1d',
+        '1m' => '1m', '5m' => '5m', '15m' => '15m', '30m' => '30m', '1h' => '60m', '4h' => '4h', '1D' => '1d',
     ];
 
     public function name(): string
@@ -821,6 +838,10 @@ final class MexcAdapter extends AbstractExchangeAdapter
 
     public function fetchCandles(string $symbol, string $timeframe, int $limit): array
     {
+        $interval = $this->mapTimeframe($timeframe);
+        if ($interval === null) {
+            return []; // this exchange has no such interval
+        }
         RateLimiter::acquire('mexc', 500);
         $interval = $this->mapTimeframe($timeframe);
         $url = Config::mexcRestBase() . '/api/v3/klines?' . http_build_query([
@@ -873,7 +894,11 @@ final class MexcAdapter extends AbstractExchangeAdapter
         // soft (no messages arrive) and the adapter keeps working over REST.
         foreach ($symbols as $symbol) {
             foreach ($timeframes as $tf) {
-                $interval = str_replace('m', 'Min', $this->mapTimeframe($tf));
+                $mapped = $this->mapTimeframe($tf);
+                if ($mapped === null) {
+                    continue;
+                }
+                $interval = str_replace('m', 'Min', $mapped);
                 $client->send(json_encode([
                     'method' => 'SUBSCRIPTION',
                     'params' => ["spot@public.kline.v3.api@{$symbol}@{$interval}"],
@@ -920,7 +945,7 @@ final class MexcAdapter extends AbstractExchangeAdapter
 final class GateAdapter extends AbstractExchangeAdapter
 {
     protected array $timeframeMap = [
-        '1m' => '1m', '5m' => '5m', '15m' => '15m', '1h' => '1h', '4h' => '4h', '1D' => '1d',
+        '1m' => '1m', '5m' => '5m', '15m' => '15m', '30m' => '30m', '1h' => '1h', '2h' => '2h', '4h' => '4h', '1D' => '1d',
     ];
 
     public function name(): string
@@ -974,10 +999,14 @@ final class GateAdapter extends AbstractExchangeAdapter
 
     public function fetchCandles(string $symbol, string $timeframe, int $limit): array
     {
+        $interval = $this->mapTimeframe($timeframe);
+        if ($interval === null) {
+            return []; // this exchange has no such interval
+        }
         RateLimiter::acquire('gate', 600);
         $url = Config::gateRestBase() . '/api/v4/spot/candlesticks?' . http_build_query([
             'currency_pair' => $symbol,
-            'interval' => $this->mapTimeframe($timeframe),
+            'interval' => $interval,
             'limit' => min($limit, 1000),
         ]);
         $res = HttpClient::request('GET', $url);
@@ -1017,7 +1046,7 @@ final class GateAdapter extends AbstractExchangeAdapter
 final class BitgetAdapter extends AbstractExchangeAdapter
 {
     protected array $timeframeMap = [
-        '1m' => '1min', '5m' => '5min', '15m' => '15min', '1h' => '1h', '4h' => '4h', '1D' => '1day',
+        '1m' => '1min', '5m' => '5min', '15m' => '15min', '30m' => '30min', '1h' => '1h', '2h' => '2h', '4h' => '4h', '1D' => '1day',
     ];
 
     public function name(): string
@@ -1071,10 +1100,14 @@ final class BitgetAdapter extends AbstractExchangeAdapter
 
     public function fetchCandles(string $symbol, string $timeframe, int $limit): array
     {
+        $interval = $this->mapTimeframe($timeframe);
+        if ($interval === null) {
+            return []; // this exchange has no such interval
+        }
         RateLimiter::acquire('bitget', 600);
         $url = Config::bitgetRestBase() . '/api/v2/spot/market/candles?' . http_build_query([
             'symbol' => $symbol,
-            'granularity' => $this->mapTimeframe($timeframe),
+            'granularity' => $interval,
             'limit' => min($limit, 1000),
         ]);
         $res = HttpClient::request('GET', $url);
@@ -1109,7 +1142,7 @@ final class BitgetAdapter extends AbstractExchangeAdapter
 final class HtxAdapter extends AbstractExchangeAdapter
 {
     protected array $timeframeMap = [
-        '1m' => '1min', '5m' => '5min', '15m' => '15min', '1h' => '60min', '4h' => '4hour', '1D' => '1day',
+        '1m' => '1min', '5m' => '5min', '15m' => '15min', '30m' => '30min', '1h' => '60min', '4h' => '4hour', '1D' => '1day',
     ];
 
     public function name(): string
@@ -1166,10 +1199,14 @@ final class HtxAdapter extends AbstractExchangeAdapter
 
     public function fetchCandles(string $symbol, string $timeframe, int $limit): array
     {
+        $interval = $this->mapTimeframe($timeframe);
+        if ($interval === null) {
+            return []; // this exchange has no such interval
+        }
         RateLimiter::acquire('htx', 600);
         $url = Config::htxRestBase() . '/market/history/kline?' . http_build_query([
             'symbol' => $symbol,
-            'period' => $this->mapTimeframe($timeframe),
+            'period' => $interval,
             'size' => min($limit, 2000),
         ]);
         $res = HttpClient::request('GET', $url);
@@ -1217,8 +1254,8 @@ final class HtxAdapter extends AbstractExchangeAdapter
 final class CryptoCompareAdapter extends AbstractExchangeAdapter
 {
     protected array $timeframeMap = [
-        '1m' => 'minute', '5m' => 'minute', '15m' => 'minute',
-        '1h' => 'hour', '4h' => 'hour', '1D' => 'day', '1W' => 'day',
+        '1m' => 'minute', '5m' => 'minute', '15m' => 'minute', '30m' => 'minute',
+        '1h' => 'hour', '2h' => 'hour', '4h' => 'hour', '1D' => 'day', '1W' => 'day',
     ];
 
     public function name(): string
@@ -1281,8 +1318,12 @@ final class CryptoCompareAdapter extends AbstractExchangeAdapter
 
     public function fetchCandles(string $symbol, string $timeframe, int $limit): array
     {
+        $interval = $this->mapTimeframe($timeframe);
+        if ($interval === null) {
+            return []; // this exchange has no such interval
+        }
         [$base, $quote] = $this->splitSymbol($symbol);
-        $endpoint = match ($this->mapTimeframe($timeframe)) {
+        $endpoint = match ($interval) {
             'minute' => '/data/v2/histominute',
             'day' => '/data/v2/histoday',
             default => '/data/v2/histohour',
@@ -1339,7 +1380,7 @@ final class CryptoCompareAdapter extends AbstractExchangeAdapter
 final class BybitAdapter extends AbstractExchangeAdapter
 {
     protected array $timeframeMap = [
-        '1m' => '1', '5m' => '5', '15m' => '15', '1h' => '60', '4h' => '240', '1D' => 'D',
+        '1m' => '1', '5m' => '5', '15m' => '15', '30m' => '30', '1h' => '60', '2h' => '120', '4h' => '240', '1D' => 'D',
     ];
 
     public function name(): string
@@ -1392,9 +1433,13 @@ final class BybitAdapter extends AbstractExchangeAdapter
 
     public function fetchCandles(string $symbol, string $timeframe, int $limit): array
     {
+        $interval = $this->mapTimeframe($timeframe);
+        if ($interval === null) {
+            return []; // this exchange has no such interval
+        }
         RateLimiter::acquire('bybit', 600);
         $url = Config::bybitRestBase() . '/v5/market/kline?' . http_build_query([
-            'category' => 'spot', 'symbol' => $symbol, 'interval' => $this->mapTimeframe($timeframe), 'limit' => $limit,
+            'category' => 'spot', 'symbol' => $symbol, 'interval' => $interval, 'limit' => $limit,
         ]);
         $res = HttpClient::request('GET', $url);
         $out = [];
@@ -1432,7 +1477,7 @@ final class BybitAdapter extends AbstractExchangeAdapter
 final class OkxAdapter extends AbstractExchangeAdapter
 {
     protected array $timeframeMap = [
-        '1m' => '1m', '5m' => '5m', '15m' => '15m', '1h' => '1H', '4h' => '4H', '1D' => '1D',
+        '1m' => '1m', '5m' => '5m', '15m' => '15m', '30m' => '30m', '1h' => '1H', '2h' => '2H', '4h' => '4H', '1D' => '1D',
     ];
 
     public function name(): string
@@ -1486,9 +1531,13 @@ final class OkxAdapter extends AbstractExchangeAdapter
 
     public function fetchCandles(string $symbol, string $timeframe, int $limit): array
     {
+        $interval = $this->mapTimeframe($timeframe);
+        if ($interval === null) {
+            return []; // this exchange has no such interval
+        }
         RateLimiter::acquire('okx', 600);
         $url = Config::okxRestBase() . '/api/v5/market/candles?' . http_build_query([
-            'instId' => $symbol, 'bar' => $this->mapTimeframe($timeframe), 'limit' => $limit,
+            'instId' => $symbol, 'bar' => $interval, 'limit' => $limit,
         ]);
         $res = HttpClient::request('GET', $url);
         $out = [];
@@ -1525,7 +1574,7 @@ final class OkxAdapter extends AbstractExchangeAdapter
 final class KucoinAdapter extends AbstractExchangeAdapter
 {
     protected array $timeframeMap = [
-        '1m' => '1min', '5m' => '5min', '15m' => '15min', '1h' => '1hour', '4h' => '4hour', '1D' => '1day',
+        '1m' => '1min', '5m' => '5min', '15m' => '15min', '30m' => '30min', '1h' => '1hour', '2h' => '2hour', '4h' => '4hour', '1D' => '1day',
     ];
 
     private const INTERVAL_SECONDS = [
@@ -1582,12 +1631,16 @@ final class KucoinAdapter extends AbstractExchangeAdapter
 
     public function fetchCandles(string $symbol, string $timeframe, int $limit): array
     {
+        $interval = $this->mapTimeframe($timeframe);
+        if ($interval === null) {
+            return []; // this exchange has no such interval
+        }
         RateLimiter::acquire('kucoin', 600);
         $intervalSeconds = self::INTERVAL_SECONDS[$timeframe] ?? 3600;
         $endAt = time();
         $startAt = $endAt - ($limit * $intervalSeconds);
         $url = Config::kucoinRestBase() . '/api/v1/market/candles?' . http_build_query([
-            'symbol' => $symbol, 'type' => $this->mapTimeframe($timeframe), 'startAt' => $startAt, 'endAt' => $endAt,
+            'symbol' => $symbol, 'type' => $interval, 'startAt' => $startAt, 'endAt' => $endAt,
         ]);
         $res = HttpClient::request('GET', $url);
         $out = [];
@@ -3138,7 +3191,8 @@ final class SignalFormatter
         $riskPct = $signal->entry > 0 ? ($risk / $signal->entry) * 100 : 0.0;
 
         $placeholders = [
-            'symbol' => $signal->symbol,
+            'symbol' => SignalCardFactory::displaySymbol($signal->symbol),
+            'symbol_raw' => $signal->symbol,
             'exchange' => ucfirst($signal->exchange),
             'direction' => $signal->direction->value,
             'direction_fa' => self::directionFa($signal->direction->value),
@@ -3179,7 +3233,8 @@ final class SignalFormatter
         $stats = self::resultStats($row, $exitPrice);
 
         $placeholders = [
-            'symbol' => (string) $row['symbol'],
+            'symbol' => SignalCardFactory::displaySymbol((string) $row['symbol']),
+            'symbol_raw' => (string) $row['symbol'],
             'exchange' => ucfirst((string) ($row['exchange'] ?? '')),
             'direction' => (string) $row['direction'],
             'direction_fa' => self::directionFa((string) $row['direction']),
@@ -3412,6 +3467,20 @@ final class SignalRepository
         );
         $stmt->execute([':eid' => $exchangeId, ':symbol' => $symbol]);
         return ((int) $stmt->fetchColumn()) > 0;
+    }
+
+    /**
+     * Exchange/symbol pairs that still have an unresolved trade on them.
+     *
+     * @return array<int,array{exchange:string,symbol:string}>
+     */
+    public function openPositionSymbols(): array
+    {
+        $sql = "SELECT DISTINCT e.name AS exchange, s.symbol
+                FROM signals s
+                JOIN exchanges e ON e.id = s.exchange_id
+                WHERE s.status IN ('sent','queued') AND s.resolved_at IS NULL";
+        return Database::pdo()->query($sql)->fetchAll();
     }
 
     /** @return array<int,array<string,mixed>> open positions, joined with their exchange name */
@@ -3845,6 +3914,7 @@ final class MarketScanner
         // while ALLOWED_QUOTE_ASSETS says "USDT" must still match; a
         // strict-case mismatch here silently filters out every symbol.
         $allowedQuotes = array_map('strtoupper', Config::allowedQuoteAssets());
+        $blockedQuotes = Config::blockedQuoteAssets();
         $minVolume = Config::minVolumeUsdt();
         $maxSpread = Config::maxSpreadPercent();
         $includeStable = Config::includeStablecoinPairs();
@@ -3859,6 +3929,10 @@ final class MarketScanner
         foreach ($symbols as $s) {
             $quote = strtoupper($s['quote']);
             $base = strtoupper($s['base']);
+            // Fiat quotes are refused unconditionally — see Config::blockedQuoteAssets().
+            if (in_array($quote, $blockedQuotes, true)) {
+                continue;
+            }
             if (!empty($allowedQuotes) && !in_array($quote, $allowedQuotes, true)) {
                 continue;
             }

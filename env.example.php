@@ -70,7 +70,7 @@ return [
 
     // Timeframes to COLLECT candles for. Must be a superset of
     // SIGNAL_TIMEFRAMES below, or those timeframes have no data to work with.
-    'TIMEFRAMES' => '1m,5m,15m,1h,4h,1D',
+    'TIMEFRAMES' => '15m,30m,1h,2h',
 
     // ---------------------------------------------------------------------
     // Automatic mode — the behaviour described in 🤖 اتومات in the panel.
@@ -86,7 +86,7 @@ return [
     'MAX_OPEN_POSITIONS' => '3',
 
     // Timeframes a signal may be issued on.
-    'SIGNAL_TIMEFRAMES' => '15m,1h,4h',
+    'SIGNAL_TIMEFRAMES' => '15m,30m,1h,2h',
 
     // Targets, as multiples of the trade's risk. Every signal's R:R equals
     // TP1_RR by construction.

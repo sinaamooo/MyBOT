@@ -641,7 +641,27 @@ final class Worker
      */
     private function tradingUniverse(): array
     {
-        return $this->symbolRepo->universe(Config::signalMaxSymbolsPerPass());
+        $universe = $this->symbolRepo->universe(Config::signalMaxSymbolsPerPass());
+
+        // A trade already out in the channel must keep its price feed even
+        // after its symbol drops out of the ranked slice — otherwise
+        // latestPrice() goes stale, monitorOpenPositions() can never see TP
+        // or SL, and the position stays open forever with its result never
+        // announced. The slot it holds would never free either.
+        $seen = [];
+        foreach ($universe as $row) {
+            $seen[$row['exchange'] . '|' . $row['symbol']] = true;
+        }
+        foreach ($this->signalRepo->openPositionSymbols() as $open) {
+            $key = $open['exchange'] . '|' . $open['symbol'];
+            if (isset($seen[$key])) {
+                continue;
+            }
+            $seen[$key] = true;
+            $universe[] = ['exchange' => $open['exchange'], 'symbol' => $open['symbol'], 'base_asset' => '', 'volume_24h' => 0.0];
+        }
+
+        return $universe;
     }
 
     /**
@@ -723,7 +743,8 @@ final class Worker
     private function timeframeSeconds(string $timeframe): int
     {
         return match ($timeframe) {
-            '1m' => 60, '5m' => 300, '15m' => 900, '1h' => 3600, '4h' => 14400, '1D' => 86400,
+            '1m' => 60, '5m' => 300, '15m' => 900, '30m' => 1800,
+            '1h' => 3600, '2h' => 7200, '4h' => 14400, '1D' => 86400,
             default => 300,
         };
     }

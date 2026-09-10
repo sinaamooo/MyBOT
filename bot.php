@@ -1090,7 +1090,8 @@ final class AdminPanel
     private static function placeholdersFor(string $key): array
     {
         $signal = [
-            '{symbol}' => 'نماد ارز',
+            '{symbol}' => 'نماد ارز — مثل BTC/USDT',
+            '{symbol_raw}' => 'نماد خام صرافی — مثل BTCUSDT',
             '{direction_fa}' => 'جهت — خرید / فروش',
             '{direction}' => 'جهت — LONG / SHORT',
             '{leverage}' => 'اهرم',
@@ -1113,7 +1114,8 @@ final class AdminPanel
         ];
 
         $result = [
-            '{symbol}' => 'نماد ارز',
+            '{symbol}' => 'نماد ارز — مثل BTC/USDT',
+            '{symbol_raw}' => 'نماد خام صرافی',
             '{direction_fa}' => 'جهت — خرید / فروش',
             '{leverage}' => 'اهرم',
             '{entry}' => 'نقطه ورود',
@@ -1973,7 +1975,7 @@ final class AdminPanel
                 return true;
             }
             if ($key === 'SIGNAL_TIMEFRAMES') {
-                $known = ['1m', '5m', '15m', '1h', '4h', '1D'];
+                $known = ['1m', '5m', '15m', '30m', '1h', '2h', '4h', '1D'];
                 $given = array_filter(array_map('trim', explode(',', $value)));
                 $unknown = array_diff($given, $known);
                 if (empty($given) || !empty($unknown)) {

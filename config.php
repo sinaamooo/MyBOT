@@ -391,6 +391,32 @@ final class Config
         return empty($list) ? self::DEFAULT_QUOTE_ASSETS : $list;
     }
 
+    /**
+     * Quote currencies that are never tradable here, whatever
+     * ALLOWED_QUOTE_ASSETS says — including when it says '*'.
+     *
+     * These are national currencies. A pair quoted in one is a fiat on-ramp
+     * rate, not a leveraged crypto instrument: the bot published signals on
+     * USDTTMN (toman) and USDTBRL (real), which are currency pegs. The
+     * allow-list alone did not stop it, because an operator who wants "all
+     * crypto quotes" reaches for '*' and gets fiat with it.
+     *
+     * @return string[]
+     */
+    public static function blockedQuoteAssets(): array
+    {
+        $custom = Env::getList('BLOCKED_QUOTE_ASSETS', '');
+        if (!empty($custom)) {
+            return array_map('strtoupper', $custom);
+        }
+        return [
+            'TMN', 'IRT', 'IRR', 'TRY', 'BRL', 'RUB', 'UAH', 'ARS', 'NGN', 'ZAR',
+            'EUR', 'GBP', 'JPY', 'KRW', 'CNY', 'INR', 'IDR', 'VND', 'THB', 'PHP',
+            'MXN', 'COP', 'PLN', 'CZK', 'RON', 'HUF', 'AUD', 'CAD', 'CHF', 'SEK',
+            'NOK', 'DKK', 'AED', 'SAR', 'EGP', 'PKR', 'BDT', 'KZT', 'GEL', 'AZN',
+        ];
+    }
+
     public static function includeStablecoinPairs(): bool
     {
         return Env::getBool('INCLUDE_STABLECOIN_PAIRS', false);
@@ -400,7 +426,7 @@ final class Config
     /** @return string[] */
     public static function timeframes(): array
     {
-        return Env::getList('TIMEFRAMES', '1m,5m,15m,1h,4h,1D');
+        return Env::getList('TIMEFRAMES', '15m,30m,1h,2h');
     }
 
     // -- Signal thresholds -------------------------------------------------
@@ -485,8 +511,8 @@ final class Config
         $override = self::dbOverride('SIGNAL_TIMEFRAMES');
         $list = $override !== null
             ? array_values(array_filter(array_map('trim', explode(',', $override))))
-            : Env::getList('SIGNAL_TIMEFRAMES', '15m,1h,4h');
-        return empty($list) ? ['15m', '1h', '4h'] : $list;
+            : Env::getList('SIGNAL_TIMEFRAMES', '15m,30m,1h,2h');
+        return empty($list) ? ['15m', '30m', '1h', '2h'] : $list;
     }
 
     /** Risk-multiple of the first target. Realised R:R of every signal equals this. */
