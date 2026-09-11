@@ -1088,16 +1088,56 @@ final class AdminPanel
         $this->render($chatId, $messageId, "🧠 استراتژی‌ها\n\nاستراتژی‌های غیرفعال در تولید سیگنال استفاده نمی‌شوند.", ['inline_keyboard' => $keyboard]);
     }
 
+    /**
+     * The modules the active strategy actually runs.
+     *
+     * This screen used to report IndicatorEngine's plugin registry, which is
+     * a different thing entirely and has always been empty — so it announced
+     * "no indicator registered" while ten of them were running the whole
+     * time. The ported indicators are engines the strategy calls directly,
+     * not registry entries, so the panel now reports those.
+     */
+    private const PORTED_INDICATORS = [
+        ['MTF Liquidity Stack', 'سطوح نقدینگی، سقف/کف روز قبل، تشخیص جارو شدن', 'LiquidityEngine'],
+        ['Order Block Detector', 'اوردر بلاک روی پیوت حجم', 'OrderBlockEngine'],
+        ['Supply & Demand MTF', 'نواحی عرضه و تقاضا از کندل‌های مومنتوم', 'SupplyDemandEngine'],
+        ['Setup Scanner', 'هشت ستاپ ورود (VWAP، EMA، شکست‌وپولبک، جارو، واگرایی، کانال، حرکت بزرگ)', 'SetupScanner'],
+        ['SMC Clean Wave', 'موج روند ALMA و موتور BOS/CHoCH', 'TrendWave'],
+        ['Auto Range Detector', 'تشخیص آماری رنج و شکست تاییدشده', 'RangeEngine'],
+        ['Liquidity Sweep → Big Move', 'جارو با سایه واقعی، بعد کندل تاییدی قوی', 'SetupScanner'],
+        ['SMC Analytics', 'ساختار داخلی iBOS، سقف/کف برابر، خط تعادل', 'SmcContext'],
+        ['Dynamic Deviation Channels', 'کانال EMA±ATR با فیلتر RSI', 'DeviationChannel'],
+        ['SMC Confluence Suite', 'ناحیه OTE، Premium/Discount، هم‌جهتی تایم بالاتر', 'SmcContext'],
+    ];
+
     // -- 📈 Indicators ---------------------------------------------------
     private function renderIndicators(int $chatId, int $messageId): void
     {
-        $engine = new IndicatorEngine();
-        $names = $engine->registeredNames();
-        $text = "📈 Indicator Engine\n\n";
-        $text .= empty($names)
-            ? "هیچ اندیکاتوری هنوز ثبت نشده است.\nمعماری آماده است — پس از دریافت قوانین دقیق شما، اندیکاتورها به IndicatorEngine::register() اضافه می‌شوند بدون تغییر در بقیه سیستم."
-            : ("اندیکاتورهای فعال:\n• " . implode("\n• ", $names));
-        $this->render($chatId, $messageId, $text, ['inline_keyboard' => [$this->backRow()]]);
+        $lines = ['📈 موتور اندیکاتورها', ''];
+        $lines[] = sprintf('استراتژی فعال: %s', Config::strategyName());
+        $lines[] = '';
+
+        $active = Config::strategyName() === 'confluence_pro';
+        $lines[] = $active
+            ? sprintf('این %d اندیکاتور روی هر ارز و هر تایم‌فریم اجرا می‌شوند و به هم رأی می‌دهند:', count(self::PORTED_INDICATORS))
+            : 'این اندیکاتورها فقط وقتی استراتژی confluence_pro فعال باشد استفاده می‌شوند:';
+        $lines[] = '';
+
+        foreach (self::PORTED_INDICATORS as $i => [$name, $role, $class]) {
+            $ok = class_exists($class);
+            $lines[] = sprintf('%s %d. %s', $ok ? '✅' : '❌', $i + 1, $name);
+            $lines[] = '     ' . $role;
+        }
+
+        $lines[] = '';
+        $lines[] = sprintf('🧮 حداقل امتیاز هم‌گرایی برای انتشار: %.0f', Config::minConfluenceScore());
+        $lines[] = sprintf('وزن‌ها — ستاپ %.0f | رنج %.0f | ساختار %.0f | ناحیه %.0f | روند %.0f | نقدینگی %.0f | تایم بالاتر %.0f',
+            Config::setupWeight(), Config::rangeWeight(), Config::structureWeight(),
+            Config::zoneWeight(), Config::trendWeight(), Config::liquidityWeight(), Config::htfWeight());
+        $lines[] = '';
+        $lines[] = 'برای دیدن اینکه آخرین پاس کدام رأی‌ها را داشت، به «🤖 اتومات» بروید.';
+
+        $this->render($chatId, $messageId, implode("\n", $lines), ['inline_keyboard' => [$this->backRow()]]);
     }
 
     // -- 📝 Signal Template ------------------------------------------------

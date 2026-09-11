@@ -2235,18 +2235,39 @@ final class SwingPivots
 
 final class Ta
 {
-    /** @param float[] $src @return float[] */
+    /**
+     * @param float[] $src
+     * @return float[]
+     *
+     * NaN-safe on purpose. Indicators are composed here — an SMA of an RSI,
+     * of an ATR, of anything with a warm-up — and every one of those sources
+     * starts with NaN. A naive running sum takes one NaN and stays NaN for
+     * the rest of the series, which silently kills the indicator built on
+     * top of it rather than delaying it. So NaNs are kept out of the sum and
+     * counted instead: the window reports NaN only while it still contains
+     * one.
+     */
     public static function sma(array $src, int $len): array
     {
         $out = [];
         $sum = 0.0;
+        $nans = 0;
         $n = count($src);
         for ($i = 0; $i < $n; $i++) {
-            $sum += $src[$i];
-            if ($i >= $len) {
-                $sum -= $src[$i - $len];
+            if (is_nan($src[$i])) {
+                $nans++;
+            } else {
+                $sum += $src[$i];
             }
-            $out[$i] = $i >= $len - 1 ? $sum / $len : NAN;
+            if ($i >= $len) {
+                $dropped = $src[$i - $len];
+                if (is_nan($dropped)) {
+                    $nans--;
+                } else {
+                    $sum -= $dropped;
+                }
+            }
+            $out[$i] = ($i >= $len - 1 && $nans === 0) ? $sum / $len : NAN;
         }
         return $out;
     }
