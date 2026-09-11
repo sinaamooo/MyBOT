@@ -355,7 +355,10 @@ final class Config
     public static function scannerTopN(): int
     {
         $override = self::dbOverride('SCANNER_TOP_N');
-        return $override !== null ? (int) $override : Env::getInt('SCANNER_TOP_N', 300);
+        // 0 means no cap: every pair that clears the volume floor stays in
+        // the universe. The rotation below is what bounds the work, not an
+        // arbitrary slice of the market.
+        return $override !== null ? (int) $override : Env::getInt('SCANNER_TOP_N', 0);
     }
 
     public static function scannerIntervalSeconds(): int
@@ -366,7 +369,10 @@ final class Config
     public static function minVolumeUsdt(): float
     {
         $override = self::dbOverride('MIN_VOLUME_USDT');
-        return $override !== null ? (float) $override : Env::getFloat('MIN_VOLUME_USDT', 20_000.0);
+        // The only real gate on which coins exist for this bot: a perp with
+        // less than this in 24h turnover cannot be entered and exited at 20x
+        // without the spread eating the trade.
+        return $override !== null ? (float) $override : Env::getFloat('MIN_VOLUME_USDT', 300_000.0);
     }
 
     public static function maxSpreadPercent(): float
@@ -670,6 +676,84 @@ final class Config
         return self::weight('CONFLUENCE_ZONE_WEIGHT', 14.0);
     }
 
+    /** Points for a micro-structure break (iBOS) agreeing with the trade. */
+    public static function internalStructureWeight(): float
+    {
+        return self::weight('CONFLUENCE_INTERNAL_WEIGHT', 8.0);
+    }
+
+    /** Points for trading from the correct half of the dealing range. */
+    public static function premiumDiscountWeight(): float
+    {
+        return self::weight('CONFLUENCE_PD_WEIGHT', 12.0);
+    }
+
+    /** Points for price sitting inside the 62-79% optimal-entry pocket. */
+    public static function oteWeight(): float
+    {
+        return self::weight('CONFLUENCE_OTE_WEIGHT', 10.0);
+    }
+
+    /** Points for the next timeframe up agreeing. */
+    public static function htfWeight(): float
+    {
+        return self::weight('CONFLUENCE_HTF_WEIGHT', 14.0);
+    }
+
+    /**
+     * Refuse to buy in premium or sell in discount outright, rather than
+     * merely scoring it lower. A sweep reversal is exempt — taking the
+     * other side of a stop run is precisely a trade against the range.
+     */
+    public static function requireDiscountPremium(): bool
+    {
+        $override = self::dbOverride('REQUIRE_DISCOUNT_PREMIUM');
+        if ($override !== null) {
+            return in_array(strtolower($override), ['1', 'true', 'yes', 'on'], true);
+        }
+        return Env::getBool('REQUIRE_DISCOUNT_PREMIUM', true);
+    }
+
+    /** Refuse a trade the next timeframe up disagrees with. */
+    public static function requireHtfAlignment(): bool
+    {
+        $override = self::dbOverride('REQUIRE_HTF_ALIGNMENT');
+        if ($override !== null) {
+            return in_array(strtolower($override), ['1', 'true', 'yes', 'on'], true);
+        }
+        return Env::getBool('REQUIRE_HTF_ALIGNMENT', true);
+    }
+
+    // -- Sweep / big-move trigger -----------------------------------------
+
+    /** How many bars back the swept extreme is measured over. */
+    public static function bigMoveLookback(): int
+    {
+        $override = self::dbOverride('BIG_MOVE_LOOKBACK');
+        return max(5, $override !== null ? (int) $override : Env::getInt('BIG_MOVE_LOOKBACK', 20));
+    }
+
+    /** How many bars the confirmation candle has to arrive in. */
+    public static function bigMoveConfirmBars(): int
+    {
+        $override = self::dbOverride('BIG_MOVE_CONFIRM_BARS');
+        return max(1, $override !== null ? (int) $override : Env::getInt('BIG_MOVE_CONFIRM_BARS', 3));
+    }
+
+    /** Minimum rejection wick on the sweep candle, as a fraction of its range. */
+    public static function bigMoveMinWick(): float
+    {
+        $override = self::dbOverride('BIG_MOVE_MIN_WICK');
+        return max(0.0, $override !== null ? (float) $override : Env::getFloat('BIG_MOVE_MIN_WICK', 0.15));
+    }
+
+    /** Minimum body of the confirmation candle, as a fraction of its range. */
+    public static function bigMoveBodyStrength(): float
+    {
+        $override = self::dbOverride('BIG_MOVE_BODY_STRENGTH');
+        return max(0.05, $override !== null ? (float) $override : Env::getFloat('BIG_MOVE_BODY_STRENGTH', 0.55));
+    }
+
     /** The bar a setup's total has to clear before it is published. */
     public static function minConfluenceScore(): float
     {
@@ -835,6 +919,29 @@ final class Config
         return Env::getBool('REQUIRE_ZONE_CONFLUENCE', true);
     }
 
+    /**
+     * Seconds of each invocation given to the symbol rotation.
+     *
+     * The universe is now every perpetual above the volume floor — several
+     * hundred coins — which cannot be swept in one cron minute. Instead each
+     * invocation walks as far along the list as this budget allows and
+     * remembers where it stopped, so the whole market is covered on a
+     * rotation of a few minutes rather than a slice of it being covered
+     * over and over.
+     */
+    public static function rotationBudgetSeconds(): int
+    {
+        $override = self::dbOverride('ROTATION_BUDGET_SECONDS');
+        return max(5, $override !== null ? (int) $override : Env::getInt('ROTATION_BUDGET_SECONDS', 32));
+    }
+
+    /** Hard ceiling on symbols visited per invocation, whatever the clock says. */
+    public static function rotationMaxSymbols(): int
+    {
+        $override = self::dbOverride('ROTATION_MAX_SYMBOLS');
+        return max(1, $override !== null ? (int) $override : Env::getInt('ROTATION_MAX_SYMBOLS', 400));
+    }
+
     // -- Scanner buckets -------------------------------------------------
     //
     // The universe is not simply "the highest-volume coins": it is built
@@ -985,7 +1092,9 @@ final class Config
     public static function signalMaxSymbolsPerPass(): int
     {
         $override = self::dbOverride('SIGNAL_MAX_SYMBOLS_PER_PASS');
-        return max(1, $override !== null ? (int) $override : Env::getInt('SIGNAL_MAX_SYMBOLS_PER_PASS', 110));
+        // 0 means no cap — see rotation, which bounds a pass by TIME rather
+        // than by a symbol count, so every coin is reached in turn.
+        return max(0, $override !== null ? (int) $override : Env::getInt('SIGNAL_MAX_SYMBOLS_PER_PASS', 0));
     }
 
     /**

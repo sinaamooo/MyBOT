@@ -3226,6 +3226,202 @@ final class TrendWave
 }
 
 /**
+ * Dynamic Deviation Channels (RSI Trigger) [ChartPrime], ported.
+ *
+ * An EMA midline with ATR-scaled bands around it, and a smoothed RSI that
+ * decides which side of the channel is live: above 50 the market is working
+ * the upper bands, below 50 the lower ones. The trade is a cross back
+ * through the first band — mean reversion with a momentum filter on it,
+ * rather than "price touched a band".
+ */
+final class DeviationChannel
+{
+    /**
+     * @param Candle[] $candles oldest-first
+     * @return array{
+     *   mid:?float, upper1:?float, lower1:?float, rsi:?float,
+     *   signal:?string, mid_rising:bool, mid_falling:bool
+     * }
+     */
+    public static function analyse(array $candles, int $length = 20, int $rsiLength = 20): array
+    {
+        $out = ['mid' => null, 'upper1' => null, 'lower1' => null, 'rsi' => null, 'signal' => null, 'mid_rising' => false, 'mid_falling' => false];
+        $n = count($candles);
+        if ($n < max($length, $rsiLength, 100) + 8) {
+            return $out;
+        }
+
+        $closes = Ta::closes($candles);
+        $mid = Ta::ema($closes, $length);
+        $last = $n - 1;
+        if (is_nan($mid[$last] ?? NAN)) {
+            return $out;
+        }
+
+        // The original's volatility measure: a long ATR, deliberately slow,
+        // so the bands describe the regime rather than the last few bars.
+        $stDev = SwingPivots::atr($candles, 100) * 1.5;
+        if ($stDev <= 0) {
+            return $out;
+        }
+
+        $rsi = Ta::sma(Ta::rsi($closes, $rsiLength), 5);
+        $rsiNow = $rsi[$last] ?? NAN;
+        if (is_nan($rsiNow)) {
+            return $out;
+        }
+
+        $upper1 = $mid[$last] + $stDev;
+        $lower1 = $mid[$last] - $stDev;
+        $upperPrev = $mid[$last - 1] + $stDev;
+        $lowerPrev = $mid[$last - 1] - $stDev;
+
+        $out['mid'] = $mid[$last];
+        $out['upper1'] = $upper1;
+        $out['lower1'] = $lower1;
+        $out['rsi'] = $rsiNow;
+        $out['mid_rising'] = $mid[$last] > ($mid[$last - 3] ?? $mid[$last]);
+        $out['mid_falling'] = $mid[$last] < ($mid[$last - 3] ?? $mid[$last]);
+
+        // RSI gates which side is even eligible, exactly as the original
+        // only plots one set of bands at a time.
+        if ($rsiNow < 50 && $closes[$last] > $lower1 && $closes[$last - 1] <= $lowerPrev) {
+            $out['signal'] = 'long';
+        } elseif ($rsiNow >= 50 && $closes[$last] < $upper1 && $closes[$last - 1] >= $upperPrev) {
+            $out['signal'] = 'short';
+        }
+
+        return $out;
+    }
+}
+
+/**
+ * The SMC vocabulary the two Smart-Money suites share: the dealing range and
+ * where price sits in it, the optimal-trade-entry pocket, equal highs and
+ * lows, and the micro structure inside the macro one.
+ *
+ * These are not triggers. They are the context that decides whether a
+ * trigger is worth taking — buying in premium and selling in discount is
+ * the single most common way a good entry signal still loses.
+ */
+final class SmcContext
+{
+    /**
+     * @param Candle[] $candles oldest-first
+     * @return array{
+     *   range_high:?float, range_low:?float, equilibrium:?float,
+     *   zone:string, position:float,
+     *   ote_high:?float, ote_low:?float, in_ote:bool, leg:?string,
+     *   eqh:?float, eql:?float,
+     *   internal_event:?string, internal_dir:?string
+     * }
+     */
+    public static function analyse(array $candles, int $swingLen = 8, int $internalLen = 3, int $rangeLookback = 40): array
+    {
+        $out = [
+            'range_high' => null, 'range_low' => null, 'equilibrium' => null,
+            'zone' => 'unknown', 'position' => 0.5,
+            'ote_high' => null, 'ote_low' => null, 'in_ote' => false, 'leg' => null,
+            'eqh' => null, 'eql' => null,
+            'internal_event' => null, 'internal_dir' => null,
+        ];
+        $n = count($candles);
+        if ($n < max($swingLen * 2 + 6, $rangeLookback)) {
+            return $out;
+        }
+
+        $highs = array_map(static fn(Candle $c) => $c->high, $candles);
+        $lows = array_map(static fn(Candle $c) => $c->low, $candles);
+        $closes = Ta::closes($candles);
+        $close = $closes[$n - 1];
+        $atr = SwingPivots::atr($candles);
+
+        // -- the dealing range, and which half of it price is in -----------
+        $window = array_slice($candles, -$rangeLookback);
+        $rangeHigh = max(array_map(static fn(Candle $c) => $c->high, $window));
+        $rangeLow = min(array_map(static fn(Candle $c) => $c->low, $window));
+        $span = $rangeHigh - $rangeLow;
+        $out['range_high'] = $rangeHigh;
+        $out['range_low'] = $rangeLow;
+        $out['equilibrium'] = ($rangeHigh + $rangeLow) / 2;
+        $out['position'] = $span > 0 ? ($close - $rangeLow) / $span : 0.5;
+        $out['zone'] = $out['position'] > 0.5 ? 'premium' : 'discount';
+
+        // -- OTE: the 62-79% retracement of the most recent leg -------------
+        $phs = Ta::pivots($highs, $swingLen, $swingLen, true);
+        $pls = Ta::pivots($lows, $swingLen, $swingLen, false);
+        $lastPh = empty($phs) ? null : $phs[count($phs) - 1];
+        $lastPl = empty($pls) ? null : $pls[count($pls) - 1];
+
+        if ($lastPh !== null && $lastPl !== null) {
+            if ($lastPl > $lastPh) {
+                // Down leg: high then low. The retracement to sell is
+                // measured back UP from the low.
+                $legHigh = $highs[$lastPh];
+                $legLow = $lows[$lastPl];
+                $out['leg'] = 'down';
+                $out['ote_low'] = $legLow + ($legHigh - $legLow) * 0.62;
+                $out['ote_high'] = $legLow + ($legHigh - $legLow) * 0.79;
+            } else {
+                // Up leg: low then high. The retracement to buy is measured
+                // back DOWN from the high.
+                $legHigh = $highs[$lastPh];
+                $legLow = $lows[$lastPl];
+                $out['leg'] = 'up';
+                $out['ote_low'] = $legHigh - ($legHigh - $legLow) * 0.79;
+                $out['ote_high'] = $legHigh - ($legHigh - $legLow) * 0.62;
+            }
+            if ($out['ote_low'] !== null && $out['ote_high'] !== null) {
+                $out['in_ote'] = $close >= min($out['ote_low'], $out['ote_high'])
+                    && $close <= max($out['ote_low'], $out['ote_high']);
+            }
+        }
+
+        // -- equal highs / lows: stop pools that have been built twice -------
+        $tolerance = $atr * 0.10;
+        if (count($phs) >= 2 && abs($highs[$phs[count($phs) - 1]] - $highs[$phs[count($phs) - 2]]) <= $tolerance) {
+            $out['eqh'] = max($highs[$phs[count($phs) - 1]], $highs[$phs[count($phs) - 2]]);
+        }
+        if (count($pls) >= 2 && abs($lows[$pls[count($pls) - 1]] - $lows[$pls[count($pls) - 2]]) <= $tolerance) {
+            $out['eql'] = min($lows[$pls[count($pls) - 1]], $lows[$pls[count($pls) - 2]]);
+        }
+
+        // -- internal (micro) structure -------------------------------------
+        // The same crossover engine on a much smaller pivot: an iBOS is the
+        // first evidence a macro leg is resuming, and it fires well before
+        // the swing structure confirms.
+        $iph = Ta::pivots($highs, $internalLen, $internalLen, true);
+        $ipl = Ta::pivots($lows, $internalLen, $internalLen, false);
+        $recent = static fn(array $piv, array $src, bool $up): ?array => (function () use ($piv, $src, $up, $closes, $n, $internalLen) {
+            for ($k = count($piv) - 1; $k >= 0; $k--) {
+                $idx = $piv[$k];
+                for ($i = max($idx + $internalLen + 1, $n - 3); $i < $n; $i++) {
+                    $crossed = $up
+                        ? ($closes[$i] > $src[$idx] && $closes[$i - 1] <= $src[$idx])
+                        : ($closes[$i] < $src[$idx] && $closes[$i - 1] >= $src[$idx]);
+                    if ($crossed) {
+                        return ['index' => $i, 'level' => $src[$idx]];
+                    }
+                }
+            }
+            return null;
+        })();
+
+        $up = $recent($iph, $highs, true);
+        $down = $recent($ipl, $lows, false);
+        if ($up !== null && ($down === null || $up['index'] >= $down['index'])) {
+            $out['internal_event'] = 'ibos';
+            $out['internal_dir'] = 'bullish';
+        } elseif ($down !== null) {
+            $out['internal_event'] = 'ibos';
+            $out['internal_dir'] = 'bearish';
+        }
+
+        return $out;
+    }
+}
+
+/**
  * Setup Scanner [GBB], ported.
  *
  * Six independent entry triggers. Each answers one question — has price
@@ -3246,6 +3442,8 @@ final class SetupScanner
     public const SWEEP = 'liquidity_sweep';
     public const DIVERGENCE = 'rsi_divergence';
     public const RANGE_BREAK = 'opening_range';
+    public const BIG_MOVE = 'sweep_big_move';
+    public const CHANNEL = 'deviation_channel';
 
     /**
      * @param Candle[] $candles oldest-first
@@ -3384,7 +3582,91 @@ final class SetupScanner
             $out['short'][] = self::DIVERGENCE;
         }
 
+        // -- 6. Sweep, then the big move ----------------------------------------
+        $bigMove = $this->sweepBigMove($candles);
+        if ($bigMove === 'long') {
+            $out['long'][] = self::BIG_MOVE;
+        } elseif ($bigMove === 'short') {
+            $out['short'][] = self::BIG_MOVE;
+        }
+
+        // -- 7. Deviation channel reversion --------------------------------------
+        $channel = DeviationChannel::analyse($candles);
+        if ($channel['signal'] === 'long') {
+            $out['long'][] = self::CHANNEL;
+        } elseif ($channel['signal'] === 'short') {
+            $out['short'][] = self::CHANNEL;
+        }
+
         return $out;
+    }
+
+    /**
+     * Liquidity Sweep Before The Big Move, ported.
+     *
+     * Two separate events, in order: price takes out the N-bar extreme and
+     * closes back inside it leaving a real wick, and THEN, within a few
+     * bars, a strong-bodied candle closes beyond the previous bar's range.
+     *
+     * The sweep alone is where most people enter and get run over again;
+     * requiring the second candle is what makes it the start of a move
+     * rather than a guess at one.
+     *
+     * @param Candle[] $candles
+     * @return string|null 'long'|'short'|null
+     */
+    private function sweepBigMove(array $candles): ?string
+    {
+        $n = count($candles);
+        $lookback = Config::bigMoveLookback();
+        $window = Config::bigMoveConfirmBars();
+        $minWick = Config::bigMoveMinWick();
+        $bodyStrength = Config::bigMoveBodyStrength();
+        if ($n < $lookback + $window + 3) {
+            return null;
+        }
+
+        $c = $candles[$n - 1];
+        $prev = $candles[$n - 2];
+        $range = max($c->high - $c->low, 1e-12);
+        $bodyRatio = abs($c->close - $c->open) / $range;
+
+        // The confirmation candle has to be doing the work itself.
+        $strongBull = $c->close > $c->open && $bodyRatio >= $bodyStrength && $c->close > $prev->high;
+        $strongBear = $c->close < $c->open && $bodyRatio >= $bodyStrength && $c->close < $prev->low;
+        if (!$strongBull && !$strongBear) {
+            return null;
+        }
+
+        // Look back through the confirmation window for the sweep that set
+        // this up, measuring each candidate against the extreme as it stood
+        // BEFORE that candle.
+        for ($i = $n - 2; $i >= max(1, $n - 1 - $window); $i--) {
+            $sweep = $candles[$i];
+            $priorHigh = -INF;
+            $priorLow = INF;
+            for ($k = max(0, $i - $lookback); $k < $i; $k++) {
+                $priorHigh = max($priorHigh, $candles[$k]->high);
+                $priorLow = min($priorLow, $candles[$k]->low);
+            }
+            if ($priorHigh === -INF || $priorLow === INF) {
+                continue;
+            }
+
+            $sweepRange = max($sweep->high - $sweep->low, 1e-12);
+            if ($strongBull
+                && $sweep->low < $priorLow && $sweep->close > $priorLow
+                && ((min($sweep->open, $sweep->close) - $sweep->low) / $sweepRange) >= $minWick) {
+                return 'long';
+            }
+            if ($strongBear
+                && $sweep->high > $priorHigh && $sweep->close < $priorHigh
+                && (($sweep->high - max($sweep->open, $sweep->close)) / $sweepRange) >= $minWick) {
+                return 'short';
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -4455,6 +4737,8 @@ final class ConfluenceProStrategy implements Strategy
         $liquidity = $this->liquidity->detect($candles);
         $sdZones = $this->supplyDemand->detect($candles);
         $structure = MarketStructure::analyse($candles);
+        $smc = SmcContext::analyse($candles);
+        $htf = $this->higherTimeframeBias($snapshot, $timeframe);
 
         // -- who wants to be long, who wants to be short? --------------------
         $reasons = ['long' => [], 'short' => []];
@@ -4488,6 +4772,12 @@ final class ConfluenceProStrategy implements Strategy
             $side = $wave['event_dir'] === 'bullish' ? 'long' : 'short';
             $votes[$side] += Config::structureWeight();
             $reasons[$side][] = strtoupper($wave['event']) . ' روی موج روند';
+        }
+
+        if ($smc['internal_event'] !== null && $smc['internal_dir'] !== null) {
+            $sideI = $smc['internal_dir'] === 'bullish' ? 'long' : 'short';
+            $votes[$sideI] += Config::internalStructureWeight();
+            $reasons[$sideI][] = 'شکست ساختار داخلی (iBOS)';
         }
 
         $sweep = $liquidity['recent_sweep'];
@@ -4541,9 +4831,61 @@ final class ConfluenceProStrategy implements Strategy
 
         // -- untapped liquidity ahead ------------------------------------------
         $target = $this->liquidityTarget($isLong, $price, $liquidity['levels']);
+        // Equal highs and lows are liquidity built twice over — the strongest
+        // magnets on the chart, so they outrank an ordinary swing as a target.
+        $equal = $isLong ? $smc['eqh'] : $smc['eql'];
+        if ($equal !== null && ($isLong ? $equal > $price : $equal < $price)) {
+            $target = $target === null
+                ? $equal
+                : ($isLong ? min($target, $equal) : max($target, $equal));
+            $why[] = $isLong ? 'سقف‌های برابر (EQH) بالای قیمت' : 'کف‌های برابر (EQL) زیر قیمت';
+        }
         if ($target !== null) {
             $score += Config::liquidityWeight();
             $why[] = 'نقدینگی دست‌نخورده در مسیر هدف';
+        }
+
+        // -- premium / discount ---------------------------------------------
+        //
+        // Buying in the top half of the dealing range is the classic way a
+        // good trigger still loses — but only for a PULLBACK entry. A
+        // breakout is in the top half by definition: that is what breaking
+        // out means. Applying the rule to both trade families would refuse
+        // every continuation trade the engine can find.
+        //
+        // So the trade is classified first, and the rule is applied to the
+        // family it actually belongs to.
+        $continuation = $this->isContinuation($setups[$side], $range, $structure, $smc);
+        $wrongHalf = $isLong ? $smc['zone'] === 'premium' : $smc['zone'] === 'discount';
+
+        if (!$continuation) {
+            if ($wrongHalf && Config::requireDiscountPremium() && !$reversal) {
+                return $this->reject($isLong
+                    ? 'ورود پولبکی در نیمه بالای محدوده (Premium) — خرید اینجا گران است'
+                    : 'ورود پولبکی در نیمه پایین محدوده (Discount) — فروش اینجا ارزان است');
+            }
+            if (!$wrongHalf) {
+                $score += Config::premiumDiscountWeight();
+                $why[] = $isLong ? 'ورود از ناحیه ارزان (Discount)' : 'ورود از ناحیه گران (Premium)';
+            }
+        }
+
+        // -- optimal trade entry ----------------------------------------------
+        // OTE is a retracement pocket, so it only means anything on a
+        // pullback entry either.
+        if ($smc['in_ote'] && !$continuation) {
+            $score += Config::oteWeight();
+            $why[] = 'قیمت داخل ناحیه ورود بهینه (OTE ۶۲-۷۹٪)';
+        }
+
+        // -- higher timeframe --------------------------------------------------
+        if ($htf !== null) {
+            if ($htf === ($isLong ? 'bullish' : 'bearish')) {
+                $score += Config::htfWeight();
+                $why[] = 'هم‌جهت با تایم‌فریم بالاتر';
+            } elseif (Config::requireHtfAlignment() && !$reversal) {
+                return $this->reject('تایم‌فریم بالاتر خلاف جهت این معامله است');
+            }
         }
 
         if ($score < Config::minConfluenceScore()) {
@@ -4570,8 +4912,12 @@ final class ConfluenceProStrategy implements Strategy
             'wave' => $wave['direction'],
             'range' => $range['qualified'] ? ($range['break'] ?? 'inside') : 'none',
             'structure' => $structure['event'],
+            'internal' => $smc['internal_dir'],
             'sweep' => $sweep !== null,
             'zone' => $guard['label'],
+            'pd' => $smc['zone'],
+            'ote' => $smc['in_ote'],
+            'htf' => $htf,
             'liquidity_target' => $target,
         ];
 
@@ -4587,6 +4933,79 @@ final class ConfluenceProStrategy implements Strategy
             'confluence_score' => round($score, 1),
             'confluence_reasons' => $why,
         ];
+    }
+
+    /**
+     * Is this a continuation trade or a pullback one?
+     *
+     * Continuation: something broke — a range, a structure level, a sweep
+     * that started a move. Price is meant to be at the edge of its range.
+     * Pullback: price came back into a zone and is being bought or sold
+     * there, which is where premium/discount and OTE apply.
+     *
+     * @param array<int,string> $firedSetups
+     * @param array<string,mixed> $range
+     * @param array<string,mixed> $structure
+     * @param array<string,mixed> $smc
+     */
+    private function isContinuation(array $firedSetups, array $range, array $structure, array $smc): bool
+    {
+        if ($range['qualified'] && $range['break'] !== null) {
+            return true;
+        }
+        if (in_array($structure['event'] ?? null, ['bos', 'break'], true)) {
+            return true;
+        }
+        foreach ([SetupScanner::BIG_MOVE, SetupScanner::BREAK_RETEST, SetupScanner::RANGE_BREAK] as $momentum) {
+            if (in_array($momentum, $firedSetups, true)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * The trend on the next timeframe up, read from the same ALMA wave.
+     *
+     * A 15m long into a falling 1h is the trade that keeps almost working:
+     * the trigger is real, the context is wrong, and it gets stopped on the
+     * higher timeframe's next leg. Returns null when that timeframe has no
+     * candles loaded, which is not a veto — just no information.
+     */
+    private function higherTimeframeBias(MarketSnapshot $snapshot, string $timeframe): ?string
+    {
+        $order = Config::signalTimeframes();
+        $seconds = static function (string $tf): int {
+            $unit = strtolower(substr($tf, -1));
+            $value = (int) substr($tf, 0, -1);
+            return match ($unit) {
+                'm' => $value * 60,
+                'h' => $value * 3600,
+                'd' => $value * 86400,
+                default => 0,
+            };
+        };
+
+        $current = $seconds($timeframe);
+        $best = null;
+        $bestSeconds = PHP_INT_MAX;
+        foreach ($order as $tf) {
+            $s = $seconds($tf);
+            if ($s > $current && $s < $bestSeconds) {
+                $best = $tf;
+                $bestSeconds = $s;
+            }
+        }
+        if ($best === null) {
+            return null;
+        }
+
+        $higher = $snapshot->candlesFor($best);
+        if (count($higher) < 40) {
+            return null;
+        }
+        $wave = TrendWave::analyse($higher);
+        return $wave['direction'] === 'neutral' ? null : $wave['direction'];
     }
 
     /**
@@ -4681,6 +5100,8 @@ final class ConfluenceProStrategy implements Strategy
             SetupScanner::SWEEP => 'جاروی نقدینگی و برگشت',
             SetupScanner::DIVERGENCE => 'واگرایی RSI',
             SetupScanner::RANGE_BREAK => 'شکست محدوده باز',
+            SetupScanner::BIG_MOVE => 'جاروی نقدینگی و شروع حرکت بزرگ',
+            SetupScanner::CHANNEL => 'برگشت از کانال انحراف با تایید RSI',
             default => $setup,
         };
     }
@@ -6040,6 +6461,11 @@ final class SymbolRepository
      */
     public function universe(?int $limit = null): array
     {
+        // A limit of 0 (or null) means the whole universe — every perp above
+        // the volume floor. The rotation in the worker bounds the work by
+        // time instead, so there is no reason to throw coins away here.
+        $limit = ($limit === null || $limit <= 0) ? null : $limit;
+
         // Over-fetch, because the same pair listed on four exchanges
         // collapses to one row below and a limit applied before that would
         // return a universe of mostly duplicates.
@@ -6283,11 +6709,17 @@ final class MarketScanner
         if (empty($candidates)) {
             return [];
         }
-        $topN = max(1, $topN);
+        // 0 means no cap: keep every coin that cleared the volume floor.
+        // Clamping to 1 here would collapse the whole market to a single
+        // symbol, which is what "unlimited" must never be turned into.
+        $topN = $topN > 0 ? $topN : count($candidates);
         $minMove = Config::scannerMinMovePercent();
 
-        $gainerSlots = (int) round($topN * Config::scannerGainerShare() / 100);
-        $loserSlots = (int) round($topN * Config::scannerLoserShare() / 100);
+        // With no cap the baskets exist purely to ORDER the list — the
+        // movers lead so the rotation reaches them first — and every
+        // remaining coin still follows in the liquid basket.
+        $gainerSlots = max(1, (int) round($topN * Config::scannerGainerShare() / 100));
+        $loserSlots = max(1, (int) round($topN * Config::scannerLoserShare() / 100));
 
         $byGain = $candidates;
         usort($byGain, static fn($a, $b) => $b['change'] <=> $a['change']);

@@ -70,9 +70,15 @@ return [
     // The defaults are deliberately wide: this bot is meant to trade
     // altcoins and low-caps, not just majors. All panel-editable.
     // ---------------------------------------------------------------------
-    'SCANNER_TOP_N' => '200',
+    // 0 = no cap. Every perpetual above MIN_VOLUME_USDT stays in the
+    // universe; the rotation below bounds the work by time instead, so the
+    // whole market gets covered rather than the same slice of it.
+    'SCANNER_TOP_N' => '0',
     'SCANNER_INTERVAL_SECONDS' => '900',
-    'MIN_VOLUME_USDT' => '0',
+    // The only real gate on which coins exist for this bot. A perp under
+    // this in 24h turnover cannot be entered and exited at 20x without the
+    // spread eating the trade.
+    'MIN_VOLUME_USDT' => '300000',
     'MAX_SPREAD_PERCENT' => '10',
     // Quote assets a pair may be priced in. Leave empty for the dollar
     // stablecoin set (USDT, USDC, FDUSD, BUSD, TUSD, DAI) — do NOT expect an
@@ -125,9 +131,17 @@ return [
     // On TP1: move the stop to entry and announce the trade as risk free.
     'RISK_FREE_ENABLED' => 'true',
 
-    // Symbols evaluated per signal pass (majors always first). Lower this if
-    // your host is slow enough that a cron pass runs out of time.
-    'SIGNAL_MAX_SYMBOLS_PER_PASS' => '60',
+    // 0 = no cap, which is the point: the scan is a ROTATION. Each cron
+    // invocation resumes where the last one stopped, visits as far as
+    // ROTATION_BUDGET_SECONDS allows, and saves its position — so several
+    // hundred coins are covered on a few-minute cycle instead of the first
+    // sixty being re-checked every minute and the rest never at all.
+    //
+    // Roughly a coin per second on a typical shared host: ~60 per
+    // invocation, so ~600 perps sweep in about ten minutes.
+    'SIGNAL_MAX_SYMBOLS_PER_PASS' => '0',
+    'ROTATION_BUDGET_SECONDS' => '32',
+    'ROTATION_MAX_SYMBOLS' => '400',
 
     'MIN_SIGNAL_SCORE' => '45',
     'SIGNAL_COOLDOWN_SECONDS' => '900',
@@ -181,6 +195,24 @@ return [
     'CONFLUENCE_ZONE_WEIGHT' => '14',       // order block / FVG / supply-demand
     'CONFLUENCE_TREND_WEIGHT' => '12',      // ALMA wave + EMA band agree
     'CONFLUENCE_LIQUIDITY_WEIGHT' => '12',  // sweep, or untapped liquidity ahead
+    'CONFLUENCE_HTF_WEIGHT' => '14',        // the next timeframe up agrees
+    'CONFLUENCE_PD_WEIGHT' => '12',         // entering from the correct half of the range
+    'CONFLUENCE_OTE_WEIGHT' => '10',        // price inside the 62-79% pocket
+    'CONFLUENCE_INTERNAL_WEIGHT' => '8',    // micro-structure break (iBOS)
+
+    // Two hard filters rather than scores. Both are skipped for sweep
+    // reversals, and premium/discount applies only to PULLBACK entries — a
+    // breakout sits at the edge of its range by definition, so applying it
+    // to both families would refuse every continuation trade.
+    'REQUIRE_HTF_ALIGNMENT' => 'true',
+    'REQUIRE_DISCOUNT_PREMIUM' => 'true',
+
+    // Sweep-then-big-move trigger: the sweep must leave a real rejection
+    // wick, and the confirmation candle must do the work itself.
+    'BIG_MOVE_LOOKBACK' => '20',
+    'BIG_MOVE_CONFIRM_BARS' => '3',
+    'BIG_MOVE_MIN_WICK' => '0.15',
+    'BIG_MOVE_BODY_STRENGTH' => '0.55',
 
     // How far a protective zone may sit from price and still count, and the
     // breathing room added beyond it when the stop is placed.

@@ -1305,6 +1305,10 @@ final class AdminPanel
         'SIGNAL_INTERVAL_SECONDS'     => ['⏱ فاصله بین سیگنال‌ها', 'بر حسب ثانیه. ۹۰۰ یعنی هر ۱۵ دقیقه یک سیگنال.'],
         'MAX_OPEN_POSITIONS'          => ['📌 حداکثر معامله باز', 'عدد صحیح. اگر ۱ بگذارید، تا بسته شدن معامله فعلی سیگنال جدید نمی‌آید.'],
         'SIGNALS_PER_PASS'            => ['📤 سیگنال در هر پاس', 'چند تا از بهترین‌های هر اسکن منتشر شوند. مثال: 3'],
+        'MIN_VOLUME_USDT'             => ['💧 حداقل حجم ۲۴ ساعته', 'به دلار. مثال: 300000'],
+        'ROTATION_BUDGET_SECONDS'     => ['🔄 ثانیه‌های چرخش هر اجرا', 'هرچه بیشتر، ارز بیشتری در هر دقیقه چک می‌شود. مثال: 32'],
+        'REQUIRE_HTF_ALIGNMENT'       => ['⬆️ اجبار هم‌جهتی تایم بالاتر', 'true یا false'],
+        'REQUIRE_DISCOUNT_PREMIUM'    => ['⚖️ اجبار ورود از ناحیه درست', 'true یا false (فقط روی ورود پولبکی)'],
         'TRADABLE_VENUES'             => ['🏦 صرافی‌های معاملاتی', 'با کاما. مثال: toobit,ourbit — یا off برای خاموش کردن فیلتر.'],
         'SIGNAL_TIMEFRAMES'           => ['🕒 تایم‌فریم سیگنال', 'با کاما جدا کنید. مثال: 15m,1h,4h'],
         'TP1_LEVERAGED_PCT'           => ['🎯 سود تارگت ۱ (با اهرم)', 'درصد سود روی مارجین. مثال: 60'],
@@ -1388,27 +1392,45 @@ final class AdminPanel
 
         // A pass that found setups but published none is a different
         // situation from one that found nothing, and says so.
+        // The rotation's position, so "it did not look at my coin yet" is a
+        // visible fact rather than a suspicion.
+        $visited = (int) ($report['visited'] ?? 0);
+        $symbolsTotal = (int) ($report['symbols'] ?? 0);
+        $rotation = '';
+        if ($visited > 0 && $symbolsTotal > 0) {
+            $minutes = max(1, (int) ceil($symbolsTotal / max(1, $visited)));
+            $rotation = sprintf(
+                "\n🔄 این اجرا %d ارز از %d ارز بررسی شد (موقعیت چرخش: %d). یک دور کامل بازار حدود %d دقیقه طول می‌کشد.",
+                $visited,
+                $symbolsTotal,
+                (int) ($report['cursor'] ?? 0),
+                $minutes
+            );
+        }
+
         $qualified = (int) ($report['qualified'] ?? 0);
         if ($qualified > 0) {
             return sprintf(
-                "🟡 آخرین پاس (%s): %d ستاپ قابل انتشار پیدا شد ولی هیچ‌کدام ارسال نشد.\nمعمولاً یعنی سقف معامله باز (%d) یا فاصله بین سیگنال‌ها (%d ثانیه) اجازه نداده.",
+                "🟡 آخرین پاس (%s): %d ستاپ قابل انتشار پیدا شد ولی هیچ‌کدام ارسال نشد.\nمعمولاً یعنی سقف معامله باز (%d) یا فاصله بین سیگنال‌ها (%d ثانیه) اجازه نداده.%s",
                 $when,
                 $qualified,
                 Config::maxOpenPositions(),
-                Config::signalIntervalSeconds()
+                Config::signalIntervalSeconds(),
+                $rotation
             );
         }
 
         $best = $report['best'] ?? null;
         $min = (float) ($report['min_score'] ?? 45);
         if (!is_array($best)) {
-            return sprintf('🟡 آخرین پاس (%s): %d نماد بررسی شد، هیچ ستاپی حتی نیمه‌کاره پیدا نشد.', $when, $symbols);
+            return sprintf('🟡 آخرین پاس (%s): %d نماد در بازار، هیچ ستاپی حتی نیمه‌کاره پیدا نشد.%s', $when, $symbols, $rotation);
         }
 
         $verdict = sprintf(
-            "🟡 آخرین پاس (%s): %d نماد بررسی شد، سیگنالی منتشر نشد.\nبهترین چیزی که دید: %s (%s) با امتیاز %.1f — حداقل لازم %.1f\nدلیل رد شدن: %s",
+            "🟡 آخرین پاس (%s): %d نماد در بازار، سیگنالی منتشر نشد.%s\nبهترین چیزی که دید: %s (%s) با امتیاز %.1f — حداقل لازم %.1f\nدلیل رد شدن: %s",
             $when,
             $symbols,
+            $rotation,
             (string) $best['symbol'],
             (string) $best['timeframe'],
             (float) $best['score'],
@@ -1474,8 +1496,10 @@ final class AdminPanel
             '   ماژول‌ها: شش ستاپ + رنج خودکار + ساختار BOS/CHoCH + موج ALMA + نقدینگی + اوردر بلاک/عرضه و تقاضا',
             sprintf('💎 %s → اهرم %dx', implode(',', Config::majorAssets()), Config::leverageMajor()),
             sprintf('🪙 بقیه ارزها → اهرم %dx تا %dx (خودکار بر اساس نقدینگی و نوسان)', Config::leverageAltMin(), Config::leverageAltMax()),
-            sprintf('🔍 ارز در هر اسکن: %d (%.0f%% پررشدترین، %.0f%% پرضررترین، بقیه پرحجم‌ترین)',
-                Config::signalMaxSymbolsPerPass(), Config::scannerGainerShare(), Config::scannerLoserShare()),
+            sprintf('🔍 پوشش بازار: %s | هر اجرا %d ثانیه چرخش',
+                Config::signalMaxSymbolsPerPass() === 0 ? 'همه ارزها (بدون محدودیت)' : Config::signalMaxSymbolsPerPass() . ' ارز',
+                Config::rotationBudgetSeconds()),
+            sprintf('💧 حداقل حجم ۲۴ ساعته: %s دلار', number_format(Config::minVolumeUsdt())),
             sprintf('📊 حداقل امتیاز: %.1f', Config::minSignalScore()),
             '',
             '— مدیریت سرمایه —',
@@ -2095,7 +2119,8 @@ final class AdminPanel
                         'ACCOUNT_BALANCE', 'RISK_PER_TRADE_PCT', 'MAX_DAILY_LOSSES', 'MAX_DAILY_SIGNALS',
                         'BREAK_VOLUME_RATIO', 'MAX_CHASE_ATR', 'REVERSAL_RUN_PCT', 'BASE_RANGE_PCT',
                         'SCANNER_GAINER_SHARE', 'SCANNER_LOSER_SHARE', 'SCANNER_MIN_MOVE_PCT',
-                        'SIGNALS_PER_PASS', 'MIN_CONFLUENCE_SCORE', 'ZONE_REACH_ATR', 'SETUP_VOLUME_MULT'];
+                        'SIGNALS_PER_PASS', 'MIN_CONFLUENCE_SCORE', 'ZONE_REACH_ATR', 'SETUP_VOLUME_MULT',
+                        'MIN_VOLUME_USDT', 'ROTATION_BUDGET_SECONDS'];
             if (in_array($key, $numeric, true) && !is_numeric($value)) {
                 $this->telegram->sendMessage($chatId, "این مقدار باید عدد باشه.");
                 return true;

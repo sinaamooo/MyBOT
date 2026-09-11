@@ -679,64 +679,24 @@ final class Worker
      */
     private function primeMarketData(): void
     {
+        // Only the symbols holding open trades are primed up front. Every
+        // other coin is primed by the rotation at the moment it is visited,
+        // because the universe is now the whole perpetual market and a
+        // pre-loop sweep of it would consume every invocation forever —
+        // which is exactly the failure this bot has already had once.
         $candleManager = $this->marketData->candleManager();
-        foreach ($this->tradingUniverse() as $row) {
+        foreach ($this->signalRepo->openPositionSymbols() as $open) {
             if (!$this->running || $this->outOfDataBudget()) {
                 break;
             }
             $missing = array_values(array_filter(
                 Config::signalTimeframes(),
-                static fn(string $tf) => !$candleManager->hasAny($row['exchange'], $row['symbol'], $tf)
+                static fn(string $tf) => !$candleManager->hasAny($open['exchange'], $open['symbol'], $tf)
             ));
             if (!empty($missing)) {
-                $this->syncSymbolCandles($row['exchange'], $row['symbol'], $missing, 200);
+                $this->syncSymbolCandles($open['exchange'], $open['symbol'], $missing, 200);
             }
         }
-    }
-
-    /**
-     * The symbols this worker actually trades — the same slice the signal
-     * pass evaluates, majors first.
-     *
-     * Collecting data for every symbol the scanner ranked was the single
-     * thing keeping this bot silent. With seven exchanges the scanner banks
-     * ~800 symbols; priming all of them across all six timeframes is ~4800
-     * HTTP round trips, and a cron invocation has about fifty seconds. The
-     * pre-loop priming therefore consumed every invocation forever and the
-     * tick loop — which writes the heartbeat, resolves open trades and
-     * publishes signals — never ran at all. Only ~60 symbols are ever
-     * evaluated, so only those need data.
-     *
-     * @return array<int,array<string,mixed>>
-     */
-    private function tradingUniverse(): array
-    {
-        $universe = $this->symbolRepo->universe(Config::signalMaxSymbolsPerPass());
-
-        // A trade already out in the channel must keep its price feed even
-        // after its symbol drops out of the ranked slice — otherwise
-        // latestPrice() goes stale, monitorOpenPositions() can never see TP
-        // or SL, and the position stays open forever with its result never
-        // announced. The slot it holds would never free either.
-        $held = [];
-        $seen = [];
-        foreach ($this->signalRepo->openPositionSymbols() as $open) {
-            $key = $open['exchange'] . '|' . $open['symbol'];
-            $seen[$key] = true;
-            $held[] = ['exchange' => $open['exchange'], 'symbol' => $open['symbol'], 'base_asset' => '', 'volume_24h' => 0.0];
-        }
-        // Held symbols lead: collection stops when the data budget runs out,
-        // and the tail of the list is what gets dropped.
-        foreach ($universe as $row) {
-            $key = $row['exchange'] . '|' . $row['symbol'];
-            if (isset($seen[$key])) {
-                continue;
-            }
-            $seen[$key] = true;
-            $held[] = $row;
-        }
-
-        return $held;
     }
 
     /**
@@ -761,57 +721,17 @@ final class Worker
      */
     private function updateMarketData(): void
     {
-        $now = time();
-        $dueTimeframes = [];
-        foreach (Config::signalTimeframes() as $tf) {
-            if ($now >= ($this->nextTimeframeRun[$tf] ?? 0)) {
-                $dueTimeframes[] = $tf;
-                $this->nextTimeframeRun[$tf] = $now + $this->timeframeSeconds($tf);
-            }
-        }
-        if (!empty($dueTimeframes)) {
-            // Persist immediately (not just kept in memory) — cron mode
-            // restarts this whole process on the next minute's invocation,
-            // so this is the only place "when is each timeframe next due"
-            // survives.
-            $this->saveTimeframeSchedule($this->nextTimeframeRun);
-        }
-
-        // One ticker fetch per exchange, reused for every symbol on it. This
-        // used to call fetchTicker24h() per symbol, and that endpoint returns
-        // the exchange's WHOLE ticker list — so a 60-symbol pass downloaded
-        // the same multi-megabyte payload 60 times.
+        // Candles are fetched by the rotation, at the moment it visits each
+        // symbol. What has to happen on EVERY tick regardless is the price
+        // feed for coins holding an open trade: TP and SL are decided from
+        // the ticker alone, and a target hit between two visits would
+        // otherwise go unnoticed.
         $tickerCache = [];
-
-        // Open trades first, and on EVERY tick regardless of the candle
-        // schedule. monitorOpenPositions() decides TP and SL from the ticker
-        // alone, so a price that is only refreshed when a 15m candle happens
-        // to be due is a target hit that goes unnoticed — and, if price
-        // retraces before the next refresh, unannounced altogether. These
-        // are also placed ahead of the ranked slice so that running out of
-        // data budget can never starve exactly the symbols a subscriber is
-        // already holding a position in.
         foreach ($this->signalRepo->openPositionSymbols() as $open) {
             if (!$this->running || $this->outOfDataBudget()) {
                 return;
             }
             $this->refreshTicker($tickerCache, (string) $open['exchange'], (string) $open['symbol']);
-        }
-
-        if (empty($dueTimeframes)) {
-            return;
-        }
-
-        foreach ($this->tradingUniverse() as $row) {
-            if (!$this->running || $this->outOfDataBudget()) {
-                break;
-            }
-            $exchange = (string) $row['exchange'];
-            if (!$this->exchangeManager->isHealthy($exchange)) {
-                continue; // circuit open — skip this tick for this exchange only
-            }
-            $this->syncSymbolCandles($exchange, (string) $row['symbol'], $dueTimeframes, 200);
-            $this->refreshTicker($tickerCache, $exchange, (string) $row['symbol']);
         }
     }
 
@@ -1006,41 +926,70 @@ final class Worker
 
     /**
      * The pass's best candidates, highest score first, at most one per
-     * symbol. Candidates are built without being persisted, so the ones
-     * that lose leave no trace.
+     * symbol.
      *
-     * Taking several per pass rather than only the single best is what
-     * raises the signal count without touching a quality gate: every one
-     * returned here already cleared the same filters the old single winner
-     * did — they were simply thrown away for not being first.
+     * This walks the universe on a ROTATION rather than from the top every
+     * time. The universe is now every perpetual above the volume floor —
+     * several hundred coins — and a cron minute cannot sweep that. Starting
+     * at the top each invocation would mean the first sixty coins are
+     * checked every minute and the rest are never checked at all.
+     *
+     * So each invocation resumes where the last one stopped, visits as far
+     * as its time budget allows, and persists the cursor. Every coin gets
+     * looked at in turn, a few minutes apart, which is what "check them all,
+     * about one a second" actually requires.
+     *
+     * Each symbol is synced and evaluated in one visit, so the HTTP call for
+     * its candles is paid once and used immediately.
      *
      * @return Signal[]
      */
     private function findBestCandidates(int $limit): array
     {
         $timeframes = Config::signalTimeframes();
-        $symbols = $this->symbolRepo->universe(Config::signalMaxSymbolsPerPass());
+        $universe = $this->symbolRepo->universe(Config::signalMaxSymbolsPerPass());
+        $total = count($universe);
+        if ($total === 0) {
+            $this->saveScanReport(0, 0, false, 0);
+            return [];
+        }
+
         $this->signalGenerator->resetObservations();
+        $dueTimeframes = $this->dueTimeframes();
+        $tickerCache = [];
+
+        $cursor = $this->loadCursor() % $total;
+        $budgetUntil = microtime(true) + Config::rotationBudgetSeconds();
+        $maxSymbols = min(Config::rotationMaxSymbols(), $total);
+
         $evaluated = 0;
+        $visited = 0;
         /** @var array<string,Signal> $bySymbol */
         $bySymbol = [];
 
-        foreach ($symbols as $row) {
-            // A full pass over a few hundred symbols x 3 timeframes can
-            // outlast a cron invocation. Stopping early still publishes the
-            // best of what was examined; the majors are evaluated first
-            // (SymbolRepository::universe) precisely so an early stop never
-            // costs us BTC/ETH.
-            if (!$this->running || time() >= $this->deadline) {
+        while ($visited < $maxSymbols) {
+            if (!$this->running || microtime(true) >= $budgetUntil || $this->outOfDataBudget()) {
                 break;
             }
+
+            $row = $universe[$cursor];
+            $cursor = ($cursor + 1) % $total;
+            $visited++;
+
             $exchange = (string) $row['exchange'];
+            $symbol = (string) $row['symbol'];
             if (!$this->exchangeManager->isHealthy($exchange)) {
                 continue;
             }
 
             try {
-                $snapshot = $this->marketData->buildSnapshot($exchange, (string) $row['symbol'], $timeframes);
+                // Sync then evaluate, in one visit.
+                if (!empty($dueTimeframes)) {
+                    $this->syncSymbolCandles($exchange, $symbol, $dueTimeframes, 200);
+                }
+                $this->refreshTicker($tickerCache, $exchange, $symbol);
+
+                $snapshot = $this->marketData->buildSnapshot($exchange, $symbol, $timeframes);
                 if ($snapshot->price <= 0) {
                     continue;
                 }
@@ -1062,24 +1011,80 @@ final class Worker
                     }
                 }
             } catch (Throwable $e) {
-                Logger::error('worker', 'signal pipeline failed for symbol', ['symbol' => $row['symbol'], 'exchange' => $exchange, 'error' => $e->getMessage()]);
+                Logger::error('worker', 'signal pipeline failed for symbol', ['symbol' => $symbol, 'exchange' => $exchange, 'error' => $e->getMessage()]);
             }
         }
+
+        $this->saveCursor($cursor);
 
         $ranked = array_values($bySymbol);
         usort($ranked, static fn(Signal $a, Signal $b) => $b->score <=> $a->score);
         $chosen = array_slice($ranked, 0, max(1, $limit));
 
-        $this->saveScanReport($evaluated, count($symbols), !empty($chosen), count($ranked));
+        $this->saveScanReport($evaluated, $total, !empty($chosen), count($ranked), $visited, $cursor);
         return $chosen;
+    }
+
+    /**
+     * Which timeframes are due a candle refresh this invocation. Pulled out
+     * of updateMarketData() so the rotation can sync a symbol at the moment
+     * it visits it instead of in a separate sweep.
+     *
+     * @return string[]
+     */
+    private function dueTimeframes(): array
+    {
+        $now = time();
+        $due = [];
+        foreach (Config::signalTimeframes() as $tf) {
+            if ($now >= ($this->nextTimeframeRun[$tf] ?? 0)) {
+                $due[] = $tf;
+                $this->nextTimeframeRun[$tf] = $now + $this->timeframeSeconds($tf);
+            }
+        }
+        if (!empty($due)) {
+            $this->saveTimeframeSchedule($this->nextTimeframeRun);
+        }
+        return $due;
+    }
+
+    /** Where the rotation stopped last invocation. */
+    private function loadCursor(): int
+    {
+        try {
+            $stmt = Database::pdo()->prepare("SELECT setting_value FROM bot_settings WHERE setting_key = 'scan_cursor'");
+            $stmt->execute();
+            $v = $stmt->fetchColumn();
+            return $v === false || $v === null ? 0 : max(0, (int) $v);
+        } catch (Throwable) {
+            return 0;
+        }
+    }
+
+    private function saveCursor(int $cursor): void
+    {
+        try {
+            Database::pdo()->prepare(
+                "INSERT INTO bot_settings (setting_key, setting_value, updated_at) VALUES ('scan_cursor', :v, :now)
+                 ON CONFLICT(setting_key) DO UPDATE SET setting_value = excluded.setting_value, updated_at = excluded.updated_at"
+            )->execute([':v' => (string) $cursor, ':now' => date('Y-m-d H:i:s')]);
+        } catch (Throwable $e) {
+            Logger::warning('worker', 'could not persist the scan cursor', ['error' => $e->getMessage()]);
+        }
     }
 
     /**
      * Records what the pass saw, so a bot that is simply not finding setups
      * can say so with numbers instead of staying silent and looking broken.
      */
-    private function saveScanReport(int $evaluated, int $symbolCount, bool $published, int $qualified = 0): void
-    {
+    private function saveScanReport(
+        int $evaluated,
+        int $symbolCount,
+        bool $published,
+        int $qualified = 0,
+        int $visited = 0,
+        int $cursor = 0,
+    ): void {
         $observation = $this->signalGenerator->bestObservation();
         $report = [
             'at' => time(),
@@ -1087,6 +1092,8 @@ final class Worker
             'evaluated' => $evaluated,
             'published' => $published,
             'qualified' => $qualified,
+            'visited' => $visited,
+            'cursor' => $cursor,
             'min_score' => Config::minSignalScore(),
             'best' => $observation,
             'daily_stop' => $this->dailyStop,
