@@ -956,6 +956,7 @@ final class Worker
 
         $this->signalGenerator->resetObservations();
         $dueTimeframes = $this->dueTimeframes();
+        $candleManager = $this->marketData->candleManager();
         $tickerCache = [];
 
         $cursor = $this->loadCursor() % $total;
@@ -984,8 +985,26 @@ final class Worker
 
             try {
                 // Sync then evaluate, in one visit.
-                if (!empty($dueTimeframes)) {
-                    $this->syncSymbolCandles($exchange, $symbol, $dueTimeframes, 200);
+                //
+                // The due-schedule is global (one next-run time per
+                // timeframe), so it answers "is a refresh owed" — not "does
+                // THIS coin have any candles". On a rotation those are very
+                // different questions: the first invocation marks 15m as
+                // refreshed for the next quarter hour, and every coin the
+                // rotation reaches after that would be evaluated against an
+                // empty candle table and silently skipped. Most of the
+                // market would never get a first fetch at all.
+                //
+                // So a timeframe is synced when it is due OR when this
+                // symbol has none of it yet.
+                $sync = $dueTimeframes;
+                foreach ($timeframes as $tf) {
+                    if (!in_array($tf, $sync, true) && !$candleManager->hasAny($exchange, $symbol, $tf)) {
+                        $sync[] = $tf;
+                    }
+                }
+                if (!empty($sync)) {
+                    $this->syncSymbolCandles($exchange, $symbol, $sync, 200);
                 }
                 $this->refreshTicker($tickerCache, $exchange, $symbol);
 
