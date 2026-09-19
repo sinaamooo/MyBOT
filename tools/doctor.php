@@ -93,6 +93,34 @@ if (Config::isConfigured()) {
     }
 }
 
+echo "\n▸ وب‌هوک\n";
+$webhookUrl = (string) Config::get('webhook_url', '');
+if ($webhookUrl === '') {
+    $warn('آدرس وب‌هوک در config.php تنظیم نشده (حالت long polling)');
+} else {
+    $ok('آدرس تنظیم‌شده: ' . $webhookUrl);
+    if (Config::isConfigured()) {
+        $info = (new Api())->getWebhookInfo();
+        if ($info['ok'] ?? false) {
+            $current = (string) ($info['result']['url'] ?? '');
+            if ($current === '') {
+                $warn('هنوز روی تلگرام ثبت نشده — php tools/webhook-set.php');
+            } elseif ($current === $webhookUrl) {
+                $ok('روی تلگرام ثبت شده است');
+                $pending = (int) ($info['result']['pending_update_count'] ?? 0);
+                if ($pending > 0) {
+                    $warn($pending . ' آپدیت در صف مانده است');
+                }
+                if (($info['result']['last_error_message'] ?? '') !== '') {
+                    $warn('آخرین خطای تلگرام: ' . $info['result']['last_error_message']);
+                }
+            } else {
+                $warn('آدرس ثبت‌شده فرق دارد: ' . $current);
+            }
+        }
+    }
+}
+
 echo "\n▸ کانال‌ها و زمان‌بندی\n";
 $channels = Channels::all();
 $channels === [] ? $warn('هنوز کانالی ثبت نشده است') : $ok(count($channels) . ' کانال ثبت شده');

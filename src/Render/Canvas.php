@@ -136,36 +136,56 @@ final class Canvas
         );
     }
 
-    /** مستطیل گِرد */
+    /**
+     * مستطیل گِرد.
+     * وقتی رنگ نیمه‌شفاف است، شکل روی یک لایه‌ی جدا ساخته و یک‌باره ترکیب می‌شود
+     * تا محل هم‌پوشانی گوشه‌ها دوبار رنگ نگیرد.
+     */
     public function roundRect(float $x, float $y, float $w, float $h, float $r, string $hex, float $alpha = 1.0): void
     {
-        $col = $this->color($hex, $alpha);
-        $this->roundRectColor($x, $y, $w, $h, $r, $col);
-    }
-
-    private function roundRectColor(float $x, float $y, float $w, float $h, float $r, int $col): void
-    {
-        $r = max(0.0, min($r, min($w, $h) / 2));
-        $x1 = $this->s($x);
-        $y1 = $this->s($y);
-        $x2 = $this->s($x + $w) - 1;
-        $y2 = $this->s($y + $h) - 1;
-        $rs = $this->s($r);
-
-        if ($rs <= 0) {
-            imagefilledrectangle($this->im, $x1, $y1, $x2, $y2, $col);
+        [$red, $green, $blue, $a] = self::parseColor($hex, $alpha);
+        if ($a <= 0) {
+            $this->roundRectColor($this->im, $this->s($x), $this->s($y), $this->s($w), $this->s($h), $this->s($r), $this->color($hex, $alpha));
             return;
         }
-        imagefilledrectangle($this->im, $x1 + $rs, $y1, $x2 - $rs, $y2, $col);
-        imagefilledrectangle($this->im, $x1, $y1 + $rs, $x2, $y2 - $rs, $col);
-        $d = $rs * 2;
-        imagefilledellipse($this->im, $x1 + $rs, $y1 + $rs, $d, $d, $col);
-        imagefilledellipse($this->im, $x2 - $rs, $y1 + $rs, $d, $d, $col);
-        imagefilledellipse($this->im, $x1 + $rs, $y2 - $rs, $d, $d, $col);
-        imagefilledellipse($this->im, $x2 - $rs, $y2 - $rs, $d, $d, $col);
+        if ($a >= 127) {
+            return; // کاملاً شفاف
+        }
+
+        $lw = max(1, $this->s($w));
+        $lh = max(1, $this->s($h));
+        $layer = imagecreatetruecolor($lw, $lh);
+        imagealphablending($layer, false);
+        imagesavealpha($layer, true);
+        imagefilledrectangle($layer, 0, 0, $lw, $lh, imagecolorallocatealpha($layer, 0, 0, 0, 127));
+        $col = imagecolorallocatealpha($layer, $red, $green, $blue, $a);
+        $this->roundRectColor($layer, 0, 0, $lw, $lh, $this->s($r), $col);
+
+        imagealphablending($this->im, true);
+        imagecopy($this->im, $layer, $this->s($x), $this->s($y), 0, 0, $lw, $lh);
+        imagedestroy($layer);
     }
 
-    /** خط دور مستطیل گِرد */
+    private function roundRectColor(GdImage $im, int $x, int $y, int $w, int $h, int $rs, int $col): void
+    {
+        $x2 = $x + $w - 1;
+        $y2 = $y + $h - 1;
+        $rs = max(0, min($rs, (int) (min($w, $h) / 2)));
+
+        if ($rs <= 0) {
+            imagefilledrectangle($im, $x, $y, $x2, $y2, $col);
+            return;
+        }
+        imagefilledrectangle($im, $x + $rs, $y, $x2 - $rs, $y2, $col);
+        imagefilledrectangle($im, $x, $y + $rs, $x2, $y2 - $rs, $col);
+        $d = $rs * 2;
+        imagefilledellipse($im, $x + $rs, $y + $rs, $d, $d, $col);
+        imagefilledellipse($im, $x2 - $rs, $y + $rs, $d, $d, $col);
+        imagefilledellipse($im, $x + $rs, $y2 - $rs, $d, $d, $col);
+        imagefilledellipse($im, $x2 - $rs, $y2 - $rs, $d, $d, $col);
+    }
+
+    /** خط دور مستطیل گِرد (یک‌بار ترکیب می‌شود تا گوشه‌ها پررنگ‌تر نشوند) */
     public function strokeRoundRect(
         float $x,
         float $y,
@@ -176,28 +196,44 @@ final class Canvas
         float $thickness = 1,
         float $alpha = 1.0
     ): void {
-        $col = $this->color($hex, $alpha);
-        $t   = max(1, $this->s($thickness));
-        $r   = max(0.0, min($r, min($w, $h) / 2));
-        $x1 = $this->s($x);
-        $y1 = $this->s($y);
-        $x2 = $this->s($x + $w) - 1;
-        $y2 = $this->s($y + $h) - 1;
-        $rs = $this->s($r);
+        [$red, $green, $blue, $a] = self::parseColor($hex, $alpha);
+        if ($a >= 127) {
+            return;
+        }
+        $t = max(1, $this->s($thickness));
+        $pad = $t + 2;
+        $lw = max(1, $this->s($w) + $pad * 2);
+        $lh = max(1, $this->s($h) + $pad * 2);
 
-        imagesetthickness($this->im, $t);
-        imageline($this->im, $x1 + $rs, $y1, $x2 - $rs, $y1, $col);
-        imageline($this->im, $x1 + $rs, $y2, $x2 - $rs, $y2, $col);
-        imageline($this->im, $x1, $y1 + $rs, $x1, $y2 - $rs, $col);
-        imageline($this->im, $x2, $y1 + $rs, $x2, $y2 - $rs, $col);
+        $layer = imagecreatetruecolor($lw, $lh);
+        imagealphablending($layer, false);
+        imagesavealpha($layer, true);
+        imagefilledrectangle($layer, 0, 0, $lw, $lh, imagecolorallocatealpha($layer, 0, 0, 0, 127));
+        $col = imagecolorallocatealpha($layer, $red, $green, $blue, $a);
+
+        $x1 = $pad;
+        $y1 = $pad;
+        $x2 = $pad + $this->s($w) - 1;
+        $y2 = $pad + $this->s($h) - 1;
+        $rs = max(0, min($this->s($r), (int) (min($this->s($w), $this->s($h)) / 2)));
+
+        imagesetthickness($layer, $t);
+        imageline($layer, $x1 + $rs, $y1, $x2 - $rs, $y1, $col);
+        imageline($layer, $x1 + $rs, $y2, $x2 - $rs, $y2, $col);
+        imageline($layer, $x1, $y1 + $rs, $x1, $y2 - $rs, $col);
+        imageline($layer, $x2, $y1 + $rs, $x2, $y2 - $rs, $col);
         if ($rs > 0) {
             $d = $rs * 2;
-            imagearc($this->im, $x1 + $rs, $y1 + $rs, $d, $d, 180, 270, $col);
-            imagearc($this->im, $x2 - $rs, $y1 + $rs, $d, $d, 270, 360, $col);
-            imagearc($this->im, $x1 + $rs, $y2 - $rs, $d, $d, 90, 180, $col);
-            imagearc($this->im, $x2 - $rs, $y2 - $rs, $d, $d, 0, 90, $col);
+            imagearc($layer, $x1 + $rs, $y1 + $rs, $d, $d, 180, 270, $col);
+            imagearc($layer, $x2 - $rs, $y1 + $rs, $d, $d, 270, 360, $col);
+            imagearc($layer, $x1 + $rs, $y2 - $rs, $d, $d, 90, 180, $col);
+            imagearc($layer, $x2 - $rs, $y2 - $rs, $d, $d, 0, 90, $col);
         }
-        imagesetthickness($this->im, 1);
+        imagesetthickness($layer, 1);
+
+        imagealphablending($this->im, true);
+        imagecopy($this->im, $layer, $this->s($x) - $pad, $this->s($y) - $pad, 0, 0, $lw, $lh);
+        imagedestroy($layer);
     }
 
     /** گرادیان خطی (dir: v عمودی، h افقی، d مورب) با ماسک مستطیل گِرد */
@@ -267,13 +303,14 @@ final class Canvas
     }
 
     /** گرادیان شعاعی (درخشش) */
-    public function radialGlow(float $cx, float $cy, float $radius, string $hex, float $alpha = 0.6, int $steps = 28): void
+    public function radialGlow(float $cx, float $cy, float $radius, string $hex, float $alpha = 0.6, int $steps = 72): void
     {
-        $steps = max(4, $steps);
+        $steps = max(8, $steps);
+        $perStep = 28 / $steps; // تعداد گام بیشتر = گرادیان نرم‌تر بدون پررنگ‌شدن
         for ($i = $steps; $i > 0; $i--) {
             $t = $i / $steps;
             $rr = $radius * $t;
-            $a = $alpha * (1 - $t) ** 1.7;
+            $a = $alpha * (1 - $t) ** 1.7 * $perStep;
             if ($a <= 0.004) {
                 continue;
             }
@@ -311,7 +348,6 @@ final class Canvas
         imagealphablending($layer, false);
         imagesavealpha($layer, true);
         imagefilledrectangle($layer, 0, 0, $sw, $sh, imagecolorallocatealpha($layer, 0, 0, 0, 127));
-        imagealphablending($layer, true);
 
         [$r, $g, $b] = self::parseColor($hex);
         $col = imagecolorallocatealpha($layer, $r, $g, $b, (int) round(127 * (1 - $alpha)));
@@ -319,7 +355,8 @@ final class Canvas
         $rw = (int) ($this->s($w) / $down);
         $rh = (int) ($this->s($h) / $down);
         $rr = max(1, (int) ($this->s($radius) / $down));
-        self::roundRectOn($layer, $rx, $rx, $rw, $rh, $rr, $col);
+        $this->roundRectColor($layer, $rx, $rx, $rw, $rh, $rr, $col);
+        imagealphablending($layer, true);
 
         $passes = max(1, (int) round($blur / 3));
         for ($i = 0; $i < $passes; $i++) {
@@ -340,6 +377,164 @@ final class Canvas
             $sh
         );
         imagedestroy($layer);
+    }
+
+    /**
+     * جعبه‌ی شیشه‌ای: پس‌زمینه را محو می‌کند و روی آن لایه‌ی نیمه‌شفاف می‌کشد.
+     *
+     * @param array{fill?:float,border?:float,blur?:int,highlight?:bool,tint?:string,shadow?:bool} $options
+     */
+    public function glass(float $x, float $y, float $w, float $h, float $radius = 16, array $options = []): void
+    {
+        $fill      = (float) ($options['fill'] ?? 0.055);
+        $border    = (float) ($options['border'] ?? 0.13);
+        $blur      = (int) ($options['blur'] ?? 3);
+        $highlight = (bool) ($options['highlight'] ?? true);
+        $tint      = (string) ($options['tint'] ?? '#FFFFFF');
+        $shadow    = (bool) ($options['shadow'] ?? true);
+
+        if ($shadow) {
+            $this->shadow($x, $y, $w, $h, $radius, '#000000', 0.30, 14, 5);
+        }
+        if ($blur > 0) {
+            $this->backdropBlur($x, $y, $w, $h, $radius, $blur);
+        }
+
+        $this->roundRect($x, $y, $w, $h, $radius, $tint, $fill);
+        if ($highlight) {
+            // بازتاب نور در بالای جعبه (محوشونده، بدون لبه‌ی تیز)
+            $band = min($h * 0.5, 56.0);
+            for ($i = 0; $i < $band; $i += 2) {
+                $a = 0.05 * (1 - $i / $band) ** 2;
+                if ($a < 0.003) {
+                    break;
+                }
+                $inset = $i < $radius ? ($radius - sqrt(max(0.0, $radius ** 2 - ($radius - $i) ** 2))) : 0.0;
+                $this->rect($x + $inset + 1, $y + $i + 1, $w - ($inset + 1) * 2, 2, '#FFFFFF', $a);
+            }
+            $this->line($x + $radius * 0.8, $y + 0.9, $x + $w - $radius * 0.8, $y + 0.9, '#FFFFFF', 1, 0.20);
+        }
+        if ($border > 0) {
+            $this->strokeRoundRect($x, $y, $w, $h, $radius, '#FFFFFF', 1, $border);
+        }
+    }
+
+    /** محو کردن ناحیه‌ای از خود بوم (افکت شیشه‌ی مات) */
+    public function backdropBlur(float $x, float $y, float $w, float $h, float $radius, int $passes = 3): void
+    {
+        $sx = max(0, $this->s($x));
+        $sy = max(0, $this->s($y));
+        $sw = min($this->s($w), imagesx($this->im) - $sx);
+        $sh = min($this->s($h), imagesy($this->im) - $sy);
+        if ($sw < 4 || $sh < 4) {
+            return;
+        }
+
+        $down = 4;
+        $tw = max(2, (int) ($sw / $down));
+        $th = max(2, (int) ($sh / $down));
+
+        $small = imagecreatetruecolor($tw, $th);
+        imagealphablending($small, false);
+        imagesavealpha($small, true);
+        imagecopyresampled($small, $this->im, 0, 0, $sx, $sy, $tw, $th, $sw, $sh);
+        imagealphablending($small, true);
+        for ($i = 0; $i < max(1, $passes); $i++) {
+            imagefilter($small, IMG_FILTER_GAUSSIAN_BLUR);
+        }
+
+        $layer = imagecreatetruecolor($sw, $sh);
+        imagealphablending($layer, false);
+        imagesavealpha($layer, true);
+        imagecopyresampled($layer, $small, 0, 0, 0, 0, $sw, $sh, $tw, $th);
+        imagedestroy($small);
+
+        $this->applyRoundMask($layer, $this->s($radius));
+        imagealphablending($this->im, true);
+        imagecopy($this->im, $layer, $sx, $sy, 0, 0, $sw, $sh);
+        imagedestroy($layer);
+    }
+
+    /** رسم فایل تصویری (با کش) */
+    public function image(string $path, float $x, float $y, float $w, float $h, float $alpha = 1.0): bool
+    {
+        $src = self::loadImage($path);
+        if ($src === null) {
+            return false;
+        }
+        $dw = $this->s($w);
+        $dh = $this->s($h);
+
+        $scaled = imagecreatetruecolor($dw, $dh);
+        imagealphablending($scaled, false);
+        imagesavealpha($scaled, true);
+        imagefilledrectangle($scaled, 0, 0, $dw, $dh, imagecolorallocatealpha($scaled, 0, 0, 0, 127));
+        imagecopyresampled($scaled, $src, 0, 0, 0, 0, $dw, $dh, imagesx($src), imagesy($src));
+
+        imagealphablending($this->im, true);
+        if ($alpha >= 1.0) {
+            imagecopy($this->im, $scaled, $this->s($x), $this->s($y), 0, 0, $dw, $dh);
+        } else {
+            imagecopymerge($this->im, $scaled, $this->s($x), $this->s($y), 0, 0, $dw, $dh, (int) round($alpha * 100));
+        }
+        imagedestroy($scaled);
+
+        return true;
+    }
+
+    /** @var array<string,\GdImage|null> */
+    private static array $imageCache = [];
+
+    public static function loadImage(string $path): ?GdImage
+    {
+        if (array_key_exists($path, self::$imageCache)) {
+            return self::$imageCache[$path];
+        }
+        $image = null;
+        if (is_file($path)) {
+            $data = @file_get_contents($path);
+            if ($data !== false) {
+                $loaded = @imagecreatefromstring($data);
+                if ($loaded !== false) {
+                    imagealphablending($loaded, false);
+                    imagesavealpha($loaded, true);
+                    $image = $loaded;
+                }
+            }
+        }
+
+        return self::$imageCache[$path] = $image;
+    }
+
+    /** میانگین روشنایی بخش‌های مات یک تصویر (۰ تا ۱) */
+    public static function imageLuminance(string $path): float
+    {
+        $src = self::loadImage($path);
+        if ($src === null) {
+            return 0.5;
+        }
+        $w = imagesx($src);
+        $h = imagesy($src);
+        $sum = 0.0;
+        $count = 0;
+        $step = max(1, (int) ($w / 24));
+
+        for ($y = 0; $y < $h; $y += $step) {
+            for ($x = 0; $x < $w; $x += $step) {
+                $rgba = imagecolorat($src, $x, $y);
+                $a = ($rgba >> 24) & 0x7F;
+                if ($a > 90) {
+                    continue; // تقریباً شفاف
+                }
+                $r = ($rgba >> 16) & 0xFF;
+                $g = ($rgba >> 8) & 0xFF;
+                $b = $rgba & 0xFF;
+                $sum += (0.2126 * $r + 0.7152 * $g + 0.0722 * $b) / 255;
+                $count++;
+            }
+        }
+
+        return $count > 0 ? $sum / $count : 0.5;
     }
 
     public function line(float $x1, float $y1, float $x2, float $y2, string $hex, float $thickness = 1, float $alpha = 1.0): void
@@ -729,22 +924,6 @@ final class Canvas
     }
 
     // ------------------------------------------------------------- کمکی
-
-    private static function roundRectOn(GdImage $im, int $x, int $y, int $w, int $h, int $r, int $col): void
-    {
-        $x2 = $x + $w;
-        $y2 = $y + $h;
-        $r = max(0, min($r, (int) (min($w, $h) / 2)));
-        imagefilledrectangle($im, $x + $r, $y, $x2 - $r, $y2, $col);
-        imagefilledrectangle($im, $x, $y + $r, $x2, $y2 - $r, $col);
-        if ($r > 0) {
-            $d = $r * 2;
-            imagefilledellipse($im, $x + $r, $y + $r, $d, $d, $col);
-            imagefilledellipse($im, $x2 - $r, $y + $r, $d, $d, $col);
-            imagefilledellipse($im, $x + $r, $y2 - $r, $d, $d, $col);
-            imagefilledellipse($im, $x2 - $r, $y2 - $r, $d, $d, $col);
-        }
-    }
 
     /** گوشه‌های یک لایه را شفاف می‌کند */
     private function applyRoundMask(GdImage $layer, int $radius): void

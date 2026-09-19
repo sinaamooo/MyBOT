@@ -1,0 +1,8 @@
+# اگر روی هاست اشتراکی با Apache هستید، این فایل را به ریشه‌ی پروژه
+# با نام .htaccess کپی کنید تا فایل‌های حساس از بیرون در دسترس نباشند.
+
+<FilesMatch "^(config\.php|.*\.sqlite.*|.*\.log)$">
+    Require all denied
+</FilesMatch>
+
+RedirectMatch 404 ^/(src|data|storage|tools|fixtures|deploy)/

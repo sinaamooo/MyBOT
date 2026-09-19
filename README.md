@@ -14,11 +14,13 @@
 
 ## ✨ ویژگی‌ها
 
+- **طراحی شیشه‌ای تیره** — جعبه‌های گلس‌مورفیسم با بلور واقعی پس‌زمینه، تایپوگرافی ریز و تمیز، بدون شلوغی.
+- **لوگوی اختصاصی هر ارز** روی کارت قیمت‌ها (۴۱ لوگو همراه پروژه، بدون نیاز به اینترنت).
 - **پنل کامل فارسی داخل تلگرام** — کانال مقصد، ساعت ارسال، روزهای هفته، تم رنگی، کپشن و ارزها؛ همه با دکمه.
 - **زمان‌بندی دقیقه‌ای** — برای هر کارت چند ساعت مختلف در روز، با انتخاب روزهای هفته و منطقه‌ی زمانی دلخواه (پیش‌فرض `Asia/Tehran`).
 - **تاریخ شمسی** روی کارت‌ها و در پنل.
 - **متن فارسی واقعی روی تصویر** — موتور اختصاصی شکل‌دهی حروف (اتصال حروف، لام‌الف، نیم‌فاصله) و چینش دوسویه (Bidi) که اعداد و متن لاتین را در جای درست نگه می‌دارد.
-- **۵ تم رنگی** برای قاب نئونی کارت‌ها: آرورا، کریمسون، امرالد، گلد، اوشن.
+- **۵ تم** — «مونو» (سیاه‌وسفید، پیش‌فرض)، آرورا، کریمسون، امرالد و گلد.
 - **پرچم‌های برداری** ۲۵ کشور — بدون نیاز به فایل تصویر یا فونت ایموجی.
 - **بدون وابستگی خارجی** — نه Composer، نه کتابخانه‌ی جانبی. فقط PHP + GD + SQLite.
 - **جلوگیری از ارسال تکراری** و **جبران تأخیر** اگر سرور چند دقیقه خواب بود.
@@ -44,8 +46,8 @@ PHP نسخه‌ی **۸.۱ یا بالاتر** لازم است و افزونه‌
 git clone https://github.com/sinaamooo/MyBOT.git
 cd MyBOT
 
-# ساخت فایل پیکربندی (توکن از @BotFather و شناسه‌ی عددی خودتان)
-php tools/install.php --token=123456789:AAH... --owner=6595849261
+# ثبت توکن (فقط یک‌بار) — فایل config.local.php ساخته می‌شود
+php tools/install.php --token=123456789:AAH...
 
 # بررسی سلامت نصب
 php tools/doctor.php
@@ -55,7 +57,15 @@ php bot.php          # ربات و پنل
 php scheduler.php    # زمان‌بند (در ترمینال دوم)
 ```
 
-> 🔐 فایل `config.php` حاوی توکن است و در `.gitignore` قرار دارد؛ هرگز آن را در مخزن عمومی نگذارید.
+تنظیمات عمومی (شناسه‌ی مدیر `6595849261`، دامنه‌ی وب‌هوک، منطقه‌ی زمانی) از قبل در
+`config.php` آماده است؛ فقط توکن باید یک‌بار ثبت شود.
+
+> 🔐 **چرا توکن در مخزن نیست؟** هر کسی که به مخزن دسترسی داشته باشد با آن توکن
+> کنترل کامل ربات را می‌گیرد. به همین دلیل توکن در `config.local.php` ذخیره می‌شود
+> که در `.gitignore` است. راه دیگر: `BOT_TOKEN=123456789:AAH... php bot.php`
+>
+> اگر توکن جایی لو رفت، در @BotFather دستور `/revoke` را بزنید و دوباره
+> `php tools/install.php --token=... --force` را اجرا کنید.
 
 ---
 
@@ -122,11 +132,27 @@ sudo systemctl status nikto-bot
 
 ### حالت وب‌هوک (به‌جای `bot.php`)
 
-```bash
-php tools/webhook-set.php https://example.com/webhook.php
-php tools/webhook-set.php --info
-php tools/webhook-set.php --delete
+آدرس وب‌هوک در `config.php` تنظیم شده است:
+
 ```
+https://nikto.s14.telviprobot.top/webhook.php
+```
+
+```bash
+php tools/webhook-set.php            # ثبت همین آدرس روی تلگرام
+php tools/webhook-set.php --info     # وضعیت فعلی
+php tools/webhook-set.php --delete   # حذف وب‌هوک و برگشت به bot.php
+```
+
+پیش‌نیازها:
+
+1. دامنه باید **SSL معتبر** داشته باشد (تلگرام فقط `https` می‌پذیرد).
+2. ریشه‌ی دامنه به پوشه‌ی پروژه اشاره کند؛ نمونه‌ی پیکربندی در `deploy/nginx.conf.sample`
+   و برای هاست اشتراکی `deploy/.htaccess.sample`.
+   با این تنظیم، هم `/` و هم `/webhook.php` آپدیت‌ها را می‌گیرند.
+3. مسیرهای `config.php`، `data/` و `storage/` نباید از بیرون قابل دسترسی باشند —
+   هر دو فایل نمونه این کار را انجام می‌دهند.
+4. در حالت وب‌هوک `bot.php` لازم نیست، اما **`scheduler.php` باید همچنان اجرا شود**.
 
 ---
 
@@ -149,17 +175,20 @@ MyBOT/
 ├── bot.php                  اجرای ربات (long polling)
 ├── scheduler.php            زمان‌بند ارسال
 ├── webhook.php              نقطه‌ی ورود وب‌هوک
-├── config.sample.php        نمونه‌ی پیکربندی
+├── index.php                ریشه‌ی دامنه (وب‌هوک + صفحه‌ی وضعیت)
+├── config.php               تنظیمات عمومی (مدیران، دامنه، منطقه‌ی زمانی)
+├── config.local.php         توکن ربات — گیت‌نشده، با install.php ساخته می‌شود
 ├── assets/fonts/            فونت وزیرمتن (۶ وزن)
+├── assets/coins/            ۴۱ لوگوی ارز
 ├── fixtures/                داده‌ی نمونه برای حالت آفلاین
-├── deploy/                  فایل‌های systemd
+├── deploy/                  systemd + نمونه‌ی nginx و htaccess
 ├── tools/                   install · doctor · preview · selftest · webhook-set
 └── src/
     ├── Core/                Config · Db · Settings · Http · Log · Jalali
     ├── Text/Persian.php     شکل‌دهی حروف + چینش دوسویه
     ├── Data/                PriceProvider · FearGreedProvider · CalendarProvider
     │                        EventTranslator · Coins · Countries · Mock
-    ├── Render/              Canvas · Theme · Frame · Flags · سه کارت
+    ├── Render/              Canvas · Theme · Frame · Flags · CoinLogo · سه کارت
     ├── Jobs/                Job · Registry · Dispatcher · Scheduler
     └── Telegram/            Api · Panel · Channels · Access · State
 ```
@@ -188,6 +217,8 @@ MyBOT/
 | کارت ارسال نمی‌شود | `📊 وضعیت` را ببینید: کارت روشن است؟ کانال انتخاب شده؟ زمان‌بند فعال است؟ |
 | ضربان زمان‌بند «متوقف؟» | `php scheduler.php` یا سرویس `nikto-scheduler` در حال اجرا نیست |
 | متن فارسی مربع نشان می‌دهد | فونت‌های `assets/fonts` موجود نیستند یا GD بدون FreeType است — `php tools/doctor.php` |
+| وب‌هوک کار نمی‌کند | `php tools/webhook-set.php --info` را ببینید؛ SSL دامنه و دسترسی عمومی `webhook.php` را بررسی کنید |
+| لوگوی یک ارز نمایش داده نمی‌شود | لوگوی آن ارز در `assets/coins/color` نیست؛ دایره‌ای با نماد ارز جایگزین می‌شود |
 | «داده‌ای دریافت نشد» | سرور به Binance/alternative.me دسترسی ندارد؛ در `config.php` مقدار `http_proxy` را تنظیم کنید |
 | تصویرها خیلی سنگین‌اند | در تنظیمات، کیفیت تصویر را روی «معمولی» بگذارید |
 
@@ -195,4 +226,5 @@ MyBOT/
 
 ## 📜 مجوز
 
-فونت **Vazirmatn** اثر صابر راستی‌کردار با مجوز SIL OFL 1.1 در `assets/fonts` همراه پروژه است.
+- فونت **Vazirmatn** اثر صابر راستی‌کردار — مجوز SIL OFL 1.1 (`assets/fonts/OFL.txt`).
+- لوگوی ارزها از مجموعه‌های **cryptocurrency-icons** (CC0) و **trustwallet/assets** (MIT).

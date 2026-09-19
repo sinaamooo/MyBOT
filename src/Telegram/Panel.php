@@ -356,10 +356,10 @@ final class Panel
                 return $ask('set_timezone', "🌍 <b>منطقه‌ی زمانی</b>\n\nنام منطقه را بفرستید؛ مثال:\n<code>Asia/Tehran</code>\n<code>Europe/Istanbul</code>\n<code>UTC</code>");
 
             case 'brand':
-                return $ask('set_brand', "🏷 <b>نام کانال روی کارت‌ها</b>\n\nمتن دلخواه (ترجیحاً انگلیسی و کوتاه) را بفرستید؛ مثال:\n<code>NIKTO CRYPTO</code>");
+                return $ask('set_brand', "🏷 <b>نام نمایشی ربات</b>\n\nاین نام فقط در پنل و پیام‌ها دیده می‌شود (روی کارت‌ها چاپ نمی‌شود).");
 
             case 'link':
-                return $ask('set_link', "🔗 <b>آیدی/لینک کانال</b>\n\nمتنی که پایین کارت و در کپشن می‌آید؛ مثال:\n<code>@nikto_crypto</code>");
+                return $ask('set_link', "🔗 <b>امضای زیر کارت</b>\n\nمتنی که در پایین کارت و در کپشن می‌آید؛ مثال:\n<code>@nikto_crypto</code>\n\nبرای حذف، کلمه‌ی <code>خالی</code> را بفرستید.");
 
             case 'cur':
                 return $ask('set_currencies', "💱 <b>ارزهای تقویم اقتصادی</b>\n\nکدهای ارز را با کاما بفرستید؛ مثال:\n<code>USD,EUR,GBP,JPY,CAD</code>");
@@ -512,7 +512,7 @@ final class Panel
                 return;
 
             case 'set_link':
-                Settings::set('brand_link', mb_substr($text, 0, 60));
+                Settings::set('brand_link', $text === 'خالی' ? '' : mb_substr($text, 0, 60));
                 $this->api->sendMessage($chatId, '✅ ذخیره شد.');
                 $this->send($chatId, $this->screenSettings());
                 return;
@@ -997,8 +997,8 @@ final class Panel
             '⚙️ <b>تنظیمات کلی</b>',
             '',
             '🌍 منطقه‌ی زمانی: <code>' . htmlspecialchars(Settings::get('timezone')) . '</code>',
-            '🏷 نام روی کارت: <code>' . htmlspecialchars(Settings::get('brand')) . '</code>',
-            '🔗 آیدی کانال: <code>' . htmlspecialchars(Settings::get('brand_link') ?: '—') . '</code>',
+            '🏷 نام ربات (پنل): <code>' . htmlspecialchars(Settings::get('brand')) . '</code>',
+            '🔗 امضای زیر کارت: <code>' . htmlspecialchars(Settings::get('brand_link') ?: '—') . '</code>',
             '🔢 ارقام متن: ' . (Settings::get('digits') === 'fa' ? 'فارسی ۱۲۳' : 'لاتین 123'),
             '💵 ارقام داده: ' . (Settings::get('digits_data') === 'fa' ? 'فارسی ۱۲۳' : 'لاتین 123'),
             '🖼 کیفیت تصویر: ' . (Settings::get('quality') === 'high' ? 'بالا' : 'معمولی'),
@@ -1013,7 +1013,7 @@ final class Panel
 
         $kb = [
             [$this->btn('🌍 منطقه‌ی زمانی', 's:tz'), $this->btn('🏷 نام کانال', 's:brand')],
-            [$this->btn('🔗 آیدی کانال', 's:link'), $this->btn('🪙 ارزهای پیش‌فرض', 's:coins')],
+            [$this->btn('🔗 امضای زیر کارت', 's:link'), $this->btn('🪙 ارزهای پیش‌فرض', 's:coins')],
             [$this->btn('🔢 ارقام متن', 's:digits'), $this->btn('💵 ارقام داده', 's:ddata')],
             [$this->btn('🖼 کیفیت تصویر', 's:q'), $this->btn('📤 حالت ارسال', 's:mode')],
             [$this->btn('💹 منبع قیمت', 's:psrc'), $this->btn('📅 منبع تقویم', 's:csrc')],

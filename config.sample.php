@@ -38,6 +38,9 @@ return [
     // سطح لاگ: debug | info | warn | error
     'log_level' => 'info',
 
-    // فقط برای حالت وب‌هوک — یک رشته‌ی تصادفی
+    // حالت وب‌هوک: آدرس عمومی فایل webhook.php روی دامنه‌ی شما
+    'webhook_url'    => 'https://your-domain.tld/webhook.php',
+
+    // یک رشته‌ی تصادفی؛ تلگرام آن را در هدر هر درخواست می‌فرستد
     'webhook_secret' => '',
 ];

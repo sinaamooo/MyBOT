@@ -33,7 +33,7 @@ final class CalendarJob extends Job
 
     public function defaultTheme(): string
     {
-        return 'crimson';
+        return 'mono';
     }
 
     public function defaultOptions(): array

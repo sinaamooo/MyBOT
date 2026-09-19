@@ -35,11 +35,10 @@ final class Config
             'webhook_secret' => '',
         ];
 
-        $file = APP_ROOT . '/config.php';
-        $fromFile = is_file($file) ? (require $file) : [];
-        if (!is_array($fromFile)) {
-            $fromFile = [];
-        }
+        // config.php تنظیمات عمومی را دارد و در مخزن ذخیره می‌شود،
+        // config.local.php فقط مقادیر محرمانه (توکن) را دارد و در .gitignore است.
+        $fromFile = self::readFile(APP_ROOT . '/config.php');
+        $fromLocal = self::readFile(APP_ROOT . '/config.local.php');
 
         $fromEnv = array_filter([
             'bot_token' => getenv('BOT_TOKEN') ?: null,
@@ -49,7 +48,7 @@ final class Config
             'brand'     => getenv('BOT_BRAND') ?: null,
         ], static fn ($v) => $v !== null);
 
-        self::$data = array_replace($defaults, $fromFile, $fromEnv);
+        self::$data = array_replace($defaults, $fromFile, $fromLocal, $fromEnv);
 
         $admins = self::$data['admins'];
         if (!is_array($admins)) {
@@ -59,6 +58,17 @@ final class Config
             $admins[] = (int) self::$data['owner_id'];
         }
         self::$data['admins'] = array_values(array_unique(array_filter(array_map('intval', $admins))));
+    }
+
+    /** @return array<string,mixed> */
+    private static function readFile(string $path): array
+    {
+        if (!is_file($path)) {
+            return [];
+        }
+        $data = require $path;
+
+        return is_array($data) ? array_filter($data, static fn ($v) => $v !== '' && $v !== null) : [];
     }
 
     public static function get(string $key, mixed $default = null): mixed

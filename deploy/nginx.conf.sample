@@ -1,0 +1,40 @@
+# نمونه‌ی پیکربندی Nginx برای وب‌هوک
+# دامنه: nikto.s14.telviprobot.top
+
+server {
+    listen 80;
+    server_name nikto.s14.telviprobot.top;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name nikto.s14.telviprobot.top;
+
+    ssl_certificate     /etc/letsencrypt/live/nikto.s14.telviprobot.top/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/nikto.s14.telviprobot.top/privkey.pem;
+
+    root /opt/MyBOT;
+    index index.php;
+
+    client_max_body_size 8m;
+
+    # فقط این دو مسیر از بیرون در دسترس باشند
+    location = / {
+        try_files /index.php =404;
+        fastcgi_pass unix:/run/php/php8.2-fpm.sock;
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME $document_root/index.php;
+    }
+
+    location = /webhook.php {
+        fastcgi_pass unix:/run/php/php8.2-fpm.sock;
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME $document_root/webhook.php;
+    }
+
+    # بستن دسترسی به بقیه‌ی فایل‌ها (به‌ویژه config.php و دیتابیس)
+    location / {
+        return 404;
+    }
+}

@@ -33,7 +33,7 @@ final class PricesJob extends Job
 
     public function defaultTheme(): string
     {
-        return 'aurora';
+        return 'mono';
     }
 
     public function defaultOptions(): array

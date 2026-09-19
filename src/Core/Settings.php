@@ -13,8 +13,8 @@ final class Settings
 
     public const DEFAULTS = [
         'timezone'          => 'Asia/Tehran',
-        'brand'             => 'NIKTO CRYPTO',
-        'brand_link'        => '',
+        'brand'             => 'NIKTO CRYPTO',   // فقط نام نمایشی در پنل
+        'brand_link'        => '',               // اگر پر شود، زیر کارت‌ها نوشته می‌شود
         'digits'            => 'fa',      // ارقام متن و تاریخ‌ها: fa | en
         'digits_data'       => 'en',      // ارقام داده‌ها (قیمت، درصد): fa | en
         'catchup_minutes'   => '10',      // اگر زمانبند دیر اجرا شد، تا چند دقیقه جبران کند

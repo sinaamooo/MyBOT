@@ -2,9 +2,11 @@
 /**
  * تنظیم یا حذف وب‌هوک
  *
- *   php tools/webhook-set.php https://example.com/webhook.php
- *   php tools/webhook-set.php --delete
- *   php tools/webhook-set.php --info
+ *   php tools/webhook-set.php                      آدرس webhook_url از config.php
+ *   php tools/webhook-set.php https://dom/webhook.php
+ *   php tools/webhook-set.php --url                فقط نمایش آدرس تنظیم‌شده
+ *   php tools/webhook-set.php --info               وضعیت فعلی وب‌هوک
+ *   php tools/webhook-set.php --delete             حذف وب‌هوک
  */
 declare(strict_types=1);
 
@@ -14,7 +16,13 @@ use Nikto\Core\Config;
 use Nikto\Telegram\Api;
 
 $api = new Api();
-$arg = $argv[1] ?? '--info';
+$configured = (string) Config::get('webhook_url', '');
+$arg = $argv[1] ?? ($configured !== '' ? $configured : '--info');
+
+if ($arg === '--url') {
+    echo $configured !== '' ? $configured . "\n" : "در config.php مقدار webhook_url تنظیم نشده است.\n";
+    exit;
+}
 
 if ($arg === '--delete') {
     $res = $api->deleteWebhook();
@@ -34,6 +42,10 @@ if (!filter_var($arg, FILTER_VALIDATE_URL) || !str_starts_with($arg, 'https://')
 }
 
 $res = $api->setWebhook($arg, (string) Config::get('webhook_secret', ''));
-echo ($res['ok'] ?? false)
-    ? "✅ وب‌هوک تنظیم شد: {$arg}\n"
-    : '❌ ' . ($res['description'] ?? 'خطا') . "\n";
+if ($res['ok'] ?? false) {
+    echo "✅ وب‌هوک تنظیم شد:\n   {$arg}\n\n";
+    echo "از این پس نیازی به اجرای bot.php نیست؛ فقط scheduler.php باید روشن بماند.\n";
+} else {
+    echo '❌ ' . ($res['description'] ?? 'خطا') . "\n";
+    exit(1);
+}

@@ -6,15 +6,17 @@ namespace Nikto\Render;
 use Nikto\Data\PriceProvider;
 
 /**
- * کارت نوسان ۲۴ ساعته‌ی ارزها (شبکه‌ی ۳×۲).
+ * کارت نوسان ۲۴ ساعته — جعبه‌های شیشه‌ای با لوگوی هر ارز.
  */
 final class PriceCard extends Card
 {
+    private const TILE_H = 193.0;
+    private const GAP    = 16.0;
+
     /** @var array<int,array<string,mixed>> */
     private array $coins;
     private string $title;
 
-    /** @param array<int,array<string,mixed>> $coins */
     public function __construct(array $coins, ?string $theme = null, array $options = [])
     {
         parent::__construct($theme, $options);
@@ -25,157 +27,121 @@ final class PriceCard extends Card
     public function render(): Canvas
     {
         $count = max(1, count($this->coins));
-        $cols  = $count <= 4 ? 2 : 3;
+        $cols  = $count <= 4 ? min(2, $count) : 3;
         $rows  = (int) ceil($count / $cols);
 
-        $width  = 1200;
-        $height = $rows >= 3 ? 860 : ($rows === 2 ? 675 : 500);
+        $height = (int) round(76 + 62 + $rows * self::TILE_H + ($rows - 1) * self::GAP);
 
-        $c = new Canvas($width, $height, $this->quality);
+        $c = new Canvas(1200, $height, $this->quality);
         $t = $this->theme;
 
-        $rect = Frame::draw($c, $t, [
-            'brand'  => $this->brand,
-            'footer' => $this->footer,
-        ]);
+        $rect = Frame::draw($c, $t, ['footer' => $this->footer]);
+        $top = Frame::header($c, $t, $rect, $this->title, $this->dateLine(), $this->marketBadge());
 
-        $top = Frame::panelHeader(
-            $c,
-            $t,
-            $rect,
-            $this->title,
-            $this->dateLine(),
-            $this->marketBadge()
-        );
-
-        $padX = 30.0;
-        $gap  = 18.0;
-        $areaW = $rect['w'] - $padX * 2;
-        $areaH = $rect['y'] + $rect['h'] - $top - 26;
-        $tileW = ($areaW - $gap * ($cols - 1)) / $cols;
-        $tileH = ($areaH - $gap * ($rows - 1)) / $rows;
+        $tileW = ($rect['w'] - self::GAP * ($cols - 1)) / $cols;
 
         foreach ($this->coins as $i => $coin) {
             $col = $i % $cols;
             $row = (int) floor($i / $cols);
             // چیدمان از راست به چپ
-            $x = $rect['x'] + $padX + ($cols - 1 - $col) * ($tileW + $gap);
-            $y = $top + $row * ($tileH + $gap);
-            $this->tile($c, $t, $coin, $x, $y, $tileW, $tileH);
+            $x = $rect['x'] + ($cols - 1 - $col) * ($tileW + self::GAP);
+            $y = $top + $row * (self::TILE_H + self::GAP);
+            $this->tile($c, $t, $coin, $x, $y, $tileW, self::TILE_H);
         }
 
         return $c;
     }
 
-    /** برچسب خلاصه‌ی بازار در گوشه‌ی چپ سربرگ */
     private function marketBadge(): string
     {
         $up = 0;
         foreach ($this->coins as $coin) {
-            if ((float) $coin['change_pct'] >= 0) {
+            if ((float) $coin['change_pct'] > 0) {
                 $up++;
             }
         }
-        $total = max(1, count($this->coins));
 
-        return $this->dnum($up . '/' . $total) . ' صعودی';
+        return $this->dnum($up . '/' . count($this->coins)) . ' صعودی';
     }
 
     private function tile(Canvas $c, Theme $t, array $coin, float $x, float $y, float $w, float $h): void
     {
-        $pct     = (float) $coin['change_pct'];
-        $isUp    = $pct > 0;
-        $isFlat  = abs($pct) < 0.005;
-        $trend   = $isFlat ? $t->c('flat') : ($isUp ? $t->c('up') : $t->c('down'));
-        $brand   = (string) $coin['color'];
+        $pct    = (float) $coin['change_pct'];
+        $isUp   = $pct > 0;
+        $isFlat = abs($pct) < 0.005;
+        $trend  = $t->trend($pct);
 
-        // بدنه‌ی کارت
-        $c->shadow($x, $y, $w, $h, 20, '#243154', 0.16, 14, 5);
-        $c->roundRect($x, $y, $w, $h, 20, '#FFFFFF');
-        $c->gradient($x + 2, $y + $h * 0.45, $w - 4, $h * 0.55 - 2, '#FFFFFF', '#F3F6FC', 'v', 0, 0.9);
-        $c->strokeRoundRect($x, $y, $w, $h, 20, $t->c('line'), 1.2, 0.9);
-        // نوار رنگی ارز در لبه‌ی راست
-        $c->roundRect($x + $w - 7, $y + 16, 5, $h - 32, 3, $brand, 0.95);
+        $c->glass($x, $y, $w, $h, 18, ['fill' => 0.065, 'border' => 0.14, 'tint' => $t->c('tint')]);
 
-        $padX  = 20.0;
-        $left  = $x + $padX;
-        $right = $x + $w - $padX - 10;
-        $inner = $w - $padX * 2 - 10;
+        $pad   = 16.0;
+        $left  = $x + $pad;
+        $right = $x + $w - $pad;
 
-        // چیدمان عمودی متناسب با ارتفاع کارت
-        $symY  = $y + $h * 0.075;
-        $priceY = $y + $h * 0.245;
-        $pillY  = $y + $h * 0.50;
-        $pillH  = min(34.0, $h * 0.185);
-        $chartY = $pillY + $pillH + $h * 0.045;
-        $chartH = max(26.0, $y + $h - $chartY - $h * 0.085);
+        // ── ردیف نماد و لوگو
+        $logoSize = 30.0;
+        $logoCx = $right - $logoSize / 2;
+        $logoCy = $y + $pad + $logoSize / 2;
+        CoinLogo::draw($c, (string) $coin['symbol'], $logoCx, $logoCy, $logoSize);
 
-        // ردیف نماد
-        $dotR = 8.5;
-        $c->circle($right - $dotR, $symY + 12, $dotR + 4.5, $brand, 0.16);
-        $c->circle($right - $dotR, $symY + 12, $dotR, $brand);
-        $c->text(
-            strtoupper((string) $coin['symbol']),
-            $right - $dotR * 2 - 10,
-            $symY,
-            23,
-            $t->c('ink'),
-            Canvas::W_BLACK,
-            'right'
-        );
+        $symbolRight = $logoCx - $logoSize / 2 - 9;
+        $c->text(strtoupper((string) $coin['symbol']), $symbolRight, $y + $pad + 1, 13.5, $t->c('ink'), Canvas::W_BOLD, 'right');
         $c->textFit(
             (string) $coin['name_fa'],
-            $left,
-            $symY + 4,
-            $w * 0.40,
-            15,
-            $t->c('ink_soft'),
-            Canvas::W_MEDIUM,
-            'left',
-            11
-        );
-
-        // قیمت
-        $price = '$' . PriceProvider::formatPrice((float) $coin['price']);
-        $c->textFit($this->dnum($price), $right, $priceY, $inner, 37, $t->c('value'), Canvas::W_BLACK, 'right', 19);
-
-        // درصد تغییر
-        $pctText = $this->dnum(number_format(abs($pct), 2) . '%');
-        $absText = $this->dnum(PriceProvider::formatChange((float) $coin['change_abs']));
-        $pctW  = $c->textWidth($pctText, 19, Canvas::W_BOLD);
-        $pillW = $pctW + 52;
-
-        $c->roundRect($right - $pillW, $pillY, $pillW, $pillH, 10, $trend, 0.13);
-        if (!$isFlat) {
-            $c->arrow($right - $pillW + 20, $pillY + $pillH / 2, 15, $isUp, $trend);
-        } else {
-            $c->rect($right - $pillW + 12, $pillY + $pillH / 2 - 1.5, 16, 3, $trend);
-        }
-        $c->text($pctText, $right - 14, $pillY + ($pillH - 22) / 2, 19, $trend, Canvas::W_BOLD, 'right');
-
-        $c->textFit(
-            '(' . $absText . ')',
-            $right - $pillW - 12,
-            $pillY + ($pillH - 19) / 2,
-            $inner - $pillW - 16,
-            15,
-            $t->c('ink_soft'),
+            $symbolRight,
+            $y + $pad + 18,
+            $w * 0.44,
+            9.5,
+            $t->c('ink_faint'),
             Canvas::W_MEDIUM,
             'right',
-            10
+            8
         );
 
-        // نمودار کوچک
-        $c->rect($left - 4, $chartY - $h * 0.035, $inner + 8, 1, $t->c('line'), 0.75);
-        $spark = array_values(array_filter(array_map('floatval', (array) ($coin['spark'] ?? []))));
-        if (count($spark) >= 4) {
-            $this->sparkline($c, $spark, $left - 6, $chartY, $w - $padX * 2 - 4, $chartH, $trend);
+        // ── قیمت
+        $price = '$' . PriceProvider::formatPrice((float) $coin['price']);
+        $c->textFit($this->dnum($price), $right, $y + $h * 0.30, $w - $pad * 2, 22, $t->c('ink'), Canvas::W_BLACK, 'right', 13);
+
+        // ── درصد تغییر و مقدار تغییر (بدون هم‌پوشانی)
+        $pctText = $this->dnum(number_format(abs($pct), 2) . '%');
+        $pillH = 22.0;
+        $pillY = $y + $h * 0.505;
+        $pctW  = $c->textWidth($pctText, 11.5, Canvas::W_BOLD);
+        $pillW = $pctW + 30;
+        $pillX = $right - $pillW;
+
+        $c->roundRect($pillX, $pillY, $pillW, $pillH, 7, $trend, $t->isMono() ? 0.13 : 0.16);
+        $c->strokeRoundRect($pillX, $pillY, $pillW, $pillH, 7, $trend, 1, 0.30);
+        if ($isFlat) {
+            $c->rect($pillX + 9, $pillY + $pillH / 2 - 1, 8, 2, $trend);
         } else {
-            $c->dashedLine($left, $chartY + $chartH / 2, $right, $chartY + $chartH / 2, $t->c('line'), 2, 8, 6);
+            $c->triangle($pillX + 13, $pillY + $pillH / 2, 8, $isUp, $trend);
+        }
+        $c->text($pctText, $right - 9, $pillY + 4, 11.5, $trend, Canvas::W_BOLD, 'right');
+
+        $absText = '(' . $this->dnum(PriceProvider::formatChange((float) $coin['change_abs'])) . ')';
+        $c->textFit(
+            $absText,
+            $pillX - 9,
+            $pillY + 6,
+            max(40.0, $pillX - $left - 12),
+            9.5,
+            $t->c('ink_faint'),
+            Canvas::W_MEDIUM,
+            'right',
+            8
+        );
+
+        // ── نمودار ۲۴ ساعته
+        $chartY = $y + $h * 0.72;
+        $chartH = $y + $h - $pad - $chartY;
+        $spark = array_values(array_map('floatval', (array) ($coin['spark'] ?? [])));
+        if (count($spark) >= 4 && $chartH > 14) {
+            $this->sparkline($c, $spark, $left, $chartY, $w - $pad * 2, $chartH, $trend);
+        } else {
+            $c->dashedLine($left, $chartY + $chartH / 2, $right, $chartY + $chartH / 2, $t->c('ink_faint'), 1, 5, 4, 0.5);
         }
     }
 
-    /** نمودار خطی کوچک با سایه‌ی گرادیانی */
     private function sparkline(Canvas $c, array $values, float $x, float $y, float $w, float $h, string $color): void
     {
         $min = min($values);
@@ -187,20 +153,18 @@ final class PriceCard extends Card
         foreach ($values as $i => $v) {
             $points[] = [
                 $x + $w * ($i / ($n - 1)),
-                $y + $h - (($v - $min) / $span) * ($h - 6) - 3,
+                $y + $h - (($v - $min) / $span) * ($h - 4) - 2,
             ];
         }
 
-        // ناحیه‌ی زیر نمودار
         $area = $points;
         $area[] = [$x + $w, $y + $h];
         $area[] = [$x, $y + $h];
-        $c->polygon($area, $color, 0.13);
-
-        $c->polyline($points, $color, 2.6);
+        $c->polygon($area, $color, 0.11);
+        $c->polyline($points, $color, 1.7, 0.95);
 
         $last = $points[$n - 1];
-        $c->circle($last[0], $last[1], 5.2, '#FFFFFF');
-        $c->circle($last[0], $last[1], 3.6, $color);
+        $c->circle($last[0], $last[1], 2.9, $color);
+        $c->circle($last[0], $last[1], 1.4, '#0B0C10');
     }
 }

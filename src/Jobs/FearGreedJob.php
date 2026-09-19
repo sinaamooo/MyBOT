@@ -33,7 +33,7 @@ final class FearGreedJob extends Job
 
     public function defaultTheme(): string
     {
-        return 'crimson';
+        return 'mono';
     }
 
     public function defaultCaption(): string

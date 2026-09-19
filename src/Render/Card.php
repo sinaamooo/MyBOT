@@ -14,15 +14,13 @@ use Nikto\Text\Persian;
 abstract class Card
 {
     protected Theme $theme;
-    protected string $brand;
     protected string $footer;
     protected DateTimeImmutable $now;
     protected int $quality;
 
     public function __construct(?string $theme = null, array $options = [])
     {
-        $this->theme  = new Theme($theme ?? 'aurora');
-        $this->brand  = (string) ($options['brand'] ?? Settings::get('brand'));
+        $this->theme  = new Theme($theme ?? 'mono');
         $this->footer = (string) ($options['footer'] ?? Settings::get('brand_link'));
         $this->now    = $options['now'] ?? Settings::now();
         $this->quality = Settings::get('quality') === 'normal' ? 1 : 2;
