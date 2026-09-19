@@ -94,7 +94,7 @@ final class PriceCard extends Card
             Canvas::W_BOLD,
             'right',
             1.0,
-            'middle'
+            'ink'
         );
         $c->textFit(
             (string) $coin['name_fa'],
@@ -123,7 +123,7 @@ final class PriceCard extends Card
             'right',
             13,
             1.0,
-            'middle'
+            'ink'
         );
 
         // ── درصد تغییر و مقدار تغییر (بدون هم‌پوشانی)
@@ -141,7 +141,7 @@ final class PriceCard extends Card
         } else {
             $c->triangle($pillX + 13, $pillY + $pillH / 2, 8, $isUp, $trend);
         }
-        $c->text($pctText, $right - 9, $pillY + $pillH / 2, 11.5, $trend, Canvas::W_BOLD, 'right', 1.0, 'middle');
+        $c->text($pctText, $right - 9, $pillY + $pillH / 2, 11.5, $trend, Canvas::W_BOLD, 'right', 1.0, 'ink');
 
         $absText = '(' . $this->dnum(PriceProvider::formatChange((float) $coin['change_abs'])) . ')';
         $c->textFit(
@@ -155,7 +155,7 @@ final class PriceCard extends Card
             'right',
             8,
             1.0,
-            'middle'
+            'ink'
         );
 
         // ── نمودار ۲۴ ساعته

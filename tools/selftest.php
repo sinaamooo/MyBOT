@@ -178,8 +178,8 @@ foreach (Registry::keys() as $key) {
         $size = filesize($path);
         [$w, $h] = getimagesize($path);
 
-        // عرض باید ۱۲۰۰ (کیفیت معمولی) یا ۲۴۰۰ (کیفیت بالا) باشد
-        return ($size > 20000 && in_array($w, [1200, 2400], true) && $h > 400 && $h < $w)
+        // عرض بسته به کیفیت انتخابی: ۱۸۰۰ تا ۳۶۰۰ پیکسل
+        return ($size > 20000 && in_array($w, [1200, 1800, 2400, 3000, 3600], true) && $h > 400 && $h < $w)
             ? true
             : sprintf('ابعاد %dx%d حجم %d', $w, $h, $size);
     });

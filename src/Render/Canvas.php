@@ -684,6 +684,17 @@ final class Canvas
         return self::$metricsCache[$key] = ['top' => $top, 'height' => $bottom - $top];
     }
 
+    /** فاصله‌ی مرکزِ حروفِ یک رشته تا خط پایه (برای وسط‌چین کردن نوری) */
+    private function inkCenter(string $visual, float $fs, string $font): float
+    {
+        $box = imagettfbbox($fs, 0, $font, $visual);
+        if ($box === false) {
+            return -$fs * 0.35;
+        }
+
+        return ((float) $box[7] + (float) $box[1]) / 2;
+    }
+
     /** ارتفاع یک خط متن در این اندازه (پیکسل منطقی) */
     public function lineHeight(float $size, string $weight = self::W_BOLD): float
     {
@@ -719,7 +730,11 @@ final class Canvas
      * رسم متن.
      *
      * $align  : right | center | left
-     * $valign : top (y بالای خط) | middle (y وسط خط) | baseline (y خط پایه)
+     * $valign :
+     *   top      — y بالای خط (برای ردیف‌های پشت‌سرهم)
+     *   middle   — y وسط خطِ فونت (برای هم‌ترازی چند متن در یک ردیف)
+     *   ink      — y وسط خودِ حروف (برای متنی که داخل دایره یا قرص می‌نشیند)
+     *   baseline — y خط پایه
      */
     public function text(
         string $text,
@@ -745,6 +760,7 @@ final class Canvas
         $drawY = match ($valign) {
             'baseline' => $this->s($y),
             'middle'   => $this->s($y) - (int) round($metrics['height'] / 2 + $metrics['top']),
+            'ink'      => $this->s($y) - (int) round($this->inkCenter($visual, $fs, $font)),
             default    => $this->s($y) - (int) round($metrics['top']),
         };
 
@@ -830,7 +846,9 @@ final class Canvas
             $text = $this->ellipsize($text, $maxWidth, $s, $weight);
         }
         // اندازه هرچه باشد، متن روی همان خطِ اندازه‌ی اصلی می‌نشیند
-        $offset = $valign === 'top' ? ($this->lineHeight($size, $weight) - $this->lineHeight($s, $weight)) / 2 : 0.0;
+        $offset = $valign === 'top'
+            ? ($this->lineHeight($size, $weight) - $this->lineHeight($s, $weight)) / 2
+            : 0.0;
         $this->text($text, $x, $y + $offset, $s, $hex, $weight, $align, $alpha, $valign);
 
         return $s;

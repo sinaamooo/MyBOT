@@ -1199,9 +1199,9 @@ final class Panel
     private function qualityLabel(): string
     {
         return match (Settings::get('quality')) {
-            'normal' => 'معمولی (۱۲۰۰ پیکسل)',
-            'ultra'  => 'حداکثر (۲۴۰۰ پیکسل)',
-            default  => 'بالا (۲۴۰۰ پیکسل)',
+            'normal' => 'معمولی (۱۸۰۰ پیکسل)',
+            'ultra'  => 'حداکثر (۳۶۰۰ پیکسل)',
+            default  => 'بالا (۳۰۰۰ پیکسل)',
         };
     }
 

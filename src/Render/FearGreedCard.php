@@ -127,7 +127,7 @@ final class FearGreedCard extends Card
         $c->circle($cx, $cy, $baseR - 3.4, $t->c('bg_from'));
 
         // مقدار و برچسب
-        $c->text($this->dnum((string) $value), $cx, $cy + 52, 33, $t->c('ink'), Canvas::W_BLACK, 'center', 1.0, 'middle');
+        $c->text($this->dnum((string) $value), $cx, $cy + 52, 33, $t->c('ink'), Canvas::W_BLACK, 'center', 1.0, 'ink');
 
         $label = (string) $zone['fa'];
         $labelW = $c->textWidth($label, 13, Canvas::W_BOLD) + 32;
@@ -136,7 +136,7 @@ final class FearGreedCard extends Card
         $pillY = min($cy + 92, $legendY - 20 - 26);
         $c->roundRect($cx - $labelW / 2, $pillY, $labelW, 26, 9, $zoneColor, 0.16);
         $c->strokeRoundRect($cx - $labelW / 2, $pillY, $labelW, 26, 9, $zoneColor, 1, 0.40);
-        $c->text($label, $cx, $pillY + 13, 13, $zoneColor, Canvas::W_BOLD, 'center', 1.0, 'middle');
+        $c->text($label, $cx, $pillY + 13, 13, $zoneColor, Canvas::W_BOLD, 'center', 1.0, 'ink');
 
         $this->legend($c, $t, $cx, $legendY, $w - 24);
     }
@@ -223,7 +223,7 @@ final class FearGreedCard extends Card
             Canvas::W_BOLD,
             'center',
             1.0,
-            'middle'
+            'ink'
         );
 
         $c->textFit(

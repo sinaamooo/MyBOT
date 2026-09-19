@@ -35,9 +35,9 @@ abstract class Card
     protected static function qualityProfile(): array
     {
         $profiles = [
-            'normal' => [2, 1.0],   // ۱۲۰۰ پیکسل
-            'high'   => [3, 2.0],   // ۲۴۰۰ پیکسل — پیش‌فرض
-            'ultra'  => [4, 2.0],   // ۲۴۰۰ پیکسل با لبه‌های نرم‌تر
+            'normal' => [2, 1.5],   // ۱۸۰۰ پیکسل
+            'high'   => [3, 2.5],   // ۳۰۰۰ پیکسل — پیش‌فرض
+            'ultra'  => [4, 3.0],   // ۳۶۰۰ پیکسل
         ];
         $key = Settings::get('quality');
         [$scale, $output] = $profiles[$key] ?? $profiles['high'];

@@ -206,7 +206,7 @@ final class CalendarCard extends Card
                 case 'currency':
                     $pillW = min($cw - 12, 46.0);
                     $c->roundRect($cx - $pillW / 2, $mid - 9, $pillW, 18, 6, '#FFFFFF', 0.08);
-                    $c->text((string) $row['currency'], $cx, $mid, 9.5, $t->c('ink_dim'), Canvas::W_BOLD, 'center', 1.0, 'middle');
+                    $c->text((string) $row['currency'], $cx, $mid, 9.5, $t->c('ink_dim'), Canvas::W_BOLD, 'center', 1.0, 'ink');
                     break;
 
                 case 'country':
