@@ -11,3 +11,6 @@ storage/logs/*.log
 .DS_Store
 *.log
 vendor/
+
+# خروجی ساخت نسخه‌ی دو فایلی
+build/

@@ -27,7 +27,7 @@ final class FearGreedCard extends Card
 
     public function render(): Canvas
     {
-        $c = new Canvas(1200, 560, $this->quality);
+        $c = new Canvas(1200, 572, $this->quality);
         $t = $this->theme;
 
         $rect = Frame::draw($c, $t, ['footer' => $this->footer]);
@@ -124,7 +124,7 @@ final class FearGreedCard extends Card
         $c->circle($cx, $cy, $baseR - 3.4, $t->c('bg_from'));
 
         // مقدار و برچسب
-        $c->text($this->dnum((string) $value), $cx, $cy + 16, 42, $t->c('ink'), Canvas::W_BLACK, 'center');
+        $c->text($this->dnum((string) $value), $cx, $cy + 34, 33, $t->c('ink'), Canvas::W_BLACK, 'center');
 
         $label = (string) $zone['fa'];
         $labelW = $c->textWidth($label, 13, Canvas::W_BOLD) + 32;

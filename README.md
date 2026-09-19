@@ -156,6 +156,46 @@ php tools/webhook-set.php --delete   # حذف وب‌هوک و برگشت به b
 
 ---
 
+## 📦 نسخه‌ی «دو فایلی» (هاست اشتراکی با چند ربات)
+
+اگر روی هاست چند ربات مختلف دارید و نمی‌خواهید پوشه‌ی کامل پروژه را آپلود کنید،
+کل پروژه در **دو فایل** فشرده می‌شود:
+
+```bash
+php tools/build.php --with-secrets          # خروجی در build/
+php tools/build.php --name=mybot --out=/tmp # نام و مسیر دلخواه
+```
+
+خروجی:
+
+| فایل | نقش |
+|---|---|
+| `nikto-bot.php` | همه‌ی کدها + فونت فارسی + ۴۱ لوگوی ارز؛ وب‌هوک، پنل و خط فرمان |
+| `nikto-cron.php` | زمان‌بند؛ کرون سرور، اجرای دائمی یا کرون اینترنتی |
+
+فقط همین دو فایل را آپلود کنید. بار اول که اجرا شوند، فونت‌ها و لوگوها را در پوشه‌ی
+`nikto-<شناسه‌ی ربات>-data/` کنار خودشان باز می‌کنند (برای هر ربات جدا، پس چند ربات
+روی یک هاست با هم قاطی نمی‌شوند) و دسترسی وب به آن پوشه هم بسته می‌شود.
+
+```bash
+php nikto-bot.php doctor        # بررسی سلامت
+php nikto-bot.php webhook       # ثبت وب‌هوک (آدرس از بالای همان فایل خوانده می‌شود)
+php nikto-bot.php               # یا حالت پولینگ، بدون وب‌هوک
+php nikto-bot.php send prices   # ارسال فوری یک کارت
+php nikto-cron.php              # یک تیک زمان‌بند (برای کرون هر دقیقه)
+php nikto-cron.php --loop       # اجرای دائمی زمان‌بند
+```
+
+اگر هاست شما کرون خط فرمان ندارد، هر دقیقه این آدرس را صدا بزنید:
+
+```
+https://your-domain/nikto-cron.php?key=<webhook_secret>
+```
+
+توکن و شناسه‌ی مدیر در بالای `nikto-bot.php` قابل ویرایش هستند.
+
+---
+
 ## 🛠 ابزارهای خط فرمان
 
 ```bash
@@ -164,6 +204,7 @@ php tools/selftest.php                        # ۳۶ تست خودکار (بدو
 php tools/preview.php --mock                  # ساخت هر سه کارت با داده‌ی نمونه
 php tools/preview.php --job=prices --theme=gold --out=/tmp --caption
 php scheduler.php --once                      # یک بار بررسی زمان‌بندی
+php tools/build.php --with-secrets            # ساخت نسخه‌ی دو فایلی
 ```
 
 ---
@@ -182,13 +223,15 @@ MyBOT/
 ├── assets/coins/            ۴۱ لوگوی ارز
 ├── fixtures/                داده‌ی نمونه برای حالت آفلاین
 ├── deploy/                  systemd + نمونه‌ی nginx و htaccess
-├── tools/                   install · doctor · preview · selftest · webhook-set
+├── build/                   خروجی نسخه‌ی دو فایلی (گیت‌نشده)
+├── tools/                   install · doctor · preview · selftest · build · webhook-set
 └── src/
     ├── Core/                Config · Db · Settings · Http · Log · Jalali
     ├── Text/Persian.php     شکل‌دهی حروف + چینش دوسویه
     ├── Data/                PriceProvider · FearGreedProvider · CalendarProvider
     │                        EventTranslator · Coins · Countries · Mock
     ├── Render/              Canvas · Theme · Frame · Flags · CoinLogo · سه کارت
+    ├── Bundle/Runtime.php   هسته‌ی نسخه‌ی دو فایلی
     ├── Jobs/                Job · Registry · Dispatcher · Scheduler
     └── Telegram/            Api · Panel · Channels · Access · State
 ```

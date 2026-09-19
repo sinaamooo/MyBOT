@@ -30,7 +30,7 @@ final class PriceCard extends Card
         $cols  = $count <= 4 ? min(2, $count) : 3;
         $rows  = (int) ceil($count / $cols);
 
-        $height = (int) round(76 + 62 + $rows * self::TILE_H + ($rows - 1) * self::GAP);
+        $height = (int) round(76 + Frame::HEADER_H + $rows * self::TILE_H + ($rows - 1) * self::GAP);
 
         $c = new Canvas(1200, $height, $this->quality);
         $t = $this->theme;

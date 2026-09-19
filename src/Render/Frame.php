@@ -8,6 +8,9 @@ namespace Nikto\Render;
  */
 final class Frame
 {
+    /** ارتفاع سربرگ کارت (عنوان + تاریخ + خط جداکننده) */
+    public const HEADER_H = 74.0;
+
     /**
      * پس‌زمینه و قاب را می‌کشد و ناحیه‌ی محتوا را برمی‌گرداند.
      *
@@ -138,7 +141,7 @@ final class Frame
 
         $c->text($title, $x + $w, $y, 17, $t->c('ink'), Canvas::W_BOLD, 'right');
         if ($subtitle !== '') {
-            $c->text($subtitle, $x + $w, $y + 24, 10.5, $t->c('ink_dim'), Canvas::W_MEDIUM, 'right');
+            $c->text($subtitle, $x + $w, $y + 34, 10.5, $t->c('ink_dim'), Canvas::W_MEDIUM, 'right');
         }
 
         if ($badge !== '') {
@@ -147,7 +150,7 @@ final class Frame
             $c->text($badge, $x + $bw / 2, $y + 8, 10, $t->c('ink_dim'), Canvas::W_SEMIBOLD, 'center');
         }
 
-        $lineY = $y + ($subtitle !== '' ? 46 : 32);
+        $lineY = $y + ($subtitle !== '' ? 58 : 34);
         $c->rect($x, $lineY, $w, 1, '#FFFFFF', 0.08);
         $c->rect($x + $w - 54, $lineY, 54, 1.6, $t->c('accent'), 0.75);
 

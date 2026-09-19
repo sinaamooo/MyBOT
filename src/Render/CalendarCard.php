@@ -40,7 +40,7 @@ final class CalendarCard extends Card
 
         $tableH = self::HEAD_H + max(1, count($rows)) * self::ROW_H + 10;
         $noteH  = $extra > 0 ? 28.0 : 0.0;
-        $height = (int) round(76 + 62 + $tableH + $noteH + 12 + 34);
+        $height = (int) round(76 + Frame::HEADER_H + $tableH + $noteH + 12 + 34);
         $height = max(430, $height);
 
         $c = new Canvas(1200, $height, $this->quality);
