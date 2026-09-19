@@ -178,7 +178,8 @@ foreach (Registry::keys() as $key) {
         $size = filesize($path);
         [$w, $h] = getimagesize($path);
 
-        return ($size > 20000 && $w === 1200 && $h > 400)
+        // عرض باید ۱۲۰۰ (کیفیت معمولی) یا ۲۴۰۰ (کیفیت بالا) باشد
+        return ($size > 20000 && in_array($w, [1200, 2400], true) && $h > 400 && $h < $w)
             ? true
             : sprintf('ابعاد %dx%d حجم %d', $w, $h, $size);
     });
@@ -285,6 +286,35 @@ $check('تنظیمات: منطقه‌ی زمانی نامعتبر رد شود', 
     $panel->handleUpdate($callback('s:tz'));
     $panel->handleUpdate($message('Mars/Olympus'));
     return Settings::get('timezone') === 'Asia/Tehran' ? true : Settings::get('timezone');
+});
+$check('پنل پیام تازه نمی‌سازد و همان پیام را ویرایش می‌کند', function () use ($panel, $callback, $message, $api) {
+    $panel->handleUpdate($message('/start'));      // یک پیام پنل ساخته می‌شود
+    $api->calls = [];
+    $panel->handleUpdate($callback('j:prices'));
+    $panel->handleUpdate($callback('j:prices:sc'));
+    $panel->handleUpdate($callback('j:prices:sc:add'));
+    $panel->handleUpdate($message('07:15'));       // ورودی متنی
+    $panel->handleUpdate($callback('m'));
+
+    $sent = $api->countOf('sendMessage');
+    $edited = $api->countOf('editMessageText');
+
+    return ($sent === 0 && $edited >= 4)
+        ? true
+        : sprintf('پیام تازه: %d — ویرایش: %d', $sent, $edited);
+});
+$check('پیام ورودی کاربر پاک می‌شود', function () use ($panel, $callback, $message, $api) {
+    $api->calls = [];
+    $panel->handleUpdate($callback('s:brand'));
+    $panel->handleUpdate($message('NIKTO TEST'));
+
+    return $api->countOf('deleteMessage') >= 1 ? true : 'پیام کاربر پاک نشد';
+});
+$check('هیچ ایموجی‌ای در پنل نیست', function () {
+    $source = (string) file_get_contents(APP_SRC . '/Telegram/Panel.php');
+    $pattern = '/[\x{1F000}-\x{1FAFF}\x{2600}-\x{27BF}\x{2B00}-\x{2BFF}\x{FE0F}\x{2190}-\x{21FF}]/u';
+
+    return preg_match($pattern, $source) === 0 ? true : 'ایموجی پیدا شد';
 });
 $check('پیمایش همه‌ی صفحه‌ها بدون خطا', function () use ($panel, $callback) {
     $routes = ['m', 'ch', 's', 's:adm', 'st', 'lg', 'hp', 'j:prices', 'j:prices:th', 'j:prices:ch',

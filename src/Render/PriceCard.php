@@ -33,6 +33,7 @@ final class PriceCard extends Card
         $height = (int) round(76 + Frame::HEADER_H + $rows * self::TILE_H + ($rows - 1) * self::GAP);
 
         $c = new Canvas(1200, $height, $this->quality);
+        $c->setOutputScale($this->outputScale);
         $t = $this->theme;
 
         $rect = Frame::draw($c, $t, ['footer' => $this->footer]);
@@ -84,22 +85,46 @@ final class PriceCard extends Card
         CoinLogo::draw($c, (string) $coin['symbol'], $logoCx, $logoCy, $logoSize);
 
         $symbolRight = $logoCx - $logoSize / 2 - 9;
-        $c->text(strtoupper((string) $coin['symbol']), $symbolRight, $y + $pad + 1, 13.5, $t->c('ink'), Canvas::W_BOLD, 'right');
+        $c->text(
+            strtoupper((string) $coin['symbol']),
+            $symbolRight,
+            $logoCy - 7,
+            13.5,
+            $t->c('ink'),
+            Canvas::W_BOLD,
+            'right',
+            1.0,
+            'middle'
+        );
         $c->textFit(
             (string) $coin['name_fa'],
             $symbolRight,
-            $y + $pad + 18,
+            $logoCy + 9,
             $w * 0.44,
             9.5,
             $t->c('ink_faint'),
             Canvas::W_MEDIUM,
             'right',
-            8
+            8,
+            1.0,
+            'middle'
         );
 
         // ── قیمت
         $price = '$' . PriceProvider::formatPrice((float) $coin['price']);
-        $c->textFit($this->dnum($price), $right, $y + $h * 0.30, $w - $pad * 2, 22, $t->c('ink'), Canvas::W_BLACK, 'right', 13);
+        $c->textFit(
+            $this->dnum($price),
+            $right,
+            $y + $h * 0.385,
+            $w - $pad * 2,
+            22,
+            $t->c('ink'),
+            Canvas::W_BLACK,
+            'right',
+            13,
+            1.0,
+            'middle'
+        );
 
         // ── درصد تغییر و مقدار تغییر (بدون هم‌پوشانی)
         $pctText = $this->dnum(number_format(abs($pct), 2) . '%');
@@ -116,19 +141,21 @@ final class PriceCard extends Card
         } else {
             $c->triangle($pillX + 13, $pillY + $pillH / 2, 8, $isUp, $trend);
         }
-        $c->text($pctText, $right - 9, $pillY + 4, 11.5, $trend, Canvas::W_BOLD, 'right');
+        $c->text($pctText, $right - 9, $pillY + $pillH / 2, 11.5, $trend, Canvas::W_BOLD, 'right', 1.0, 'middle');
 
         $absText = '(' . $this->dnum(PriceProvider::formatChange((float) $coin['change_abs'])) . ')';
         $c->textFit(
             $absText,
             $pillX - 9,
-            $pillY + 6,
+            $pillY + $pillH / 2,
             max(40.0, $pillX - $left - 12),
             9.5,
             $t->c('ink_faint'),
             Canvas::W_MEDIUM,
             'right',
-            8
+            8,
+            1.0,
+            'middle'
         );
 
         // ── نمودار ۲۴ ساعته

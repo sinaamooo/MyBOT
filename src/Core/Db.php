@@ -99,6 +99,14 @@ final class Db
             updated_at INTEGER NOT NULL
         );
 
+        CREATE TABLE IF NOT EXISTS panel_anchor (
+            user_id            INTEGER PRIMARY KEY,
+            chat_id            TEXT NOT NULL,
+            message_id         INTEGER NOT NULL,
+            preview_message_id INTEGER NOT NULL DEFAULT 0,
+            updated_at         INTEGER NOT NULL
+        );
+
         CREATE TABLE IF NOT EXISTS admins (
             user_id    INTEGER PRIMARY KEY,
             name       TEXT NOT NULL DEFAULT '',

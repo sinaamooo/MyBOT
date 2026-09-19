@@ -24,6 +24,7 @@ final class Canvas
     private int $scale;
     private int $width;
     private int $height;
+    private float $outputScale = 1.0;
 
     public function __construct(int $width, int $height, int $scale = 2, ?string $background = null)
     {
@@ -61,6 +62,15 @@ final class Canvas
         imagedestroy($src);
 
         return $canvas;
+    }
+
+    /**
+     * ضریب بزرگ‌نمایی خروجی نهایی.
+     * مثلاً ۲ یعنی کارت ۱۲۰۰ پیکسلی با عرض ۲۴۰۰ ذخیره می‌شود.
+     */
+    public function setOutputScale(float $scale): void
+    {
+        $this->outputScale = max(0.25, min(4.0, $scale));
     }
 
     public function gd(): GdImage { return $this->im; }
@@ -648,6 +658,38 @@ final class Canvas
         return '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf';
     }
 
+    /** @var array<string,array{top:float,height:float}> */
+    private static array $metricsCache = [];
+
+    /**
+     * سنجه‌ی ثابت خط برای یک فونت و اندازه.
+     *
+     * از یک رشته‌ی مرجع استفاده می‌شود تا همه‌ی متن‌ها با هر حرفی که دارند
+     * دقیقاً روی یک خط بنشینند؛ وگرنه ارتفاع هر متن به حروف خودش وابسته می‌شد.
+     *
+     * @return array{top:float,height:float} نسبت به خط پایه (top منفی است)
+     */
+    public function metrics(float $size, string $weight = self::W_BOLD): array
+    {
+        $fs = $size * $this->scale;
+        $key = $weight . '|' . $fs;
+        if (isset(self::$metricsCache[$key])) {
+            return self::$metricsCache[$key];
+        }
+
+        $box = imagettfbbox($fs, 0, self::fontPath($weight), 'الکجMg0');
+        $top = $box === false ? -$fs : (float) $box[7];
+        $bottom = $box === false ? $fs * 0.25 : (float) $box[1];
+
+        return self::$metricsCache[$key] = ['top' => $top, 'height' => $bottom - $top];
+    }
+
+    /** ارتفاع یک خط متن در این اندازه (پیکسل منطقی) */
+    public function lineHeight(float $size, string $weight = self::W_BOLD): float
+    {
+        return $this->metrics($size, $weight)['height'] / $this->scale;
+    }
+
     /** @return array{w:float,h:float,top:float} */
     public function measure(string $text, float $size, string $weight = self::W_BOLD, bool $prepared = false): array
     {
@@ -659,10 +701,12 @@ final class Canvas
         if ($box === false) {
             return ['w' => 0.0, 'h' => 0.0, 'top' => 0.0];
         }
+        $metrics = $this->metrics($size, $weight);
+
         return [
             'w'   => abs($box[2] - $box[0]) / $this->scale,
-            'h'   => abs($box[1] - $box[7]) / $this->scale,
-            'top' => $box[7] / $this->scale,
+            'h'   => $metrics['height'] / $this->scale,
+            'top' => $metrics['top'] / $this->scale,
         ];
     }
 
@@ -673,7 +717,9 @@ final class Canvas
 
     /**
      * رسم متن.
-     * $align: right|center|left  — $baseline: اگر true باشد y خط پایه است، در غیر این صورت y بالای متن.
+     *
+     * $align  : right | center | left
+     * $valign : top (y بالای خط) | middle (y وسط خط) | baseline (y خط پایه)
      */
     public function text(
         string $text,
@@ -684,7 +730,7 @@ final class Canvas
         string $weight = self::W_BOLD,
         string $align = 'right',
         float $alpha = 1.0,
-        bool $baseline = false,
+        string $valign = 'top',
         float $letterSpacing = 0.0
     ): float {
         if (trim($text) === '') {
@@ -694,9 +740,16 @@ final class Canvas
         $font = self::fontPath($weight);
         $col  = $this->color($hex, $alpha);
         $fs   = $size * $this->scale;
+        $metrics = $this->metrics($size, $weight);
+
+        $drawY = match ($valign) {
+            'baseline' => $this->s($y),
+            'middle'   => $this->s($y) - (int) round($metrics['height'] / 2 + $metrics['top']),
+            default    => $this->s($y) - (int) round($metrics['top']),
+        };
 
         if ($letterSpacing > 0.0) {
-            return $this->textSpaced($visual, $x, $y, $size, $col, $font, $align, $baseline, $letterSpacing);
+            return $this->textSpaced($visual, $x, $drawY, $size, $col, $font, $align, $letterSpacing);
         }
 
         $box = imagettfbbox($fs, 0, $font, $visual);
@@ -706,9 +759,8 @@ final class Canvas
             'left'   => $this->s($x),
             default  => $this->s($x) - $w,
         };
-        $drawY = $baseline ? $this->s($y) : $this->s($y) - $box[7];
 
-        imagettftext($this->im, $fs, 0, (int) $drawX - $box[0], (int) $drawY, $col, $font, $visual);
+        imagettftext($this->im, $fs, 0, (int) $drawX - $box[0], $drawY, $col, $font, $visual);
 
         return $w / $this->scale;
     }
@@ -716,12 +768,11 @@ final class Canvas
     private function textSpaced(
         string $visual,
         float $x,
-        float $y,
+        int $drawY,
         float $size,
         int $col,
         string $font,
         string $align,
-        bool $baseline,
         float $spacing
     ): float {
         $chars = preg_split('//u', $visual, -1, PREG_SPLIT_NO_EMPTY) ?: [];
@@ -746,12 +797,10 @@ final class Canvas
             'left'   => $this->s($x),
             default  => $this->s($x) - $total,
         };
-        $refBox = imagettfbbox($fs, 0, $font, 'A');
-        $drawY = $baseline ? $this->s($y) : $this->s($y) - $refBox[7];
 
         foreach ($chars as $i => $ch) {
             if (trim($ch) !== '') {
-                imagettftext($this->im, $fs, 0, (int) round($cursor), (int) $drawY, $col, $font, $ch);
+                imagettftext($this->im, $fs, 0, (int) round($cursor), $drawY, $col, $font, $ch);
             }
             $cursor += $widths[$i] + $sp;
         }
@@ -770,7 +819,8 @@ final class Canvas
         string $weight = self::W_BOLD,
         string $align = 'right',
         float $minSize = 9,
-        float $alpha = 1.0
+        float $alpha = 1.0,
+        string $valign = 'top'
     ): float {
         $s = $size;
         while ($s > $minSize && $this->textWidth($text, $s, $weight) > $maxWidth) {
@@ -779,7 +829,9 @@ final class Canvas
         if ($this->textWidth($text, $s, $weight) > $maxWidth) {
             $text = $this->ellipsize($text, $maxWidth, $s, $weight);
         }
-        $this->text($text, $x, $y, $s, $hex, $weight, $align, $alpha);
+        // اندازه هرچه باشد، متن روی همان خطِ اندازه‌ی اصلی می‌نشیند
+        $offset = $valign === 'top' ? ($this->lineHeight($size, $weight) - $this->lineHeight($s, $weight)) / 2 : 0.0;
+        $this->text($text, $x, $y + $offset, $s, $hex, $weight, $align, $alpha, $valign);
 
         return $s;
     }
@@ -874,7 +926,7 @@ final class Canvas
     public function savePng(string $path): string
     {
         $out = $this->flatten();
-        imagepng($out, $path, 6);
+        imagepng($out, $path, 4);
         imagedestroy($out);
         return $path;
     }
@@ -889,15 +941,18 @@ final class Canvas
 
     private function flatten(?string $bg = null): GdImage
     {
-        $out = imagecreatetruecolor($this->width, $this->height);
+        $outW = (int) round($this->width * $this->outputScale);
+        $outH = (int) round($this->height * $this->outputScale);
+
+        $out = imagecreatetruecolor($outW, $outH);
         imagealphablending($out, false);
         imagesavealpha($out, true);
         if ($bg !== null) {
             [$r, $g, $b] = self::parseColor($bg);
-            imagefilledrectangle($out, 0, 0, $this->width, $this->height, imagecolorallocate($out, $r, $g, $b));
+            imagefilledrectangle($out, 0, 0, $outW, $outH, imagecolorallocate($out, $r, $g, $b));
             imagealphablending($out, true);
         } else {
-            imagefilledrectangle($out, 0, 0, $this->width, $this->height, imagecolorallocatealpha($out, 0, 0, 0, 127));
+            imagefilledrectangle($out, 0, 0, $outW, $outH, imagecolorallocatealpha($out, 0, 0, 0, 127));
         }
         imagecopyresampled(
             $out,
@@ -906,8 +961,8 @@ final class Canvas
             0,
             0,
             0,
-            $this->width,
-            $this->height,
+            $outW,
+            $outH,
             imagesx($this->im),
             imagesy($this->im)
         );

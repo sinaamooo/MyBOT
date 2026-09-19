@@ -38,7 +38,7 @@ final class Frame
                 Canvas::W_MEDIUM,
                 'center',
                 0.9,
-                false,
+                'middle',
                 2.0
             );
         }
@@ -147,7 +147,7 @@ final class Frame
         if ($badge !== '') {
             $bw = $c->textWidth($badge, 10, Canvas::W_SEMIBOLD) + 22;
             $c->glass($x, $y + 2, $bw, 24, 8, ['fill' => 0.07, 'border' => 0.12, 'blur' => 2, 'shadow' => false]);
-            $c->text($badge, $x + $bw / 2, $y + 8, 10, $t->c('ink_dim'), Canvas::W_SEMIBOLD, 'center');
+            $c->text($badge, $x + $bw / 2, $y + 14, 10, $t->c('ink_dim'), Canvas::W_SEMIBOLD, 'center', 1.0, 'middle');
         }
 
         $lineY = $y + ($subtitle !== '' ? 58 : 34);

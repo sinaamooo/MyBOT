@@ -27,7 +27,8 @@ final class FearGreedCard extends Card
 
     public function render(): Canvas
     {
-        $c = new Canvas(1200, 572, $this->quality);
+        $c = new Canvas(1200, 505, $this->quality);
+        $c->setOutputScale($this->outputScale);
         $t = $this->theme;
 
         $rect = Frame::draw($c, $t, ['footer' => $this->footer]);
@@ -100,11 +101,13 @@ final class FearGreedCard extends Card
                 $c->text(
                     $this->dnum((string) $v),
                     $cx + cos($ang) * $lr,
-                    $cy + sin($ang) * $lr - 6,
+                    $cy + sin($ang) * $lr,
                     9.5,
                     $t->c('ink_faint'),
                     Canvas::W_SEMIBOLD,
-                    'center'
+                    'center',
+                    1.0,
+                    'middle'
                 );
             }
         }
@@ -124,16 +127,18 @@ final class FearGreedCard extends Card
         $c->circle($cx, $cy, $baseR - 3.4, $t->c('bg_from'));
 
         // مقدار و برچسب
-        $c->text($this->dnum((string) $value), $cx, $cy + 34, 33, $t->c('ink'), Canvas::W_BLACK, 'center');
+        $c->text($this->dnum((string) $value), $cx, $cy + 52, 33, $t->c('ink'), Canvas::W_BLACK, 'center', 1.0, 'middle');
 
         $label = (string) $zone['fa'];
         $labelW = $c->textWidth($label, 13, Canvas::W_BOLD) + 32;
-        $pillY = $cy + 92;
+        $legendY = $y + $h - 16;
+        // برچسب ناحیه هیچ‌وقت روی راهنمای پایین کارت نمی‌افتد
+        $pillY = min($cy + 92, $legendY - 20 - 26);
         $c->roundRect($cx - $labelW / 2, $pillY, $labelW, 26, 9, $zoneColor, 0.16);
         $c->strokeRoundRect($cx - $labelW / 2, $pillY, $labelW, 26, 9, $zoneColor, 1, 0.40);
-        $c->text($label, $cx, $pillY + 5, 13, $zoneColor, Canvas::W_BOLD, 'center');
+        $c->text($label, $cx, $pillY + 13, 13, $zoneColor, Canvas::W_BOLD, 'center', 1.0, 'middle');
 
-        $this->legend($c, $t, $cx, $y + $h - 26, $w - 24);
+        $this->legend($c, $t, $cx, $legendY, $w - 24);
     }
 
     private function legend(Canvas $c, Theme $t, float $cx, float $y, float $maxWidth): void
@@ -156,8 +161,8 @@ final class FearGreedCard extends Card
 
         $cursor = $cx + $total / 2;
         foreach ($items as $item) {
-            $c->circle($cursor - $dot, $y + 5, $dot, $item['color'], 0.95);
-            $c->text($item['fa'], $cursor - $dot * 2 - 5, $y, $size, $t->c('ink_faint'), Canvas::W_SEMIBOLD, 'right');
+            $c->circle($cursor - $dot, $y, $dot, $item['color'], 0.95);
+            $c->text($item['fa'], $cursor - $dot * 2 - 5, $y, $size, $t->c('ink_faint'), Canvas::W_SEMIBOLD, 'right', 1.0, 'middle');
             $cursor -= $item['w'] + $dot * 2 + 5 + $gap;
         }
     }
@@ -179,7 +184,7 @@ final class FearGreedCard extends Card
         $gap = 12.0;
         $count = max(1, count($items));
         $cardW = ($w - $gap * ($count - 1)) / $count;
-        $cardH = min(132.0, $h * 0.40);
+        $cardH = min(104.0, $h * 0.30);
 
         foreach ($items as $i => $item) {
             $cx = $x + $w - ($i + 1) * $cardW - $i * $gap;
@@ -199,27 +204,40 @@ final class FearGreedCard extends Card
         $zoneIndex = $this->zoneIndex((int) $item['value']);
         $color = $this->zoneColor($t, $zoneIndex, (string) $item['zone']['color']);
 
-        $c->glass($x, $y, $w, $h, 16, ['fill' => 0.06, 'border' => 0.12, 'tint' => $t->c('tint')]);
-        $c->text($item['label'], $x + $w / 2, $y + 11, 10, $t->c('ink_dim'), Canvas::W_SEMIBOLD, 'center');
+        $c->glass($x, $y, $w, $h, 14, ['fill' => 0.06, 'border' => 0.12, 'tint' => $t->c('tint')]);
+        $c->text($item['label'], $x + $w / 2, $y + 16, 9.5, $t->c('ink_dim'), Canvas::W_SEMIBOLD, 'center', 1.0, 'middle');
 
-        $ringR = min($w * 0.26, $h * 0.28);
+        // حلقه‌ی کوچک با عدد ریز داخلش
+        $ringR = min($w * 0.15, $h * 0.20);
         $ringCx = $x + $w / 2;
-        $ringCy = $y + $h * 0.55;
-        $c->ring($ringCx, $ringCy, $ringR, $ringR * 0.26, '#FFFFFF', 0, 360, 0.10);
+        $ringCy = $y + $h * 0.54;
+        $c->ring($ringCx, $ringCy, $ringR, $ringR * 0.30, '#FFFFFF', 0, 360, 0.10);
         $sweep = 360 * max(0.02, min(1, $item['value'] / 100));
-        $c->ring($ringCx, $ringCy, $ringR, $ringR * 0.26, $color, -90, -90 + $sweep, 0.95);
-        $c->text($this->dnum((string) $item['value']), $ringCx, $ringCy - $ringR * 0.50, $ringR * 0.88, $t->c('ink'), Canvas::W_BOLD, 'center');
+        $c->ring($ringCx, $ringCy, $ringR, $ringR * 0.30, $color, -90, -90 + $sweep, 0.95);
+        $c->text(
+            $this->dnum((string) $item['value']),
+            $ringCx,
+            $ringCy,
+            $ringR * 0.80,
+            $t->c('ink'),
+            Canvas::W_BOLD,
+            'center',
+            1.0,
+            'middle'
+        );
 
         $c->textFit(
             (string) $item['zone']['fa'],
             $ringCx,
-            $y + $h - 20,
+            $y + $h - 13,
             $w - 14,
-            9.5,
+            9,
             $t->isMono() ? $t->c('ink_dim') : $color,
             Canvas::W_SEMIBOLD,
             'center',
-            8
+            8,
+            1.0,
+            'middle'
         );
     }
 
@@ -233,7 +251,7 @@ final class FearGreedCard extends Card
         $innerW = $w - $padX * 2;
         $innerH = $h - $padTop - $padBottom;
 
-        $c->text('۳۰ روز اخیر', $x + $w - $padX, $y + 9, 10, $t->c('ink_dim'), Canvas::W_SEMIBOLD, 'right');
+        $c->text('۳۰ روز اخیر', $x + $w - $padX, $y + 15, 10, $t->c('ink_dim'), Canvas::W_SEMIBOLD, 'right', 1.0, 'middle');
 
         $min = min($series);
         $max = max($series);
@@ -257,8 +275,8 @@ final class FearGreedCard extends Card
         $last = $points[$n - 1];
         $c->circle($last[0], $last[1], 3, $t->c('accent'));
 
-        $c->text($this->dnum((string) $max), $x + $padX, $y + $padTop - 13, 9, $t->c('ink_faint'), Canvas::W_MEDIUM, 'left');
-        $c->text($this->dnum((string) $min), $x + $padX, $y + $h - $padBottom - 11, 9, $t->c('ink_faint'), Canvas::W_MEDIUM, 'left');
+        $c->text($this->dnum((string) $max), $x + $padX, $y + $padTop - 8, 9, $t->c('ink_faint'), Canvas::W_MEDIUM, 'left', 1.0, 'middle');
+        $c->text($this->dnum((string) $min), $x + $padX, $y + $h - $padBottom - 6, 9, $t->c('ink_faint'), Canvas::W_MEDIUM, 'left', 1.0, 'middle');
     }
 
     private function zoneIndex(int $value): int

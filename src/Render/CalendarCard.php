@@ -44,6 +44,7 @@ final class CalendarCard extends Card
         $height = max(430, $height);
 
         $c = new Canvas(1200, $height, $this->quality);
+        $c->setOutputScale($this->outputScale);
         $t = $this->theme;
 
         $rect = Frame::draw($c, $t, ['footer' => $this->footer]);
@@ -61,11 +62,13 @@ final class CalendarCard extends Card
             $c->text(
                 'امروز رویداد مهمی در تقویم اقتصادی ثبت نشده است',
                 $rect['x'] + $rect['w'] / 2,
-                $top + 27,
+                $top + 35,
                 13,
                 $t->c('ink_dim'),
                 Canvas::W_SEMIBOLD,
-                'center'
+                'center',
+                1.0,
+                'middle'
             );
             $this->legend($c, $t, $rect['x'], $top + 88, $rect['w']);
 
@@ -142,11 +145,13 @@ final class CalendarCard extends Card
             $c->text(
                 $col['label'],
                 $x + $col['x'] + $col['w'] / 2,
-                $y + 9,
+                $y + self::HEAD_H / 2,
                 10.5,
                 $t->c('ink_dim'),
                 Canvas::W_BOLD,
-                'center'
+                'center',
+                1.0,
+                'middle'
             );
         }
 
@@ -188,18 +193,20 @@ final class CalendarCard extends Card
                     $c->text(
                         $isAllDay ? 'تعطیل' : $this->dnum((string) $row['time']),
                         $cx,
-                        $mid - ($isAllDay ? 6 : 7),
+                        $mid,
                         $isAllDay ? 10 : 11.5,
                         $isHoliday ? $t->c('ink_faint') : $t->c('ink'),
                         Canvas::W_BOLD,
-                        'center'
+                        'center',
+                        1.0,
+                        'middle'
                     );
                     break;
 
                 case 'currency':
                     $pillW = min($cw - 12, 46.0);
                     $c->roundRect($cx - $pillW / 2, $mid - 9, $pillW, 18, 6, '#FFFFFF', 0.08);
-                    $c->text((string) $row['currency'], $cx, $mid - 6, 9.5, $t->c('ink_dim'), Canvas::W_BOLD, 'center');
+                    $c->text((string) $row['currency'], $cx, $mid, 9.5, $t->c('ink_dim'), Canvas::W_BOLD, 'center', 1.0, 'middle');
                     break;
 
                 case 'country':
@@ -210,7 +217,7 @@ final class CalendarCard extends Card
 
                 case 'impact':
                     if ($isHoliday) {
-                        $c->text('—', $cx, $mid - 7, 10, $t->c('ink_faint'), Canvas::W_BOLD, 'center');
+                        $c->text('—', $cx, $mid, 10, $t->c('ink_faint'), Canvas::W_BOLD, 'center', 1.0, 'middle');
                     } else {
                         $this->impactIcon($c, $t, $cx + 7, $mid, $impact);
                     }
@@ -224,13 +231,15 @@ final class CalendarCard extends Card
                     $c->textFit(
                         $text,
                         $x + $col['x'] + $cw - 12,
-                        $mid - 7,
+                        $mid,
                         $cw - 22,
                         11.5,
                         $isHoliday ? $t->c('ink_dim') : $t->c('ink'),
                         Canvas::W_MEDIUM,
                         'right',
-                        8.5
+                        8.5,
+                        1.0,
+                        'middle'
                     );
                     break;
 
@@ -239,13 +248,15 @@ final class CalendarCard extends Card
                     $c->textFit(
                         $value === '' ? '–' : $this->dnum($value),
                         $cx,
-                        $mid - 6,
+                        $mid,
                         $cw - 10,
                         10.5,
                         $col['key'] === 'actual' && $value !== '' ? $t->c('ink') : $t->c('ink_dim'),
                         Canvas::W_SEMIBOLD,
                         'center',
-                        8
+                        8,
+                        1.0,
+                        'middle'
                     );
             }
         }
@@ -301,14 +312,14 @@ final class CalendarCard extends Card
         foreach ([[3, 'اهمیت زیاد'], [2, 'اهمیت متوسط'], [1, 'اهمیت کم']] as [$impact, $label]) {
             $this->impactIcon($c, $t, $cursor - 12, $mid, $impact);
             $cursor -= 28;
-            $c->text($label, $cursor, $mid - 6, $size, $t->c('ink_faint'), Canvas::W_SEMIBOLD, 'right');
+            $c->text($label, $cursor, $mid, $size, $t->c('ink_faint'), Canvas::W_SEMIBOLD, 'right', 1.0, 'middle');
             $cursor -= $c->textWidth($label, $size, Canvas::W_SEMIBOLD) + 18;
         }
 
         $this->micIcon($c, $t, $cursor - 7, $mid);
         $cursor -= 18;
-        $c->text('سخنرانی مقام‌ها', $cursor, $mid - 6, $size, $t->c('ink_faint'), Canvas::W_SEMIBOLD, 'right');
+        $c->text('سخنرانی مقام‌ها', $cursor, $mid, $size, $t->c('ink_faint'), Canvas::W_SEMIBOLD, 'right', 1.0, 'middle');
 
-        $c->text('زمان‌ها به وقت ایران', $x + 14, $mid - 6, $size, $t->c('ink_dim'), Canvas::W_BOLD, 'left');
+        $c->text('زمان‌ها به وقت ایران', $x + 14, $mid, $size, $t->c('ink_dim'), Canvas::W_BOLD, 'left', 1.0, 'middle');
     }
 }

@@ -17,13 +17,57 @@ abstract class Card
     protected string $footer;
     protected DateTimeImmutable $now;
     protected int $quality;
+    protected float $outputScale;
 
     public function __construct(?string $theme = null, array $options = [])
     {
         $this->theme  = new Theme($theme ?? 'mono');
         $this->footer = (string) ($options['footer'] ?? Settings::get('brand_link'));
         $this->now    = $options['now'] ?? Settings::now();
-        $this->quality = Settings::get('quality') === 'normal' ? 1 : 2;
+        [$this->quality, $this->outputScale] = self::qualityProfile();
+    }
+
+    /**
+     * انتخاب کیفیت رندر بر اساس تنظیمات و حافظه‌ی در دسترس.
+     *
+     * @return array{0:int,1:float} [ضریب سوپرسمپلینگ, ضریب خروجی]
+     */
+    protected static function qualityProfile(): array
+    {
+        $profiles = [
+            'normal' => [2, 1.0],   // ۱۲۰۰ پیکسل
+            'high'   => [3, 2.0],   // ۲۴۰۰ پیکسل — پیش‌فرض
+            'ultra'  => [4, 2.0],   // ۲۴۰۰ پیکسل با لبه‌های نرم‌تر
+        ];
+        $key = Settings::get('quality');
+        [$scale, $output] = $profiles[$key] ?? $profiles['high'];
+
+        // اگر حافظه‌ی PHP کم باشد، خودکار یک پله پایین می‌آید
+        $limit = self::memoryLimitBytes();
+        if ($limit > 0) {
+            while ($scale > 2 && (1200 * $scale) * (900 * $scale) * 5 > $limit) {
+                $scale--;
+            }
+        }
+
+        return [$scale, $output];
+    }
+
+    private static function memoryLimitBytes(): int
+    {
+        $raw = trim((string) ini_get('memory_limit'));
+        if ($raw === '' || $raw === '-1') {
+            return 0; // بدون محدودیت
+        }
+        $unit = strtolower(substr($raw, -1));
+        $value = (int) $raw;
+
+        return match ($unit) {
+            'g'     => $value * 1024 * 1024 * 1024,
+            'm'     => $value * 1024 * 1024,
+            'k'     => $value * 1024,
+            default => $value,
+        };
     }
 
     abstract public function render(): Canvas;
