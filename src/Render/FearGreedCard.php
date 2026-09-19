@@ -128,7 +128,7 @@ final class FearGreedCard extends Card
 
         $label = (string) $zone['fa'];
         $labelW = $c->textWidth($label, 13, Canvas::W_BOLD) + 32;
-        $pillY = $cy + 70;
+        $pillY = $cy + 92;
         $c->roundRect($cx - $labelW / 2, $pillY, $labelW, 26, 9, $zoneColor, 0.16);
         $c->strokeRoundRect($cx - $labelW / 2, $pillY, $labelW, 26, 9, $zoneColor, 1, 0.40);
         $c->text($label, $cx, $pillY + 5, 13, $zoneColor, Canvas::W_BOLD, 'center');
