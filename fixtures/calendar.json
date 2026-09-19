@@ -1,0 +1,16 @@
+[
+  { "time": "",      "currency": "JPY", "impact": 0, "title": "Constitution Day" },
+  { "time": "00:00", "currency": "USD", "impact": 3, "title": "API Weekly Statistical Bulletin", "previous": "-1.790M", "forecast": "-2.800M" },
+  { "time": "00:30", "currency": "NZD", "impact": 3, "title": "Financial Stability Report" },
+  { "time": "02:30", "currency": "NZD", "impact": 3, "title": "RBNZ Gov Orr Speaks" },
+  { "time": "11:25", "currency": "EUR", "impact": 3, "title": "German Final Services PMI (Apr)", "previous": "50.9", "forecast": "46.9" },
+  { "time": "11:30", "currency": "EUR", "impact": 2, "title": "Final Composite PMI (Apr)", "previous": "50.7", "forecast": "48.6" },
+  { "time": "11:30", "currency": "EUR", "impact": 3, "title": "Final Services PMI (Apr)", "previous": "50.2", "forecast": "47.4" },
+  { "time": "12:00", "currency": "GBP", "impact": 2, "title": "Final Composite PMI (Apr)", "previous": "50.3", "forecast": "52.0" },
+  { "time": "12:00", "currency": "GBP", "impact": 3, "title": "Final Services PMI (Apr)", "previous": "50.5", "forecast": "52.0" },
+  { "time": "15:45", "currency": "USD", "impact": 3, "title": "ADP Non-Farm Employment Change (Apr)", "previous": "62K", "forecast": "116K" },
+  { "time": "17:30", "currency": "CAD", "impact": 3, "title": "Ivey PMI (Apr)", "previous": "49.7", "forecast": "49.9" },
+  { "time": "18:00", "currency": "USD", "impact": 3, "title": "Crude Oil Inventories", "previous": "-6.234M", "forecast": "-2.800M" },
+  { "time": "18:00", "currency": "USD", "impact": 3, "title": "Cushing Crude Oil Inventories", "previous": "-0.796M" },
+  { "time": "23:45", "currency": "CAD", "impact": 3, "title": "BOC Gov Macklem Speaks" }
+]

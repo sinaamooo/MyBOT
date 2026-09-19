@@ -1,0 +1,17 @@
+[Unit]
+Description=NIKTO CRYPTO Telegram Bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/opt/MyBOT
+ExecStart=/usr/bin/php /opt/MyBOT/bot.php
+Restart=always
+RestartSec=5
+StandardOutput=append:/opt/MyBOT/storage/logs/bot.out
+StandardError=append:/opt/MyBOT/storage/logs/bot.err
+
+[Install]
+WantedBy=multi-user.target

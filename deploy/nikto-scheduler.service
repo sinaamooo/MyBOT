@@ -1,0 +1,17 @@
+[Unit]
+Description=NIKTO CRYPTO Card Scheduler
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/opt/MyBOT
+ExecStart=/usr/bin/php /opt/MyBOT/scheduler.php
+Restart=always
+RestartSec=10
+StandardOutput=append:/opt/MyBOT/storage/logs/scheduler.out
+StandardError=append:/opt/MyBOT/storage/logs/scheduler.err
+
+[Install]
+WantedBy=multi-user.target

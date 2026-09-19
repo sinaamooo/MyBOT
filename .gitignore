@@ -1,0 +1,13 @@
+# پیکربندی محرمانه
+config.php
+
+# دیتابیس و خروجی‌ها
+data/*.sqlite
+data/*.sqlite-*
+storage/cards/*.png
+storage/logs/*.log
+
+# سیستمی
+.DS_Store
+*.log
+vendor/

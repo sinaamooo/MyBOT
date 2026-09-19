@@ -1,0 +1,11 @@
+{
+  "BTC":  { "price": 62979.31, "change_pct": -3.08, "change_abs": -1936.81, "volume": 28400000000 },
+  "ETH":  { "price": 1822.82,  "change_pct": -2.34, "change_abs": -42.67,   "volume": 14100000000 },
+  "XRP":  { "price": 1.3318,   "change_pct": -1.26, "change_abs": -0.0169,  "volume": 2310000000 },
+  "BNB":  { "price": 589.65,   "change_pct": -0.64, "change_abs": -3.78,    "volume": 1180000000 },
+  "SOL":  { "price": 76.50,    "change_pct": -1.86, "change_abs": -1.42,    "volume": 3420000000 },
+  "TRX":  { "price": 0.2810,   "change_pct": -2.03, "change_abs": -0.0058,  "volume": 641000000 },
+  "DOGE": { "price": 0.1642,   "change_pct": 2.41,  "change_abs": 0.0039,   "volume": 812000000 },
+  "TON":  { "price": 5.132,    "change_pct": 1.18,  "change_abs": 0.0598,   "volume": 214000000 },
+  "ADA":  { "price": 0.4471,   "change_pct": 3.92,  "change_abs": 0.0169,   "volume": 398000000 }
+}
