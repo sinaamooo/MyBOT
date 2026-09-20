@@ -25,7 +25,7 @@ return [
     'admins'    => [6595849261],
 
     // آدرس وب‌هوک؛ با «php tools/webhook-set.php» روی تلگرام ثبت می‌شود
-    'webhook_url' => 'https://nikto.s14.telviprobot.top/webhook.php',
+    'webhook_url' => 'https://nikto.s14.telviprobot.top/nikto/webhook.php',
 
     'db_path'   => __DIR__ . '/data/bot.sqlite',
     'timezone'  => 'Asia/Tehran',

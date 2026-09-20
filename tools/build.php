@@ -39,7 +39,7 @@ echo "\n📦 ساخت نسخه‌ی دو فایلی\n" . str_repeat('─', 48) .
 // ───────────────────────────────────────────── ۱) کدها
 $sources = [
     'src/Core/Config.php', 'src/Core/Db.php', 'src/Core/Settings.php', 'src/Core/Http.php',
-    'src/Core/Log.php', 'src/Core/Jalali.php',
+    'src/Core/Log.php', 'src/Core/Jalali.php', 'src/Core/PublicUrl.php',
     'src/Text/Persian.php',
     'src/Data/Coins.php', 'src/Data/Countries.php', 'src/Data/EventTranslator.php',
     'src/Data/PriceProvider.php', 'src/Data/FearGreedProvider.php', 'src/Data/CalendarProvider.php',

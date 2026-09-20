@@ -1,0 +1,8 @@
+# محافظت از فایل‌های حساس روی هاست‌های Apache
+# (روی Nginx بی‌اثر است؛ برای آن از deploy/nginx.conf.sample استفاده کنید)
+
+<FilesMatch "^(config\.php|config\.local\.php|.*\.sqlite.*|.*\.log)$">
+    Require all denied
+</FilesMatch>
+
+RedirectMatch 404 ^.*/(src|data|storage|tools|fixtures|deploy|build)/

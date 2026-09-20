@@ -6,6 +6,7 @@ namespace Nikto\Bundle;
 use Nikto\Core\Config;
 use Nikto\Core\Db;
 use Nikto\Core\Log;
+use Nikto\Core\PublicUrl;
 use Nikto\Core\Settings;
 use Nikto\Jobs\Dispatcher;
 use Nikto\Jobs\Registry;
@@ -125,7 +126,7 @@ final class Runtime
         if ($method !== 'POST') {
             header('Content-Type: text/plain; charset=utf-8');
             http_response_code(200);
-            echo "NIKTO CRYPTO BOT v" . self::VERSION . " is running.\n";
+            echo PublicUrl::statusPage(self::VERSION, 'php ' . basename((string) ($_SERVER['SCRIPT_NAME'] ?? 'nikto-bot.php')) . ' webhook');
             return;
         }
 

@@ -12,8 +12,16 @@ require __DIR__ . '/src/bootstrap.php';
 use Nikto\Core\Config;
 use Nikto\Core\Db;
 use Nikto\Core\Log;
+use Nikto\Core\PublicUrl;
 use Nikto\Telegram\Api;
 use Nikto\Telegram\Panel;
+
+// درخواست معمولی مرورگر: نمایش آدرس درست وب‌هوک
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
+    header('Content-Type: text/plain; charset=utf-8');
+    http_response_code(200);
+    exit(PublicUrl::statusPage());
+}
 
 $secret = (string) Config::get('webhook_secret', '');
 if ($secret !== '' && ($_SERVER['HTTP_X_TELEGRAM_BOT_API_SECRET_TOKEN'] ?? '') !== $secret) {

@@ -7,6 +7,8 @@
  */
 declare(strict_types=1);
 
+require __DIR__ . '/src/bootstrap.php';
+
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     require __DIR__ . '/webhook.php';
     return;
@@ -14,4 +16,4 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
 
 header('Content-Type: text/plain; charset=utf-8');
 http_response_code(200);
-echo "NIKTO CRYPTO BOT is running.\n";
+echo \Nikto\Core\PublicUrl::statusPage();
