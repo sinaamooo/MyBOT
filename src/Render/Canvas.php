@@ -20,11 +20,20 @@ final class Canvas
     public const W_EXTRA    = 'ExtraBold';
     public const W_BLACK    = 'Black';
 
+    /** فونت مخصوص عددها و متن لاتین (بارلو) — سبک‌تر و متمایز از فونت فارسی */
+    public const W_NUM      = 'Num';
+    public const W_NUM_BOLD = 'NumBold';
+
     private GdImage $im;
     private int $scale;
     private int $width;
     private int $height;
     private float $outputScale = 1.0;
+
+    /** برای بازرسی چیدمان: جعبه‌ی هر متن رسم‌شده ثبت می‌شود */
+    public static bool $trace = false;
+    /** @var array<int,array{x:float,y:float,w:float,h:float,text:string,size:float}> */
+    public static array $traceBoxes = [];
 
     public function __construct(int $width, int $height, int $scale = 2, ?string $background = null)
     {
@@ -738,6 +747,14 @@ final class Canvas
 
     public static function fontPath(string $weight = self::W_BOLD): string
     {
+        if ($weight === self::W_NUM || $weight === self::W_NUM_BOLD) {
+            $numeric = APP_ASSETS . '/fonts/NiktoNum-' . ($weight === self::W_NUM_BOLD ? 'SemiBold' : 'Medium') . '.ttf';
+            if (is_file($numeric)) {
+                return $numeric;
+            }
+            $weight = $weight === self::W_NUM_BOLD ? self::W_SEMIBOLD : self::W_MEDIUM;
+        }
+
         $file = APP_ASSETS . '/fonts/Vazirmatn-' . $weight . '.ttf';
         if (is_file($file)) {
             return $file;
@@ -868,6 +885,17 @@ final class Canvas
         };
 
         imagettftext($this->im, $fs, 0, (int) $drawX - $box[0], $drawY, $col, $font, $visual);
+
+        if (self::$trace) {
+            self::$traceBoxes[] = [
+                'x'    => $drawX / $this->scale,
+                'y'    => ($drawY + $metrics['top']) / $this->scale,
+                'w'    => $w / $this->scale,
+                'h'    => $metrics['height'] / $this->scale,
+                'text' => mb_substr($text, 0, 28),
+                'size' => $size,
+            ];
+        }
 
         return $w / $this->scale;
     }

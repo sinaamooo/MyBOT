@@ -86,7 +86,7 @@ final class PriceCard extends Card
             $barY + 24,
             11,
             $t->c('ink_dim'),
-            Canvas::W_SEMIBOLD,
+            Canvas::W_MEDIUM,
             'left',
             1.0,
             'middle'
@@ -121,9 +121,9 @@ final class PriceCard extends Card
             strtoupper((string) $coin['symbol']),
             $labelRight,
             $logoCy - 8,
-            14.5,
+            15,
             $t->c('ink'),
-            Canvas::W_BLACK,
+            Canvas::W_NUM_BOLD,
             'right',
             1.0,
             'ink'
@@ -145,11 +145,11 @@ final class PriceCard extends Card
         // ── قیمت و تغییر
         $priceY = $y + $h * 0.455;
         $price = '$' . PriceProvider::formatPrice((float) $coin['price']);
-        $c->textFit($this->dnum($price), $right, $priceY, $inner * 0.72, 25, $t->c('ink'), Canvas::W_BLACK, 'right', 14, 1.0, 'ink');
+        $c->textFit($this->dnum($price), $right, $priceY, $inner * 0.72, 27, $t->c('ink'), Canvas::W_NUM_BOLD, 'right', 15, 1.0, 'ink');
 
         $pctText = $this->dnum(number_format(abs($pct), 2) . '%');
         $chipH = 23.0;
-        $chipW = $c->textWidth($pctText, 11.5, Canvas::W_BOLD) + 31;
+        $chipW = $c->textWidth($pctText, 12.5, Canvas::W_NUM_BOLD) + 31;
         $chipY = $priceY - $chipH / 2;
 
         $c->roundRect($left, $chipY, $chipW, $chipH, $chipH / 2, $trend, 0.16);
@@ -159,7 +159,7 @@ final class PriceCard extends Card
         } else {
             $c->triangle($left + 14, $priceY, 8, $isUp, $trend);
         }
-        $c->text($pctText, $left + $chipW - 10, $priceY, 11.5, $trend, Canvas::W_BOLD, 'right', 1.0, 'ink');
+        $c->text($pctText, $left + $chipW - 10, $priceY, 12.5, $trend, Canvas::W_NUM_BOLD, 'right', 1.0, 'ink');
 
         // ── نوار دامنه‌ی ۲۴ ساعته
         $this->rangeBar($c, $t, $coin, $left, $y + $h * 0.605, $inner, $trend);
@@ -189,8 +189,8 @@ final class PriceCard extends Card
         $c->circle($x + $w * $ratio, $y + 2, 4.2, $trend);
         $c->circle($x + $w * $ratio, $y + 2, 1.8, $t->c('bg_from'));
 
-        $c->text($this->dnum('L'), $x, $y + 15, 8, $t->c('ink_faint'), Canvas::W_MEDIUM, 'left', 0.8, 'middle');
-        $c->text($this->dnum('H'), $x + $w, $y + 15, 8, $t->c('ink_faint'), Canvas::W_MEDIUM, 'right', 0.8, 'middle');
+        $c->text('L', $x, $y + 15, 8.5, $t->c('ink_faint'), Canvas::W_NUM, 'left', 0.8, 'ink');
+        $c->text('H', $x + $w, $y + 15, 8.5, $t->c('ink_faint'), Canvas::W_NUM, 'right', 0.8, 'ink');
     }
 
     private function sparkline(Canvas $c, array $values, float $x, float $y, float $w, float $h, string $color): void

@@ -93,6 +93,9 @@ $addAsset = static function (string $source, string $target) use (&$assetFiles):
 foreach (['Regular', 'Medium', 'SemiBold', 'Bold', 'Black'] as $weight) {
     $addAsset(APP_ASSETS . "/fonts/Vazirmatn-{$weight}.ttf", "assets/fonts/Vazirmatn-{$weight}.ttf");
 }
+foreach (['Medium', 'SemiBold'] as $weight) {
+    $addAsset(APP_ASSETS . "/fonts/NiktoNum-{$weight}.ttf", "assets/fonts/NiktoNum-{$weight}.ttf");
+}
 foreach (['color', 'white'] as $variant) {
     foreach (glob(APP_ASSETS . "/coins/{$variant}/*.png") ?: [] as $logo) {
         $addAsset($logo, "assets/coins/{$variant}/" . basename($logo));

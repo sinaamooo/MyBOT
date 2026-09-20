@@ -184,6 +184,15 @@ foreach (Registry::keys() as $key) {
             : sprintf('ابعاد %dx%d حجم %d', $w, $h, $size);
     });
 }
+$check('چیدمان کارت‌ها بدون هم‌پوشانی', function () {
+    exec('php ' . escapeshellarg(APP_ROOT . '/tools/layout-check.php') . ' 2>&1', $lines, $status);
+    if ($status === 0) {
+        return true;
+    }
+    $found = array_values(array_filter($lines, static fn ($l) => str_contains($l, '•')));
+
+    return implode(' | ', array_slice($found, 0, 3)) ?: 'بازرسی چیدمان شکست خورد';
+});
 $check('کپشن با متغیرها', function () {
     $job = Registry::refresh('prices');
     $caption = $job->renderCaption($job->fetch());

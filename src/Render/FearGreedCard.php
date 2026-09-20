@@ -112,7 +112,7 @@ final class FearGreedCard extends Card
         }
 
         // عدد وسط حلقه
-        $c->text($this->dnum((string) $value), $cx, $cy, 44, $t->c('ink'), Canvas::W_BLACK, 'center', 1.0, 'ink');
+        $c->text($this->dnum((string) $value), $cx, $cy, 48, $t->c('ink'), Canvas::W_NUM_BOLD, 'center', 1.0, 'ink');
 
         $label = (string) $zone['fa'];
         $chipW = $c->textWidth($label, 13, Canvas::W_BOLD) + 34;
@@ -169,9 +169,9 @@ final class FearGreedCard extends Card
                 $this->dnum(self::RANGES[$i] ?? ''),
                 $x + $pad + 16,
                 $mid,
-                10.5,
+                11,
                 $isActive ? $color : $t->c('ink_faint'),
-                Canvas::W_SEMIBOLD,
+                Canvas::W_NUM,
                 'left',
                 1.0,
                 'ink'
@@ -180,14 +180,14 @@ final class FearGreedCard extends Card
             if ($isActive) {
                 // عدد فعلی داخل یک باکس کوچک، وسط ردیف
                 $valueText = $this->dnum((string) $value);
-                $boxW = max(46.0, $c->textWidth($valueText, 12, Canvas::W_BLACK) + 26);
+                $boxW = max(46.0, $c->textWidth($valueText, 13, Canvas::W_NUM_BOLD) + 26);
                 $boxH = min(26.0, $rowH - 12);
                 $boxX = $x + $w / 2 - $boxW / 2;
                 $boxY = $mid - $boxH / 2;
 
                 $c->roundRect($boxX, $boxY, $boxW, $boxH, $boxH / 2, $color, 0.20);
                 $c->strokeRoundRect($boxX, $boxY, $boxW, $boxH, $boxH / 2, $color, 1, 0.55);
-                $c->text($valueText, $x + $w / 2, $mid, 12, $color, Canvas::W_BLACK, 'center', 1.0, 'ink');
+                $c->text($valueText, $x + $w / 2, $mid, 13, $color, Canvas::W_NUM_BOLD, 'center', 1.0, 'ink');
             }
         }
     }
@@ -218,7 +218,7 @@ final class FearGreedCard extends Card
 
             $valueText = $this->dnum((string) $v);
             $labelW = $c->textWidth($label, 10, Canvas::W_MEDIUM);
-            $valueW = $c->textWidth($valueText, 11, Canvas::W_BLACK);
+            $valueW = $c->textWidth($valueText, 12, Canvas::W_NUM_BOLD);
             $chipW = $labelW + $valueW + ($diff !== 0 ? 16 : 6) + 30;
 
             $c->roundRect($cursor, $rowCy - $chipH / 2, $chipW, $chipH, $chipH / 2, '#FFFFFF', 0.05);
@@ -228,7 +228,7 @@ final class FearGreedCard extends Card
             $inner = $cursor + $chipW - 13;
             $c->text($label, $inner, $rowCy, 10, $t->c('ink_dim'), Canvas::W_MEDIUM, 'right', 1.0, 'ink');
             $inner -= $labelW + 8;
-            $c->text($valueText, $inner, $rowCy, 11, $t->c('ink'), Canvas::W_BLACK, 'right', 1.0, 'ink');
+            $c->text($valueText, $inner, $rowCy, 12, $t->c('ink'), Canvas::W_NUM_BOLD, 'right', 1.0, 'ink');
             if ($diff !== 0) {
                 $inner -= $valueW + 9;
                 $c->triangle($inner, $rowCy, 7, $diff > 0, $color);
@@ -274,7 +274,7 @@ final class FearGreedCard extends Card
         $c->circle($last[0], $last[1], 4.0, $color);
         $c->circle($last[0], $last[1], 1.8, $t->c('bg_from'));
 
-        $c->text($this->dnum((string) $max), $chartX + $chartW, $chartY + 6, 9, $t->c('ink_faint'), Canvas::W_MEDIUM, 'right', 0.9, 'ink');
-        $c->text($this->dnum((string) $min), $chartX + $chartW, $chartY + $chartH - 6, 9, $t->c('ink_faint'), Canvas::W_MEDIUM, 'right', 0.9, 'ink');
+        $c->text($this->dnum((string) $max), $chartX + $chartW, $chartY + 6, 9.5, $t->c('ink_faint'), Canvas::W_NUM, 'right', 0.9, 'ink');
+        $c->text($this->dnum((string) $min), $chartX + $chartW, $chartY + $chartH - 6, 9.5, $t->c('ink_faint'), Canvas::W_NUM, 'right', 0.9, 'ink');
     }
 }
