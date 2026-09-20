@@ -178,17 +178,16 @@ final class FearGreedCard extends Card
             );
 
             if ($isActive) {
-                $c->text(
-                    $this->dnum((string) $value),
-                    $x + $w / 2 + 30,
-                    $mid,
-                    12,
-                    $color,
-                    Canvas::W_BLACK,
-                    'center',
-                    1.0,
-                    'ink'
-                );
+                // عدد فعلی داخل یک باکس کوچک، وسط ردیف
+                $valueText = $this->dnum((string) $value);
+                $boxW = max(46.0, $c->textWidth($valueText, 12, Canvas::W_BLACK) + 26);
+                $boxH = min(26.0, $rowH - 12);
+                $boxX = $x + $w / 2 - $boxW / 2;
+                $boxY = $mid - $boxH / 2;
+
+                $c->roundRect($boxX, $boxY, $boxW, $boxH, $boxH / 2, $color, 0.20);
+                $c->strokeRoundRect($boxX, $boxY, $boxW, $boxH, $boxH / 2, $color, 1, 0.55);
+                $c->text($valueText, $x + $w / 2, $mid, 12, $color, Canvas::W_BLACK, 'center', 1.0, 'ink');
             }
         }
     }
@@ -199,12 +198,16 @@ final class FearGreedCard extends Card
         $c->glass($x, $y, $w, $h, 20, ['fill' => 0.05, 'border' => 0.11, 'tint' => $t->c('tint')]);
 
         $pad = 18.0;
-        $c->text('روند ۳۰ روز اخیر', $x + $w - $pad, $y + $pad + 4, 11, $t->c('ink_dim'), Canvas::W_SEMIBOLD, 'right', 1.0, 'ink');
+        $rowCy = $y + $pad + 11;   // عنوان و چیپ‌ها روی یک خط می‌نشینند
 
-        // برچسب‌های تاریخچه به‌صورت چیپ افقی
+        $c->text('روند ۳۰ روز اخیر', $x + $w - $pad, $rowCy, 11, $t->c('ink_dim'), Canvas::W_SEMIBOLD, 'right', 1.0, 'ink');
+
+        // هر چیپ: برچسب و عدد و فلش، همه در یک ردیف
         $history = (array) ($this->data['history'] ?? []);
         $current = (int) $this->data['value'];
+        $chipH = 26.0;
         $cursor = $x + $pad;
+
         foreach (self::HISTORY_LABELS as $key => $label) {
             if (!isset($history[$key])) {
                 continue;
@@ -212,15 +215,25 @@ final class FearGreedCard extends Card
             $v = (int) $history[$key]['value'];
             $diff = $current - $v;
             $color = $diff > 0 ? $t->c('up') : ($diff < 0 ? $t->c('down') : $t->c('flat'));
-            $text = $label . ' ' . $this->dnum((string) $v);
-            $chipW = $c->textWidth($text, 10, Canvas::W_SEMIBOLD) + 40;
 
-            $c->roundRect($cursor, $y + $pad - 2, $chipW, 24, 12, '#FFFFFF', 0.05);
-            $c->strokeRoundRect($cursor, $y + $pad - 2, $chipW, 24, 12, '#FFFFFF', 1, 0.10);
-            $c->text($text, $cursor + 14, $y + $pad + 10, 10, $t->c('ink_dim'), Canvas::W_SEMIBOLD, 'left', 1.0, 'ink');
+            $valueText = $this->dnum((string) $v);
+            $labelW = $c->textWidth($label, 10, Canvas::W_MEDIUM);
+            $valueW = $c->textWidth($valueText, 11, Canvas::W_BLACK);
+            $chipW = $labelW + $valueW + ($diff !== 0 ? 16 : 6) + 30;
+
+            $c->roundRect($cursor, $rowCy - $chipH / 2, $chipW, $chipH, $chipH / 2, '#FFFFFF', 0.05);
+            $c->strokeRoundRect($cursor, $rowCy - $chipH / 2, $chipW, $chipH, $chipH / 2, '#FFFFFF', 1, 0.10);
+
+            // از راست به چپ داخل چیپ: برچسب، سپس عدد، سپس فلش
+            $inner = $cursor + $chipW - 13;
+            $c->text($label, $inner, $rowCy, 10, $t->c('ink_dim'), Canvas::W_MEDIUM, 'right', 1.0, 'ink');
+            $inner -= $labelW + 8;
+            $c->text($valueText, $inner, $rowCy, 11, $t->c('ink'), Canvas::W_BLACK, 'right', 1.0, 'ink');
             if ($diff !== 0) {
-                $c->triangle($cursor + $chipW - 13, $y + $pad + 10, 7, $diff > 0, $color);
+                $inner -= $valueW + 9;
+                $c->triangle($inner, $rowCy, 7, $diff > 0, $color);
             }
+
             $cursor += $chipW + 8;
         }
 
@@ -230,7 +243,7 @@ final class FearGreedCard extends Card
         }
 
         $chartX = $x + $pad;
-        $chartY = $y + $pad + 32;
+        $chartY = $rowCy + 22;
         $chartW = $w - $pad * 2;
         $chartH = $y + $h - $pad - $chartY;
         if ($chartH < 30) {
