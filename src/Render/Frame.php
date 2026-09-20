@@ -4,40 +4,37 @@ declare(strict_types=1);
 namespace Nikto\Render;
 
 /**
- * قاب و پس‌زمینه‌ی کارت‌ها: تیره، مینیمال و شیشه‌ای.
+ * پس‌زمینه و قاب کارت‌ها.
  */
 final class Frame
 {
-    /** ارتفاع سربرگ کارت (عنوان + تاریخ + خط جداکننده) */
-    public const HEADER_H = 74.0;
+    public const HEADER_H = 76.0;
 
     /**
-     * پس‌زمینه و قاب را می‌کشد و ناحیه‌ی محتوا را برمی‌گرداند.
-     *
      * @param array{footer?:string,margin?:float} $options
      * @return array{x:float,y:float,w:float,h:float}
      */
     public static function draw(Canvas $c, Theme $t, array $options = []): array
     {
-        $margin = (float) ($options['margin'] ?? 18);
+        $margin = (float) ($options['margin'] ?? 16);
         $footer = trim((string) ($options['footer'] ?? ''));
 
         self::background($c, $t);
         self::border($c, $t, $margin);
 
-        $pad = $margin + 20;
-        $bottom = $pad + ($footer !== '' ? 22 : 0);
+        $pad = $margin + 22;
+        $bottom = $pad + ($footer !== '' ? 20 : 0);
 
         if ($footer !== '') {
             $c->text(
                 $footer,
                 $c->width() / 2,
-                $c->height() - $margin - 26,
-                10.5,
+                $c->height() - $margin - 22,
+                10,
                 $t->c('ink_faint'),
                 Canvas::W_MEDIUM,
                 'center',
-                0.9,
+                0.85,
                 'middle',
                 2.0
             );
@@ -58,29 +55,22 @@ final class Frame
 
         $c->gradient(0, 0, $w, $h, $t->c('bg_from'), $t->c('bg_to'), 'v');
 
-        // درخشش‌های بسیار ملایم
-        $c->radialGlow($w * 0.16, -$h * 0.05, $w * 0.46, $t->c('glow'), $t->isMono() ? 0.10 : 0.20);
-        $c->radialGlow($w * 0.92, $h * 1.02, $w * 0.40, $t->c('glow_alt'), $t->isMono() ? 0.08 : 0.16);
+        // دو هاله‌ی بزرگ و نرم در دو گوشه
+        $c->radialGlow($w * 0.88, -$h * 0.10, $w * 0.52, $t->c('glow'), 0.24);
+        $c->radialGlow($w * 0.06, $h * 1.06, $w * 0.46, $t->c('glow_alt'), 0.22);
 
-        self::dotGrid($c, $t);
-
-        // باریکه‌ی نور مورب
-        $c->polygon([
-            [$w * 0.58, 0], [$w * 0.74, 0], [$w * 0.34, $h], [$w * 0.18, $h],
-        ], '#FFFFFF', 0.012);
-
+        self::texture($c, $t);
         self::vignette($c);
     }
 
-    /** شبکه‌ی نقطه‌چین محو در پس‌زمینه */
-    private static function dotGrid(Canvas $c, Theme $t): void
+    /** بافت خطوط مورب بسیار محو */
+    private static function texture(Canvas $c, Theme $t): void
     {
-        $step = 30;
-        $color = $t->c('tint');
-        for ($y = $step; $y < $c->height(); $y += $step) {
-            for ($x = $step; $x < $c->width(); $x += $step) {
-                $c->rect($x, $y, 1.2, 1.2, $color, 0.045);
-            }
+        $w = $c->width();
+        $h = $c->height();
+        $step = 26;
+        for ($x = -$h; $x < $w; $x += $step) {
+            $c->line($x, 0, $x + $h, $h, $t->c('tint'), 1, 0.016);
         }
     }
 
@@ -89,17 +79,17 @@ final class Frame
         $w = $c->width();
         $h = $c->height();
 
-        $band = (int) ($h * 0.26);
+        $band = (int) ($h * 0.30);
         for ($i = 0; $i < $band; $i += 2) {
             $a = (1 - $i / $band) ** 2;
-            $c->rect(0, $i, $w, 2, '#000000', $a * 0.30);
-            $c->rect(0, $h - $i - 2, $w, 2, '#000000', $a * 0.38);
+            $c->rect(0, $i, $w, 2, '#000000', $a * 0.34);
+            $c->rect(0, $h - $i - 2, $w, 2, '#000000', $a * 0.42);
         }
-        $bandX = (int) ($w * 0.16);
+        $bandX = (int) ($w * 0.14);
         for ($i = 0; $i < $bandX; $i += 2) {
             $a = (1 - $i / $bandX) ** 2;
-            $c->rect($i, 0, 2, $h, '#000000', $a * 0.32);
-            $c->rect($w - $i - 2, 0, 2, $h, '#000000', $a * 0.32);
+            $c->rect($i, 0, 2, $h, '#000000', $a * 0.34);
+            $c->rect($w - $i - 2, 0, 2, $h, '#000000', $a * 0.34);
         }
     }
 
@@ -110,22 +100,25 @@ final class Frame
         $bw = $w - $margin * 2;
         $bh = $h - $margin * 2;
 
-        $c->strokeRoundRect($margin, $margin, $bw, $bh, 22, '#FFFFFF', 1, 0.10);
+        $c->strokeRoundRect($margin, $margin, $bw, $bh, 26, '#FFFFFF', 1, 0.09);
 
-        // گوشه‌های ظریف
-        $len = 26.0;
-        $col = $t->c('accent');
-        foreach ([[0, 0, 1, 1], [1, 0, -1, 1], [0, 1, 1, -1], [1, 1, -1, -1]] as [$ix, $iy, $sx, $sy]) {
-            $x = $margin + $ix * $bw;
-            $y = $margin + $iy * $bh;
-            $c->line($x, $y, $x + $sx * $len, $y, $col, 1.4, 0.55);
-            $c->line($x, $y, $x, $y + $sy * $len, $col, 1.4, 0.55);
-        }
+        // نوار تأکید در لبه‌ی بالا: سبز به آبی
+        $c->gradientLine(
+            $margin + $bw * 0.30,
+            $margin + 1,
+            $margin + $bw * 0.70,
+            $margin + 1,
+            $t->c('accent'),
+            $t->c('accent_alt'),
+            2.4,
+            0.9
+        );
     }
 
     /**
-     * سربرگ کوچک کارت — عنوان راست، تاریخ زیرش، برچسب سمت چپ.
-     * مقدار بازگشتی: y شروع محتوا.
+     * سربرگ کارت: عنوان راست، تاریخ زیرش، و یک ویجت دلخواه در سمت چپ.
+     *
+     * @param callable(float,float):void|null $left ویجت سمت چپ (x و y بالای آن)
      */
     public static function header(
         Canvas $c,
@@ -133,27 +126,52 @@ final class Frame
         array $rect,
         string $title,
         string $subtitle = '',
-        string $badge = ''
+        string $badge = '',
+        ?callable $left = null
     ): float {
         $x = $rect['x'];
         $w = $rect['w'];
         $y = $rect['y'];
 
-        $c->text($title, $x + $w, $y, 17, $t->c('ink'), Canvas::W_BOLD, 'right');
+        $c->text($title, $x + $w, $y, 18, $t->c('ink'), Canvas::W_BLACK, 'right');
         if ($subtitle !== '') {
             $c->text($subtitle, $x + $w, $y + 34, 10.5, $t->c('ink_dim'), Canvas::W_MEDIUM, 'right');
         }
 
-        if ($badge !== '') {
-            $bw = $c->textWidth($badge, 10, Canvas::W_SEMIBOLD) + 22;
-            $c->glass($x, $y + 2, $bw, 24, 8, ['fill' => 0.07, 'border' => 0.12, 'blur' => 2, 'shadow' => false]);
+        if ($left !== null) {
+            $left($x, $y);
+        } elseif ($badge !== '') {
+            $bw = $c->textWidth($badge, 10, Canvas::W_SEMIBOLD) + 26;
+            $c->glass($x, $y + 1, $bw, 26, 9, ['fill' => 0.07, 'border' => 0.13, 'blur' => 2, 'shadow' => false]);
             $c->text($badge, $x + $bw / 2, $y + 14, 10, $t->c('ink_dim'), Canvas::W_SEMIBOLD, 'center', 1.0, 'middle');
         }
 
-        $lineY = $y + ($subtitle !== '' ? 58 : 34);
-        $c->rect($x, $lineY, $w, 1, '#FFFFFF', 0.08);
-        $c->rect($x + $w - 54, $lineY, 54, 1.6, $t->c('accent'), 0.75);
+        $lineY = $y + 58;
+        $c->rect($x, $lineY, $w, 1, '#FFFFFF', 0.07);
+        $c->gradientLine($x + $w - 74, $lineY, $x + $w, $lineY, $t->c('accent_alt'), $t->c('accent'), 2.2, 0.95);
 
-        return $lineY + 16;
+        return $lineY + 18;
+    }
+
+    /** برچسب کوچک شیشه‌ای */
+    public static function chip(
+        Canvas $c,
+        Theme $t,
+        string $text,
+        float $x,
+        float $y,
+        float $size = 10,
+        ?string $color = null,
+        string $weight = Canvas::W_SEMIBOLD
+    ): float {
+        $w = $c->textWidth($text, $size, $weight) + 22;
+        $h = $size + 14;
+        $tint = $color ?? '#FFFFFF';
+
+        $c->roundRect($x, $y, $w, $h, $h / 2, $tint, $color !== null ? 0.14 : 0.07);
+        $c->strokeRoundRect($x, $y, $w, $h, $h / 2, $tint, 1, $color !== null ? 0.35 : 0.12);
+        $c->text($text, $x + $w / 2, $y + $h / 2, $size, $color ?? $t->c('ink_dim'), $weight, 'center', 1.0, 'ink');
+
+        return $w;
     }
 }

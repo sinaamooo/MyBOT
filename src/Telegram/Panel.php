@@ -256,7 +256,9 @@ final class Panel
                 $toast = 'منتظر ورودی';
                 return $this->screenPrompt(
                     'ویرایش کپشن',
-                    "متن دلخواه را بفرستید. متغیرهای مجاز:\n"
+                    "متن دلخواه را بفرستید. می‌توانید از قالب‌بندی خود تلگرام استفاده کنید:\n"
+                    . "بولد، ایتالیک، زیرخط، نقل‌قول، کد و لینک — همه حفظ می‌شوند.\n\n"
+                    . "متغیرهای مجاز:\n"
                     . "<code>{summary}</code> خلاصه داده‌ها\n"
                     . "<code>{date}</code> تاریخ شمسی\n"
                     . "<code>{time}</code> ساعت\n"
@@ -506,7 +508,13 @@ final class Panel
             case 'caption':
                 $job = Registry::refresh($payload);
                 if ($job !== null) {
-                    $job->setCaption($text === 'خالی' ? '' : $text);
+                    // قالب‌بندی تلگرام (بولد، نقل‌قول و …) به HTML تبدیل می‌شود
+                    $formatted = $text === 'خالی'
+                        ? ''
+                        : (Entities::looksLikeHtml($text)
+                            ? $text
+                            : Entities::toHtml($text, (array) ($msg['entities'] ?? [])));
+                    $job->setCaption($formatted);
                 }
                 $this->render($chatId, $userId, $this->screenJob($payload), 'کپشن ذخیره شد.');
                 return;
@@ -839,7 +847,7 @@ final class Panel
 
     private function screenThemes(string $key): array
     {
-        $current = Registry::refresh($key)?->theme() ?? 'mono';
+        $current = Registry::refresh($key)?->theme() ?? 'neo';
 
         $kb = [];
         foreach (Theme::options() as $name => $label) {

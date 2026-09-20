@@ -547,6 +547,97 @@ final class Canvas
         return $count > 0 ? $sum / $count : 0.5;
     }
 
+    /** خطی که رنگش از یک سر به سر دیگر تغییر می‌کند */
+    public function gradientLine(
+        float $x1,
+        float $y1,
+        float $x2,
+        float $y2,
+        string $from,
+        string $to,
+        float $thickness = 2,
+        float $alpha = 1.0
+    ): void {
+        $steps = max(8, (int) (abs($x2 - $x1) + abs($y2 - $y1)) / 4);
+        for ($i = 0; $i < $steps; $i++) {
+            $t1 = $i / $steps;
+            $t2 = ($i + 1) / $steps;
+            $this->rect(
+                $x1 + ($x2 - $x1) * $t1,
+                $y1 + ($y2 - $y1) * $t1 - $thickness / 2,
+                ($x2 - $x1) * ($t2 - $t1) + 0.8,
+                $thickness,
+                self::mix($from, $to, $t1),
+                $alpha
+            );
+        }
+    }
+
+    /**
+     * ناحیه‌ی زیر نمودار با محوشدگی عمودی.
+     *
+     * @param array<int,array{0:float,1:float}> $points نقاط منحنی
+     */
+    public function areaGradient(array $points, float $x, float $y, float $w, float $h, string $hex, float $alphaTop = 0.35): void
+    {
+        if (count($points) < 2 || $w <= 0 || $h <= 0) {
+            return;
+        }
+        $lw = max(2, $this->s($w));
+        $lh = max(2, $this->s($h));
+
+        $layer = imagecreatetruecolor($lw, $lh);
+        imagealphablending($layer, false);
+        imagesavealpha($layer, true);
+
+        [$r, $g, $b] = self::parseColor($hex);
+        for ($row = 0; $row < $lh; $row++) {
+            $t = $row / max(1, $lh - 1);
+            $a = $alphaTop * (1 - $t) ** 1.35;
+            imagefilledrectangle(
+                $layer,
+                0,
+                $row,
+                $lw,
+                $row,
+                imagecolorallocatealpha($layer, $r, $g, $b, (int) round(127 * (1 - $a)))
+            );
+        }
+
+        // هرچه بالای منحنی است پاک می‌شود
+        $clear = imagecolorallocatealpha($layer, 0, 0, 0, 127);
+        $count = count($points);
+        for ($i = 0; $i < $count - 1; $i++) {
+            $ax = $this->s($points[$i][0] - $x);
+            $ay = $this->s($points[$i][1] - $y);
+            $bx = $this->s($points[$i + 1][0] - $x);
+            $by = $this->s($points[$i + 1][1] - $y);
+            $span = max(1, $bx - $ax);
+            for ($col = $ax; $col <= $bx; $col++) {
+                if ($col < 0 || $col >= $lw) {
+                    continue;
+                }
+                $curve = (int) round($ay + ($by - $ay) * (($col - $ax) / $span));
+                if ($curve > 0) {
+                    imagefilledrectangle($layer, $col, 0, $col, min($lh - 1, $curve), $clear);
+                }
+            }
+        }
+        // دو طرف بیرون از منحنی
+        $firstX = $this->s($points[0][0] - $x);
+        $lastX = $this->s($points[$count - 1][0] - $x);
+        if ($firstX > 0) {
+            imagefilledrectangle($layer, 0, 0, $firstX - 1, $lh, $clear);
+        }
+        if ($lastX < $lw - 1) {
+            imagefilledrectangle($layer, $lastX + 1, 0, $lw, $lh, $clear);
+        }
+
+        imagealphablending($this->im, true);
+        imagecopy($this->im, $layer, $this->s($x), $this->s($y), 0, 0, $lw, $lh);
+        imagedestroy($layer);
+    }
+
     public function line(float $x1, float $y1, float $x2, float $y2, string $hex, float $thickness = 1, float $alpha = 1.0): void
     {
         imagesetthickness($this->im, max(1, $this->s($thickness)));

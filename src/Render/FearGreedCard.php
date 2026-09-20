@@ -6,7 +6,7 @@ namespace Nikto\Render;
 use Nikto\Data\FearGreedProvider;
 
 /**
- * کارت شاخص ترس و طمع — گیج شیشه‌ای، مقادیر تاریخی و روند ۳۰ روزه.
+ * کارت شاخص ترس و طمع — حلقه‌ی کامل، نردبان ناحیه‌ها و نمودار ۳۰ روزه.
  */
 final class FearGreedCard extends Card
 {
@@ -19,6 +19,8 @@ final class FearGreedCard extends Card
         'month'     => '۱ ماه پیش',
     ];
 
+    private const RANGES = ['0 – 24', '25 – 44', '45 – 55', '56 – 75', '76 – 100'];
+
     public function __construct(array $data, ?string $theme = null, array $options = [])
     {
         parent::__construct($theme, $options);
@@ -27,256 +29,24 @@ final class FearGreedCard extends Card
 
     public function render(): Canvas
     {
-        $c = new Canvas(1200, 505, $this->quality);
+        $c = new Canvas(1200, 628, $this->quality);
         $c->setOutputScale($this->outputScale);
         $t = $this->theme;
 
         $rect = Frame::draw($c, $t, ['footer' => $this->footer]);
-        $top = Frame::header($c, $t, $rect, 'شاخص ترس و طمع بازار', $this->dateLine(), 'Fear & Greed');
+        $top = Frame::header($c, $t, $rect, 'شاخص ترس و طمع بازار', $this->dateLine(), 'Fear & Greed Index');
 
+        $gap = 14.0;
         $bodyH = $rect['y'] + $rect['h'] - $top;
-        $gaugeW = $rect['w'] * 0.56;
-        $sideW = $rect['w'] - $gaugeW - 16;
+        $topH = $bodyH * 0.645;
+        $dialW = $rect['w'] * 0.40;
+        $ladderW = $rect['w'] - $dialW - $gap;
 
-        // ستون راست: گیج
-        $this->gauge($c, $t, $rect['x'] + $sideW + 16, $top, $gaugeW, $bodyH);
-
-        // ستون چپ: تاریخچه + روند
-        $this->history($c, $t, $rect['x'], $top, $sideW, $bodyH);
+        $this->dial($c, $t, $rect['x'] + $ladderW + $gap, $top, $dialW, $topH);
+        $this->ladder($c, $t, $rect['x'], $top, $ladderW, $topH);
+        $this->trend($c, $t, $rect['x'], $top + $topH + $gap, $rect['w'], $bodyH - $topH - $gap);
 
         return $c;
-    }
-
-    /** رنگ ناحیه؛ در تم مونو به طیف خاکستری تا سفید تبدیل می‌شود */
-    private function zoneColor(Theme $t, int $index, string $original): string
-    {
-        if (!$t->isMono()) {
-            return $original;
-        }
-
-        return ['#5E6470', '#828996', '#A6ADB8', '#CDD3DC', '#FFFFFF'][$index] ?? '#FFFFFF';
-    }
-
-    private function gauge(Canvas $c, Theme $t, float $x, float $y, float $w, float $h): void
-    {
-        $value = max(0, min(100, (int) $this->data['value']));
-        $zone  = $this->data['zone'];
-        $zoneIndex = $this->zoneIndex($value);
-        $zoneColor = $this->zoneColor($t, $zoneIndex, (string) $zone['color']);
-
-        $c->glass($x, $y, $w, $h, 20, ['fill' => 0.05, 'border' => 0.12, 'tint' => $t->c('tint')]);
-
-        $cx = $x + $w / 2;
-        $radius = min($w * 0.33, $h * 0.46);
-        $cy = $y + $h * 0.60;
-        $thickness = $radius * 0.16;
-
-        // مسیر پس‌زمینه
-        $c->ring($cx, $cy, $radius, $thickness + 3, '#FFFFFF', 179, 361, 0.05);
-
-        $bounds = [0, 25, 45, 56, 76, 101];
-        foreach (FearGreedProvider::ZONES as $i => $zoneDef) {
-            $a1 = 180 + $bounds[$i] * 1.8 + 0.9;
-            $a2 = 180 + ($bounds[$i + 1] - 1) * 1.8 - 0.9;
-            $c->ring($cx, $cy, $radius, $thickness, $this->zoneColor($t, $i, $zoneDef['color']), $a1, $a2, 0.95);
-        }
-
-        // مدرج‌ها
-        for ($v = 0; $v <= 100; $v += 5) {
-            $ang = deg2rad(180 + $v * 1.8);
-            $major = $v % 25 === 0;
-            $r1 = $radius + $thickness / 2 + 4;
-            $r2 = $r1 + ($major ? 8 : 4);
-            $c->line(
-                $cx + cos($ang) * $r1,
-                $cy + sin($ang) * $r1,
-                $cx + cos($ang) * $r2,
-                $cy + sin($ang) * $r2,
-                $t->c('ink_dim'),
-                $major ? 1.6 : 1,
-                $major ? 0.75 : 0.35
-            );
-            if ($major) {
-                $lr = $r2 + 12;
-                $c->text(
-                    $this->dnum((string) $v),
-                    $cx + cos($ang) * $lr,
-                    $cy + sin($ang) * $lr,
-                    9.5,
-                    $t->c('ink_faint'),
-                    Canvas::W_SEMIBOLD,
-                    'center',
-                    1.0,
-                    'middle'
-                );
-            }
-        }
-
-        // عقربه
-        $ang = deg2rad(180 + $value * 1.8);
-        $tip = $radius + $thickness / 2 - 1;
-        $baseR = 9.0;
-        $perp = $ang + M_PI / 2;
-        $c->polygon([
-            [$cx + cos($ang) * $tip, $cy + sin($ang) * $tip],
-            [$cx + cos($perp) * $baseR * 0.45, $cy + sin($perp) * $baseR * 0.45],
-            [$cx - cos($ang) * $baseR * 0.8, $cy - sin($ang) * $baseR * 0.8],
-            [$cx - cos($perp) * $baseR * 0.45, $cy - sin($perp) * $baseR * 0.45],
-        ], $t->c('ink'), 0.95);
-        $c->circle($cx, $cy, $baseR, $t->c('ink'));
-        $c->circle($cx, $cy, $baseR - 3.4, $t->c('bg_from'));
-
-        // مقدار و برچسب
-        $c->text($this->dnum((string) $value), $cx, $cy + 52, 33, $t->c('ink'), Canvas::W_BLACK, 'center', 1.0, 'ink');
-
-        $label = (string) $zone['fa'];
-        $labelW = $c->textWidth($label, 13, Canvas::W_BOLD) + 32;
-        $legendY = $y + $h - 16;
-        // برچسب ناحیه هیچ‌وقت روی راهنمای پایین کارت نمی‌افتد
-        $pillY = min($cy + 92, $legendY - 20 - 26);
-        $c->roundRect($cx - $labelW / 2, $pillY, $labelW, 26, 9, $zoneColor, 0.16);
-        $c->strokeRoundRect($cx - $labelW / 2, $pillY, $labelW, 26, 9, $zoneColor, 1, 0.40);
-        $c->text($label, $cx, $pillY + 13, 13, $zoneColor, Canvas::W_BOLD, 'center', 1.0, 'ink');
-
-        $this->legend($c, $t, $cx, $legendY, $w - 24);
-    }
-
-    private function legend(Canvas $c, Theme $t, float $cx, float $y, float $maxWidth): void
-    {
-        $size = 9.0;
-        $dot = 4.0;
-        $gap = 13.0;
-
-        $items = [];
-        $total = 0.0;
-        foreach (FearGreedProvider::ZONES as $i => $zoneDef) {
-            $tw = $c->textWidth($zoneDef['fa'], $size, Canvas::W_SEMIBOLD);
-            $items[] = ['fa' => $zoneDef['fa'], 'color' => $this->zoneColor($t, $i, $zoneDef['color']), 'w' => $tw];
-            $total += $tw + $dot * 2 + 5 + $gap;
-        }
-        $total -= $gap;
-        if ($total > $maxWidth) {
-            return;
-        }
-
-        $cursor = $cx + $total / 2;
-        foreach ($items as $item) {
-            $c->circle($cursor - $dot, $y, $dot, $item['color'], 0.95);
-            $c->text($item['fa'], $cursor - $dot * 2 - 5, $y, $size, $t->c('ink_faint'), Canvas::W_SEMIBOLD, 'right', 1.0, 'middle');
-            $cursor -= $item['w'] + $dot * 2 + 5 + $gap;
-        }
-    }
-
-    private function history(Canvas $c, Theme $t, float $x, float $y, float $w, float $h): void
-    {
-        $history = (array) ($this->data['history'] ?? []);
-        $items = [];
-        foreach (self::HISTORY_LABELS as $key => $label) {
-            if (isset($history[$key])) {
-                $items[] = [
-                    'label' => $label,
-                    'value' => (int) $history[$key]['value'],
-                    'zone'  => $history[$key]['zone'],
-                ];
-            }
-        }
-
-        $gap = 12.0;
-        $count = max(1, count($items));
-        $cardW = ($w - $gap * ($count - 1)) / $count;
-        $cardH = min(94.0, $h * 0.27);
-
-        foreach ($items as $i => $item) {
-            $cx = $x + $w - ($i + 1) * $cardW - $i * $gap;
-            $this->historyCard($c, $t, $item, $cx, $y, $cardW, $cardH);
-        }
-
-        $series = array_values(array_map('intval', (array) ($this->data['series'] ?? [])));
-        $chartY = $y + $cardH + $gap;
-        $chartH = $y + $h - $chartY;
-        if (count($series) >= 5 && $chartH > 60) {
-            $this->trend($c, $t, $series, $x, $chartY, $w, $chartH);
-        }
-    }
-
-    private function historyCard(Canvas $c, Theme $t, array $item, float $x, float $y, float $w, float $h): void
-    {
-        $zoneIndex = $this->zoneIndex((int) $item['value']);
-        $color = $this->zoneColor($t, $zoneIndex, (string) $item['zone']['color']);
-
-        $c->glass($x, $y, $w, $h, 14, ['fill' => 0.06, 'border' => 0.12, 'tint' => $t->c('tint')]);
-        $c->text($item['label'], $x + $w / 2, $y + 17, 9.5, $t->c('ink_dim'), Canvas::W_SEMIBOLD, 'center', 1.0, 'middle');
-
-        // حلقه‌ی کوچک با عدد ریز و دقیقاً وسط
-        $ringR = min($w * 0.105, $h * 0.145);
-        $ringCx = $x + $w / 2;
-        $ringCy = $y + $h * 0.53;
-        $c->ring($ringCx, $ringCy, $ringR, $ringR * 0.26, '#FFFFFF', 0, 360, 0.10);
-        $sweep = 360 * max(0.02, min(1, $item['value'] / 100));
-        $c->ring($ringCx, $ringCy, $ringR, $ringR * 0.26, $color, -90, -90 + $sweep, 0.95);
-        $c->text(
-            $this->dnum((string) $item['value']),
-            $ringCx,
-            $ringCy,
-            $ringR * 0.70,
-            $t->c('ink'),
-            Canvas::W_BOLD,
-            'center',
-            1.0,
-            'ink'
-        );
-
-        $c->textFit(
-            (string) $item['zone']['fa'],
-            $ringCx,
-            $y + $h - 15,
-            $w - 14,
-            9,
-            $t->isMono() ? $t->c('ink_dim') : $color,
-            Canvas::W_SEMIBOLD,
-            'center',
-            8,
-            1.0,
-            'middle'
-        );
-    }
-
-    private function trend(Canvas $c, Theme $t, array $series, float $x, float $y, float $w, float $h): void
-    {
-        $c->glass($x, $y, $w, $h, 16, ['fill' => 0.06, 'border' => 0.12, 'tint' => $t->c('tint')]);
-
-        $padX = 16.0;
-        $padTop = 26.0;
-        $padBottom = 14.0;
-        $innerW = $w - $padX * 2;
-        $innerH = $h - $padTop - $padBottom;
-
-        $c->text('۳۰ روز اخیر', $x + $w - $padX, $y + 15, 10, $t->c('ink_dim'), Canvas::W_SEMIBOLD, 'right', 1.0, 'middle');
-
-        $min = min($series);
-        $max = max($series);
-        $span = max(1, $max - $min);
-        $n = count($series);
-
-        $points = [];
-        foreach ($series as $i => $v) {
-            $points[] = [
-                $x + $padX + $innerW * ($i / max(1, $n - 1)),
-                $y + $padTop + $innerH - (($v - $min) / $span) * $innerH,
-            ];
-        }
-
-        $area = $points;
-        $area[] = [$x + $padX + $innerW, $y + $padTop + $innerH];
-        $area[] = [$x + $padX, $y + $padTop + $innerH];
-        $c->polygon($area, $t->c('accent'), 0.10);
-        $c->polyline($points, $t->c('accent'), 1.7, 0.9);
-
-        $last = $points[$n - 1];
-        $c->circle($last[0], $last[1], 3, $t->c('accent'));
-
-        $c->text($this->dnum((string) $max), $x + $padX, $y + $padTop - 8, 9, $t->c('ink_faint'), Canvas::W_MEDIUM, 'left', 1.0, 'middle');
-        $c->text($this->dnum((string) $min), $x + $padX, $y + $h - $padBottom - 6, 9, $t->c('ink_faint'), Canvas::W_MEDIUM, 'left', 1.0, 'middle');
     }
 
     private function zoneIndex(int $value): int
@@ -288,5 +58,210 @@ final class FearGreedCard extends Card
         }
 
         return count(FearGreedProvider::ZONES) - 1;
+    }
+
+    /** رنگ ناحیه در پالت سبز/آبی */
+    private function zoneColor(Theme $t, int $index): string
+    {
+        $ramp = [
+            $t->c('down'),                                     // ترس شدید — آبی
+            Canvas::mix($t->c('down'), $t->c('ink_dim'), 0.45),
+            $t->c('ink_dim'),                                  // خنثی — خاکستری روشن
+            Canvas::mix($t->c('up'), $t->c('ink_dim'), 0.35),
+            $t->c('up'),                                       // طمع شدید — سبز
+        ];
+
+        return $ramp[$index] ?? $t->c('ink');
+    }
+
+    /** حلقه‌ی کامل با عدد در مرکز */
+    private function dial(Canvas $c, Theme $t, float $x, float $y, float $w, float $h): void
+    {
+        $value = max(0, min(100, (int) $this->data['value']));
+        $index = $this->zoneIndex($value);
+        $color = $this->zoneColor($t, $index);
+        $zone = $this->data['zone'];
+
+        $c->glass($x, $y, $w, $h, 22, ['fill' => 0.05, 'border' => 0.11, 'tint' => $t->c('tint')]);
+
+        $cx = $x + $w / 2;
+        $cy = $y + $h * 0.47;
+        $radius = min($w * 0.26, $h * 0.30);
+        $thickness = $radius * 0.20;
+
+        // هاله‌ی پشت حلقه
+        $c->radialGlow($cx, $cy, $radius * 1.7, $color, 0.16);
+
+        // مسیر خالی
+        $c->ring($cx, $cy, $radius, $thickness, '#FFFFFF', 0, 360, 0.08);
+
+        // کمان پیشرفت از بالا
+        $sweep = max(2.0, $value * 3.6);
+        $c->ring($cx, $cy, $radius, $thickness, $color, -90, -90 + $sweep, 0.96);
+        // سر گرد کمان
+        $endAngle = deg2rad(-90 + $sweep);
+        $c->circle($cx + cos($endAngle) * $radius, $cy + sin($endAngle) * $radius, $thickness / 2, $color);
+        $c->circle($cx, $cy - $radius, $thickness / 2, $color);
+
+        // حلقه‌ی نازک ناحیه‌ها بیرون
+        $bounds = [0, 25, 45, 56, 76, 101];
+        foreach (FearGreedProvider::ZONES as $i => $zoneDef) {
+            $a1 = -90 + $bounds[$i] * 3.6 + 1.2;
+            $a2 = -90 + ($bounds[$i + 1] - 1) * 3.6 - 1.2;
+            $c->ring($cx, $cy, $radius + $thickness * 0.92, 2.6, $this->zoneColor($t, $i), $a1, $a2, $i === $index ? 0.95 : 0.35);
+        }
+
+        // عدد وسط حلقه
+        $c->text($this->dnum((string) $value), $cx, $cy, 44, $t->c('ink'), Canvas::W_BLACK, 'center', 1.0, 'ink');
+
+        $label = (string) $zone['fa'];
+        $chipW = $c->textWidth($label, 13, Canvas::W_BOLD) + 34;
+        $chipY = min($y + $h - 40, $cy + $radius + $thickness + 16);
+        $c->roundRect($cx - $chipW / 2, $chipY, $chipW, 28, 14, $color, 0.16);
+        $c->strokeRoundRect($cx - $chipW / 2, $chipY, $chipW, 28, 14, $color, 1, 0.45);
+        $c->text($label, $cx, $chipY + 14, 13, $color, Canvas::W_BOLD, 'center', 1.0, 'ink');
+    }
+
+    /** نردبان عمودی ناحیه‌ها */
+    private function ladder(Canvas $c, Theme $t, float $x, float $y, float $w, float $h): void
+    {
+        $value = max(0, min(100, (int) $this->data['value']));
+        $active = $this->zoneIndex($value);
+
+        $c->glass($x, $y, $w, $h, 22, ['fill' => 0.05, 'border' => 0.11, 'tint' => $t->c('tint')]);
+
+        $pad = 16.0;
+        $c->text('ناحیه‌های شاخص', $x + $w - $pad, $y + $pad + 6, 11, $t->c('ink_dim'), Canvas::W_SEMIBOLD, 'right', 1.0, 'ink');
+
+        $rows = count(FearGreedProvider::ZONES);
+        $gap = 7.0;
+        $listY = $y + $pad + 26;
+        $rowH = ($h - ($listY - $y) - $pad - $gap * ($rows - 1)) / $rows;
+
+        // از بالا: طمع شدید تا پایین: ترس شدید
+        foreach (array_reverse(FearGreedProvider::ZONES, true) as $i => $zoneDef) {
+            $order = $rows - 1 - $i;
+            $rowY = $listY + $order * ($rowH + $gap);
+            $color = $this->zoneColor($t, $i);
+            $isActive = $i === $active;
+
+            $c->roundRect($x + $pad, $rowY, $w - $pad * 2, $rowH, 12, $isActive ? $color : '#FFFFFF', $isActive ? 0.13 : 0.035);
+            if ($isActive) {
+                $c->strokeRoundRect($x + $pad, $rowY, $w - $pad * 2, $rowH, 12, $color, 1.2, 0.5);
+            }
+
+            $mid = $rowY + $rowH / 2;
+            $c->roundRect($x + $w - $pad - 8, $rowY + 6, 4, $rowH - 12, 2, $color, $isActive ? 1.0 : 0.5);
+
+            $c->text(
+                (string) $zoneDef['fa'],
+                $x + $w - $pad - 22,
+                $mid,
+                12.5,
+                $isActive ? $t->c('ink') : $t->c('ink_dim'),
+                $isActive ? Canvas::W_BOLD : Canvas::W_MEDIUM,
+                'right',
+                1.0,
+                'ink'
+            );
+
+            $c->text(
+                $this->dnum(self::RANGES[$i] ?? ''),
+                $x + $pad + 16,
+                $mid,
+                10.5,
+                $isActive ? $color : $t->c('ink_faint'),
+                Canvas::W_SEMIBOLD,
+                'left',
+                1.0,
+                'ink'
+            );
+
+            if ($isActive) {
+                $c->text(
+                    $this->dnum((string) $value),
+                    $x + $w / 2 + 30,
+                    $mid,
+                    12,
+                    $color,
+                    Canvas::W_BLACK,
+                    'center',
+                    1.0,
+                    'ink'
+                );
+            }
+        }
+    }
+
+    /** نمودار ۳۰ روزه با برچسب‌های تاریخچه */
+    private function trend(Canvas $c, Theme $t, float $x, float $y, float $w, float $h): void
+    {
+        $c->glass($x, $y, $w, $h, 20, ['fill' => 0.05, 'border' => 0.11, 'tint' => $t->c('tint')]);
+
+        $pad = 18.0;
+        $c->text('روند ۳۰ روز اخیر', $x + $w - $pad, $y + $pad + 4, 11, $t->c('ink_dim'), Canvas::W_SEMIBOLD, 'right', 1.0, 'ink');
+
+        // برچسب‌های تاریخچه به‌صورت چیپ افقی
+        $history = (array) ($this->data['history'] ?? []);
+        $current = (int) $this->data['value'];
+        $cursor = $x + $pad;
+        foreach (self::HISTORY_LABELS as $key => $label) {
+            if (!isset($history[$key])) {
+                continue;
+            }
+            $v = (int) $history[$key]['value'];
+            $diff = $current - $v;
+            $color = $diff > 0 ? $t->c('up') : ($diff < 0 ? $t->c('down') : $t->c('flat'));
+            $text = $label . ' ' . $this->dnum((string) $v);
+            $chipW = $c->textWidth($text, 10, Canvas::W_SEMIBOLD) + 40;
+
+            $c->roundRect($cursor, $y + $pad - 2, $chipW, 24, 12, '#FFFFFF', 0.05);
+            $c->strokeRoundRect($cursor, $y + $pad - 2, $chipW, 24, 12, '#FFFFFF', 1, 0.10);
+            $c->text($text, $cursor + 14, $y + $pad + 10, 10, $t->c('ink_dim'), Canvas::W_SEMIBOLD, 'left', 1.0, 'ink');
+            if ($diff !== 0) {
+                $c->triangle($cursor + $chipW - 13, $y + $pad + 10, 7, $diff > 0, $color);
+            }
+            $cursor += $chipW + 8;
+        }
+
+        $series = array_values(array_map('intval', (array) ($this->data['series'] ?? [])));
+        if (count($series) < 5) {
+            return;
+        }
+
+        $chartX = $x + $pad;
+        $chartY = $y + $pad + 32;
+        $chartW = $w - $pad * 2;
+        $chartH = $y + $h - $pad - $chartY;
+        if ($chartH < 30) {
+            return;
+        }
+
+        $min = min($series);
+        $max = max($series);
+        $span = max(1, $max - $min);
+        $n = count($series);
+
+        $points = [];
+        foreach ($series as $i => $v) {
+            $points[] = [
+                $chartX + $chartW * ($i / max(1, $n - 1)),
+                $chartY + $chartH - (($v - $min) / $span) * ($chartH - 8) - 4,
+            ];
+        }
+
+        // خط میانه
+        $c->dashedLine($chartX, $chartY + $chartH / 2, $chartX + $chartW, $chartY + $chartH / 2, $t->c('ink_faint'), 1, 6, 6, 0.25);
+
+        $color = $this->zoneColor($t, $this->zoneIndex($current));
+        $c->areaGradient($points, $chartX, $chartY, $chartW, $chartH, $color, 0.32);
+        $c->polyline($points, $color, 2.0, 0.98);
+
+        $last = $points[$n - 1];
+        $c->circle($last[0], $last[1], 4.0, $color);
+        $c->circle($last[0], $last[1], 1.8, $t->c('bg_from'));
+
+        $c->text($this->dnum((string) $max), $chartX + $chartW, $chartY + 6, 9, $t->c('ink_faint'), Canvas::W_MEDIUM, 'right', 0.9, 'ink');
+        $c->text($this->dnum((string) $min), $chartX + $chartW, $chartY + $chartH - 6, 9, $t->c('ink_faint'), Canvas::W_MEDIUM, 'right', 0.9, 'ink');
     }
 }

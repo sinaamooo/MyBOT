@@ -238,8 +238,8 @@ $check('روشن‌کردن کارت قیمت‌ها', function () use ($panel, 
     return Registry::refresh('prices')->enabled() ? true : 'فعال نشد';
 });
 $check('تغییر تم', function () use ($panel, $callback) {
-    $panel->handleUpdate($callback('j:prices:th:gold'));
-    return Registry::refresh('prices')->theme() === 'gold' ? true : 'تم عوض نشد';
+    $panel->handleUpdate($callback('j:prices:th:ocean'));
+    return Registry::refresh('prices')->theme() === 'ocean' ? true : 'تم عوض نشد';
 });
 $check('افزودن چند زمان ارسال', function () use ($panel, $callback, $message) {
     $panel->handleUpdate($callback('j:prices:sc:add'));
@@ -276,6 +276,27 @@ $check('ویرایش کپشن', function () use ($panel, $callback, $message) {
     $panel->handleUpdate($callback('j:prices:cap'));
     $panel->handleUpdate($message('تست {date}'));
     return Registry::refresh('prices')->caption() === 'تست {date}' ? true : 'ذخیره نشد';
+});
+$check('قالب‌بندی بولد و نقل‌قول در کپشن حفظ می‌شود', function () use ($panel, $callback, $api) {
+    $panel->handleUpdate($callback('j:feargreed:cap'));
+    $panel->handleUpdate([
+        'update_id' => random_int(1, 1000000),
+        'message' => [
+            'message_id' => random_int(1, 1000000),
+            'from' => ['id' => 6595849261],
+            'chat' => ['id' => 6595849261, 'type' => 'private'],
+            'text' => 'عنوان تست' . "\n" . 'نقل قول',
+            'entities' => [
+                ['type' => 'bold', 'offset' => 0, 'length' => 9],
+                ['type' => 'blockquote', 'offset' => 10, 'length' => 8],
+            ],
+        ],
+    ]);
+    $caption = Registry::refresh('feargreed')->caption();
+
+    return (str_contains($caption, '<b>') && str_contains($caption, '<blockquote>'))
+        ? true
+        : 'کپشن ذخیره‌شده: ' . $caption;
 });
 $check('تنظیمات: تغییر ارقام', function () use ($panel, $callback) {
     $before = Settings::get('digits');

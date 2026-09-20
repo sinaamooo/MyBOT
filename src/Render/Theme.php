@@ -4,86 +4,90 @@ declare(strict_types=1);
 namespace Nikto\Render;
 
 /**
- * پالت رنگ کارت‌ها — همه‌ی تم‌ها تیره و شیشه‌ای هستند.
- * تم پیش‌فرض «مونو» کاملاً سیاه‌وسفید است.
+ * پالت رنگ کارت‌ها — پایه‌ی مشکی با شیشه‌ی سفید و تأکید سبز/آبی.
  */
 final class Theme
 {
     public const PALETTES = [
-        'mono' => [
-            'label'    => 'مونو (سیاه و سفید)',
-            'bg_from'  => '#070709',
-            'bg_to'    => '#111319',
-            'glow'     => '#FFFFFF',
-            'glow_alt' => '#C8CCD4',
-            'accent'   => '#FFFFFF',
-            'ink'      => '#F4F6FA',
-            'ink_dim'  => '#9EA5B2',
-            'ink_faint'=> '#646B78',
-            'up'       => '#FFFFFF',
-            'down'     => '#7E8695',
-            'flat'     => '#646B78',
-            'tint'     => '#FFFFFF',
-        ],
-        'aurora' => [
-            'label'    => 'آرورا (بنفش/آبی)',
-            'bg_from'  => '#07060F',
-            'bg_to'    => '#130E24',
-            'glow'     => '#7C5CFF',
-            'glow_alt' => '#22D3EE',
-            'accent'   => '#A78BFA',
-            'ink'      => '#F3F2FB',
-            'ink_dim'  => '#A3A0BE',
-            'ink_faint'=> '#6B6889',
-            'up'       => '#3DDC97',
-            'down'     => '#FF5C7A',
-            'flat'     => '#7A7796',
-            'tint'     => '#C9C4FF',
-        ],
-        'crimson' => [
-            'label'    => 'کریمسون (قرمز/مشکی)',
-            'bg_from'  => '#080607',
-            'bg_to'    => '#18090D',
-            'glow'     => '#FF2340',
-            'glow_alt' => '#FF7A4D',
-            'accent'   => '#FF4D63',
-            'ink'      => '#FAF3F4',
-            'ink_dim'  => '#B0A0A4',
-            'ink_faint'=> '#726367',
-            'up'       => '#35D08A',
-            'down'     => '#FF5062',
-            'flat'     => '#7A6E71',
-            'tint'     => '#FFD9DE',
+        'neo' => [
+            'label'     => 'نئو (سبز و آبی)',
+            'bg_from'   => '#03060A',
+            'bg_to'     => '#071118',
+            'glow'      => '#10E39B',
+            'glow_alt'  => '#2F86FF',
+            'accent'    => '#10E39B',
+            'accent_alt'=> '#2F86FF',
+            'ink'       => '#EDF6F2',
+            'ink_dim'   => '#8EA3AC',
+            'ink_faint' => '#5A6D77',
+            'up'        => '#10E39B',
+            'down'      => '#2F86FF',
+            'flat'      => '#6B7C85',
+            'tint'      => '#FFFFFF',
         ],
         'emerald' => [
-            'label'    => 'امرالد (سبز/فیروزه‌ای)',
-            'bg_from'  => '#040A09',
-            'bg_to'    => '#0A1D1A',
-            'glow'     => '#12E29A',
-            'glow_alt' => '#22D3EE',
-            'accent'   => '#3DE9AE',
-            'ink'      => '#F0FBF7',
-            'ink_dim'  => '#95B2AA',
-            'ink_faint'=> '#5F7B74',
-            'up'       => '#3DE9AE',
-            'down'     => '#FF6076',
-            'flat'     => '#6E8A83',
-            'tint'     => '#C7FFEE',
+            'label'     => 'امرالد (سبز)',
+            'bg_from'   => '#020705',
+            'bg_to'     => '#06150F',
+            'glow'      => '#10E39B',
+            'glow_alt'  => '#7BF7C4',
+            'accent'    => '#10E39B',
+            'accent_alt'=> '#7BF7C4',
+            'ink'       => '#EDFBF4',
+            'ink_dim'   => '#89A99A',
+            'ink_faint' => '#557266',
+            'up'        => '#10E39B',
+            'down'      => '#5FB8FF',
+            'flat'      => '#68867A',
+            'tint'      => '#FFFFFF',
         ],
-        'gold' => [
-            'label'    => 'گلد (طلایی/شب)',
-            'bg_from'  => '#08070A',
-            'bg_to'    => '#1A1408',
-            'glow'     => '#F7C948',
-            'glow_alt' => '#FF9F45',
-            'accent'   => '#F7C948',
-            'ink'      => '#FBF7EE',
-            'ink_dim'  => '#B3A992',
-            'ink_faint'=> '#7A725F',
-            'up'       => '#4ADE9B',
-            'down'     => '#FF6262',
-            'flat'     => '#7E765F',
-            'tint'     => '#FFE9B8',
+        'ocean' => [
+            'label'     => 'اوشن (آبی)',
+            'bg_from'   => '#03060D',
+            'bg_to'     => '#07121F',
+            'glow'      => '#2F86FF',
+            'glow_alt'  => '#10E39B',
+            'accent'    => '#2F86FF',
+            'accent_alt'=> '#66D3FF',
+            'ink'       => '#EAF2FB',
+            'ink_dim'   => '#8B9DB4',
+            'ink_faint' => '#586A82',
+            'up'        => '#10E39B',
+            'down'      => '#4DA3FF',
+            'flat'      => '#6B7E94',
+            'tint'      => '#FFFFFF',
+        ],
+        'mono' => [
+            'label'     => 'مونو (سیاه و سفید)',
+            'bg_from'   => '#050506',
+            'bg_to'     => '#101214',
+            'glow'      => '#FFFFFF',
+            'glow_alt'  => '#C9D2D6',
+            'accent'    => '#FFFFFF',
+            'accent_alt'=> '#C9D2D6',
+            'ink'       => '#F4F7F8',
+            'ink_dim'   => '#9BA5AA',
+            'ink_faint' => '#646E73',
+            'up'        => '#FFFFFF',
+            'down'      => '#7E888F',
+            'flat'      => '#646E73',
+            'tint'      => '#FFFFFF',
+        ],
+        'aurora' => [
+            'label'     => 'آرورا (سبز تا آبی)',
+            'bg_from'   => '#03080C',
+            'bg_to'     => '#04161C',
+            'glow'      => '#12E3B0',
+            'glow_alt'  => '#3F7BFF',
+            'accent'    => '#12E3B0',
+            'accent_alt'=> '#3F7BFF',
+            'ink'       => '#EAF7F6',
+            'ink_dim'   => '#86A3A8',
+            'ink_faint' => '#546E74',
+            'up'        => '#12E3B0',
+            'down'      => '#3F7BFF',
+            'flat'      => '#657E84',
+            'tint'      => '#FFFFFF',
         ],
     ];
 
@@ -91,9 +95,9 @@ final class Theme
     private array $palette;
     private string $name;
 
-    public function __construct(string $name = 'mono')
+    public function __construct(string $name = 'neo')
     {
-        $this->name = isset(self::PALETTES[$name]) ? $name : 'mono';
+        $this->name = isset(self::PALETTES[$name]) ? $name : 'neo';
         $this->palette = self::PALETTES[$this->name];
     }
 
@@ -108,7 +112,7 @@ final class Theme
         return $this->palette[$key] ?? $fallback;
     }
 
-    /** رنگ روند بر اساس تغییر قیمت */
+    /** رنگ روند: سبز برای رشد، آبی برای افت */
     public function trend(float $change): string
     {
         if (abs($change) < 0.005) {
