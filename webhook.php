@@ -48,6 +48,8 @@ if (function_exists('fastcgi_finish_request')) {
     fastcgi_finish_request();
 }
 
+Log::guardFatals();
+
 try {
     Db::migrate();
     (new Panel(new Api()))->handleUpdate($update);

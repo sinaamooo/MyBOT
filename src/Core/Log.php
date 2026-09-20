@@ -7,6 +7,62 @@ final class Log
 {
     private const LEVELS = ['debug' => 10, 'info' => 20, 'warn' => 30, 'error' => 40];
 
+    private static bool $guarded = false;
+
+    /**
+     * ثبت خطاهای کشنده‌ی PHP.
+     *
+     * وب‌هوک پیش از پردازش، پاسخ ۲۰۰ را می‌فرستد؛ بنابراین اگر بعد از آن خطایی
+     * رخ دهد تلگرام چیزی نمی‌بیند و دکمه بی‌صدا می‌ماند. این تابع چنین خطاهایی
+     * را در لاگ می‌نویسد تا در صفحه‌ی عیب‌یابی دیده شوند.
+     */
+    public static function guardFatals(): void
+    {
+        if (self::$guarded) {
+            return;
+        }
+        self::$guarded = true;
+
+        set_exception_handler(static function (\Throwable $e): void {
+            self::error('Uncaught exception', [
+                'message' => $e->getMessage(),
+                'where'   => basename($e->getFile()) . ':' . $e->getLine(),
+            ]);
+        });
+
+        register_shutdown_function(static function (): void {
+            $error = error_get_last();
+            if ($error === null || !in_array($error['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR], true)) {
+                return;
+            }
+            self::error('Fatal error', [
+                'message' => $error['message'],
+                'where'   => basename((string) $error['file']) . ':' . $error['line'],
+            ]);
+        });
+    }
+
+    /** @return array<int,array{level:string,message:string,context:string,created_at:int}> */
+    public static function recent(int $limit = 8): array
+    {
+        try {
+            $rows = Db::all(
+                "SELECT level, message, context, created_at FROM logs
+                 WHERE level IN ('error','warn') ORDER BY created_at DESC LIMIT :n",
+                [':n' => $limit]
+            );
+        } catch (\Throwable) {
+            return [];
+        }
+
+        return array_map(static fn (array $r): array => [
+            'level'      => (string) $r['level'],
+            'message'    => (string) $r['message'],
+            'context'    => (string) $r['context'],
+            'created_at' => (int) $r['created_at'],
+        ], $rows);
+    }
+
     public static function debug(string $msg, array $ctx = []): void { self::write('debug', $msg, $ctx); }
     public static function info(string $msg, array $ctx = []): void  { self::write('info', $msg, $ctx); }
     public static function warn(string $msg, array $ctx = []): void  { self::write('warn', $msg, $ctx); }

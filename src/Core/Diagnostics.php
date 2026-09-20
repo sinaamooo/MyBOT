@@ -140,6 +140,22 @@ final class Diagnostics
             $lines[] = sprintf('%s %-28s %s', $mark, $row['label'], $row['detail']);
         }
 
+        $recent = Log::recent(8);
+        if ($recent !== []) {
+            $lines[] = '';
+            $lines[] = str_repeat('-', 46);
+            $lines[] = 'آخرین خطاهای ثبت‌شده:';
+            foreach ($recent as $row) {
+                $lines[] = sprintf(
+                    '  %s  %s  %s %s',
+                    date('m-d H:i:s', $row['created_at']),
+                    strtoupper($row['level']),
+                    $row['message'],
+                    mb_substr($row['context'], 0, 160)
+                );
+            }
+        }
+
         $lines[] = '';
         $lines[] = str_repeat('=', 46);
         $lines[] = $problems === 0

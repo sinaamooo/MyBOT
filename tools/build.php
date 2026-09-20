@@ -37,31 +37,30 @@ if (!is_dir($outDir) && !@mkdir($outDir, 0775, true)) {
 echo "\n📦 ساخت نسخه‌ی دو فایلی\n" . str_repeat('─', 48) . "\n";
 
 // ───────────────────────────────────────────── ۱) کدها
-$sources = [
-    'src/Core/Config.php', 'src/Core/Db.php', 'src/Core/Settings.php', 'src/Core/Http.php',
-    'src/Core/Log.php', 'src/Core/Jalali.php', 'src/Core/PublicUrl.php', 'src/Core/Diagnostics.php',
-    'src/Text/Persian.php',
-    'src/Data/Coins.php', 'src/Data/Countries.php', 'src/Data/EventTranslator.php',
-    'src/Data/PriceProvider.php', 'src/Data/FearGreedProvider.php', 'src/Data/CalendarProvider.php',
-    'src/Data/Mock.php',
-    'src/Render/Canvas.php', 'src/Render/Theme.php', 'src/Render/Frame.php', 'src/Render/Flags.php',
-    'src/Render/CoinLogo.php', 'src/Render/Card.php', 'src/Render/PriceCard.php',
-    'src/Render/FearGreedCard.php', 'src/Render/CalendarCard.php',
-    'src/Jobs/Job.php', 'src/Jobs/PricesJob.php', 'src/Jobs/FearGreedJob.php', 'src/Jobs/CalendarJob.php',
-    'src/Jobs/Registry.php', 'src/Jobs/Dispatcher.php', 'src/Jobs/Scheduler.php',
-    'src/Telegram/Api.php', 'src/Telegram/Access.php', 'src/Telegram/State.php',
-    'src/Telegram/Channels.php', 'src/Telegram/Panel.php',
-    'src/Bundle/Runtime.php',
-];
+// همه‌ی فایل‌های src خودکار پیدا می‌شوند تا هیچ کلاسی جا نماند.
+$sources = [];
+$iterator = new RecursiveIteratorIterator(
+    new RecursiveDirectoryIterator(APP_SRC, FilesystemIterator::SKIP_DOTS)
+);
+foreach ($iterator as $file) {
+    /** @var SplFileInfo $file */
+    if ($file->getExtension() !== 'php') {
+        continue;
+    }
+    $relative = 'src/' . ltrim(str_replace(APP_SRC, '', $file->getPathname()), '/\\');
+    $relative = str_replace('\\', '/', $relative);
+    if ($relative === 'src/bootstrap.php') {
+        continue; // بارگذارنده در نسخه‌ی فشرده لازم نیست
+    }
+    $sources[] = $relative;
+}
+sort($sources);
 
 $code = '';
 $classCount = 0;
+$bundledClasses = [];
 foreach ($sources as $relative) {
     $path = APP_ROOT . '/' . $relative;
-    if (!is_file($path)) {
-        fwrite(STDERR, "❌ فایل پیدا نشد: {$relative}\n");
-        exit(1);
-    }
     $body = (string) file_get_contents($path);
     $body = preg_replace('/^<\?php\s*/', '', $body, 1) ?? $body;
     $body = preg_replace('/^\s*declare\s*\(\s*strict_types\s*=\s*1\s*\)\s*;\s*/m', '', $body, 1) ?? $body;
@@ -72,6 +71,10 @@ foreach ($sources as $relative) {
     }
     $namespace = trim($m[1]);
     $body = str_replace($m[0], '', $body);
+
+    if (preg_match('/^\s*(?:final\s+|abstract\s+)?(?:class|interface|trait|enum)\s+([A-Za-z_]\w*)/m', $body, $cm)) {
+        $bundledClasses[] = $namespace . '\\' . $cm[1];
+    }
 
     $code .= "namespace {$namespace} {\n" . trim($body) . "\n}\n\n";
     $classCount++;
@@ -287,6 +290,43 @@ foreach ([$botPath, $cronPath] as $path) {
         exit(1);
     }
 }
+
+// بررسی اینکه هیچ کلاسی از قلم نیفتاده باشد
+$bundle = (string) file_get_contents($botPath);
+$missing = [];
+foreach ($bundledClasses as $class) {
+    $short = substr((string) strrchr($class, '\\'), 1);
+    if (!preg_match('/\b(?:class|interface|trait|enum)\s+' . preg_quote($short, '/') . '\b/', $bundle)) {
+        $missing[] = $class;
+    }
+}
+if ($missing !== []) {
+    fwrite(STDERR, "❌ این کلاس‌ها در خروجی نیستند:\n  " . implode("\n  ", $missing) . "\n");
+    exit(1);
+}
+
+// بررسی اینکه هر کلاسی که در کد صدا زده می‌شود واقعاً وجود دارد
+$referenced = [];
+preg_match_all('/\\\\?(Nikto\\\\[A-Za-z_\\\\]+)::/', $bundle, $refMatches);
+foreach ($refMatches[1] as $ref) {
+    $referenced[str_replace('\\\\\\\\', '\\\\', $ref)] = true;
+}
+$unknown = [];
+foreach (array_keys($referenced) as $ref) {
+    $short = substr((string) strrchr($ref, '\\'), 1);
+    if ($short === '' || $short === 'class') {
+        continue;
+    }
+    if (!preg_match('/\b(?:class|interface|trait|enum)\s+' . preg_quote($short, '/') . '\b/', $bundle)) {
+        $unknown[] = $ref;
+    }
+}
+if ($unknown !== []) {
+    fwrite(STDERR, "❌ به این کلاس‌ها ارجاع داده شده ولی تعریفشان در خروجی نیست:\n  "
+        . implode("\n  ", array_unique($unknown)) . "\n");
+    exit(1);
+}
+printf("  ✅ %d کلاس بررسی شد — همه موجودند\n", count($bundledClasses));
 
 printf("  ✅ %s (%s کیلوبایت)\n", basename($botPath), number_format(filesize($botPath) / 1024, 0));
 printf("  ✅ %s (%s کیلوبایت)\n", basename($cronPath), number_format(filesize($cronPath) / 1024, 0));

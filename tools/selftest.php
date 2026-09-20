@@ -385,6 +385,45 @@ $check('ارسال دستی به کانال', function () use ($api) {
     return ($result['ok'] && $api->countOf('sendPhoto') === $before + 1) ? true : $result['message'];
 });
 
+// ---------------------------------------------------------------- نسخه‌ی دو فایلی
+echo "\n▸ نسخه‌ی دو فایلی\n";
+$check('همه‌ی کلاس‌ها داخل فایل نهایی هستند', function () {
+    $out = sys_get_temp_dir() . '/nikto-build-' . getmypid();
+    @mkdir($out, 0775, true);
+    exec(
+        'php ' . escapeshellarg(APP_ROOT . '/tools/build.php') . ' --out=' . escapeshellarg($out) . ' 2>&1',
+        $lines,
+        $status
+    );
+    $bundle = $out . '/nikto-bot.php';
+
+    if ($status !== 0 || !is_file($bundle)) {
+        return 'ساخت ناموفق: ' . implode(' | ', array_slice($lines, -3));
+    }
+
+    $source = (string) file_get_contents($bundle);
+    $missing = [];
+    $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator(APP_SRC, FilesystemIterator::SKIP_DOTS));
+    foreach ($iterator as $file) {
+        if ($file->getExtension() !== 'php' || $file->getFilename() === 'bootstrap.php') {
+            continue;
+        }
+        $body = (string) file_get_contents($file->getPathname());
+        if (preg_match('/^\s*(?:final\s+|abstract\s+)?(?:class|interface|trait|enum)\s+(\w+)/m', $body, $m)) {
+            if (!str_contains($source, $m[1])) {
+                $missing[] = $m[1];
+            }
+        }
+    }
+
+    foreach (glob($out . '/*') ?: [] as $file) {
+        @unlink($file);
+    }
+    @rmdir($out);
+
+    return $missing === [] ? true : 'کلاس‌های جامانده: ' . implode(', ', $missing);
+});
+
 // ---------------------------------------------------------------- پایان
 echo "\n" . str_repeat('─', 52) . "\n";
 printf("نتیجه: %d موفق، %d ناموفق\n\n", $passed, $failed);
