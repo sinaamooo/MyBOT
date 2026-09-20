@@ -184,7 +184,7 @@ final class FearGreedCard extends Card
         $gap = 12.0;
         $count = max(1, count($items));
         $cardW = ($w - $gap * ($count - 1)) / $count;
-        $cardH = min(104.0, $h * 0.30);
+        $cardH = min(94.0, $h * 0.27);
 
         foreach ($items as $i => $item) {
             $cx = $x + $w - ($i + 1) * $cardW - $i * $gap;
@@ -205,20 +205,20 @@ final class FearGreedCard extends Card
         $color = $this->zoneColor($t, $zoneIndex, (string) $item['zone']['color']);
 
         $c->glass($x, $y, $w, $h, 14, ['fill' => 0.06, 'border' => 0.12, 'tint' => $t->c('tint')]);
-        $c->text($item['label'], $x + $w / 2, $y + 16, 9.5, $t->c('ink_dim'), Canvas::W_SEMIBOLD, 'center', 1.0, 'middle');
+        $c->text($item['label'], $x + $w / 2, $y + 17, 9.5, $t->c('ink_dim'), Canvas::W_SEMIBOLD, 'center', 1.0, 'middle');
 
-        // حلقه‌ی کوچک با عدد ریز داخلش
-        $ringR = min($w * 0.15, $h * 0.20);
+        // حلقه‌ی کوچک با عدد ریز و دقیقاً وسط
+        $ringR = min($w * 0.105, $h * 0.145);
         $ringCx = $x + $w / 2;
-        $ringCy = $y + $h * 0.54;
-        $c->ring($ringCx, $ringCy, $ringR, $ringR * 0.30, '#FFFFFF', 0, 360, 0.10);
+        $ringCy = $y + $h * 0.53;
+        $c->ring($ringCx, $ringCy, $ringR, $ringR * 0.26, '#FFFFFF', 0, 360, 0.10);
         $sweep = 360 * max(0.02, min(1, $item['value'] / 100));
-        $c->ring($ringCx, $ringCy, $ringR, $ringR * 0.30, $color, -90, -90 + $sweep, 0.95);
+        $c->ring($ringCx, $ringCy, $ringR, $ringR * 0.26, $color, -90, -90 + $sweep, 0.95);
         $c->text(
             $this->dnum((string) $item['value']),
             $ringCx,
             $ringCy,
-            $ringR * 0.80,
+            $ringR * 0.70,
             $t->c('ink'),
             Canvas::W_BOLD,
             'center',
@@ -229,7 +229,7 @@ final class FearGreedCard extends Card
         $c->textFit(
             (string) $item['zone']['fa'],
             $ringCx,
-            $y + $h - 13,
+            $y + $h - 15,
             $w - 14,
             9,
             $t->isMono() ? $t->c('ink_dim') : $color,
