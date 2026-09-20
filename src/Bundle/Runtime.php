@@ -424,7 +424,15 @@ final class Runtime
 
         if ($secret === '' || !hash_equals($secret, $given)) {
             http_response_code(403);
-            echo "forbidden\n";
+            // راهنمای تنظیم کرون (کلید نمایش داده نمی‌شود)
+            $url = PublicUrl::current();
+            echo "NIKTO CRYPTO BOT — scheduler\n\n";
+            echo "این آدرس باید هر دقیقه صدا زده شود:\n";
+            echo '  ' . ($url !== '' ? $url : 'https://your-domain/nikto-cron.php') . "?key=<webhook_secret>\n\n";
+            echo "یا از کرون خط فرمان استفاده کنید:\n";
+            $script = (string) ($_SERVER['SCRIPT_FILENAME'] ?? '') ?: __FILE__;
+            echo '  * * * * * /usr/local/bin/php ' . $script . " >/dev/null 2>&1\n\n";
+            echo "مقدار webhook_secret بالای فایل ربات نوشته شده است.\n";
             return;
         }
 
