@@ -5,6 +5,7 @@ namespace Nikto\Bundle;
 
 use Nikto\Core\Config;
 use Nikto\Core\Db;
+use Nikto\Core\Diagnostics;
 use Nikto\Core\Log;
 use Nikto\Core\PublicUrl;
 use Nikto\Core\Settings;
@@ -126,7 +127,19 @@ final class Runtime
         if ($method !== 'POST') {
             header('Content-Type: text/plain; charset=utf-8');
             http_response_code(200);
-            echo PublicUrl::statusPage(self::VERSION, 'php ' . basename((string) ($_SERVER['SCRIPT_NAME'] ?? 'nikto-bot.php')) . ' webhook');
+
+            // صفحه‌ی عیب‌یابی:  ...nikto-bot.php?check=<webhook_secret>
+            $secret = (string) Config::get('webhook_secret', '');
+            $given = (string) ($_GET['check'] ?? '');
+            if ($given !== '' && $secret !== '' && hash_equals($secret, $given)) {
+                echo Diagnostics::renderText();
+                return;
+            }
+
+            echo PublicUrl::statusPage(
+                self::VERSION,
+                'php ' . basename((string) ($_SERVER['SCRIPT_NAME'] ?? 'nikto-bot.php')) . ' webhook'
+            );
             return;
         }
 
@@ -182,7 +195,7 @@ final class Runtime
             'webhook:info'  => self::webhookInfo(),
             'send'          => self::send($arg),
             'preview'       => self::preview($arg),
-            'doctor'        => self::doctor(),
+            'doctor', 'check' => self::doctor(),
             'cron', 'tick'  => self::tick(),
             'cron:loop'     => self::cronLoop(),
             default         => self::usage($command),
@@ -339,6 +352,14 @@ final class Runtime
 
     /** بررسی سلامت نصب در نسخه‌ی دو فایلی */
     private static function doctor(): int
+    {
+        echo "\n" . Diagnostics::renderText() . "\n";
+
+        return 0;
+    }
+
+    /** نسخه‌ی قدیمی بررسی سلامت (دیگر استفاده نمی‌شود) */
+    private static function doctorLegacy(): int
     {
         $problems = 0;
         echo "\n🔎 بررسی سلامت — NIKTO CRYPTO BOT v" . self::VERSION . "\n" . str_repeat('─', 46) . "\n";

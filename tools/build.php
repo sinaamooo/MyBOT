@@ -39,7 +39,7 @@ echo "\n📦 ساخت نسخه‌ی دو فایلی\n" . str_repeat('─', 48) .
 // ───────────────────────────────────────────── ۱) کدها
 $sources = [
     'src/Core/Config.php', 'src/Core/Db.php', 'src/Core/Settings.php', 'src/Core/Http.php',
-    'src/Core/Log.php', 'src/Core/Jalali.php', 'src/Core/PublicUrl.php',
+    'src/Core/Log.php', 'src/Core/Jalali.php', 'src/Core/PublicUrl.php', 'src/Core/Diagnostics.php',
     'src/Text/Persian.php',
     'src/Data/Coins.php', 'src/Data/Countries.php', 'src/Data/EventTranslator.php',
     'src/Data/PriceProvider.php', 'src/Data/FearGreedProvider.php', 'src/Data/CalendarProvider.php',
@@ -248,7 +248,13 @@ $cronFile = <<<PHP
  *        https://your-domain/{$name}-cron.php?key={$secret}
  */
 
-declare(strict_types=1);
+if (version_compare(PHP_VERSION, '8.0.0', '<')) {
+    header('Content-Type: text/plain; charset=utf-8');
+    echo "NIKTO CRYPTO BOT\\n\\n";
+    echo "PHP " . PHP_VERSION . " — this bot needs PHP 8.0 or newer.\\n";
+    echo "نسخه PHP هاست را از پنل هاست روی 8.1 یا بالاتر بگذارید.\\n";
+    exit;
+}
 
 define('NIKTO_LIBRARY', true);
 
