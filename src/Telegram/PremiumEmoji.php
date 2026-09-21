@@ -82,6 +82,33 @@ final class PremiumEmoji
         return $code !== false && ($code >= 0x2190 && $code <= 0x2BFF || $code >= 0x1F000);
     }
 
+    /** آیا متن شامل تگ ایموجی پریمیوم است؟ */
+    public static function hasTag(string $text): bool
+    {
+        return stripos($text, '<tg-emoji') !== false;
+    }
+
+    /**
+     * برداشتن تگ‌های ایموجی پریمیوم و نگه‌داشتن ایموجی جایگزین.
+     *
+     * وقتی تلگرام اجازه‌ی ایموجی پریمیوم به ربات ندهد، پست با همین متن
+     * دوباره فرستاده می‌شود تا ارسال از دست نرود.
+     */
+    public static function strip(string $text): string
+    {
+        if (!self::hasTag($text)) {
+            return $text;
+        }
+
+        $out = preg_replace_callback(
+            '#<tg-emoji\s+emoji-id="\d+"\s*>(.*?)</tg-emoji>#isu',
+            static fn (array $m): string => $m[1] !== '' ? $m[1] : self::FALLBACK,
+            $text
+        );
+
+        return $out ?? $text;
+    }
+
     /** آیا متن شامل الگوی ایموجی پریمیوم است؟ */
     public static function has(string $text): bool
     {

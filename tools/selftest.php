@@ -346,6 +346,57 @@ $check('ایموجی پریمیوم در کپشن نهایی ارسال می‌�
         ? true
         : 'کپشن: ' . $caption;
 });
+$check('ایموجی پریمیوم: برداشتن تگ برای ارسال جایگزین', function () {
+    $html = \Nikto\Telegram\PremiumEmoji::apply("\u{1F525}[5368324170671202286] بازار");
+    $plain = \Nikto\Telegram\PremiumEmoji::strip($html);
+
+    return $plain === "\u{1F525} بازار" ? true : 'خروجی: ' . $plain;
+});
+$check('اگر ربات اجازه‌ی ایموجی پریمیوم نداشته باشد، پست بدون آن می‌رود', function () use ($api) {
+    // تلگرام تقلبی‌ای که هر کپشن دارای tg-emoji را رد می‌کند
+    $picky = new class (Config::get('bot_token')) extends Api {
+        public int $rejected = 0;
+        public string $delivered = '';
+
+        public function call(string $method, array $params = [], int $timeout = 60): array
+        {
+            if (in_array($method, ['sendPhoto', 'sendDocument'], true)) {
+                $caption = (string) ($params['caption'] ?? '');
+                if (str_contains($caption, '<tg-emoji')) {
+                    $this->rejected++;
+
+                    return ['ok' => false, 'description' => 'Bad Request: CUSTOM_EMOJI_INVALID'];
+                }
+                $this->delivered = $caption;
+            }
+
+            return match ($method) {
+                'getMe'   => ['ok' => true, 'result' => ['id' => 8870139346, 'username' => 'nikto_test_bot']],
+                default   => ['ok' => true, 'result' => ['message_id' => 1]],
+            };
+        }
+    };
+
+    $job = Registry::refresh('prices');
+    $before = $job->caption();
+    $job->setCaption("\u{1F525}[5368324170671202286] نوسان بازار");
+
+    Dispatcher::setApi($picky);
+    $result = Dispatcher::run('prices', ['chat_ids' => [-1001234567890]]);
+    Dispatcher::setApi($api);
+    $job->setCaption($before);
+
+    if ($picky->rejected !== 1) {
+        return 'تلاش اول با ایموجی پریمیوم انجام نشد';
+    }
+    if (!($result['ok'] ?? false) || ($result['sent'] ?? 0) !== 1) {
+        return 'پست دوباره فرستاده نشد: ' . ($result['message'] ?? '');
+    }
+
+    return str_contains($picky->delivered, "\u{1F525}") && !str_contains($picky->delivered, '<tg-emoji')
+        ? true
+        : 'کپشن ارسالی: ' . $picky->delivered;
+});
 $check('تنظیمات: تغییر ارقام', function () use ($panel, $callback) {
     $before = Settings::get('digits');
     $panel->handleUpdate($callback('s:digits'));

@@ -7,6 +7,7 @@ use Nikto\Core\Db;
 use Nikto\Core\Log;
 use Nikto\Core\Settings;
 use Nikto\Telegram\Api;
+use Nikto\Telegram\PremiumEmoji;
 
 /**
  * اجرای یک کار: دریافت داده ← ساخت کارت ← ارسال به کانال‌ها.
@@ -82,11 +83,30 @@ final class Dispatcher
         $failed = 0;
         $errors = [];
 
+        $silent = (bool) ($options['silent'] ?? false);
+        $downgraded = 0;
+
         foreach ($targets as $chatId) {
             $api->sendChatAction($chatId, $asDocument ? 'upload_document' : 'upload_photo');
-            $res = $asDocument
-                ? $api->sendDocument($chatId, $path, $caption, ['disable_notification' => (bool) ($options['silent'] ?? false)])
-                : $api->sendPhoto($chatId, $path, $caption, ['disable_notification' => (bool) ($options['silent'] ?? false)]);
+            $res = self::deliver($api, $chatId, $path, $caption, $asDocument, $silent);
+
+            // اگر ربات اجازه‌ی ایموجی پریمیوم نداشته باشد، یک بار بدون آن دوباره
+            // فرستاده می‌شود تا پست زمان‌بندی‌شده از دست نرود.
+            if (!($res['ok'] ?? false) && PremiumEmoji::hasTag($caption)) {
+                $plain = PremiumEmoji::strip($caption);
+                if ($plain !== $caption) {
+                    Log::warn('Premium emoji rejected, retrying without it', [
+                        'job'   => $jobKey,
+                        'chat'  => $chatId,
+                        'error' => (string) ($res['description'] ?? ''),
+                    ]);
+                    $retry = self::deliver($api, $chatId, $path, $plain, $asDocument, $silent);
+                    if ($retry['ok'] ?? false) {
+                        $downgraded++;
+                        $res = $retry;
+                    }
+                }
+            }
 
             if ($res['ok'] ?? false) {
                 $sent++;
@@ -98,6 +118,9 @@ final class Dispatcher
 
         $took = round(microtime(true) - $started, 2);
         $message = sprintf('ارسال شد به %d کانال (%s ثانیه)', $sent, $took);
+        if ($downgraded > 0) {
+            $message .= sprintf(' — %d مورد بدون ایموجی پریمیوم ارسال شد (ربات اجازه‌اش را ندارد)', $downgraded);
+        }
         if ($failed > 0) {
             $message .= sprintf(' — %d خطا: %s', $failed, implode(' | ', array_slice($errors, 0, 3)));
         }
@@ -135,6 +158,22 @@ final class Dispatcher
 
             return ['ok' => false, 'message' => 'خطا: ' . $e->getMessage()];
         }
+    }
+
+    /** یک بار ارسال به یک کانال */
+    private static function deliver(
+        Api $api,
+        int|string $chatId,
+        string $path,
+        string $caption,
+        bool $asDocument,
+        bool $silent
+    ): array {
+        $extra = ['disable_notification' => $silent];
+
+        return $asDocument
+            ? $api->sendDocument($chatId, $path, $caption, $extra)
+            : $api->sendPhoto($chatId, $path, $caption, $extra);
     }
 
     private static function fail(string $jobKey, array $options, string $message): array
