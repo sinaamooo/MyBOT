@@ -346,6 +346,62 @@ $check('ایموجی پریمیوم در کپشن نهایی ارسال می‌�
         ? true
         : 'کپشن: ' . $caption;
 });
+$check('ایموجی پریمیوم مستقیم از کیبورد: پنل خودش شناسه را برمی‌دارد', function () use ($panel, $callback) {
+    // تلگرام ایموجی پریمیوم را به‌صورت entity از نوع custom_emoji می‌فرستد
+    // و خود ایموجی جایگزین داخل متن است (خارج از BMP = دو واحد UTF-16).
+    $panel->handleUpdate($callback('j:prices:cap'));
+    $panel->handleUpdate([
+        'update_id' => random_int(1, 1000000),
+        'message' => [
+            'message_id' => random_int(1, 1000000),
+            'from' => ['id' => 6595849261],
+            'chat' => ['id' => 6595849261, 'type' => 'private'],
+            'text' => "\u{1F525} نوسان بازار \u{1F680} امروز",
+            'entities' => [
+                ['type' => 'custom_emoji', 'offset' => 0,  'length' => 2, 'custom_emoji_id' => '5368324170671202286'],
+                ['type' => 'bold',         'offset' => 3,  'length' => 11],
+                ['type' => 'custom_emoji', 'offset' => 15, 'length' => 2, 'custom_emoji_id' => '5222142777738344173'],
+            ],
+        ],
+    ]);
+
+    $job = Registry::refresh('prices');
+    $stored = $job->caption();
+    $final = $job->renderCaption($job->fetch());
+    $job->setCaption('{summary}');
+
+    foreach (['5368324170671202286', '5222142777738344173'] as $id) {
+        if (!str_contains($final, '<tg-emoji emoji-id="' . $id . '">')) {
+            return 'شناسه ' . $id . ' برداشته نشد — کپشن: ' . $stored;
+        }
+    }
+    if (!str_contains($final, "<tg-emoji emoji-id=\"5368324170671202286\">\u{1F525}</tg-emoji>")) {
+        return 'ایموجی جایگزین درست جاسازی نشد: ' . $final;
+    }
+
+    return str_contains($final, '<b>نوسان بازار</b>') ? true : 'بولد کنارش از بین رفت: ' . $final;
+});
+$check('ایموجی پریمیوم: ویرایش دوباره‌ی کپشن تگ را خراب نمی‌کند', function () use ($panel, $callback) {
+    $job = Registry::refresh('prices');
+    $job->setCaption('<tg-emoji emoji-id="5368324170671202286">\u{1F525}</tg-emoji> <b>سلام</b>');
+    $saved = $job->caption();
+
+    // پنل باید متن HTML را همان‌طور نگه دارد (دوباره escape نکند)
+    $panel->handleUpdate($callback('j:prices:cap'));
+    $panel->handleUpdate([
+        'update_id' => random_int(1, 1000000),
+        'message' => [
+            'message_id' => random_int(1, 1000000),
+            'from' => ['id' => 6595849261],
+            'chat' => ['id' => 6595849261, 'type' => 'private'],
+            'text' => $saved,
+        ],
+    ]);
+    $again = Registry::refresh('prices')->caption();
+    $job->setCaption('{summary}');
+
+    return $again === $saved ? true : 'تغییر کرد: ' . $again;
+});
 $check('ایموجی پریمیوم: برداشتن تگ برای ارسال جایگزین', function () {
     $html = \Nikto\Telegram\PremiumEmoji::apply("\u{1F525}[5368324170671202286] بازار");
     $plain = \Nikto\Telegram\PremiumEmoji::strip($html);

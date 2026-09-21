@@ -269,7 +269,7 @@ final class Panel
                     . "<code>{time}</code> ساعت\n"
                     . "<code>{brand}</code> نام کانال\n"
                     . "<code>{link}</code> امضای کانال\n\n"
-                    . "کپشن فعلی:\n<code>" . htmlspecialchars($job->caption()) . "</code>\n\n"
+                    . $this->captionPreview($job->caption())
                     . 'برای خالی‌کردن کپشن کلمه <code>خالی</code> را بفرستید.',
                     'j:' . $key
                 );
@@ -788,6 +788,33 @@ final class Panel
         $kb[] = [$this->btn('راهنما', 'hp')];
 
         return ['text' => implode("\n", $lines), 'kb' => $kb];
+    }
+
+    /**
+     * نمایش کپشن فعلی: اول همان‌طور که در کانال دیده می‌شود (پس ایموجی
+     * پریمیوم واقعاً رندر می‌شود)، بعد متن خام برای کپی و ویرایش.
+     */
+    private function captionPreview(string $caption): string
+    {
+        if (trim($caption) === '') {
+            return "کپشن فعلی: <i>خالی</i>\n\n";
+        }
+
+        // نقل‌قول و pre را نمی‌شود تو‌در‌تو گذاشت؛ در آن حالت بدون قاب نشان می‌دهیم
+        $nested = (bool) preg_match('#<(blockquote|pre)\b#i', $caption);
+
+        $out = "کپشن فعلی (همان‌طور که در کانال دیده می‌شود):\n"
+            . ($nested ? $caption . "\n" : '<blockquote>' . $caption . "</blockquote>\n");
+
+        // متن خام فقط وقتی جدا نشان داده می‌شود که قالب‌بندی داشته باشد
+        if ($caption !== strip_tags($caption)) {
+            $out .= mb_strlen($caption) > 700
+                ? "\n(متن خام طولانی است و نشان داده نمی‌شود؛ برای تغییر، کپشن تازه بفرستید.)\n"
+                : "\nمتن خام (برای ویرایش، همین را کپی و اصلاح کنید):\n"
+                    . '<code>' . htmlspecialchars($caption) . "</code>\n";
+        }
+
+        return $out . "\n";
     }
 
     private function screenJob(string $key): array
