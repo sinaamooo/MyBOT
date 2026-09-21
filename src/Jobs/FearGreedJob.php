@@ -6,6 +6,7 @@ namespace Nikto\Jobs;
 use Nikto\Core\Settings;
 use Nikto\Data\FearGreedProvider;
 use Nikto\Render\Card;
+use Nikto\Render\Theme;
 use Nikto\Render\FearGreedCard;
 use Nikto\Text\Persian;
 
@@ -33,7 +34,7 @@ final class FearGreedJob extends Job
 
     public function defaultTheme(): string
     {
-        return 'neo';
+        return Theme::DEFAULT;
     }
 
     public function defaultCaption(): string

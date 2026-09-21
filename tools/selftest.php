@@ -307,6 +307,45 @@ $check('قالب‌بندی بولد و نقل‌قول در کپشن حفظ م�
         ? true
         : 'کپشن ذخیره‌شده: ' . $caption;
 });
+$check('ایموجی پریمیوم: الگوی کروشه‌ای تبدیل می‌شود', function () {
+    $out = \Nikto\Telegram\PremiumEmoji::apply('بازار [5368324170671202286] امروز');
+
+    return str_contains($out, '<tg-emoji emoji-id="5368324170671202286">')
+        ? true
+        : 'خروجی: ' . $out;
+});
+$check('ایموجی پریمیوم: ایموجی کنارش جایگزین می‌شود', function () {
+    $out = \Nikto\Telegram\PremiumEmoji::apply("\u{1F525}[5368324170671202286]");
+
+    return $out === "<tg-emoji emoji-id=\"5368324170671202286\">\u{1F525}</tg-emoji>"
+        ? true
+        : 'خروجی: ' . $out;
+});
+$check('ایموجی پریمیوم: عدد معمولی دست‌نخورده می‌ماند', function () {
+    $out = \Nikto\Telegram\PremiumEmoji::apply('گزارش [2024] سالانه');
+
+    return $out === 'گزارش [2024] سالانه' ? true : 'خروجی: ' . $out;
+});
+$check('ایموجی پریمیوم: entity تلگرام به تگ تبدیل می‌شود', function () {
+    $html = \Nikto\Telegram\Entities::toHtml("\u{1F60E} سلام", [
+        ['type' => 'custom_emoji', 'offset' => 0, 'length' => 2, 'custom_emoji_id' => '5222142777738344173'],
+    ]);
+
+    return str_contains($html, '<tg-emoji emoji-id="5222142777738344173">')
+        ? true
+        : 'خروجی: ' . $html;
+});
+$check('ایموجی پریمیوم در کپشن نهایی ارسال می‌شود', function () {
+    $job = Registry::refresh('prices');
+    $before = $job->caption();
+    $job->setCaption('نوسان [5368324170671202286] {date}');
+    $caption = $job->renderCaption($job->fetch());
+    $job->setCaption($before);
+
+    return str_contains($caption, '<tg-emoji emoji-id="5368324170671202286">')
+        ? true
+        : 'کپشن: ' . $caption;
+});
 $check('تنظیمات: تغییر ارقام', function () use ($panel, $callback) {
     $before = Settings::get('digits');
     $panel->handleUpdate($callback('s:digits'));

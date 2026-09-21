@@ -4,90 +4,98 @@ declare(strict_types=1);
 namespace Nikto\Render;
 
 /**
- * پالت رنگ کارت‌ها — پایه‌ی مشکی با شیشه‌ی سفید و تأکید سبز/آبی.
+ * پالت رنگ کارت‌ها — پایه‌ی سفید با تأکید سبز و قرمز و حاشیه‌های مشکی.
+ *
+ * همه‌ی پالت‌ها روشن هستند تا کارت‌ها در حالت روشن تلگرام هم کاملاً خوانا باشند.
  */
 final class Theme
 {
+    public const DEFAULT = 'light';
+
     public const PALETTES = [
-        'neo' => [
-            'label'     => 'نئو (سبز و آبی)',
-            'bg_from'   => '#03060A',
-            'bg_to'     => '#071118',
-            'glow'      => '#10E39B',
-            'glow_alt'  => '#2F86FF',
-            'accent'    => '#10E39B',
-            'accent_alt'=> '#2F86FF',
-            'ink'       => '#EDF6F2',
-            'ink_dim'   => '#8EA3AC',
-            'ink_faint' => '#5A6D77',
-            'up'        => '#10E39B',
-            'down'      => '#2F86FF',
-            'flat'      => '#6B7C85',
-            'tint'      => '#FFFFFF',
+        'light' => [
+            'label'       => 'روشن (سفید، سبز، قرمز)',
+            'bg_from'     => '#FFFFFF',
+            'bg_to'       => '#F1F5F3',
+            'surface'     => '#FFFFFF',
+            'surface_alt' => '#F6F9F7',
+            'glow'        => '#00A85C',
+            'glow_alt'    => '#E11D3C',
+            'accent'      => '#00A85C',
+            'accent_alt'  => '#E11D3C',
+            'ink'         => '#0A0F0D',
+            'ink_dim'     => '#4C5A56',
+            'ink_faint'   => '#7A8A86',
+            'line'        => '#0A0F0D',
+            'line_soft'   => '#D5DEDA',
+            'shadow'      => '#16332A',
+            'up'          => '#00A85C',
+            'down'        => '#E11D3C',
+            'flat'        => '#8A9794',
+            'tint'        => '#0A0F0D',
         ],
-        'emerald' => [
-            'label'     => 'امرالد (سبز)',
-            'bg_from'   => '#020705',
-            'bg_to'     => '#06150F',
-            'glow'      => '#10E39B',
-            'glow_alt'  => '#7BF7C4',
-            'accent'    => '#10E39B',
-            'accent_alt'=> '#7BF7C4',
-            'ink'       => '#EDFBF4',
-            'ink_dim'   => '#89A99A',
-            'ink_faint' => '#557266',
-            'up'        => '#10E39B',
-            'down'      => '#5FB8FF',
-            'flat'      => '#68867A',
-            'tint'      => '#FFFFFF',
+        'snow' => [
+            'label'       => 'برفی (سفید و طوسی)',
+            'bg_from'     => '#FFFFFF',
+            'bg_to'       => '#ECEFF4',
+            'surface'     => '#FFFFFF',
+            'surface_alt' => '#F4F6FA',
+            'glow'        => '#00A05C',
+            'glow_alt'    => '#E0233B',
+            'accent'      => '#00A05C',
+            'accent_alt'  => '#E0233B',
+            'ink'         => '#090C11',
+            'ink_dim'     => '#4A525F',
+            'ink_faint'   => '#79828F',
+            'line'        => '#090C11',
+            'line_soft'   => '#D6DCE6',
+            'shadow'      => '#1B2433',
+            'up'          => '#00A05C',
+            'down'        => '#E0233B',
+            'flat'        => '#858E9C',
+            'tint'        => '#090C11',
         ],
-        'ocean' => [
-            'label'     => 'اوشن (آبی)',
-            'bg_from'   => '#03060D',
-            'bg_to'     => '#07121F',
-            'glow'      => '#2F86FF',
-            'glow_alt'  => '#10E39B',
-            'accent'    => '#2F86FF',
-            'accent_alt'=> '#66D3FF',
-            'ink'       => '#EAF2FB',
-            'ink_dim'   => '#8B9DB4',
-            'ink_faint' => '#586A82',
-            'up'        => '#10E39B',
-            'down'      => '#4DA3FF',
-            'flat'      => '#6B7E94',
-            'tint'      => '#FFFFFF',
+        'mint' => [
+            'label'       => 'نعنایی (سفید و سبز)',
+            'bg_from'     => '#FFFFFF',
+            'bg_to'       => '#E8F5EE',
+            'surface'     => '#FFFFFF',
+            'surface_alt' => '#F0F9F4',
+            'glow'        => '#009E57',
+            'glow_alt'    => '#D91F39',
+            'accent'      => '#009E57',
+            'accent_alt'  => '#D91F39',
+            'ink'         => '#06120C',
+            'ink_dim'     => '#41564C',
+            'ink_faint'   => '#72897E',
+            'line'        => '#06120C',
+            'line_soft'   => '#CCE2D7',
+            'shadow'      => '#0C3A26',
+            'up'          => '#009E57',
+            'down'        => '#D91F39',
+            'flat'        => '#7E9389',
+            'tint'        => '#06120C',
         ],
-        'mono' => [
-            'label'     => 'مونو (سیاه و سفید)',
-            'bg_from'   => '#050506',
-            'bg_to'     => '#101214',
-            'glow'      => '#FFFFFF',
-            'glow_alt'  => '#C9D2D6',
-            'accent'    => '#FFFFFF',
-            'accent_alt'=> '#C9D2D6',
-            'ink'       => '#F4F7F8',
-            'ink_dim'   => '#9BA5AA',
-            'ink_faint' => '#646E73',
-            'up'        => '#FFFFFF',
-            'down'      => '#7E888F',
-            'flat'      => '#646E73',
-            'tint'      => '#FFFFFF',
-        ],
-        'aurora' => [
-            'label'     => 'آرورا (سبز تا آبی)',
-            'bg_from'   => '#03080C',
-            'bg_to'     => '#04161C',
-            'glow'      => '#12E3B0',
-            'glow_alt'  => '#3F7BFF',
-            'accent'    => '#12E3B0',
-            'accent_alt'=> '#3F7BFF',
-            'ink'       => '#EAF7F6',
-            'ink_dim'   => '#86A3A8',
-            'ink_faint' => '#546E74',
-            'up'        => '#12E3B0',
-            'down'      => '#3F7BFF',
-            'flat'      => '#657E84',
-            'tint'      => '#FFFFFF',
+        'paper' => [
+            'label'       => 'کاغذی (سفید گرم)',
+            'bg_from'     => '#FFFFFF',
+            'bg_to'       => '#F3F0E9',
+            'surface'     => '#FFFFFF',
+            'surface_alt' => '#F8F5EE',
+            'glow'        => '#0B9E5A',
+            'glow_alt'    => '#D62839',
+            'accent'      => '#0B9E5A',
+            'accent_alt'  => '#D62839',
+            'ink'         => '#12100B',
+            'ink_dim'     => '#575143',
+            'ink_faint'   => '#8A8271',
+            'line'        => '#12100B',
+            'line_soft'   => '#E0DACB',
+            'shadow'      => '#3A3222',
+            'up'          => '#0B9E5A',
+            'down'        => '#D62839',
+            'flat'        => '#968D7C',
+            'tint'        => '#12100B',
         ],
     ];
 
@@ -95,9 +103,10 @@ final class Theme
     private array $palette;
     private string $name;
 
-    public function __construct(string $name = 'neo')
+    public function __construct(?string $name = null)
     {
-        $this->name = isset(self::PALETTES[$name]) ? $name : 'neo';
+        $name ??= self::DEFAULT;
+        $this->name = isset(self::PALETTES[$name]) ? $name : self::DEFAULT;
         $this->palette = self::PALETTES[$this->name];
     }
 
@@ -105,14 +114,14 @@ final class Theme
 
     public function label(): string { return $this->palette['label']; }
 
-    public function isMono(): bool { return $this->name === 'mono'; }
+    public function isMono(): bool { return $this->name === 'snow'; }
 
-    public function c(string $key, string $fallback = '#FFFFFF'): string
+    public function c(string $key, string $fallback = '#000000'): string
     {
         return $this->palette[$key] ?? $fallback;
     }
 
-    /** رنگ روند: سبز برای رشد، آبی برای افت */
+    /** رنگ روند: سبز برای رشد، قرمز برای افت */
     public function trend(float $change): string
     {
         if (abs($change) < 0.005) {

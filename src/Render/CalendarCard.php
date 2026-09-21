@@ -6,13 +6,14 @@ namespace Nikto\Render;
 use Nikto\Data\Countries;
 
 /**
- * کارت تقویم اقتصادی — هر رویداد یک ردیف شیشه‌ای مستقل.
+ * کارت تقویم اقتصادی — یک جدول سفید با حاشیه‌ی مشکی و ردیف‌های یک‌درمیان.
  */
 final class CalendarCard extends Card
 {
-    private const ROW_H    = 46.0;
-    private const ROW_GAP  = 7.0;
-    private const MAX_ROWS = 18;
+    private const ROW_H     = 50.0;
+    private const HEAD_H    = 34.0;
+    private const MAX_ROWS  = 18;
+    private const TABLE_PAD = 8.0;
 
     /** @var array<int,array<string,mixed>> */
     private array $rows;
@@ -30,10 +31,9 @@ final class CalendarCard extends Card
         $rows = array_slice($this->rows, 0, self::MAX_ROWS);
         $extra = count($this->rows) - count($rows);
 
-        $listH = max(1, count($rows)) * self::ROW_H + max(0, count($rows) - 1) * self::ROW_GAP;
+        $tableH = self::TABLE_PAD * 2 + self::HEAD_H + max(1, count($rows)) * self::ROW_H;
         $noteH = $extra > 0 ? 26.0 : 0.0;
-        $height = (int) round(76 + Frame::HEADER_H + 22 + $listH + $noteH + 18 + 38);
-        $height = max(420, $height);
+        $height = (int) round(84 + Frame::HEADER_H + $tableH + $noteH + 14 + 46 + 40);
 
         $c = new Canvas(1200, $height, $this->quality);
         $c->setOutputScale($this->outputScale);
@@ -50,11 +50,11 @@ final class CalendarCard extends Card
         );
 
         if ($rows === []) {
-            $c->glass($rect['x'], $top, $rect['w'], 74, 16, ['tint' => $t->c('tint')]);
+            Frame::panel($c, $t, $rect['x'], $top, $rect['w'], 84, 18);
             $c->text(
                 'امروز رویداد مهمی در تقویم اقتصادی ثبت نشده است',
                 $rect['x'] + $rect['w'] / 2,
-                $top + 37,
+                $top + 42,
                 13,
                 $t->c('ink_dim'),
                 Canvas::W_SEMIBOLD,
@@ -62,26 +62,31 @@ final class CalendarCard extends Card
                 1.0,
                 'ink'
             );
-            $this->legend($c, $t, $rect['x'], $top + 92, $rect['w']);
+            $this->legend($c, $t, $rect['x'], $top + 100, $rect['w']);
 
             return $c;
         }
 
-        $y = $this->columnLabels($c, $t, $rect['x'], $top, $rect['w']);
+        // جدول یکپارچه
+        Frame::panel($c, $t, $rect['x'], $top, $rect['w'], $tableH, 18, ['border_alpha' => 0.55, 'border_w' => 1.8]);
 
-        foreach ($rows as $row) {
-            $this->row($c, $t, $row, $rect['x'], $y, $rect['w']);
-            $y += self::ROW_H + self::ROW_GAP;
+        $cols = $this->columns($rect['x'], $rect['w']);
+        $y = $this->headRow($c, $t, $rect['x'], $top + self::TABLE_PAD, $rect['w'], $cols);
+
+        foreach ($rows as $i => $row) {
+            $this->row($c, $t, $row, $rect['x'] + self::TABLE_PAD, $y, $rect['w'] - self::TABLE_PAD * 2, $cols, $i);
+            $y += self::ROW_H;
         }
-        $y -= self::ROW_GAP;
+
+        $y = $top + $tableH;
 
         if ($extra > 0) {
             $c->text(
                 '+ ' . $this->tnum((string) $extra) . ' رویداد دیگر در تقویم امروز',
                 $rect['x'] + $rect['w'],
-                $y + 14,
-                10,
-                $t->c('ink_faint'),
+                $y + 16,
+                10.5,
+                $t->c('ink_dim'),
                 Canvas::W_MEDIUM,
                 'right',
                 1.0,
@@ -95,67 +100,104 @@ final class CalendarCard extends Card
         return $c;
     }
 
-    /** برچسب ستون‌ها بالای فهرست */
-    private function columnLabels(Canvas $c, Theme $t, float $x, float $y, float $w): float
+    /**
+     * جای هر ستون (از راست به چپ).
+     *
+     * @return array<string,float>
+     */
+    private function columns(float $x, float $w): array
     {
         $right = $x + $w;
+
+        return [
+            'time'      => $right - 60,        // مرکز پلاک ساعت
+            'flag'      => $right - 118,       // مرکز پرچم
+            'currency'  => $right - 140,       // راست نام ارز
+            'impact'    => $right - 200,       // مرکز میله‌های اهمیت
+            'mic'       => $right - 232,       // مرکز آیکون سخنرانی
+            'title'     => $right - 256,       // راست متن شرح
+            'forecast'  => $x + 152,           // مرکز خانه‌ی پیش‌بینی
+            'previous'  => $x + 58,            // مرکز خانه‌ی قبلی
+            'head_cur'  => $right - 138,       // عنوان ستون ارز
+        ];
+    }
+
+    /** ردیف عنوان ستون‌ها */
+    private function headRow(Canvas $c, Theme $t, float $x, float $y, float $w, array $cols): float
+    {
+        $inner = $w - self::TABLE_PAD * 2;
+        $c->roundRect($x + self::TABLE_PAD, $y, $inner, self::HEAD_H, 10, $t->c('surface_alt'), 1.0);
+
+        $mid = $y + self::HEAD_H / 2;
         $labels = [
-            ['زمان', $right - 45, 'center'],
-            ['ارز', $right - 114, 'center'],
-            ['اهمیت', $right - 168, 'center'],
-            ['شرح رویداد', $right - 212, 'right'],
-            ['پیش‌بینی', $x + 60, 'center'],
-            ['قبلی', $x + 154, 'center'],
+            ['زمان', $cols['time'], 'center'],
+            ['ارز', $cols['head_cur'], 'center'],
+            ['اهمیت', $cols['impact'], 'center'],
+            ['شرح رویداد', $cols['title'], 'right'],
+            ['پیش‌بینی', $cols['forecast'], 'center'],
+            ['قبلی', $cols['previous'], 'center'],
         ];
 
         foreach ($labels as [$text, $lx, $align]) {
-            $c->text($text, $lx, $y + 6, 9.5, $t->c('ink_faint'), Canvas::W_SEMIBOLD, $align, 0.85, 'ink');
+            $c->text($text, $lx, $mid, 10.5, $t->c('ink'), Canvas::W_BOLD, $align, 1.0, 'ink');
         }
 
-        return $y + 20;
+        $c->rect($x + self::TABLE_PAD, $y + self::HEAD_H, $inner, 1.4, $t->c('line'), 0.55);
+
+        return $y + self::HEAD_H;
     }
 
-    private function row(Canvas $c, Theme $t, array $row, float $x, float $y, float $w): void
+    private function row(Canvas $c, Theme $t, array $row, float $x, float $y, float $w, array $cols, int $index): void
     {
         $impact = (int) $row['impact'];
         $isHoliday = $impact === 0 || (bool) $row['all_day'];
         $accent = $this->impactColor($t, $impact, $isHoliday);
-        $right = $x + $w;
         $mid = $y + self::ROW_H / 2;
 
-        $c->roundRect($x, $y, $w, self::ROW_H, 14, '#FFFFFF', $isHoliday ? 0.028 : 0.05);
-        $c->strokeRoundRect($x, $y, $w, self::ROW_H, 14, '#FFFFFF', 1, 0.07);
+        // ردیف‌های یک‌درمیان
+        if ($index % 2 === 1) {
+            $c->roundRect($x, $y, $w, self::ROW_H, 8, $t->c('surface_alt'), 0.75);
+        }
+        if ($index > 0) {
+            $c->rect($x + 6, $y, $w - 12, 1, $t->c('line_soft'), 1.0);
+        }
 
-        // نوار اهمیت در لبه‌ی راست
-        $c->roundRect($right - 8, $y + 9, 4, self::ROW_H - 18, 2, $accent, $isHoliday ? 0.4 : 0.95);
+        // نوار اهمیت در لبه‌ی راست ردیف
+        if ($impact >= 3 && !$isHoliday) {
+            $c->roundRect($x + $w - 12, $y + 11, 4, self::ROW_H - 22, 2, $accent, 1.0);
+        }
 
-        // ── زمان
+        // ── پلاک ساعت
         $timeText = $isHoliday && (string) $row['time'] === '' ? 'تعطیل' : (string) $row['time'];
-        $badgeW = 58.0;
-        $badgeX = $right - 16 - $badgeW;
-        $c->roundRect($badgeX, $mid - 13, $badgeW, 26, 9, $accent, $isHoliday ? 0.10 : 0.14);
+        $hasTime = (string) $row['time'] !== '';
+        $badgeW = 60.0;
+        $badgeH = 28.0;
+        $badgeX = $cols['time'] - $badgeW / 2;
+
+        $c->roundRect($badgeX, $mid - $badgeH / 2, $badgeW, $badgeH, 8, $hasTime ? $t->c('line') : $t->c('surface_alt'), $hasTime ? 1.0 : 1.0);
+        if (!$hasTime) {
+            $c->strokeRoundRect($badgeX, $mid - $badgeH / 2, $badgeW, $badgeH, 8, $t->c('line'), 1.2, 0.45);
+        }
         $c->text(
-            (string) $row['time'] === '' ? $timeText : $this->dnum($timeText),
-            $badgeX + $badgeW / 2,
+            $hasTime ? $this->dnum($timeText) : $timeText,
+            $cols['time'],
             $mid,
-            (string) $row['time'] === '' ? 10 : 13,
-            $isHoliday ? $t->c('ink_dim') : $t->c('ink'),
-            (string) $row['time'] === '' ? Canvas::W_SEMIBOLD : Canvas::W_NUM_BOLD,
+            $hasTime ? 13 : 10.5,
+            $hasTime ? '#FFFFFF' : $t->c('ink_dim'),
+            $hasTime ? Canvas::W_NUM_BOLD : Canvas::W_SEMIBOLD,
             'center',
             1.0,
             'ink'
         );
 
         // ── پرچم و ارز
-        $flagW = 24.0;
-        $flagX = $badgeX - 14 - $flagW;
-        Flags::draw($c, Countries::code((string) $row['currency']), $flagX, $mid - 8, $flagW, 16);
+        Flags::draw($c, Countries::code((string) $row['currency']), $cols['flag'] - 13, $mid - 9, 26, 18);
         $c->text(
             (string) $row['currency'],
-            $flagX - 8,
+            $cols['currency'],
             $mid,
-            11,
-            $t->c('ink_dim'),
+            11.5,
+            $t->c('ink'),
             Canvas::W_NUM_BOLD,
             'right',
             1.0,
@@ -163,31 +205,29 @@ final class CalendarCard extends Card
         );
 
         // ── اهمیت و آیکون سخنرانی
-        $impactCx = $flagX - 56;
         if ($isHoliday) {
-            $c->text('—', $impactCx, $mid, 10, $t->c('ink_faint'), Canvas::W_BOLD, 'center', 1.0, 'ink');
+            $c->text('—', $cols['impact'], $mid, 11, $t->c('ink_faint'), Canvas::W_BOLD, 'center', 1.0, 'ink');
         } else {
-            $this->impactIcon($c, $t, $impactCx, $mid, $impact);
+            $this->impactIcon($c, $t, $cols['impact'], $mid, $impact);
         }
         if ((bool) $row['speech']) {
-            $this->micIcon($c, $t, $impactCx - 26, $mid);
+            $this->micIcon($c, $t, $cols['mic'], $mid);
         }
 
-        // ── مقدارهای قبلی و پیش‌بینی
+        // ── مقدارها
         $forecast = (string) ($row['forecast'] ?? '');
         $previous = (string) ($row['previous'] ?? '');
-        $this->stat($c, $t, $x + 18, $mid, 84, $forecast, $forecast !== '' ? $t->c('ink') : $t->c('ink_faint'));
-        $this->stat($c, $t, $x + 114, $mid, 80, $previous, $t->c('ink_dim'));
+        $this->stat($c, $t, $cols['forecast'], $mid, 88, $forecast, $this->statColor($t, $forecast, $previous));
+        $this->stat($c, $t, $cols['previous'], $mid, 84, $previous, $t->c('ink_dim'));
 
         // ── شرح رویداد
-        $titleRight = $impactCx - 44;
-        $titleLeft = $x + 206;
+        $titleLeft = $cols['forecast'] + 56;
         $text = (string) ($row['title_fa'] !== '' ? $row['title_fa'] : $row['title_en']);
         $c->textFit(
             $text,
-            $titleRight,
+            $cols['title'],
             $mid,
-            max(160.0, $titleRight - $titleLeft),
+            max(160.0, $cols['title'] - $titleLeft),
             12.5,
             $isHoliday ? $t->c('ink_dim') : $t->c('ink'),
             Canvas::W_MEDIUM,
@@ -198,12 +238,36 @@ final class CalendarCard extends Card
         );
     }
 
-    /** خانه‌ی مقدار (برچسب‌ها فقط بالای فهرست نوشته می‌شوند) */
-    private function stat(Canvas $c, Theme $t, float $x, float $mid, float $w, string $value, string $color): void
+    /** سبز اگر پیش‌بینی بالاتر از قبلی باشد، قرمز اگر پایین‌تر */
+    private function statColor(Theme $t, string $forecast, string $previous): string
+    {
+        if ($forecast === '') {
+            return $t->c('ink_faint');
+        }
+        $f = $this->numeric($forecast);
+        $p = $this->numeric($previous);
+        if ($f === null || $p === null || abs($f - $p) < 1e-9) {
+            return $t->c('ink');
+        }
+
+        return $f > $p ? $t->c('up') : $t->c('down');
+    }
+
+    private function numeric(string $value): ?float
+    {
+        if (preg_match('/-?\d+(?:[.,]\d+)?/', str_replace(',', '', $value), $m) !== 1) {
+            return null;
+        }
+
+        return (float) $m[0];
+    }
+
+    /** خانه‌ی مقدار */
+    private function stat(Canvas $c, Theme $t, float $cx, float $mid, float $w, string $value, string $color): void
     {
         $c->textFit(
             $value === '' ? '–' : $this->dnum($value),
-            $x + $w / 2,
+            $cx,
             $mid,
             $w,
             12.5,
@@ -223,8 +287,8 @@ final class CalendarCard extends Card
         }
 
         return match ($impact) {
-            3       => $t->c('accent'),
-            2       => $t->c('accent_alt'),
+            3       => $t->c('down'),      // اهمیت زیاد — قرمز
+            2       => $t->c('line'),      // اهمیت متوسط — مشکی
             default => $t->c('ink_faint'),
         };
     }
@@ -233,56 +297,55 @@ final class CalendarCard extends Card
     private function impactIcon(Canvas $c, Theme $t, float $cx, float $cy, int $impact): void
     {
         $color = $this->impactColor($t, $impact, false);
-        $barW = 4.0;
-        $gap = 3.5;
+        $barW = 4.2;
+        $gap = 3.6;
         $totalW = $barW * 3 + $gap * 2;
         $startX = $cx - $totalW / 2;
 
         for ($i = 0; $i < 3; $i++) {
-            $barH = 6.5 + $i * 3.8;
+            $barH = 6.5 + $i * 4.0;
             $filled = $i < $impact;
             $c->roundRect(
                 $startX + $i * ($barW + $gap),
-                $cy + 7 - $barH,
+                $cy + 8 - $barH,
                 $barW,
                 $barH,
                 1.6,
-                $filled ? $color : '#FFFFFF',
-                $filled ? 1.0 : 0.15
+                $filled ? $color : $t->c('line_soft'),
+                1.0
             );
         }
     }
 
     private function micIcon(Canvas $c, Theme $t, float $cx, float $cy): void
     {
-        $col = $t->c('accent_alt');
-        $c->roundRect($cx - 2.3, $cy - 7.5, 4.6, 8.4, 2.3, $col);
-        $c->ring($cx, $cy - 1.6, 4.4, 1.2, $col, 10, 170, 1.0);
-        $c->rect($cx - 0.7, $cy + 2.8, 1.4, 3.4, $col);
-        $c->rect($cx - 3.2, $cy + 6.2, 6.4, 1.4, $col);
+        $col = $t->c('line');
+        $c->roundRect($cx - 2.4, $cy - 8, 4.8, 8.8, 2.4, $col, 0.85);
+        $c->ring($cx, $cy - 1.6, 4.6, 1.3, $col, 10, 170, 0.85);
+        $c->rect($cx - 0.75, $cy + 3.0, 1.5, 3.4, $col, 0.85);
+        $c->rect($cx - 3.4, $cy + 6.4, 6.8, 1.5, $col, 0.85);
     }
 
     private function legend(Canvas $c, Theme $t, float $x, float $y, float $w): void
     {
-        $h = 32.0;
-        $c->roundRect($x, $y, $w, $h, 12, '#FFFFFF', 0.035);
-        $c->strokeRoundRect($x, $y, $w, $h, 12, '#FFFFFF', 1, 0.07);
+        $h = 38.0;
+        Frame::panel($c, $t, $x, $y, $w, $h, 12, ['fill' => $t->c('surface_alt'), 'border_alpha' => 0.14, 'shadow' => false]);
 
         $mid = $y + $h / 2;
-        $cursor = $x + $w - 16;
-        $size = 9.5;
+        $cursor = $x + $w - 18;
+        $size = 10;
 
         foreach ([[3, 'اهمیت زیاد'], [2, 'اهمیت متوسط'], [1, 'اهمیت کم']] as [$impact, $label]) {
             $this->impactIcon($c, $t, $cursor - 12, $mid, $impact);
             $cursor -= 28;
-            $c->text($label, $cursor, $mid, $size, $t->c('ink_faint'), Canvas::W_SEMIBOLD, 'right', 1.0, 'ink');
-            $cursor -= $c->textWidth($label, $size, Canvas::W_SEMIBOLD) + 20;
+            $c->text($label, $cursor, $mid, $size, $t->c('ink_dim'), Canvas::W_SEMIBOLD, 'right', 1.0, 'ink');
+            $cursor -= $c->textWidth($label, $size, Canvas::W_SEMIBOLD) + 22;
         }
 
-        $this->micIcon($c, $t, $cursor - 7, $mid);
-        $cursor -= 18;
-        $c->text('سخنرانی مقام‌ها', $cursor, $mid, $size, $t->c('ink_faint'), Canvas::W_SEMIBOLD, 'right', 1.0, 'ink');
+        $this->micIcon($c, $t, $cursor - 8, $mid);
+        $cursor -= 20;
+        $c->text('سخنرانی مقام‌ها', $cursor, $mid, $size, $t->c('ink_dim'), Canvas::W_SEMIBOLD, 'right', 1.0, 'ink');
 
-        $c->text('زمان‌ها به وقت ایران', $x + 16, $mid, $size, $t->c('ink_dim'), Canvas::W_BOLD, 'left', 1.0, 'ink');
+        $c->text('زمان‌ها به وقت ایران', $x + 18, $mid, $size, $t->c('ink'), Canvas::W_BOLD, 'left', 1.0, 'ink');
     }
 }

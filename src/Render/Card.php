@@ -21,7 +21,7 @@ abstract class Card
 
     public function __construct(?string $theme = null, array $options = [])
     {
-        $this->theme  = new Theme($theme ?? 'neo');
+        $this->theme  = new Theme($theme);
         $this->footer = (string) ($options['footer'] ?? Settings::get('brand_link'));
         $this->now    = $options['now'] ?? Settings::now();
         [$this->quality, $this->outputScale] = self::qualityProfile();

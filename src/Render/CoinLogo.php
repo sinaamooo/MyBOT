@@ -10,6 +10,9 @@ use Nikto\Data\Coins;
  */
 final class CoinLogo
 {
+    /** روی کاغذ سفید هرگز نسخه‌ی سفید لوگو استفاده نمی‌شود */
+    public static bool $lightSurface = true;
+
     /** @var array<string,bool> */
     private static array $preferWhite = [];
 
@@ -26,7 +29,7 @@ final class CoinLogo
     }
 
     /**
-     * رسم لوگو داخل یک دایره‌ی شیشه‌ای.
+     * رسم لوگو داخل یک دایره.
      * $size قطر کل دایره است.
      */
     public static function draw(Canvas $c, string $symbol, float $cx, float $cy, float $size, bool $plate = true): void
@@ -35,19 +38,26 @@ final class CoinLogo
         $radius = $size / 2;
 
         if ($plate) {
-            $c->circle($cx, $cy, $radius, '#FFFFFF', 0.08);
-            $c->ring($cx, $cy, $radius - 0.5, 1, '#FFFFFF', 0, 360, 0.16);
+            if (self::$lightSurface) {
+                $c->circle($cx, $cy, $radius, '#F4F7F5', 1.0);
+                $c->ring($cx, $cy, $radius - 0.5, 1.1, '#0A0F0D', 0, 360, 0.16);
+            } else {
+                $c->circle($cx, $cy, $radius, '#FFFFFF', 0.08);
+                $c->ring($cx, $cy, $radius - 0.5, 1, '#FFFFFF', 0, 360, 0.16);
+            }
         }
 
         $path = self::path($symbol);
         if ($path !== null) {
-            // لوگوهای خیلی تیره روی پس‌زمینه‌ی مشکی دیده نمی‌شوند
-            if (!isset(self::$preferWhite[$symbol])) {
-                self::$preferWhite[$symbol] = Canvas::imageLuminance($path) < 0.22
-                    && self::path($symbol, true) !== null;
-            }
-            if (self::$preferWhite[$symbol]) {
-                $path = self::path($symbol, true) ?? $path;
+            if (!self::$lightSurface) {
+                // روی کاغذ تیره، لوگوهای خیلی تیره با نسخه‌ی سفید جایگزین می‌شوند
+                if (!isset(self::$preferWhite[$symbol])) {
+                    self::$preferWhite[$symbol] = Canvas::imageLuminance($path) < 0.22
+                        && self::path($symbol, true) !== null;
+                }
+                if (self::$preferWhite[$symbol]) {
+                    $path = self::path($symbol, true) ?? $path;
+                }
             }
             $inner = $size * 0.72;
             $c->image($path, $cx - $inner / 2, $cy - $inner / 2, $inner, $inner);
@@ -56,16 +66,18 @@ final class CoinLogo
         }
 
         // جایگزین: حرف اول نماد
-        $c->circle($cx, $cy, $radius - 1, Coins::color($symbol), 0.22);
+        $color = Coins::color($symbol);
+        $c->circle($cx, $cy, $radius - 1, $color, self::$lightSurface ? 1.0 : 0.22);
         $c->text(
             mb_substr($symbol, 0, min(3, mb_strlen($symbol))),
             $cx,
-            $cy - $size * 0.21,
-            $size * 0.34,
+            $cy,
+            $size * 0.32,
             '#FFFFFF',
             Canvas::W_BOLD,
             'center',
-            0.92
+            0.96,
+            'ink'
         );
     }
 }

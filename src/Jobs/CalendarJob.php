@@ -7,6 +7,7 @@ use Nikto\Core\Settings;
 use Nikto\Data\CalendarProvider;
 use Nikto\Render\CalendarCard;
 use Nikto\Render\Card;
+use Nikto\Render\Theme;
 use Nikto\Text\Persian;
 
 /**
@@ -33,7 +34,7 @@ final class CalendarJob extends Job
 
     public function defaultTheme(): string
     {
-        return 'neo';
+        return Theme::DEFAULT;
     }
 
     public function defaultOptions(): array

@@ -180,6 +180,8 @@ abstract class Job
 
         $caption = strtr($this->caption(), $replace);
         $caption = preg_replace("/\n{3,}/", "\n\n", $caption) ?? $caption;
+        // [شناسه] → ایموجی پریمیوم تلگرام
+        $caption = \Nikto\Telegram\PremiumEmoji::apply($caption);
 
         return trim($caption);
     }
