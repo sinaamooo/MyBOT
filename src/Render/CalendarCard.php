@@ -139,7 +139,7 @@ final class CalendarCard extends Card
         ];
 
         foreach ($labels as [$text, $lx, $align]) {
-            $c->text($text, $lx, $mid, 10.5, $t->c('ink'), Canvas::W_BOLD, $align, 1.0, 'ink');
+            $c->text($text, $lx, $mid, 10.5, $t->c('ink'), Canvas::W_BOLD, $align, 1.0, 'middle');
         }
 
         $c->rect($x + self::TABLE_PAD, $y + self::HEAD_H, $inner, 1.4, $t->c('line'), 0.55);
@@ -187,7 +187,7 @@ final class CalendarCard extends Card
             $hasTime ? Canvas::W_NUM_BOLD : Canvas::W_SEMIBOLD,
             'center',
             1.0,
-            'ink'
+            $hasTime ? 'num' : 'ink'
         );
 
         // ── پرچم و ارز
@@ -201,7 +201,7 @@ final class CalendarCard extends Card
             Canvas::W_NUM_BOLD,
             'right',
             1.0,
-            'ink'
+            'num'
         );
 
         // ── اهمیت و آیکون سخنرانی
@@ -253,13 +253,15 @@ final class CalendarCard extends Card
         return $f > $p ? $t->c('up') : $t->c('down');
     }
 
+    /** «1.2B»، «-900M»، «3.4%» → عدد قابل مقایسه (واحدهای K/M/B/T لحاظ می‌شوند) */
     private function numeric(string $value): ?float
     {
-        if (preg_match('/-?\d+(?:[.,]\d+)?/', str_replace(',', '', $value), $m) !== 1) {
+        if (preg_match('/(-?\d+(?:\.\d+)?)\s*([KMBT])?/i', str_replace(',', '', $value), $m) !== 1) {
             return null;
         }
+        $scale = ['K' => 1e3, 'M' => 1e6, 'B' => 1e9, 'T' => 1e12][strtoupper($m[2] ?? '')] ?? 1.0;
 
-        return (float) $m[0];
+        return (float) $m[1] * $scale;
     }
 
     /** خانه‌ی مقدار */
@@ -276,7 +278,7 @@ final class CalendarCard extends Card
             'center',
             8,
             1.0,
-            'ink'
+            'num'
         );
     }
 
@@ -338,14 +340,14 @@ final class CalendarCard extends Card
         foreach ([[3, 'اهمیت زیاد'], [2, 'اهمیت متوسط'], [1, 'اهمیت کم']] as [$impact, $label]) {
             $this->impactIcon($c, $t, $cursor - 12, $mid, $impact);
             $cursor -= 28;
-            $c->text($label, $cursor, $mid, $size, $t->c('ink_dim'), Canvas::W_SEMIBOLD, 'right', 1.0, 'ink');
+            $c->text($label, $cursor, $mid, $size, $t->c('ink_dim'), Canvas::W_SEMIBOLD, 'right', 1.0, 'middle');
             $cursor -= $c->textWidth($label, $size, Canvas::W_SEMIBOLD) + 22;
         }
 
         $this->micIcon($c, $t, $cursor - 8, $mid);
         $cursor -= 20;
-        $c->text('سخنرانی مقام‌ها', $cursor, $mid, $size, $t->c('ink_dim'), Canvas::W_SEMIBOLD, 'right', 1.0, 'ink');
+        $c->text('سخنرانی مقام‌ها', $cursor, $mid, $size, $t->c('ink_dim'), Canvas::W_SEMIBOLD, 'right', 1.0, 'middle');
 
-        $c->text('زمان‌ها به وقت ایران', $x + 18, $mid, $size, $t->c('ink'), Canvas::W_BOLD, 'left', 1.0, 'ink');
+        $c->text('زمان‌ها به وقت ایران', $x + 18, $mid, $size, $t->c('ink'), Canvas::W_BOLD, 'left', 1.0, 'middle');
     }
 }

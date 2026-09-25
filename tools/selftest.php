@@ -62,7 +62,7 @@ final class FakeApi extends Api
 $tmpDb = sys_get_temp_dir() . '/nikto-selftest-' . getmypid() . '.sqlite';
 @unlink($tmpDb);
 Config::set('db_path', $tmpDb);
-Config::set('bot_token', '8870139346:TEST');
+Config::set('bot_token', '8870139346:' . str_repeat('T', 35)); // توکن ساختگی با شکل واقعی
 Config::set('bot_id', 8870139346);
 Config::set('admins', [6595849261]);
 Config::set('owner_id', 6595849261);
@@ -247,8 +247,13 @@ $check('روشن‌کردن کارت قیمت‌ها', function () use ($panel, 
     return Registry::refresh('prices')->enabled() ? true : 'فعال نشد';
 });
 $check('تغییر تم', function () use ($panel, $callback) {
-    $panel->handleUpdate($callback('j:prices:th:ocean'));
-    return Registry::refresh('prices')->theme() === 'ocean' ? true : 'تم عوض نشد';
+    $panel->handleUpdate($callback('j:prices:th:mint'));
+    return Registry::refresh('prices')->theme() === 'mint' ? true : 'تم عوض نشد';
+});
+$check('تم نامعتبر ذخیره نمی‌شود', function () use ($panel, $callback) {
+    $panel->handleUpdate($callback('j:prices:th:hacked'));
+    $raw = (string) (Db::one("SELECT theme FROM jobs WHERE key = 'prices'")['theme'] ?? '');
+    return $raw === 'mint' ? true : 'ذخیره شد: ' . $raw;
 });
 $check('افزودن چند زمان ارسال', function () use ($panel, $callback, $message) {
     $panel->handleUpdate($callback('j:prices:sc:add'));
@@ -307,151 +312,30 @@ $check('قالب‌بندی بولد و نقل‌قول در کپشن حفظ م�
         ? true
         : 'کپشن ذخیره‌شده: ' . $caption;
 });
-$check('ایموجی پریمیوم: الگوی کروشه‌ای تبدیل می‌شود', function () {
-    $out = \Nikto\Telegram\PremiumEmoji::apply('بازار [5368324170671202286] امروز');
+$check('تم قدیمی ذخیره‌شده (neo) به تم روشن جدید نگاشت می‌شود', function () {
+    Db::exec("UPDATE jobs SET theme = 'neo' WHERE key = 'prices'");
+    $theme = Registry::refresh('prices')->theme();
+    Registry::refresh('prices')->setTheme(\Nikto\Render\Theme::DEFAULT);
 
-    return str_contains($out, '<tg-emoji emoji-id="5368324170671202286">')
-        ? true
-        : 'خروجی: ' . $out;
+    return $theme === \Nikto\Render\Theme::DEFAULT ? true : 'تم: ' . $theme;
 });
-$check('ایموجی پریمیوم: ایموجی کنارش جایگزین می‌شود', function () {
-    $out = \Nikto\Telegram\PremiumEmoji::apply("\u{1F525}[5368324170671202286]");
+$check('توکن نمونه (PUT-YOUR-BOT-TOKEN-HERE) تنظیم‌شده حساب نمی‌شود', function () {
+    $real = Config::token();
+    Config::set('bot_token', 'PUT-YOUR-BOT-TOKEN-HERE');
+    $placeholder = Config::isConfigured();
+    Config::set('bot_token', $real);
 
-    return $out === "<tg-emoji emoji-id=\"5368324170671202286\">\u{1F525}</tg-emoji>"
-        ? true
-        : 'خروجی: ' . $out;
+    return !$placeholder && Config::isConfigured() ? true : 'تشخیص توکن اشتباه است';
 });
-$check('ایموجی پریمیوم: عدد معمولی دست‌نخورده می‌ماند', function () {
-    $out = \Nikto\Telegram\PremiumEmoji::apply('گزارش [2024] سالانه');
-
-    return $out === 'گزارش [2024] سالانه' ? true : 'خروجی: ' . $out;
-});
-$check('ایموجی پریمیوم: entity تلگرام به تگ تبدیل می‌شود', function () {
-    $html = \Nikto\Telegram\Entities::toHtml("\u{1F60E} سلام", [
-        ['type' => 'custom_emoji', 'offset' => 0, 'length' => 2, 'custom_emoji_id' => '5222142777738344173'],
-    ]);
-
-    return str_contains($html, '<tg-emoji emoji-id="5222142777738344173">')
-        ? true
-        : 'خروجی: ' . $html;
-});
-$check('ایموجی پریمیوم در کپشن نهایی ارسال می‌شود', function () {
+$check('دستور /cancel ورودی نیمه‌کاره را واقعاً لغو می‌کند', function () use ($panel, $callback, $message) {
     $job = Registry::refresh('prices');
     $before = $job->caption();
-    $job->setCaption('نوسان [5368324170671202286] {date}');
-    $caption = $job->renderCaption($job->fetch());
-    $job->setCaption($before);
+    $panel->handleUpdate($callback('j:prices:cap'));   // منتظر کپشن
+    $panel->handleUpdate($message('/cancel'));
+    $panel->handleUpdate($message('این نباید کپشن شود'));
+    $after = Registry::refresh('prices')->caption();
 
-    return str_contains($caption, '<tg-emoji emoji-id="5368324170671202286">')
-        ? true
-        : 'کپشن: ' . $caption;
-});
-$check('ایموجی پریمیوم مستقیم از کیبورد: پنل خودش شناسه را برمی‌دارد', function () use ($panel, $callback) {
-    // تلگرام ایموجی پریمیوم را به‌صورت entity از نوع custom_emoji می‌فرستد
-    // و خود ایموجی جایگزین داخل متن است (خارج از BMP = دو واحد UTF-16).
-    $panel->handleUpdate($callback('j:prices:cap'));
-    $panel->handleUpdate([
-        'update_id' => random_int(1, 1000000),
-        'message' => [
-            'message_id' => random_int(1, 1000000),
-            'from' => ['id' => 6595849261],
-            'chat' => ['id' => 6595849261, 'type' => 'private'],
-            'text' => "\u{1F525} نوسان بازار \u{1F680} امروز",
-            'entities' => [
-                ['type' => 'custom_emoji', 'offset' => 0,  'length' => 2, 'custom_emoji_id' => '5368324170671202286'],
-                ['type' => 'bold',         'offset' => 3,  'length' => 11],
-                ['type' => 'custom_emoji', 'offset' => 15, 'length' => 2, 'custom_emoji_id' => '5222142777738344173'],
-            ],
-        ],
-    ]);
-
-    $job = Registry::refresh('prices');
-    $stored = $job->caption();
-    $final = $job->renderCaption($job->fetch());
-    $job->setCaption('{summary}');
-
-    foreach (['5368324170671202286', '5222142777738344173'] as $id) {
-        if (!str_contains($final, '<tg-emoji emoji-id="' . $id . '">')) {
-            return 'شناسه ' . $id . ' برداشته نشد — کپشن: ' . $stored;
-        }
-    }
-    if (!str_contains($final, "<tg-emoji emoji-id=\"5368324170671202286\">\u{1F525}</tg-emoji>")) {
-        return 'ایموجی جایگزین درست جاسازی نشد: ' . $final;
-    }
-
-    return str_contains($final, '<b>نوسان بازار</b>') ? true : 'بولد کنارش از بین رفت: ' . $final;
-});
-$check('ایموجی پریمیوم: ویرایش دوباره‌ی کپشن تگ را خراب نمی‌کند', function () use ($panel, $callback) {
-    $job = Registry::refresh('prices');
-    $job->setCaption('<tg-emoji emoji-id="5368324170671202286">\u{1F525}</tg-emoji> <b>سلام</b>');
-    $saved = $job->caption();
-
-    // پنل باید متن HTML را همان‌طور نگه دارد (دوباره escape نکند)
-    $panel->handleUpdate($callback('j:prices:cap'));
-    $panel->handleUpdate([
-        'update_id' => random_int(1, 1000000),
-        'message' => [
-            'message_id' => random_int(1, 1000000),
-            'from' => ['id' => 6595849261],
-            'chat' => ['id' => 6595849261, 'type' => 'private'],
-            'text' => $saved,
-        ],
-    ]);
-    $again = Registry::refresh('prices')->caption();
-    $job->setCaption('{summary}');
-
-    return $again === $saved ? true : 'تغییر کرد: ' . $again;
-});
-$check('ایموجی پریمیوم: برداشتن تگ برای ارسال جایگزین', function () {
-    $html = \Nikto\Telegram\PremiumEmoji::apply("\u{1F525}[5368324170671202286] بازار");
-    $plain = \Nikto\Telegram\PremiumEmoji::strip($html);
-
-    return $plain === "\u{1F525} بازار" ? true : 'خروجی: ' . $plain;
-});
-$check('اگر ربات اجازه‌ی ایموجی پریمیوم نداشته باشد، پست بدون آن می‌رود', function () use ($api) {
-    // تلگرام تقلبی‌ای که هر کپشن دارای tg-emoji را رد می‌کند
-    $picky = new class (Config::get('bot_token')) extends Api {
-        public int $rejected = 0;
-        public string $delivered = '';
-
-        public function call(string $method, array $params = [], int $timeout = 60): array
-        {
-            if (in_array($method, ['sendPhoto', 'sendDocument'], true)) {
-                $caption = (string) ($params['caption'] ?? '');
-                if (str_contains($caption, '<tg-emoji')) {
-                    $this->rejected++;
-
-                    return ['ok' => false, 'description' => 'Bad Request: CUSTOM_EMOJI_INVALID'];
-                }
-                $this->delivered = $caption;
-            }
-
-            return match ($method) {
-                'getMe'   => ['ok' => true, 'result' => ['id' => 8870139346, 'username' => 'nikto_test_bot']],
-                default   => ['ok' => true, 'result' => ['message_id' => 1]],
-            };
-        }
-    };
-
-    $job = Registry::refresh('prices');
-    $before = $job->caption();
-    $job->setCaption("\u{1F525}[5368324170671202286] نوسان بازار");
-
-    Dispatcher::setApi($picky);
-    $result = Dispatcher::run('prices', ['chat_ids' => [-1001234567890]]);
-    Dispatcher::setApi($api);
-    $job->setCaption($before);
-
-    if ($picky->rejected !== 1) {
-        return 'تلاش اول با ایموجی پریمیوم انجام نشد';
-    }
-    if (!($result['ok'] ?? false) || ($result['sent'] ?? 0) !== 1) {
-        return 'پست دوباره فرستاده نشد: ' . ($result['message'] ?? '');
-    }
-
-    return str_contains($picky->delivered, "\u{1F525}") && !str_contains($picky->delivered, '<tg-emoji')
-        ? true
-        : 'کپشن ارسالی: ' . $picky->delivered;
+    return $after === $before ? true : 'کپشن عوض شد: ' . $after;
 });
 $check('تنظیمات: تغییر ارقام', function () use ($panel, $callback) {
     $before = Settings::get('digits');
@@ -553,6 +437,79 @@ $check('محاسبه‌ی زمان اجرای بعدی', function () {
     return $next !== null && $next->format('H:i') === '07:30' && $next > Settings::now()
         ? true
         : 'محاسبه نشد';
+});
+$check('قطعی لحظه‌ای: دقیقه‌ی بعد دوباره فرستاده می‌شود (فقط یک بار)', function () use ($api) {
+    // تلگرامی که بار اول قطع است و بعد وصل می‌شود
+    $flaky = new class extends Api {
+        public int $attempts = 0;
+        public int $delivered = 0;
+        public function __construct() {}
+        public function call(string $method, array $params = [], int $timeout = 60): array
+        {
+            if ($method === 'sendPhoto' || $method === 'sendDocument') {
+                if (++$this->attempts === 1) {
+                    return ['ok' => false, 'description' => 'Connection timed out'];
+                }
+                $this->delivered++;
+            }
+            return ['ok' => true, 'result' => ['message_id' => 1]];
+        }
+    };
+    Db::exec('DELETE FROM schedules');
+    Db::exec('DELETE FROM runs');
+    $slot = Settings::now()->setTime(9, 0);
+    Db::exec(
+        'INSERT INTO schedules(job_key, at_time, days, enabled, created_at) VALUES(:j, :t, :d, 1, :c)',
+        [':j' => 'prices', ':t' => '09:00', ':d' => '*', ':c' => time()]
+    );
+
+    Dispatcher::setApi($flaky);
+    Scheduler::tick($slot);                       // ۰۹:۰۰ — قطع
+    Scheduler::tick($slot->modify('+1 minute'));  // ۰۹:۰۱ — دوباره، موفق
+    Scheduler::tick($slot->modify('+2 minutes')); // ۰۹:۰۲ — نباید تکرار شود
+    Dispatcher::setApi($api);
+
+    return $flaky->attempts === 2 && $flaky->delivered === 1
+        ? true
+        : sprintf('تلاش: %d، ارسال موفق: %d', $flaky->attempts, $flaky->delivered);
+});
+$check('خرابی دائمی: بیش از سه بار تلاش نمی‌شود', function () use ($api) {
+    $down = new class extends Api {
+        public int $attempts = 0;
+        public function __construct() {}
+        public function call(string $method, array $params = [], int $timeout = 60): array
+        {
+            if ($method === 'sendPhoto' || $method === 'sendDocument') {
+                $this->attempts++;
+                return ['ok' => false, 'description' => 'Bad Gateway'];
+            }
+            return ['ok' => true, 'result' => []];
+        }
+    };
+    Db::exec('DELETE FROM runs');
+    $slot = Settings::now()->setTime(9, 0);
+    Dispatcher::setApi($down);
+    for ($i = 0; $i < 8; $i++) {
+        Scheduler::tick($slot->modify("+{$i} minutes"));
+    }
+    Dispatcher::setApi($api);
+
+    return $down->attempts === Scheduler::MAX_ATTEMPTS ? true : 'تلاش‌ها: ' . $down->attempts;
+});
+$check('زمان نزدیک نیمه‌شب اگر سرور دیر بیدار شود از دست نمی‌رود', function () {
+    Db::exec('DELETE FROM schedules');
+    Db::exec('DELETE FROM runs');
+    Db::exec(
+        'INSERT INTO schedules(job_key, at_time, days, enabled, created_at) VALUES(:j, :t, :d, 1, :c)',
+        [':j' => 'prices', ':t' => '23:58', ':d' => '*', ':c' => time()]
+    );
+    $afterMidnight = Settings::now()->setTime(0, 3);
+    $due = Scheduler::due($afterMidnight, 10);
+    $expected = $afterMidnight->modify('-1 day')->format('Y-m-d') . ' 23:58';
+
+    return count($due) === 1 && $due[0]['slot'] === $expected
+        ? true
+        : 'سررسیدها: ' . json_encode($due, JSON_UNESCAPED_UNICODE);
 });
 $check('ارسال دستی به کانال', function () use ($api) {
     $before = $api->countOf('sendPhoto');

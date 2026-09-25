@@ -5,6 +5,7 @@
  *   php tools/build.php                     خروجی در پوشه‌ی build/
  *   php tools/build.php --out=/tmp/x        مسیر خروجی دلخواه
  *   php tools/build.php --with-secrets      توکن فعلی را داخل فایل بنویس
+ *   php tools/build.php --public            نسخه‌ی قابل انتشار: بدون توکن، مدیر، آدرس و کلید شما
  *   php tools/build.php --name=mybot        نام فایل‌ها (پیش‌فرض nikto)
  *
  * خروجی:
@@ -28,6 +29,11 @@ foreach (array_slice($argv, 1) as $arg) {
 $outDir = rtrim($args['out'] ?? (APP_ROOT . '/build'), '/');
 $name = preg_replace('/[^a-z0-9_-]/i', '', $args['name'] ?? 'nikto') ?: 'nikto';
 $withSecrets = isset($args['with-secrets']);
+$public = isset($args['public']);
+if ($public && $withSecrets) {
+    fwrite(STDERR, "❌ --public و --with-secrets با هم معنا ندارند.\n");
+    exit(1);
+}
 
 if (!is_dir($outDir) && !@mkdir($outDir, 0775, true)) {
     fwrite(STDERR, "❌ ساخت پوشه‌ی خروجی ممکن نبود: {$outDir}\n");
@@ -150,9 +156,10 @@ PHP;
 
 // ───────────────────────────────────────────── ۳) تنظیمات بالای فایل
 $token  = $withSecrets ? (string) Config::token() : 'PUT-YOUR-BOT-TOKEN-HERE';
-$owner  = (int) Config::get('owner_id', 0);
-$secret = (string) Config::get('webhook_secret', '') ?: bin2hex(random_bytes(16));
-$webhook = (string) Config::get('webhook_url', '');
+$owner  = $public ? 0 : (int) Config::get('owner_id', 0);
+// نسخه‌ی عمومی همیشه کلید تازه و تصادفی می‌گیرد
+$secret = $public ? bin2hex(random_bytes(16)) : ((string) Config::get('webhook_secret', '') ?: bin2hex(random_bytes(16)));
+$webhook = $public ? '' : (string) Config::get('webhook_url', '');
 if ($webhook !== '') {
     $webhook = preg_replace('~/[^/]*$~', '/' . $name . '-bot.php', $webhook) ?? $webhook;
 }
@@ -168,10 +175,14 @@ $header = <<<PHP
  * این فایل شامل همه‌ی کدها، فونت فارسی و لوگوی ارزهاست.
  * فقط همین فایل و {$name}-cron.php را روی هاست آپلود کنید.
  *
- * اجرا:
- *   • وب‌هوک:   آدرس همین فایل را با «php {$name}-bot.php webhook» ثبت کنید
- *   • یا پولینگ: php {$name}-bot.php
- *   • زمان‌بند:  php {$name}-cron.php   (یا کرون اینترنتی روی همان فایل)
+ * راه‌اندازی:
+ *   ۱) bot_token و owner_id را پایین‌تر بنویسید.
+ *   ۲) وب‌هوک را یک بار از مرورگر ثبت کنید:
+ *        https://دامنه/مسیر/{$name}-bot.php?setup=<webhook_secret>
+ *      (یا از خط فرمان: php {$name}-bot.php webhook)
+ *   ۳) کرون هر دقیقه: php {$name}-cron.php
+ *      (یا کرون اینترنتی: {$name}-cron.php?key=<webhook_secret>)
+ *   عیب‌یابی: {$name}-bot.php?check=<webhook_secret>
  *
  * ساخته‌شده در %BUILD_DATE% — نسخه‌ی هسته %CORE_VERSION%
  */
@@ -186,7 +197,7 @@ const NIKTO_CONFIG = [
     // توکن ربات از @BotFather
     'bot_token' => '{$token}',
 
-    // شناسه‌ی عددی مدیر اصلی (با دستور /id در ربات دیده می‌شود)
+    // شناسه‌ی عددی مدیر اصلی (اگر نمی‌دانید، به ربات /start بفرستید تا نشانتان دهد)
     'owner_id'  => {$owner},
 
     // مدیران بیشتر: [111111111, 222222222]

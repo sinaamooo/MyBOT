@@ -94,8 +94,9 @@ final class Config
         return (array) self::get('admins', []);
     }
 
+    /** توکن واقعی BotFather شکل «عدد:رشته» دارد؛ متن نمونه پذیرفته نمی‌شود */
     public static function isConfigured(): bool
     {
-        return self::token() !== '';
+        return preg_match('/^\d{5,}:[A-Za-z0-9_-]{30,}$/', self::token()) === 1;
     }
 }

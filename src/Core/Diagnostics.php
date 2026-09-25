@@ -45,7 +45,8 @@ final class Diagnostics
 
         // ── پیکربندی
         $token = Config::token();
-        $add($token !== '', 'توکن ربات', $token !== '' ? self::mask($token) : 'تنظیم نشده');
+        $validToken = Config::isConfigured();
+        $add($validToken, 'توکن ربات', $validToken ? self::mask($token) : ($token === '' ? 'تنظیم نشده' : 'نامعتبر — توکن را از BotFather کپی کنید'));
         $owner = (int) Config::get('owner_id', 0);
         $add($owner > 0, 'شناسه مدیر', $owner > 0 ? (string) $owner : 'تنظیم نشده');
         $add(null, 'آدرس وب‌هوک در تنظیمات', (string) Config::get('webhook_url', '—'));
@@ -70,8 +71,8 @@ final class Diagnostics
         $add($fonts > 0, 'فونت‌ها', $fonts . ' فایل');
         $add($logos > 0, 'لوگوی ارزها', $logos . ' فایل');
 
-        // ── تلگرام
-        if ($token === '') {
+        // ── تلگرام (با توکن نامعتبر تماس گرفتن بی‌معناست)
+        if (!$validToken) {
             return $out;
         }
         $api = new Api();

@@ -75,6 +75,17 @@ final class Panel
             return;
         }
 
+        // هر دستوری ورودیِ نیمه‌کاره را لغو می‌کند؛ وگرنه متن بعدی کاربر
+        // بی‌خبر به‌جای کپشن یا ساعت ذخیره می‌شد.
+        if ($state['action'] !== '' && str_starts_with($text, '/')) {
+            State::clear($userId);
+            if (str_starts_with($text, '/cancel')) {
+                $this->api->deleteMessage($chatId, $messageId);
+                $this->render($chatId, $userId, $this->screenMain(), 'لغو شد.');
+                return;
+            }
+        }
+
         // افزودن کانال با فوروارد پست
         $forwardChat = $msg['forward_origin']['chat'] ?? ($msg['forward_from_chat'] ?? null);
         if (is_array($forwardChat) && isset($forwardChat['id'])) {
@@ -225,6 +236,10 @@ final class Panel
 
             case 'th':
                 if (isset($p[3])) {
+                    if (!isset(Theme::PALETTES[$p[3]])) {
+                        $toast = 'تم نامعتبر';
+                        return $this->screenThemes($key);
+                    }
                     $job->setTheme($p[3]);
                     $toast = 'تم تغییر کرد';
                     return $this->screenJob($key);
@@ -258,11 +273,6 @@ final class Panel
                     'ویرایش کپشن',
                     "متن دلخواه را بفرستید. می‌توانید از قالب‌بندی خود تلگرام استفاده کنید:\n"
                     . "بولد، ایتالیک، زیرخط، نقل‌قول، کد و لینک — همه حفظ می‌شوند.\n\n"
-                    . "ایموجی پریمیوم:\n"
-                    . "اگر خودتان پریمیوم دارید، کافی است ایموجی پریمیوم را در همین متن بگذارید.\n"
-                    . "در غیر این صورت شناسه‌ی عددی آن را داخل کروشه بنویسید؛ مثال:\n"
-                    . "<code>[5368324170671202286] بازار امروز</code>\n"
-                    . "اگر درست قبل از کروشه یک ایموجی معمولی بگذارید، همان ایموجی برای کاربران بدون پریمیوم نشان داده می‌شود.\n\n"
                     . "متغیرهای مجاز:\n"
                     . "<code>{summary}</code> خلاصه داده‌ها\n"
                     . "<code>{date}</code> تاریخ شمسی\n"
@@ -791,8 +801,8 @@ final class Panel
     }
 
     /**
-     * نمایش کپشن فعلی: اول همان‌طور که در کانال دیده می‌شود (پس ایموجی
-     * پریمیوم واقعاً رندر می‌شود)، بعد متن خام برای کپی و ویرایش.
+     * نمایش کپشن فعلی: اول همان‌طور که در کانال دیده می‌شود،
+     * بعد متن خام برای کپی و ویرایش.
      */
     private function captionPreview(string $caption): string
     {
@@ -879,7 +889,7 @@ final class Panel
 
     private function screenThemes(string $key): array
     {
-        $current = Registry::refresh($key)?->theme() ?? 'neo';
+        $current = Registry::refresh($key)?->theme() ?? Theme::DEFAULT;
 
         $kb = [];
         foreach (Theme::options() as $name => $label) {

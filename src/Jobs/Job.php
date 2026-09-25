@@ -6,6 +6,7 @@ namespace Nikto\Jobs;
 use Nikto\Core\Db;
 use Nikto\Core\Settings;
 use Nikto\Render\Card;
+use Nikto\Render\Theme;
 
 /**
  * پایه‌ی «کار»ها: هر کارت یک Job است با تنظیمات، کانال‌ها و زمان‌بندی خودش.
@@ -46,7 +47,7 @@ abstract class Job
 
     public function defaultTheme(): string
     {
-        return 'aurora';
+        return Theme::DEFAULT;
     }
 
     public function defaultCaption(): string
@@ -68,7 +69,10 @@ abstract class Job
 
     public function theme(): string
     {
-        return (string) $this->row['theme'];
+        // تم‌های قدیمی (تیره) دیگر وجود ندارند؛ به تم پیش‌فرض روشن نگاشت می‌شوند
+        $theme = (string) $this->row['theme'];
+
+        return isset(Theme::PALETTES[$theme]) ? $theme : Theme::DEFAULT;
     }
 
     public function caption(): string
@@ -180,8 +184,6 @@ abstract class Job
 
         $caption = strtr($this->caption(), $replace);
         $caption = preg_replace("/\n{3,}/", "\n\n", $caption) ?? $caption;
-        // [شناسه] → ایموجی پریمیوم تلگرام
-        $caption = \Nikto\Telegram\PremiumEmoji::apply($caption);
 
         return trim($caption);
     }

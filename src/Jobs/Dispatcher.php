@@ -7,7 +7,6 @@ use Nikto\Core\Db;
 use Nikto\Core\Log;
 use Nikto\Core\Settings;
 use Nikto\Telegram\Api;
-use Nikto\Telegram\PremiumEmoji;
 
 /**
  * اجرای یک کار: دریافت داده ← ساخت کارت ← ارسال به کانال‌ها.
@@ -50,7 +49,7 @@ final class Dispatcher
         if ($data === null || $data === []) {
             $empty = $jobKey === CalendarJob::KEY && $data === [];
             if (!$empty) {
-                return self::fail($jobKey, $options, 'داده‌ای از سرویس دریافت نشد (اینترنت یا API).');
+                return self::fail($jobKey, $options, 'داده‌ای از سرویس دریافت نشد (اینترنت یا API).', true);
             }
         }
 
@@ -84,29 +83,10 @@ final class Dispatcher
         $errors = [];
 
         $silent = (bool) ($options['silent'] ?? false);
-        $downgraded = 0;
 
         foreach ($targets as $chatId) {
             $api->sendChatAction($chatId, $asDocument ? 'upload_document' : 'upload_photo');
             $res = self::deliver($api, $chatId, $path, $caption, $asDocument, $silent);
-
-            // اگر ربات اجازه‌ی ایموجی پریمیوم نداشته باشد، یک بار بدون آن دوباره
-            // فرستاده می‌شود تا پست زمان‌بندی‌شده از دست نرود.
-            if (!($res['ok'] ?? false) && PremiumEmoji::hasTag($caption)) {
-                $plain = PremiumEmoji::strip($caption);
-                if ($plain !== $caption) {
-                    Log::warn('Premium emoji rejected, retrying without it', [
-                        'job'   => $jobKey,
-                        'chat'  => $chatId,
-                        'error' => (string) ($res['description'] ?? ''),
-                    ]);
-                    $retry = self::deliver($api, $chatId, $path, $plain, $asDocument, $silent);
-                    if ($retry['ok'] ?? false) {
-                        $downgraded++;
-                        $res = $retry;
-                    }
-                }
-            }
 
             if ($res['ok'] ?? false) {
                 $sent++;
@@ -118,9 +98,6 @@ final class Dispatcher
 
         $took = round(microtime(true) - $started, 2);
         $message = sprintf('ارسال شد به %d کانال (%s ثانیه)', $sent, $took);
-        if ($downgraded > 0) {
-            $message .= sprintf(' — %d مورد بدون ایموجی پریمیوم ارسال شد (ربات اجازه‌اش را ندارد)', $downgraded);
-        }
         if ($failed > 0) {
             $message .= sprintf(' — %d خطا: %s', $failed, implode(' | ', array_slice($errors, 0, 3)));
         }
@@ -135,6 +112,8 @@ final class Dispatcher
             'sent'    => $sent,
             'failed'  => $failed,
             'path'    => $path,
+            // هیچ کانالی دریافت نکرد: احتمالاً قطعی گذرای تلگرام یا شبکه
+            'retry'   => $sent === 0 && $failed > 0,
         ];
     }
 
@@ -176,12 +155,13 @@ final class Dispatcher
             : $api->sendPhoto($chatId, $path, $caption, $extra);
     }
 
-    private static function fail(string $jobKey, array $options, string $message): array
+    /** @param bool $retry خطای گذرا (اینترنت/سرویس) که ارزش تلاش دوباره دارد */
+    private static function fail(string $jobKey, array $options, string $message, bool $retry = false): array
     {
         self::record($jobKey, $options['slot'] ?? null, 'error', $message);
         Log::error('Job failed', ['job' => $jobKey, 'message' => $message]);
 
-        return ['ok' => false, 'message' => $message, 'sent' => 0, 'failed' => 0];
+        return ['ok' => false, 'message' => $message, 'sent' => 0, 'failed' => 0, 'retry' => $retry];
     }
 
     private static function record(string $jobKey, ?string $slot, string $status, string $detail): void

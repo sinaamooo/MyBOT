@@ -54,32 +54,46 @@ class Api
             }
         }
 
-        $ch = curl_init($this->base . $method);
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_POST           => true,
-            CURLOPT_POSTFIELDS     => $hasFile ? $params : http_build_query($params),
-            CURLOPT_TIMEOUT        => $timeout,
-            CURLOPT_CONNECTTIMEOUT => 20,
-        ]);
-        $proxy = (string) Config::get('http_proxy', '');
-        if ($proxy !== '') {
-            curl_setopt($ch, CURLOPT_PROXY, $proxy);
+        $body = $hasFile ? $params : http_build_query($params);
+
+        // اگر تلگرام «Too Many Requests» داد، به اندازه‌ی خواسته‌شده صبر و یک بار دوباره تلاش می‌کنیم
+        for ($attempt = 0; ; $attempt++) {
+            $ch = curl_init($this->base . $method);
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_POST           => true,
+                CURLOPT_POSTFIELDS     => $body,
+                CURLOPT_TIMEOUT        => $timeout,
+                CURLOPT_CONNECTTIMEOUT => 20,
+            ]);
+            $proxy = (string) Config::get('http_proxy', '');
+            if ($proxy !== '') {
+                curl_setopt($ch, CURLOPT_PROXY, $proxy);
+            }
+
+            $raw = curl_exec($ch);
+            $err = curl_error($ch);
+            curl_close($ch);
+
+            if ($raw === false) {
+                Log::error('Telegram request failed', ['method' => $method, 'error' => $err]);
+                return ['ok' => false, 'description' => $err ?: 'خطای شبکه'];
+            }
+
+            $data = json_decode((string) $raw, true);
+            if (!is_array($data)) {
+                return ['ok' => false, 'description' => 'پاسخ نامعتبر از تلگرام'];
+            }
+
+            $wait = (int) ($data['parameters']['retry_after'] ?? 0);
+            if ($attempt === 0 && (int) ($data['error_code'] ?? 0) === 429 && $wait > 0 && $wait <= 15) {
+                Log::warn('Telegram rate limit, waiting', ['method' => $method, 'seconds' => $wait]);
+                sleep($wait);
+                continue;
+            }
+            break;
         }
 
-        $raw = curl_exec($ch);
-        $err = curl_error($ch);
-        curl_close($ch);
-
-        if ($raw === false) {
-            Log::error('Telegram request failed', ['method' => $method, 'error' => $err]);
-            return ['ok' => false, 'description' => $err ?: 'خطای شبکه'];
-        }
-
-        $data = json_decode((string) $raw, true);
-        if (!is_array($data)) {
-            return ['ok' => false, 'description' => 'پاسخ نامعتبر از تلگرام'];
-        }
         if (!($data['ok'] ?? false)) {
             Log::warn('Telegram API error', [
                 'method' => $method,

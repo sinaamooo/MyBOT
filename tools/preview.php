@@ -4,7 +4,7 @@
  *
  *   php tools/preview.php                       هر سه کارت با داده‌ی واقعی
  *   php tools/preview.php --mock                با داده‌ی نمونه (بدون اینترنت)
- *   php tools/preview.php --job=prices --theme=gold --out=/tmp
+ *   php tools/preview.php --job=prices --theme=mint --out=/tmp
  */
 declare(strict_types=1);
 

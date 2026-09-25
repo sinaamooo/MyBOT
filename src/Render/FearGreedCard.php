@@ -110,14 +110,28 @@ final class FearGreedCard extends Card
         // نوار رنگی ناحیه در لبه‌ی راست بلوک
         $c->roundRect($boxX + $boxW - 10, $boxY + 12, 5, $boxH - 24, 2.5, $color, 1.0);
 
+        // سه جزء (عنوان، عدد، برچسب ناحیه) با فاصله‌های کاملاً برابر روی هم چیده می‌شوند.
+        // فاصله‌ها از ارتفاع واقعی جوهر حروف حساب می‌شوند، نه از اندازه‌ی فونت.
         $boxCx = $boxX + ($boxW - 14) / 2;
-        $c->text('شاخص امروز', $boxCx, $boxY + 20, 11, $t->c('ink_dim'), Canvas::W_SEMIBOLD, 'center', 1.0, 'middle');
-        $c->text($this->dnum((string) $value), $boxCx, $boxY + $boxH * 0.46, 54, $t->c('ink'), Canvas::W_NUM_BOLD, 'center', 1.0, 'ink');
-
+        $title = 'شاخص امروز';
+        $number = $this->dnum((string) $value);
         $label = (string) $zone['fa'];
-        $chipW = $c->textWidth($label, 13, Canvas::W_BOLD) + 34;
+
+        $titleSize = 11.5;
+        $numberSize = 40.0;
         $chipH = 30.0;
-        $chipY = $boxY + $boxH - 18 - $chipH;
+        $titleH = $c->inkHeight($title, $titleSize, Canvas::W_SEMIBOLD);
+        $numberH = $c->inkHeight($number, $numberSize, Canvas::W_NUM_BOLD);
+        $gap = ($boxH - $titleH - $numberH - $chipH) / 4;
+
+        $titleCy = $boxY + $gap + $titleH / 2;
+        $numberCy = $titleCy + $titleH / 2 + $gap + $numberH / 2;
+        $chipY = $numberCy + $numberH / 2 + $gap;
+
+        $c->text($title, $boxCx, $titleCy, $titleSize, $t->c('ink_dim'), Canvas::W_SEMIBOLD, 'center', 1.0, 'ink');
+        $c->text($number, $boxCx, $numberCy, $numberSize, $t->c('ink'), Canvas::W_NUM_BOLD, 'center', 1.0, 'num');
+
+        $chipW = $c->textWidth($label, 13, Canvas::W_BOLD) + 34;
         $c->roundRect($boxCx - $chipW / 2, $chipY, $chipW, $chipH, 9, $color, 1.0);
         $c->text($label, $boxCx, $chipY + $chipH / 2, 13, '#FFFFFF', Canvas::W_BOLD, 'center', 1.0, 'ink');
 
@@ -164,13 +178,13 @@ final class FearGreedCard extends Card
             $c->text(
                 $this->dnum((string) $from . ' – ' . (string) ($to - 1)),
                 $segX + $segW / 2,
-                $barY + $barH + 44,
+                $barY + $barH + 47,
                 9.5,
                 $t->c('ink_faint'),
                 Canvas::W_NUM,
                 'center',
                 1.0,
-                'middle'
+                'num'
             );
         }
 
@@ -184,7 +198,7 @@ final class FearGreedCard extends Card
         $bubbleY = $barY - 18 - $bubbleH;
 
         $c->roundRect($bubbleX, $bubbleY, $bubbleW, $bubbleH, 8, $t->c('line'), 1.0);
-        $c->text($this->dnum((string) $value), $bubbleX + $bubbleW / 2, $bubbleY + $bubbleH / 2, 14, '#FFFFFF', Canvas::W_NUM_BOLD, 'center', 1.0, 'ink');
+        $c->text($this->dnum((string) $value), $bubbleX + $bubbleW / 2, $bubbleY + $bubbleH / 2, 14, '#FFFFFF', Canvas::W_NUM_BOLD, 'center', 1.0, 'num');
         $c->triangle($markX, $bubbleY + $bubbleH + 4, 9, false, $t->c('line'));
         $c->line($markX, $barY - 7, $markX, $barY + $barH + 7, $t->c('line'), 2.2, 0.9);
     }
@@ -218,8 +232,8 @@ final class FearGreedCard extends Card
             $c->roundRect($cx + $cellW - 6, $y + 10, 4, $h - 20, 2, $color, 0.9);
 
             $mid = $y + $h / 2;
-            $c->text($label, $cx + $cellW - 18, $mid, 11.5, $t->c('ink_dim'), Canvas::W_SEMIBOLD, 'right', 1.0, 'ink');
-            $c->text($this->dnum((string) $v), $cx + $cellW / 2 + 6, $mid, 22, $t->c('ink'), Canvas::W_NUM_BOLD, 'center', 1.0, 'ink');
+            $c->text($label, $cx + $cellW - 18, $mid, 11.5, $t->c('ink_dim'), Canvas::W_SEMIBOLD, 'right', 1.0, 'middle');
+            $c->text($this->dnum((string) $v), $cx + $cellW / 2 + 6, $mid, 22, $t->c('ink'), Canvas::W_NUM_BOLD, 'center', 1.0, 'num');
 
             $deltaText = ($diff > 0 ? '+' : ($diff < 0 ? '−' : '')) . $this->dnum((string) abs($diff));
             $dw = $c->textWidth($deltaText, 11.5, Canvas::W_NUM_BOLD) + 24;
@@ -234,7 +248,7 @@ final class FearGreedCard extends Card
                 Canvas::W_NUM_BOLD,
                 'center',
                 1.0,
-                'ink'
+                'num'
             );
         }
     }
@@ -274,7 +288,7 @@ final class FearGreedCard extends Card
             $gy = $chartY + $chartH * $f;
             $c->dashedLine($chartX, $gy, $chartX + $chartW, $gy, $t->c('line_soft'), 1, 6, 6, 1.0);
             $v = (int) round($max - ($max - $min) * $f);
-            $c->text($this->dnum((string) $v), $chartX - 10, $gy, 9.5, $t->c('ink_faint'), Canvas::W_NUM, 'right', 1.0, 'middle');
+            $c->text($this->dnum((string) $v), $chartX - 10, $gy, 9.5, $t->c('ink_faint'), Canvas::W_NUM, 'right', 1.0, 'num');
         }
 
         $points = [];

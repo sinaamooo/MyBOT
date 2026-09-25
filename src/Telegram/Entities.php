@@ -81,18 +81,8 @@ final class Entities
             'blockquote'          => ['<blockquote>', '</blockquote>'],
             'expandable_blockquote' => ['<blockquote expandable>', '</blockquote>'],
             'text_link'           => ['<a href="' . self::escape((string) ($entity['url'] ?? '')) . '">', '</a>'],
-            // ایموجی پریمیوم: متن اصلی به‌عنوان جایگزین داخل تگ می‌ماند
-            'custom_emoji'        => self::emojiTags($entity),
             default               => ['', ''],
         };
-    }
-
-    /** @return array{0:string,1:string} */
-    private static function emojiTags(array $entity): array
-    {
-        $id = preg_replace('/\\D+/', '', (string) ($entity['custom_emoji_id'] ?? '')) ?? '';
-
-        return $id !== '' ? ['<tg-emoji emoji-id="' . $id . '">', '</tg-emoji>'] : ['', ''];
     }
 
     /** @return array{0:string,1:string} */
@@ -131,6 +121,6 @@ final class Entities
     /** آیا متن از قبل شامل تگ HTML است؟ */
     public static function looksLikeHtml(string $text): bool
     {
-        return (bool) preg_match('#</?(b|strong|i|em|u|s|code|pre|a|blockquote|tg-spoiler|tg-emoji)\b[^>]*>#i', $text);
+        return (bool) preg_match('#</?(b|strong|i|em|u|s|code|pre|a|blockquote|tg-spoiler)\b[^>]*>#i', $text);
     }
 }

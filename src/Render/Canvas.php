@@ -32,8 +32,11 @@ final class Canvas
 
     /** برای بازرسی چیدمان: جعبه‌ی هر متن رسم‌شده ثبت می‌شود */
     public static bool $trace = false;
-    /** @var array<int,array{x:float,y:float,w:float,h:float,text:string,size:float}> */
+    /** @var array<int,array{x:float,y:float,w:float,h:float,text:string,size:float,ink:array{0:float,1:float,2:float,3:float}}> */
     public static array $traceBoxes = [];
+    /** شکل‌های پر (قرص، برچسب، کادر) برای بررسی وسط‌چین بودن متنِ داخلشان */
+    /** @var array<int,array{x:float,y:float,w:float,h:float}> */
+    public static array $traceShapes = [];
 
     public function __construct(int $width, int $height, int $scale = 2, ?string $background = null)
     {
@@ -162,6 +165,9 @@ final class Canvas
      */
     public function roundRect(float $x, float $y, float $w, float $h, float $r, string $hex, float $alpha = 1.0): void
     {
+        if (self::$trace && $alpha >= 0.05) {
+            self::$traceShapes[] = ['x' => $x, 'y' => $y, 'w' => $w, 'h' => $h];
+        }
         [$red, $green, $blue, $a] = self::parseColor($hex, $alpha);
         if ($a <= 0) {
             $this->roundRectColor($this->im, $this->s($x), $this->s($y), $this->s($w), $this->s($h), $this->s($r), $this->color($hex, $alpha));
@@ -792,6 +798,45 @@ final class Canvas
         return self::$metricsCache[$key] = ['top' => $top, 'height' => $bottom - $top];
     }
 
+    /**
+     * فونت اعداد (Barlow) ارقام و حروف فارسی ندارد؛ اگر متن شامل آن‌ها باشد
+     * همان وزن از وزیرمتن استفاده می‌شود تا به‌جای عدد، مربع خالی چاپ نشود.
+     */
+    private static function fontFor(string $weight, string $text): string
+    {
+        if (($weight === self::W_NUM || $weight === self::W_NUM_BOLD)
+            && preg_match('/[\x{0600}-\x{06FF}\x{FB50}-\x{FDFF}\x{FE70}-\x{FEFF}]/u', $text) === 1
+        ) {
+            return $weight === self::W_NUM_BOLD ? self::W_SEMIBOLD : self::W_MEDIUM;
+        }
+
+        return $weight;
+    }
+
+    /** @var array<string,float> */
+    private static array $digitCache = [];
+
+    /**
+     * فاصله‌ی مرکزِ بدنه‌ی ارقام تا خط پایه.
+     * همه‌ی عددهای یک اندازه، با هر علامتی ($ , % −)، روی یک خط می‌نشینند
+     * و خودِ ارقام دقیقاً وسط قرار می‌گیرند.
+     */
+    private function digitCenter(string $text, float $fs, string $font): float
+    {
+        $reference = preg_match('/[\x{06F0}-\x{06F9}\x{0660}-\x{0669}]/u', $text) === 1
+            ? '۱۲۳۴۶۷۸۹'
+            : '0123456789';
+        $key = $font . '|' . $fs . '|' . $reference;
+        if (!isset(self::$digitCache[$key])) {
+            $box = imagettfbbox($fs, 0, $font, $reference);
+            self::$digitCache[$key] = $box === false
+                ? -$fs * 0.36
+                : ((float) $box[7] + (float) $box[1]) / 2;
+        }
+
+        return self::$digitCache[$key];
+    }
+
     /** فاصله‌ی مرکزِ حروفِ یک رشته تا خط پایه (برای وسط‌چین کردن نوری) */
     private function inkCenter(string $visual, float $fs, string $font): float
     {
@@ -803,6 +848,22 @@ final class Canvas
         return ((float) $box[7] + (float) $box[1]) / 2;
     }
 
+    /**
+     * ارتفاع واقعی جوهر حروف یک متن (پیکسل منطقی).
+     * برای چیدن عمودی دقیق عنوان و عدد با فاصله‌ی برابر.
+     */
+    public function inkHeight(string $text, float $size, string $weight = self::W_BOLD): float
+    {
+        $weight = self::fontFor($weight, $text);
+        $visual = Persian::prepare($text);
+        if ($visual === '') {
+            return 0.0;
+        }
+        $box = imagettfbbox($size * $this->scale, 0, self::fontPath($weight), $visual);
+
+        return $box === false ? $size * 0.7 : ((float) $box[1] - (float) $box[7]) / $this->scale;
+    }
+
     /** ارتفاع یک خط متن در این اندازه (پیکسل منطقی) */
     public function lineHeight(float $size, string $weight = self::W_BOLD): float
     {
@@ -812,6 +873,7 @@ final class Canvas
     /** @return array{w:float,h:float,top:float} */
     public function measure(string $text, float $size, string $weight = self::W_BOLD, bool $prepared = false): array
     {
+        $weight = self::fontFor($weight, $text);
         $visual = $prepared ? $text : Persian::prepare($text);
         if ($visual === '') {
             return ['w' => 0.0, 'h' => 0.0, 'top' => 0.0];
@@ -842,6 +904,7 @@ final class Canvas
      *   top      — y بالای خط (برای ردیف‌های پشت‌سرهم)
      *   middle   — y وسط خطِ فونت (برای هم‌ترازی چند متن در یک ردیف)
      *   ink      — y وسط خودِ حروف (برای متنی که داخل دایره یا قرص می‌نشیند)
+     *   num      — y وسط بدنه‌ی ارقام (برای همه‌ی عددها: قیمت، درصد، ساعت، محور)
      *   baseline — y خط پایه
      */
     public function text(
@@ -859,6 +922,7 @@ final class Canvas
         if (trim($text) === '') {
             return 0.0;
         }
+        $weight = self::fontFor($weight, $text);
         $visual = Persian::prepare($text);
         $font = self::fontPath($weight);
         $col  = $this->color($hex, $alpha);
@@ -869,6 +933,7 @@ final class Canvas
             'baseline' => $this->s($y),
             'middle'   => $this->s($y) - (int) round($metrics['height'] / 2 + $metrics['top']),
             'ink'      => $this->s($y) - (int) round($this->inkCenter($visual, $fs, $font)),
+            'num'      => $this->s($y) - (int) round($this->digitCenter($text, $fs, $font)),
             default    => $this->s($y) - (int) round($metrics['top']),
         };
 
@@ -887,13 +952,31 @@ final class Canvas
         imagettftext($this->im, $fs, 0, (int) $drawX - $box[0], $drawY, $col, $font, $visual);
 
         if (self::$trace) {
+            // جعبه‌ی واقعی جوهر حروف (نه ارتفاع کلی فونت)
+            $ink = [
+                ($drawX) / $this->scale,
+                ($drawY + $box[7]) / $this->scale,
+                ($drawX + $w) / $this->scale,
+                ($drawY + $box[1]) / $this->scale,
+            ];
+            // مرکزی که چشم می‌بیند: بدنه‌ی ارقام، جوهر حروف، یا وسط خط فونت
+            $optical = match ($valign) {
+                'num'   => $drawY + $this->digitCenter($text, $fs, $font),
+                'ink'   => $drawY + ($box[7] + $box[1]) / 2,
+                default => $drawY + $metrics['top'] + $metrics['height'] / 2,
+            };
             self::$traceBoxes[] = [
+                'optical' => $optical / $this->scale,
                 'x'    => $drawX / $this->scale,
                 'y'    => ($drawY + $metrics['top']) / $this->scale,
                 'w'    => $w / $this->scale,
                 'h'    => $metrics['height'] / $this->scale,
-                'text' => mb_substr($text, 0, 28),
-                'size' => $size,
+                'text'   => mb_substr($text, 0, 28),
+                'size'   => $size,
+                'ink'    => $ink,
+                'base'   => $drawY / $this->scale,
+                'weight' => $weight,
+                'valign' => $valign,
             ];
         }
 

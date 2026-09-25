@@ -10,7 +10,7 @@ use Nikto\Data\PriceProvider;
  */
 final class PriceCard extends Card
 {
-    private const TILE_H = 222.0;
+    private const TILE_H = 240.0;
     private const GAP    = 18.0;
 
     /** @var array<int,array<string,mixed>> */
@@ -82,10 +82,10 @@ final class PriceCard extends Card
             $boxH = 26.0;
 
             $c->roundRect($cursor, $y + 2, $boxW, $boxH, 8, $color, 1.0);
-            $c->text($text, $cursor + $boxW / 2, $y + 2 + $boxH / 2, 13, '#FFFFFF', Canvas::W_NUM_BOLD, 'center', 1.0, 'ink');
+            $c->text($text, $cursor + $boxW / 2, $y + 2 + $boxH / 2, 13, '#FFFFFF', Canvas::W_NUM_BOLD, 'center', 1.0, 'num');
             $c->triangle($cursor + $boxW + 16, $y + 2 + $boxH / 2, 8, $isUp, $color);
 
-            $c->text($label, $cursor + $boxW + 27, $y + 2 + $boxH / 2, 11, $t->c('ink_dim'), Canvas::W_SEMIBOLD, 'left', 1.0, 'ink');
+            $c->text($label, $cursor + $boxW + 27, $y + 2 + $boxH / 2, 11, $t->c('ink_dim'), Canvas::W_SEMIBOLD, 'left', 1.0, 'middle');
             $cursor += $boxW + 30 + $c->textWidth($label, 11, Canvas::W_SEMIBOLD) + 18;
         }
 
@@ -98,7 +98,7 @@ final class PriceCard extends Card
             Canvas::W_MEDIUM,
             'left',
             1.0,
-            'ink'
+            'middle'
         );
     }
 
@@ -130,18 +130,18 @@ final class PriceCard extends Card
         $c->text(
             strtoupper((string) $coin['symbol']),
             $labelRight,
-            $logoCy - 9,
+            $logoCy - 10,
             15.5,
             $t->c('ink'),
             Canvas::W_NUM_BOLD,
             'right',
             1.0,
-            'ink'
+            'num'
         );
         $c->textFit(
             (string) $coin['name_fa'],
             $labelRight,
-            $logoCy + 11,
+            $logoCy + 12,
             $w * 0.44,
             10.5,
             $t->c('ink_dim'),
@@ -149,7 +149,7 @@ final class PriceCard extends Card
             'right',
             8.5,
             1.0,
-            'ink'
+            'middle'
         );
 
         // ── پلاک درصد (توپر، متن سفید)
@@ -163,23 +163,23 @@ final class PriceCard extends Card
         } else {
             $c->triangle($left + 16, $chipCy, 9, $isUp, '#FFFFFF');
         }
-        $c->text($pctText, $left + $chipW - 12, $chipCy, 13, '#FFFFFF', Canvas::W_NUM_BOLD, 'right', 1.0, 'ink');
+        $c->text($pctText, $left + $chipW - 12, $chipCy, 13, '#FFFFFF', Canvas::W_NUM_BOLD, 'right', 1.0, 'num');
 
         // ── قیمت
-        $priceY = $y + 96;
+        $priceY = $y + 98;
         $price = '$' . PriceProvider::formatPrice((float) $coin['price']);
-        $c->textFit($this->dnum($price), $right, $priceY, $inner * 0.80, 30, $t->c('ink'), Canvas::W_NUM_BOLD, 'right', 16, 1.0, 'ink');
+        $c->textFit($this->dnum($price), $right, $priceY, $inner * 0.80, 30, $t->c('ink'), Canvas::W_NUM_BOLD, 'right', 16, 1.0, 'num');
 
-        $c->text('قیمت لحظه‌ای', $left, $priceY, 10, $t->c('ink_faint'), Canvas::W_MEDIUM, 'left', 1.0, 'ink');
+        $c->text('قیمت لحظه‌ای', $left, $priceY, 10, $t->c('ink_faint'), Canvas::W_MEDIUM, 'left', 1.0, 'middle');
 
         // ── خط جداکننده
-        $c->rect($left, $y + 118, $inner, 1, $t->c('line_soft'), 1.0);
+        $c->rect($left, $y + 124, $inner, 1, $t->c('line_soft'), 1.0);
 
         // ── کمترین و بیشترین ۲۴ ساعت
-        $this->range($c, $t, $coin, $left, $y + 130, $inner, $trend);
+        $this->range($c, $t, $coin, $left, $y + 134, $inner, $trend);
 
         // ── نمودار
-        $chartY = $y + 160;
+        $chartY = $y + 178;
         $chartH = $y + $h - 14 - $chartY;
         $spark = array_values(array_map('floatval', (array) ($coin['spark'] ?? [])));
         if (count($spark) >= 4 && $chartH > 20) {
@@ -195,10 +195,13 @@ final class PriceCard extends Card
         $high = (float) ($coin['high'] ?? 0);
         $price = (float) $coin['price'];
 
-        $c->text('بیشترین', $x + $w, $y, 9.5, $t->c('ink_faint'), Canvas::W_MEDIUM, 'right', 1.0, 'top');
-        $c->text('کمترین', $x, $y, 9.5, $t->c('ink_faint'), Canvas::W_MEDIUM, 'left', 1.0, 'top');
+        // ردیف عنوان و ردیف عدد هر کدام روی یک خط پایه‌ی مشترک
+        $labelY = $y + 8;
+        $valueY = $y + 28;
 
-        $valueY = $y + 13;
+        $c->text('بیشترین', $x + $w, $labelY, 9.5, $t->c('ink_faint'), Canvas::W_MEDIUM, 'right', 1.0, 'middle');
+        $c->text('کمترین', $x, $labelY, 9.5, $t->c('ink_faint'), Canvas::W_MEDIUM, 'left', 1.0, 'middle');
+
         $c->textFit(
             $this->dnum(PriceProvider::formatPrice($high)),
             $x + $w,
@@ -210,7 +213,7 @@ final class PriceCard extends Card
             'right',
             8.5,
             1.0,
-            'top'
+            'num'
         );
         $c->textFit(
             $this->dnum(PriceProvider::formatPrice($low)),
@@ -223,7 +226,7 @@ final class PriceCard extends Card
             'left',
             8.5,
             1.0,
-            'top'
+            'num'
         );
 
         if ($high <= $low) {
@@ -231,7 +234,8 @@ final class PriceCard extends Card
         }
 
         // نوار جایگاه قیمت بین کف و سقف
-        $barY = $y + 1;
+        // نوار درست وسط دو ردیف
+        $barY = ($labelY + $valueY) / 2 - 2.5;
         $barX = $x + $w * 0.32;
         $barW = $w * 0.36;
         $ratio = max(0.02, min(0.98, ($price - $low) / ($high - $low)));

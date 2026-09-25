@@ -89,6 +89,12 @@ final class Log
             );
             if (random_int(1, 50) === 1) {
                 Db::exec('DELETE FROM logs WHERE created_at < :t', [':t' => time() - 7 * 86400]);
+                // فایل‌های روزانه‌ی قدیمی هم پاک می‌شوند تا فضای هاست پر نشود
+                foreach (glob(APP_STORAGE . '/logs/bot-*.log') ?: [] as $file) {
+                    if (filemtime($file) < time() - 14 * 86400) {
+                        @unlink($file);
+                    }
+                }
             }
         } catch (\Throwable) {
             // دیتابیس هنوز آماده نیست — نادیده بگیر

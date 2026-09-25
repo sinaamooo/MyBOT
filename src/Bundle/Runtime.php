@@ -137,6 +137,20 @@ final class Runtime
                 return;
             }
 
+            // ثبت وب‌هوک از مرورگر (برای هاست‌هایی که خط فرمان ندارند):
+            //   ...nikto-bot.php?setup=<webhook_secret>
+            $setup = (string) ($_GET['setup'] ?? '');
+            if ($setup !== '') {
+                if ($secret === '' || !hash_equals($secret, $setup)) {
+                    http_response_code(403);
+                    echo "کلید نادرست است. مقدار webhook_secret بالای فایل ربات را بگذارید:\n";
+                    echo '  ' . (PublicUrl::current() ?: 'nikto-bot.php') . "?setup=<webhook_secret>\n";
+                    return;
+                }
+                echo self::webSetup();
+                return;
+            }
+
             echo PublicUrl::statusPage(
                 self::VERSION,
                 'php ' . basename((string) ($_SERVER['SCRIPT_NAME'] ?? 'nikto-bot.php')) . ' webhook'
@@ -145,7 +159,8 @@ final class Runtime
         }
 
         $secret = (string) Config::get('webhook_secret', '');
-        if ($secret !== '' && ($_SERVER['HTTP_X_TELEGRAM_BOT_API_SECRET_TOKEN'] ?? '') !== $secret) {
+        $header = (string) ($_SERVER['HTTP_X_TELEGRAM_BOT_API_SECRET_TOKEN'] ?? '');
+        if ($secret !== '' && !hash_equals($secret, $header)) {
             http_response_code(403);
             echo 'forbidden';
             return;
@@ -171,6 +186,65 @@ final class Runtime
         } catch (\Throwable $e) {
             Log::error('Webhook handling failed', ['error' => $e->getMessage()]);
         }
+    }
+
+    /**
+     * ثبت وب‌هوک روی همین فایل و گزارش نتیجه (صفحه‌ی متنی).
+     * آدرس از خودِ درخواست خوانده می‌شود تا با جای واقعی فایل یکی باشد.
+     */
+    private static function webSetup(): string
+    {
+        if (!Config::isConfigured()) {
+            return "توکن ربات بالای فایل تنظیم نشده است (bot_token).\n";
+        }
+
+        $current = PublicUrl::current();
+        $configured = trim((string) Config::get('webhook_url', ''));
+        $strip = static fn (string $u): string => rtrim((string) preg_replace('#^https?://#i', '', $u), '/');
+
+        if ($configured !== '' && $strip($configured) === $strip($current)) {
+            $url = $configured;                       // همان آدرس، با https تنظیمات
+        } elseif (str_starts_with(strtolower($current), 'https://')) {
+            $url = $current;
+        } else {
+            $url = $configured;
+        }
+        if (!str_starts_with(strtolower($url), 'https://')) {
+            return "تلگرام فقط آدرس https قبول می‌کند.\n"
+                . "آدرس فعلی: " . ($current ?: '(نامشخص)') . "\n"
+                . "این صفحه را با https باز کنید یا webhook_url را بالای فایل درست بنویسید.\n";
+        }
+
+        $api = new Api();
+        $me = $api->getMe();
+        if (!($me['ok'] ?? false)) {
+            $why = (string) ($me['description'] ?? 'نامشخص');
+            $badToken = isset($me['error_code']) || stripos($why, 'Unauthorized') !== false || stripos($why, 'Not Found') !== false;
+
+            return "اتصال به تلگرام ناموفق بود: {$why}\n"
+                . ($badToken
+                    ? "توکن ربات (bot_token بالای فایل) نادرست است.\n"
+                    : "هاست به api.telegram.org دسترسی ندارد؛ اگر لازم است http_proxy را بالای فایل تنظیم کنید.\n");
+        }
+
+        $res = $api->setWebhook($url, (string) Config::get('webhook_secret', ''));
+        $lines = ['NIKTO CRYPTO BOT — ثبت وب‌هوک', ''];
+        $lines[] = 'ربات:   @' . ($me['result']['username'] ?? '?');
+        $lines[] = 'آدرس:   ' . $url;
+        $lines[] = '';
+        if (!($res['ok'] ?? false)) {
+            $lines[] = 'ناموفق: ' . ($res['description'] ?? 'نامشخص');
+            return implode("\n", $lines) . "\n";
+        }
+        $lines[] = 'وب‌هوک با موفقیت ثبت شد.';
+        if ($configured !== '' && $url !== $configured) {
+            $lines[] = '';
+            $lines[] = 'توجه: webhook_url بالای فایل با این آدرس فرق دارد؛ بهتر است آن را هم به همین آدرس تغییر دهید.';
+        }
+        $lines[] = '';
+        $lines[] = 'حالا در تلگرام به ربات /start بفرستید.';
+
+        return implode("\n", $lines) . "\n";
     }
 
     // ------------------------------------------------------- ورودی خط فرمان
