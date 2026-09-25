@@ -10,9 +10,6 @@ use Nikto\Render\Card;
 use Nikto\Render\Theme;
 use Nikto\Text\Persian;
 
-/**
- * کارت تقویم اقتصادی روز.
- */
 final class CalendarJob extends Job
 {
     public const KEY = 'calendar';
@@ -41,7 +38,7 @@ final class CalendarJob extends Job
     {
         return [
             'headline'  => 'تقویم اقتصادی امروز',
-            'day_shift' => 0, // 0 = امروز، 1 = فردا
+            'day_shift' => 0,
         ];
     }
 

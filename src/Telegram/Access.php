@@ -6,9 +6,6 @@ namespace Nikto\Telegram;
 use Nikto\Core\Config;
 use Nikto\Core\Db;
 
-/**
- * مدیریت دسترسی ادمین‌ها.
- */
 final class Access
 {
     public static function isAdmin(int $userId): bool
@@ -44,7 +41,6 @@ final class Access
         Db::exec('DELETE FROM admins WHERE user_id = :u', [':u' => $userId]);
     }
 
-    /** @return array<int,array<string,mixed>> */
     public static function list(): array
     {
         $rows = Db::all('SELECT * FROM admins ORDER BY created_at');
@@ -56,7 +52,6 @@ final class Access
         return array_merge($configured, $rows);
     }
 
-    /** @return int[] همه‌ی ادمین‌ها برای اطلاع‌رسانی */
     public static function ids(): array
     {
         $ids = Config::admins();

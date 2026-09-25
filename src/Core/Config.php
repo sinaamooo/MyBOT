@@ -3,13 +3,8 @@ declare(strict_types=1);
 
 namespace Nikto\Core;
 
-/**
- * پیکربندی ثابت برنامه (فایل config.php یا متغیرهای محیطی).
- * مقادیر پویا (کانال‌ها، زمان‌بندی‌ها) در دیتابیس نگهداری می‌شوند، نه اینجا.
- */
 final class Config
 {
-    /** @var array<string,mixed> */
     private static array $data = [];
     private static bool $booted = false;
 
@@ -35,8 +30,6 @@ final class Config
             'webhook_secret' => '',
         ];
 
-        // config.php تنظیمات عمومی را دارد و در مخزن ذخیره می‌شود،
-        // config.local.php فقط مقادیر محرمانه (توکن) را دارد و در .gitignore است.
         $fromFile = self::readFile(APP_ROOT . '/config.php');
         $fromLocal = self::readFile(APP_ROOT . '/config.local.php');
 
@@ -60,7 +53,6 @@ final class Config
         self::$data['admins'] = array_values(array_unique(array_filter(array_map('intval', $admins))));
     }
 
-    /** @return array<string,mixed> */
     private static function readFile(string $path): array
     {
         if (!is_file($path)) {
@@ -88,13 +80,11 @@ final class Config
         return (string) self::get('bot_token', '');
     }
 
-    /** @return int[] */
     public static function admins(): array
     {
         return (array) self::get('admins', []);
     }
 
-    /** توکن واقعی BotFather شکل «عدد:رشته» دارد؛ متن نمونه پذیرفته نمی‌شود */
     public static function isConfigured(): bool
     {
         return preg_match('/^\d{5,}:[A-Za-z0-9_-]{30,}$/', self::token()) === 1;

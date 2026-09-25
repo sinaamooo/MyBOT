@@ -3,9 +3,6 @@ declare(strict_types=1);
 
 namespace Nikto\Core;
 
-/**
- * کلاینت HTTP ساده روی cURL با کش اختیاری و تلاش مجدد.
- */
 final class Http
 {
     public static function get(string $url, array $headers = [], int $timeout = 0, int $retries = 2): ?string
@@ -42,7 +39,7 @@ final class Http
             }
             $lastErr = $err !== '' ? $err : ('HTTP ' . $code);
             if ($code >= 400 && $code < 500 && $code !== 429) {
-                break; // خطای سمت درخواست؛ تلاش مجدد بی‌فایده است
+                break;
             }
         }
 
@@ -50,7 +47,6 @@ final class Http
         return null;
     }
 
-    /** @return array<mixed>|null */
     public static function getJson(string $url, array $headers = [], int $timeout = 0, int $retries = 2): ?array
     {
         $raw = self::get($url, $headers, $timeout, $retries);
@@ -65,7 +61,36 @@ final class Http
         return $data;
     }
 
-    /** دریافت JSON با کش کوتاه‌مدت در دیتابیس */
+    public static function remember(string $key, int $ttl, callable $produce): ?array
+    {
+        $row = Db::one('SELECT value, expires_at FROM cache WHERE key = :k', [':k' => $key]);
+        if ($row && (int) $row['expires_at'] > time()) {
+            $data = json_decode((string) $row['value'], true);
+            if (is_array($data)) {
+                return $data;
+            }
+        }
+
+        $data = $produce();
+        if (is_array($data) && $data !== []) {
+            Db::exec(
+                'INSERT INTO cache(key, value, expires_at) VALUES(:k, :v, :e)
+                 ON CONFLICT(key) DO UPDATE SET value = excluded.value, expires_at = excluded.expires_at',
+                [':k' => $key, ':v' => json_encode($data, JSON_UNESCAPED_UNICODE), ':e' => time() + $ttl]
+            );
+            return $data;
+        }
+        if ($row) {
+            $stale = json_decode((string) $row['value'], true);
+            if (is_array($stale)) {
+                Log::warn('Using stale cache', ['key' => $key]);
+                return $stale;
+            }
+        }
+
+        return null;
+    }
+
     public static function cachedJson(string $key, string $url, int $ttl, array $headers = []): ?array
     {
         $row = Db::one('SELECT value, expires_at FROM cache WHERE key = :k', [':k' => $key]);
@@ -84,7 +109,6 @@ final class Http
             );
             return $data;
         }
-        // اگر شبکه قطع بود، از کش منقضی‌شده استفاده کن (بهتر از هیچ)
         if ($row) {
             $stale = json_decode((string) $row['value'], true);
             if (is_array($stale)) {

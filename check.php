@@ -1,13 +1,4 @@
 <?php
-/**
- * عیب‌یابی از طریق مرورگر.
- *
- *   https://your-domain/nikto/check.php?key=<webhook_secret>
- *
- * این فایل عمداً با نحو قدیمی PHP نوشته شده تا روی نسخه‌های قدیمی هم
- * اجرا شود و بتواند پیام «نسخه PHP قدیمی است» را نشان دهد.
- */
-
 header('Content-Type: text/plain; charset=utf-8');
 
 if (version_compare(PHP_VERSION, '8.0.0', '<')) {

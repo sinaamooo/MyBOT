@@ -10,9 +10,6 @@ use Nikto\Render\Theme;
 use Nikto\Render\PriceCard;
 use Nikto\Text\Persian;
 
-/**
- * کارت نوسان ۲۴ ساعته‌ی ارزهای منتخب.
- */
 final class PricesJob extends Job
 {
     public const KEY = 'prices';
@@ -51,7 +48,6 @@ final class PricesJob extends Job
         return "📊 <b>نوسان ۲۴ ساعته بازار رمزارز</b>\n\n{summary}\n\n🗓 {date} — ⏰ {time}\n{link}";
     }
 
-    /** @return string[] */
     public function coins(): array
     {
         $raw = (string) $this->option('coins', Settings::get('coins'));

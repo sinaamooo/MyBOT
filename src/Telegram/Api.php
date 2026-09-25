@@ -7,9 +7,6 @@ use CURLFile;
 use Nikto\Core\Config;
 use Nikto\Core\Log;
 
-/**
- * کلاینت Bot API تلگرام.
- */
 class Api
 {
     private string $token;
@@ -26,10 +23,6 @@ class Api
         return trim($this->token) !== '';
     }
 
-    /**
-     * فراخوانی متد Bot API.
-     * @return array{ok:bool,result?:mixed,description?:string,error_code?:int}
-     */
     public function call(string $method, array $params = [], int $timeout = 60): array
     {
         if (!$this->hasToken()) {
@@ -56,7 +49,6 @@ class Api
 
         $body = $hasFile ? $params : http_build_query($params);
 
-        // اگر تلگرام «Too Many Requests» داد، به اندازه‌ی خواسته‌شده صبر و یک بار دوباره تلاش می‌کنیم
         for ($attempt = 0; ; $attempt++) {
             $ch = curl_init($this->base . $method);
             curl_setopt_array($ch, [
@@ -143,7 +135,6 @@ class Api
             'reply_markup' => $keyboard ? ['inline_keyboard' => $keyboard] : null,
         ]);
 
-        // اگر متن تغییری نکرده باشد تلگرام خطا می‌دهد — بی‌اهمیت است
         if (!($res['ok'] ?? false) && str_contains((string) ($res['description'] ?? ''), 'message is not modified')) {
             return ['ok' => true];
         }

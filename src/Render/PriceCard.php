@@ -5,15 +5,11 @@ namespace Nikto\Render;
 
 use Nikto\Data\PriceProvider;
 
-/**
- * کارت نوسان ۲۴ ساعته — کاشی‌های سفید با نوار رنگی بالا، پلاک درصد توپر و نمودار.
- */
 final class PriceCard extends Card
 {
     private const TILE_H = 240.0;
     private const GAP    = 18.0;
 
-    /** @var array<int,array<string,mixed>> */
     private array $coins;
     private string $title;
 
@@ -61,7 +57,6 @@ final class PriceCard extends Card
         return $c;
     }
 
-    /** شمارنده‌ی صعودی و نزولی در سربرگ */
     private function score(Canvas $c, Theme $t, float $x, float $y): void
     {
         $up = 0;
@@ -112,7 +107,6 @@ final class PriceCard extends Card
 
         Frame::panel($c, $t, $x, $y, $w, $h, $radius, ['border_alpha' => 0.14]);
 
-        // نوار رنگی روند روی لبه‌ی بالا
         $c->roundRect($x + $radius * 0.55, $y - 0.5, $w - $radius * 1.1, 5, 2.5, $trend, 1.0);
 
         $pad   = 18.0;
@@ -120,7 +114,6 @@ final class PriceCard extends Card
         $right = $x + $w - $pad;
         $inner = $w - $pad * 2;
 
-        // ── لوگو و نماد
         $logoSize = 38.0;
         $logoCx = $right - $logoSize / 2;
         $logoCy = $y + 20 + $logoSize / 2;
@@ -152,7 +145,6 @@ final class PriceCard extends Card
             'middle'
         );
 
-        // ── پلاک درصد (توپر، متن سفید)
         $pctText = $this->dnum(number_format(abs($pct), 2) . '%');
         $chipH = 28.0;
         $chipW = $c->textWidth($pctText, 13, Canvas::W_NUM_BOLD) + 38;
@@ -165,20 +157,16 @@ final class PriceCard extends Card
         }
         $c->text($pctText, $left + $chipW - 12, $chipCy, 13, '#FFFFFF', Canvas::W_NUM_BOLD, 'right', 1.0, 'num');
 
-        // ── قیمت
         $priceY = $y + 98;
         $price = '$' . PriceProvider::formatPrice((float) $coin['price']);
         $c->textFit($this->dnum($price), $right, $priceY, $inner * 0.80, 30, $t->c('ink'), Canvas::W_NUM_BOLD, 'right', 16, 1.0, 'num');
 
         $c->text('قیمت لحظه‌ای', $left, $priceY, 10, $t->c('ink_faint'), Canvas::W_MEDIUM, 'left', 1.0, 'middle');
 
-        // ── خط جداکننده
         $c->rect($left, $y + 124, $inner, 1, $t->c('line_soft'), 1.0);
 
-        // ── کمترین و بیشترین ۲۴ ساعت
         $this->range($c, $t, $coin, $left, $y + 134, $inner, $trend);
 
-        // ── نمودار
         $chartY = $y + 178;
         $chartH = $y + $h - 14 - $chartY;
         $spark = array_values(array_map('floatval', (array) ($coin['spark'] ?? [])));
@@ -188,14 +176,12 @@ final class PriceCard extends Card
         }
     }
 
-    /** ردیف کمترین/بیشترین با مقدار واقعی و نوار جایگاه قیمت */
     private function range(Canvas $c, Theme $t, array $coin, float $x, float $y, float $w, string $trend): void
     {
         $low = (float) ($coin['low'] ?? 0);
         $high = (float) ($coin['high'] ?? 0);
         $price = (float) $coin['price'];
 
-        // ردیف عنوان و ردیف عدد هر کدام روی یک خط پایه‌ی مشترک
         $labelY = $y + 8;
         $valueY = $y + 28;
 
@@ -233,8 +219,6 @@ final class PriceCard extends Card
             return;
         }
 
-        // نوار جایگاه قیمت بین کف و سقف
-        // نوار درست وسط دو ردیف
         $barY = ($labelY + $valueY) / 2 - 2.5;
         $barX = $x + $w * 0.32;
         $barW = $w * 0.36;
@@ -261,7 +245,6 @@ final class PriceCard extends Card
             ];
         }
 
-        // خط پایه‌ی کم‌رنگ
         $c->dashedLine($x, $y + $h / 2, $x + $w, $y + $h / 2, $t->c('line_soft'), 1, 5, 5, 0.9);
 
         $c->areaGradient($points, $x, $y, $w, $h, $color, 0.22);

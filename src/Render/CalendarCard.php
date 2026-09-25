@@ -5,9 +5,6 @@ namespace Nikto\Render;
 
 use Nikto\Data\Countries;
 
-/**
- * کارت تقویم اقتصادی — یک جدول سفید با حاشیه‌ی مشکی و ردیف‌های یک‌درمیان.
- */
 final class CalendarCard extends Card
 {
     private const ROW_H     = 50.0;
@@ -15,7 +12,6 @@ final class CalendarCard extends Card
     private const MAX_ROWS  = 18;
     private const TABLE_PAD = 8.0;
 
-    /** @var array<int,array<string,mixed>> */
     private array $rows;
     private string $title;
 
@@ -67,7 +63,6 @@ final class CalendarCard extends Card
             return $c;
         }
 
-        // جدول یکپارچه
         Frame::panel($c, $t, $rect['x'], $top, $rect['w'], $tableH, 18, ['border_alpha' => 0.55, 'border_w' => 1.8]);
 
         $cols = $this->columns($rect['x'], $rect['w']);
@@ -100,29 +95,23 @@ final class CalendarCard extends Card
         return $c;
     }
 
-    /**
-     * جای هر ستون (از راست به چپ).
-     *
-     * @return array<string,float>
-     */
     private function columns(float $x, float $w): array
     {
         $right = $x + $w;
 
         return [
-            'time'      => $right - 60,        // مرکز پلاک ساعت
-            'flag'      => $right - 118,       // مرکز پرچم
-            'currency'  => $right - 140,       // راست نام ارز
-            'impact'    => $right - 200,       // مرکز میله‌های اهمیت
-            'mic'       => $right - 232,       // مرکز آیکون سخنرانی
-            'title'     => $right - 256,       // راست متن شرح
-            'forecast'  => $x + 152,           // مرکز خانه‌ی پیش‌بینی
-            'previous'  => $x + 58,            // مرکز خانه‌ی قبلی
-            'head_cur'  => $right - 138,       // عنوان ستون ارز
+            'time'      => $right - 60,
+            'flag'      => $right - 118,
+            'currency'  => $right - 140,
+            'impact'    => $right - 200,
+            'mic'       => $right - 232,
+            'title'     => $right - 256,
+            'forecast'  => $x + 152,
+            'previous'  => $x + 58,
+            'head_cur'  => $right - 138,
         ];
     }
 
-    /** ردیف عنوان ستون‌ها */
     private function headRow(Canvas $c, Theme $t, float $x, float $y, float $w, array $cols): float
     {
         $inner = $w - self::TABLE_PAD * 2;
@@ -154,7 +143,6 @@ final class CalendarCard extends Card
         $accent = $this->impactColor($t, $impact, $isHoliday);
         $mid = $y + self::ROW_H / 2;
 
-        // ردیف‌های یک‌درمیان
         if ($index % 2 === 1) {
             $c->roundRect($x, $y, $w, self::ROW_H, 8, $t->c('surface_alt'), 0.75);
         }
@@ -162,12 +150,10 @@ final class CalendarCard extends Card
             $c->rect($x + 6, $y, $w - 12, 1, $t->c('line_soft'), 1.0);
         }
 
-        // نوار اهمیت در لبه‌ی راست ردیف
         if ($impact >= 3 && !$isHoliday) {
             $c->roundRect($x + $w - 12, $y + 11, 4, self::ROW_H - 22, 2, $accent, 1.0);
         }
 
-        // ── پلاک ساعت
         $timeText = $isHoliday && (string) $row['time'] === '' ? 'تعطیل' : (string) $row['time'];
         $hasTime = (string) $row['time'] !== '';
         $badgeW = 60.0;
@@ -190,7 +176,6 @@ final class CalendarCard extends Card
             $hasTime ? 'num' : 'ink'
         );
 
-        // ── پرچم و ارز
         Flags::draw($c, Countries::code((string) $row['currency']), $cols['flag'] - 13, $mid - 9, 26, 18);
         $c->text(
             (string) $row['currency'],
@@ -204,7 +189,6 @@ final class CalendarCard extends Card
             'num'
         );
 
-        // ── اهمیت و آیکون سخنرانی
         if ($isHoliday) {
             $c->text('—', $cols['impact'], $mid, 11, $t->c('ink_faint'), Canvas::W_BOLD, 'center', 1.0, 'ink');
         } else {
@@ -214,13 +198,11 @@ final class CalendarCard extends Card
             $this->micIcon($c, $t, $cols['mic'], $mid);
         }
 
-        // ── مقدارها
         $forecast = (string) ($row['forecast'] ?? '');
         $previous = (string) ($row['previous'] ?? '');
         $this->stat($c, $t, $cols['forecast'], $mid, 88, $forecast, $this->statColor($t, $forecast, $previous));
         $this->stat($c, $t, $cols['previous'], $mid, 84, $previous, $t->c('ink_dim'));
 
-        // ── شرح رویداد
         $titleLeft = $cols['forecast'] + 56;
         $text = (string) ($row['title_fa'] !== '' ? $row['title_fa'] : $row['title_en']);
         $c->textFit(
@@ -238,7 +220,6 @@ final class CalendarCard extends Card
         );
     }
 
-    /** سبز اگر پیش‌بینی بالاتر از قبلی باشد، قرمز اگر پایین‌تر */
     private function statColor(Theme $t, string $forecast, string $previous): string
     {
         if ($forecast === '') {
@@ -253,7 +234,6 @@ final class CalendarCard extends Card
         return $f > $p ? $t->c('up') : $t->c('down');
     }
 
-    /** «1.2B»، «-900M»، «3.4%» → عدد قابل مقایسه (واحدهای K/M/B/T لحاظ می‌شوند) */
     private function numeric(string $value): ?float
     {
         if (preg_match('/(-?\d+(?:\.\d+)?)\s*([KMBT])?/i', str_replace(',', '', $value), $m) !== 1) {
@@ -264,7 +244,6 @@ final class CalendarCard extends Card
         return (float) $m[1] * $scale;
     }
 
-    /** خانه‌ی مقدار */
     private function stat(Canvas $c, Theme $t, float $cx, float $mid, float $w, string $value, string $color): void
     {
         $c->textFit(
@@ -289,13 +268,12 @@ final class CalendarCard extends Card
         }
 
         return match ($impact) {
-            3       => $t->c('down'),      // اهمیت زیاد — قرمز
-            2       => $t->c('line'),      // اهمیت متوسط — مشکی
+            3       => $t->c('down'),
+            2       => $t->c('line'),
             default => $t->c('ink_faint'),
         };
     }
 
-    /** سه میله‌ی اهمیت */
     private function impactIcon(Canvas $c, Theme $t, float $cx, float $cy, int $impact): void
     {
         $color = $this->impactColor($t, $impact, false);

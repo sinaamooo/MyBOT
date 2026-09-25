@@ -8,18 +8,10 @@ use Nikto\Core\Db;
 use Nikto\Core\Log;
 use Nikto\Core\Settings;
 
-/**
- * زمان‌بند دقیقه‌ای: هر دقیقه بررسی می‌کند کدام کار باید اجرا شود.
- */
 final class Scheduler
 {
-    /** اگر ارسال کلاً ناموفق شود (مثلاً قطعی لحظه‌ای اینترنت) چند بار دوباره تلاش شود */
     public const MAX_ATTEMPTS = 3;
 
-    /**
-     * یک تیک زمان‌بند.
-     * @return array<int,array{job:string,slot:string,result:array}>
-     */
     public static function tick(?DateTimeImmutable $now = null): array
     {
         $now ??= Settings::now();
@@ -29,13 +21,11 @@ final class Scheduler
         foreach (self::due($now, $catchup) as $due) {
             $attempt = self::claim($due['job_key'], $due['slot']);
             if ($attempt === 0) {
-                continue; // قبلاً ارسال شده یا در حال ارسال است
+                continue;
             }
             Log::info('Scheduler firing job', ['job' => $due['job_key'], 'slot' => $due['slot'], 'attempt' => $attempt]);
             $result = Dispatcher::run($due['job_key'], ['slot' => $due['slot']]);
 
-            // هیچ پیامی نرفته و خطا گذرا بوده: دقیقه‌ی بعد دوباره امتحان می‌شود.
-            // ارسال ناقص (به بعضی کانال‌ها رفته) هرگز تکرار نمی‌شود تا پست دوبار نرود.
             if (($result['retry'] ?? false) && (int) ($result['sent'] ?? 0) === 0 && $attempt < self::MAX_ATTEMPTS) {
                 self::release($due['job_key'], $due['slot'], $attempt);
                 Log::warn('Job will retry', ['job' => $due['job_key'], 'slot' => $due['slot'], 'attempt' => $attempt]);
@@ -46,10 +36,6 @@ final class Scheduler
         return $results;
     }
 
-    /**
-     * زمان‌بندی‌های سررسیدشده.
-     * @return array<int,array{job_key:string,slot:string,at_time:string}>
-     */
     public static function due(DateTimeImmutable $now, int $catchupMinutes = 10): array
     {
         $out = [];
@@ -66,8 +52,6 @@ final class Scheduler
                 continue;
             }
 
-            // اسلات امروز، و اسلات دیروز برای زمان‌های نزدیک نیمه‌شب (مثلاً ۲۳:۵۸ که
-            // سرور تا ۰۰:۰۲ خواب بوده)
             foreach ([$now, $now->modify('-1 day')] as $day) {
                 if (!self::matchesDay((string) $row['days'], $day)) {
                     continue;
@@ -88,11 +72,6 @@ final class Scheduler
         return $out;
     }
 
-    /**
-     * رزرو اتمیک یک اسلات تا از ارسال تکراری جلوگیری شود.
-     *
-     * @return int شماره‌ی تلاش (۱ برای بار اول)، یا ۰ اگر اسلات مال کس دیگری است
-     */
     private static function claim(string $jobKey, string $slot): int
     {
         $affected = Db::exec(
@@ -104,8 +83,6 @@ final class Scheduler
             return 1;
         }
 
-        // اسلاتی که برای تلاش دوباره آزاد شده: با مقایسه‌ی وضعیت قبلی برداشته
-        // می‌شود تا دو پردازش هم‌زمان هر دو آن را نگیرند.
         $row = Db::one('SELECT status FROM runs WHERE job_key = :j AND slot = :s', [':j' => $jobKey, ':s' => $slot]);
         $status = (string) ($row['status'] ?? '');
         if (!preg_match('/^retry:(\d+)$/', $status, $m)) {
@@ -119,7 +96,6 @@ final class Scheduler
         return $taken > 0 ? (int) $m[1] + 1 : 0;
     }
 
-    /** آزاد کردن اسلات برای تلاش دوباره در تیک بعدی */
     private static function release(string $jobKey, string $slot, int $attempt): void
     {
         Db::exec(
@@ -128,7 +104,6 @@ final class Scheduler
         );
     }
 
-    /** آیا این زمان‌بندی امروز اجرا می‌شود؟ (days: '*' یا فهرست 1..7 با 1=دوشنبه) */
     public static function matchesDay(string $days, DateTimeImmutable $now): bool
     {
         $days = trim($days);
@@ -141,7 +116,6 @@ final class Scheduler
         return in_array($today, $list, true);
     }
 
-    /** زمان اجرای بعدی یک کار */
     public static function nextRun(string $jobKey, ?DateTimeImmutable $now = null): ?DateTimeImmutable
     {
         $now ??= Settings::now();

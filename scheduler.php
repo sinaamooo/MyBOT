@@ -1,13 +1,4 @@
 <?php
-/**
- * NIKTO CRYPTO BOT — زمان‌بند ارسال کارت‌ها
- *
- *   php scheduler.php            اجرای دائمی (هر دقیقه بررسی می‌کند)
- *   php scheduler.php --once     فقط یک بار بررسی می‌کند (مناسب cron)
- *
- * نمونه‌ی cron:
- *   * * * * * /usr/bin/php /path/to/MyBOT/scheduler.php --once >> /dev/null 2>&1
- */
 declare(strict_types=1);
 
 require __DIR__ . '/src/bootstrap.php';
@@ -71,7 +62,6 @@ Log::info('Scheduler started');
 
 while ($running) {
     $tick();
-    // تا ابتدای دقیقه‌ی بعد صبر کن تا ارسال‌ها دقیقاً سر وقت انجام شوند
     $sleep = 60 - (int) date('s');
     for ($i = 0; $i < $sleep && $running; $i++) {
         sleep(1);

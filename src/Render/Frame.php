@@ -3,20 +3,12 @@ declare(strict_types=1);
 
 namespace Nikto\Render;
 
-/**
- * قاب و پس‌زمینه‌ی کارت‌ها — کاغذ سفید با حاشیه‌ی مشکی و تأکید سبز/قرمز.
- */
 final class Frame
 {
     public const HEADER_H = 84.0;
 
-    /** ضخامت حاشیه‌ی بیرونی */
     private const BORDER_W = 2.4;
 
-    /**
-     * @param array{footer?:string,margin?:float} $options
-     * @return array{x:float,y:float,w:float,h:float}
-     */
     public static function draw(Canvas $c, Theme $t, array $options = []): array
     {
         $margin = (float) ($options['margin'] ?? 18);
@@ -47,14 +39,12 @@ final class Frame
 
         $c->gradient(0, 0, $w, $h, $t->c('bg_from'), $t->c('bg_to'), 'v');
 
-        // دو لکه‌ی رنگی بسیار ملایم؛ کاغذ سفید می‌ماند اما مرده نیست
         $c->radialGlow($w * 0.86, -$h * 0.06, $w * 0.44, $t->c('glow'), 0.07);
         $c->radialGlow($w * 0.08, $h * 1.04, $w * 0.40, $t->c('glow_alt'), 0.055);
 
         self::texture($c, $t);
     }
 
-    /** بافت نقطه‌چین بسیار محو روی کاغذ */
     private static function texture(Canvas $c, Theme $t): void
     {
         $w = $c->width();
@@ -77,12 +67,9 @@ final class Frame
         $bh = $h - $margin * 2;
         $r = 28.0;
 
-        // حاشیه‌ی مشکی اصلی
         $c->strokeRoundRect($margin, $margin, $bw, $bh, $r, $t->c('line'), self::BORDER_W, 0.92);
-        // خط داخلی نازک برای عمق
         $c->strokeRoundRect($margin + 5, $margin + 5, $bw - 10, $bh - 10, $r - 5, $t->c('line_soft'), 1, 0.85);
 
-        // سه قطعه‌ی رنگی روی لبه‌ی بالا: سبز، مشکی، قرمز
         $segY = $margin + self::BORDER_W / 2;
         $segW = $bw * 0.085;
         $x0 = $margin + $bw * 0.5 - ($segW * 3 + 12) / 2;
@@ -102,11 +89,6 @@ final class Frame
         $c->text($text, $cx, $y, 10.5, $t->c('ink_faint'), Canvas::W_SEMIBOLD, 'center', 1.0, 'middle', 2.0);
     }
 
-    /**
-     * سربرگ کارت: عنوان راست، تاریخ زیرش، و یک ویجت دلخواه در سمت چپ.
-     *
-     * @param callable(float,float):void|null $left ویجت سمت چپ (x و y بالای آن)
-     */
     public static function header(
         Canvas $c,
         Theme $t,
@@ -120,7 +102,6 @@ final class Frame
         $w = $rect['w'];
         $y = $rect['y'];
 
-        // میله‌ی مشکی کنار عنوان
         $c->roundRect($x + $w - 5, $y + 1, 5, 26, 2.5, $t->c('line'), 1.0);
         $c->text($title, $x + $w - 17, $y + 14, 19, $t->c('ink'), Canvas::W_BLACK, 'right', 1.0, 'middle');
 
@@ -142,7 +123,6 @@ final class Frame
         return $lineY + 18;
     }
 
-    /** برچسب مستطیلی با حاشیه‌ی مشکی */
     public static function tagBadge(Canvas $c, Theme $t, string $text, float $x, float $y, float $size = 10.5): float
     {
         $w = $c->textWidth($text, $size, Canvas::W_SEMIBOLD) + 26;
@@ -155,11 +135,6 @@ final class Frame
         return $w;
     }
 
-    /**
-     * جعبه‌ی سفید کارت: سایه‌ی ملایم، پرکننده‌ی سفید و حاشیه‌ی مشکی نازک.
-     *
-     * @param array{fill?:string,radius?:float,border?:string,border_alpha?:float,border_w?:float,shadow?:bool} $o
-     */
     public static function panel(Canvas $c, Theme $t, float $x, float $y, float $w, float $h, float $radius = 18, array $o = []): void
     {
         $fill        = (string) ($o['fill'] ?? $t->c('surface'));
@@ -176,7 +151,6 @@ final class Frame
         }
     }
 
-    /** برچسب رنگی کوچک (پر یا تو‌خالی) */
     public static function chip(
         Canvas $c,
         Theme $t,

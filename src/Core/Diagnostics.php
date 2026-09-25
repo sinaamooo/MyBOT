@@ -8,12 +8,8 @@ use Nikto\Jobs\Scheduler;
 use Nikto\Telegram\Api;
 use Nikto\Telegram\Channels;
 
-/**
- * عیب‌یابی نصب — هم از خط فرمان و هم از مرورگر قابل اجراست.
- */
 final class Diagnostics
 {
-    /** @return array<int,array{ok:bool|null,label:string,detail:string}> */
     public static function run(): array
     {
         $out = [];
@@ -21,7 +17,6 @@ final class Diagnostics
             $out[] = ['ok' => $ok, 'label' => $label, 'detail' => $detail];
         };
 
-        // ── محیط
         $phpOk = version_compare(PHP_VERSION, '8.0.0', '>=');
         $add($phpOk, 'نسخه PHP', PHP_VERSION . ($phpOk ? '' : ' — حداقل ۸.۰ لازم است'));
 
@@ -34,7 +29,6 @@ final class Diagnostics
         $limit = (string) ini_get('memory_limit');
         $add(null, 'حافظه PHP', $limit);
 
-        // ── دسترسی نوشتن
         foreach ([APP_DATA => 'پوشه data', APP_STORAGE . '/cards' => 'پوشه storage/cards'] as $dir => $label) {
             if (!is_dir($dir)) {
                 @mkdir($dir, 0775, true);
@@ -43,7 +37,6 @@ final class Diagnostics
             $add($writable, $label, $writable ? 'قابل نوشتن' : 'قابل نوشتن نیست — دسترسی 755 یا 775 بدهید');
         }
 
-        // ── پیکربندی
         $token = Config::token();
         $validToken = Config::isConfigured();
         $add($validToken, 'توکن ربات', $validToken ? self::mask($token) : ($token === '' ? 'تنظیم نشده' : 'نامعتبر — توکن را از BotFather کپی کنید'));
@@ -55,7 +48,6 @@ final class Diagnostics
             $add(null, 'آدرس واقعی این فایل', $current);
         }
 
-        // ── دیتابیس
         try {
             Db::migrate();
             Registry::all();
@@ -65,13 +57,11 @@ final class Diagnostics
             $add(false, 'دیتابیس', 'خطا: ' . $e->getMessage());
         }
 
-        // ── فونت و لوگو
         $fonts = count(glob(APP_ASSETS . '/fonts/*.ttf') ?: []);
         $logos = count(glob(APP_ASSETS . '/coins/color/*.png') ?: []);
         $add($fonts > 0, 'فونت‌ها', $fonts . ' فایل');
         $add($logos > 0, 'لوگوی ارزها', $logos . ' فایل');
 
-        // ── تلگرام (با توکن نامعتبر تماس گرفتن بی‌معناست)
         if (!$validToken) {
             return $out;
         }

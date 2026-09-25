@@ -6,12 +6,8 @@ namespace Nikto\Telegram;
 use Nikto\Core\Config;
 use Nikto\Core\Db;
 
-/**
- * مدیریت کانال‌های مقصد.
- */
 final class Channels
 {
-    /** @return array<int,array<string,mixed>> */
     public static function all(bool $onlyActive = false): array
     {
         $sql = 'SELECT * FROM channels' . ($onlyActive ? ' WHERE active = 1' : '') . ' ORDER BY id';
@@ -35,10 +31,6 @@ final class Channels
         Db::exec('DELETE FROM channels WHERE id = :i', [':i' => $id]);
     }
 
-    /**
-     * افزودن کانال با بررسی دسترسی ربات.
-     * @return array{ok:bool,message:string,channel?:array<string,mixed>}
-     */
     public static function add(Api $api, string $raw): array
     {
         $raw = trim($raw);
@@ -103,7 +95,6 @@ final class Channels
         ];
     }
 
-    /** بررسی دسترسی ربات به همه‌ی کانال‌ها */
     public static function check(Api $api): array
     {
         $botId = (int) Config::get('bot_id', 0);

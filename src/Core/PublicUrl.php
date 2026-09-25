@@ -3,9 +3,6 @@ declare(strict_types=1);
 
 namespace Nikto\Core;
 
-/**
- * تشخیص آدرس عمومی فایل جاری (برای نمایش آدرس درست وب‌هوک).
- */
 final class PublicUrl
 {
     public static function current(): string
@@ -25,7 +22,6 @@ final class PublicUrl
         return ($https ? 'https' : 'http') . '://' . $host . $path;
     }
 
-    /** صفحه‌ی وضعیت ساده برای درخواست‌های GET */
     public static function statusPage(string $version = '', string $registerHint = ''): string
     {
         $url = self::current();

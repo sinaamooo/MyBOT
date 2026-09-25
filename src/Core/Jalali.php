@@ -3,9 +3,6 @@ declare(strict_types=1);
 
 namespace Nikto\Core;
 
-/**
- * تبدیل تاریخ میلادی به شمسی (الگوریتم استاندارد jdn).
- */
 final class Jalali
 {
     public const MONTHS = [
@@ -18,7 +15,6 @@ final class Jalali
         4 => 'پنجشنبه', 5 => 'جمعه', 6 => 'شنبه',
     ];
 
-    /** @return array{0:int,1:int,2:int} [سال, ماه, روز] */
     public static function fromGregorian(int $gy, int $gm, int $gd): array
     {
         $jdn = self::gregorianToJdn($gy, $gm, $gd);
@@ -69,7 +65,6 @@ final class Jalali
         return $d;
     }
 
-    /** @return array{0:int,1:int,2:int} */
     private static function jdnToJalali(int $jdn): array
     {
         $gy = self::jdnToGregorianYear($jdn);
@@ -104,7 +99,6 @@ final class Jalali
         return (int) ($j / 1461) - 100100 + (int) ((8 - $i / 25) / 100);
     }
 
-    /** ژولیَن روز اول فروردین سال شمسی داده‌شده */
     private static function firstMarchJdn(int $jy): int
     {
         $breaks = [-61, 9, 38, 199, 426, 686, 756, 818, 1111, 1181, 1210,

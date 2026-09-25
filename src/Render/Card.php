@@ -8,9 +8,6 @@ use Nikto\Core\Jalali;
 use Nikto\Core\Settings;
 use Nikto\Text\Persian;
 
-/**
- * کلاس پایه‌ی کارت‌ها: تم، برند، تاریخ و کمک‌کننده‌های عددی.
- */
 abstract class Card
 {
     protected Theme $theme;
@@ -27,22 +24,16 @@ abstract class Card
         [$this->quality, $this->outputScale] = self::qualityProfile();
     }
 
-    /**
-     * انتخاب کیفیت رندر بر اساس تنظیمات و حافظه‌ی در دسترس.
-     *
-     * @return array{0:int,1:float} [ضریب سوپرسمپلینگ, ضریب خروجی]
-     */
     protected static function qualityProfile(): array
     {
         $profiles = [
-            'normal' => [2, 1.5],   // ۱۸۰۰ پیکسل
-            'high'   => [3, 2.5],   // ۳۰۰۰ پیکسل — پیش‌فرض
-            'ultra'  => [4, 3.0],   // ۳۶۰۰ پیکسل
+            'normal' => [2, 1.5],
+            'high'   => [3, 2.5],
+            'ultra'  => [4, 3.0],
         ];
         $key = Settings::get('quality');
         [$scale, $output] = $profiles[$key] ?? $profiles['high'];
 
-        // اگر حافظه‌ی PHP کم باشد، خودکار یک پله پایین می‌آید
         $limit = self::memoryLimitBytes();
         if ($limit > 0) {
             while ($scale > 2 && (1200 * $scale) * (900 * $scale) * 5 > $limit) {
@@ -57,7 +48,7 @@ abstract class Card
     {
         $raw = trim((string) ini_get('memory_limit'));
         if ($raw === '' || $raw === '-1') {
-            return 0; // بدون محدودیت
+            return 0;
         }
         $unit = strtolower(substr($raw, -1));
         $value = (int) $raw;
@@ -90,13 +81,11 @@ abstract class Card
         return strtolower(preg_replace('/([a-z])([A-Z])/', '$1-$2', end($parts)) ?? 'card');
     }
 
-    /** ارقام متن و تاریخ */
     protected function tnum(string $text): string
     {
         return Settings::get('digits') === 'fa' ? Persian::faDigits($text) : Persian::enDigits($text);
     }
 
-    /** ارقام داده (قیمت، درصد، مقادیر جدول) */
     protected function dnum(string $text): string
     {
         return Settings::get('digits_data') === 'fa' ? Persian::faDigits($text) : Persian::enDigits($text);

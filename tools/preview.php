@@ -1,11 +1,4 @@
 <?php
-/**
- * ساخت پیش‌نمایش کارت‌ها روی دیسک (بدون ارسال به تلگرام)
- *
- *   php tools/preview.php                       هر سه کارت با داده‌ی واقعی
- *   php tools/preview.php --mock                با داده‌ی نمونه (بدون اینترنت)
- *   php tools/preview.php --job=prices --theme=mint --out=/tmp
- */
 declare(strict_types=1);
 
 require dirname(__DIR__) . '/src/bootstrap.php';

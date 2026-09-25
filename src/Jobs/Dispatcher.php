@@ -8,14 +8,10 @@ use Nikto\Core\Log;
 use Nikto\Core\Settings;
 use Nikto\Telegram\Api;
 
-/**
- * اجرای یک کار: دریافت داده ← ساخت کارت ← ارسال به کانال‌ها.
- */
 final class Dispatcher
 {
     private static ?Api $api = null;
 
-    /** تزریق کلاینت تلگرام (برای تست یا استفاده‌ی مجدد از یک نمونه) */
     public static function setApi(?Api $api): void
     {
         self::$api = $api;
@@ -26,10 +22,6 @@ final class Dispatcher
         return self::$api ??= new Api();
     }
 
-    /**
-     * @param array{chat_ids?:array<int,int|string>,slot?:string,silent?:bool} $options
-     * @return array{ok:bool,message:string,sent:int,failed:int,path?:string}
-     */
     public static function run(string $jobKey, array $options = []): array
     {
         $job = Registry::refresh($jobKey);
@@ -112,12 +104,10 @@ final class Dispatcher
             'sent'    => $sent,
             'failed'  => $failed,
             'path'    => $path,
-            // هیچ کانالی دریافت نکرد: احتمالاً قطعی گذرای تلگرام یا شبکه
             'retry'   => $sent === 0 && $failed > 0,
         ];
     }
 
-    /** ساخت کارت بدون ارسال (برای پیش‌نمایش) */
     public static function build(string $jobKey): array
     {
         $job = Registry::refresh($jobKey);
@@ -139,7 +129,6 @@ final class Dispatcher
         }
     }
 
-    /** یک بار ارسال به یک کانال */
     private static function deliver(
         Api $api,
         int|string $chatId,
@@ -155,7 +144,6 @@ final class Dispatcher
             : $api->sendPhoto($chatId, $path, $caption, $extra);
     }
 
-    /** @param bool $retry خطای گذرا (اینترنت/سرویس) که ارزش تلاش دوباره دارد */
     private static function fail(string $jobKey, array $options, string $message, bool $retry = false): array
     {
         self::record($jobKey, $options['slot'] ?? null, 'error', $message);
@@ -174,7 +162,6 @@ final class Dispatcher
         );
     }
 
-    /** پاک‌سازی تصاویر قدیمی */
     private static function cleanup(int $keepHours = 48): void
     {
         $dir = APP_STORAGE . '/cards';

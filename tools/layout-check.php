@@ -1,9 +1,4 @@
 <?php
-/**
- * بازرسی چیدمان کارت‌ها: هیچ متنی نباید روی متن دیگر بیفتد یا از قاب بیرون بزند.
- *
- *   php tools/layout-check.php
- */
 declare(strict_types=1);
 
 require dirname(__DIR__) . '/src/bootstrap.php';
@@ -11,16 +6,19 @@ require dirname(__DIR__) . '/src/bootstrap.php';
 use Nikto\Core\Settings;
 use Nikto\Data\CalendarProvider;
 use Nikto\Data\FearGreedProvider;
+use Nikto\Data\FuturesProvider;
+use Nikto\Data\LiquidityProvider;
 use Nikto\Data\Mock;
 use Nikto\Data\PriceProvider;
 use Nikto\Render\CalendarCard;
 use Nikto\Render\Canvas;
 use Nikto\Render\FearGreedCard;
+use Nikto\Render\LiquidityCard;
+use Nikto\Render\MoversCard;
 use Nikto\Render\PriceCard;
 
 Mock::enable();
 
-/** @return array<string,callable():Canvas> */
 $cards = [
     'قیمت‌ها (۶ ارز)' => function (): Canvas {
         $coins = PriceProvider::fetch(['BTC', 'ETH', 'XRP', 'BNB', 'SOL', 'TRX']);
@@ -69,23 +67,36 @@ $cards = [
 
         return (new CalendarCard($rows))->render();
     },
+    'فیوچرز (برترین‌ها)' => fn (): Canvas => (new MoversCard(FuturesProvider::movers(5, 5e6)))->render(),
+    'فیوچرز (بازار کوچک)' => function (): Canvas {
+        $tickers = array_slice(Mock::futuresTickers(), 0, 6);
+        $data = FuturesProvider::rank($tickers, null, 5, 0);
+
+        return (new MoversCard($data))->render();
+    },
+    'نقدینگی بیت‌کوین' => fn (): Canvas => (new LiquidityCard(LiquidityProvider::btc(5)))->render(),
+    'نقدینگی (دیوارهای فشرده)' => function (): Canvas {
+        $data = LiquidityProvider::btc(5);
+        foreach ($data['ask_walls'] as $i => $w) {
+            $data['ask_walls'][$i]['price'] = Mock::BTC_MID + 60 + $i * 70;
+        }
+        foreach ($data['bid_walls'] as $i => $w) {
+            $data['bid_walls'][$i]['price'] = Mock::BTC_MID - 60 - $i * 70;
+        }
+
+        return (new LiquidityCard($data))->render();
+    },
 ];
 
-/** بلندترین کادری که متنش باید دقیقاً وسط باشد (قرص، برچسب، پلاک) */
 const CENTER_MAX_H = 44.0;
-/** بیشترین جابه‌جایی مجاز از وسط (پیکسل منطقی؛ در خروجی ×۲٫۵) */
 const CENTER_TOLERANCE = 0.8;
-/** کمترین فاصله‌ی متن از لبه‌ی کادر */
 const MIN_SIDE_PAD = 5.0;
-/** بیشترین اختلاف خط پایه‌ی متن‌های هم‌ردیف */
 const BASELINE_TOLERANCE = 0.8;
-/** کمترین فاصله‌ی دو متنِ زیر هم */
 const MIN_STACK_GAP = 5.0;
 
 $problems = 0;
 echo "\n🔍 بازرسی چیدمان کارت‌ها\n" . str_repeat('─', 52) . "\n";
 
-// هر سناریو یک بار با ارقام لاتین و یک بار با ارقام فارسی بررسی می‌شود
 $digitsBefore = Settings::get('digits_data');
 $runs = [];
 foreach (['en' => '', 'fa' => ' [ارقام فارسی]'] as $digits => $suffix) {
@@ -111,20 +122,17 @@ foreach ($runs as $name => [$digits, $factory]) {
     $height = $canvas->height();
     $issues = [];
 
-    // ۱) بیرون‌زدگی از کارت
     foreach ($boxes as $b) {
         if ($b['x'] < -1 || $b['y'] < -1 || $b['x'] + $b['w'] > $width + 1 || $b['y'] + $b['h'] > $height + 1) {
             $issues[] = sprintf('«%s» بیرون از کارت (%.0f,%.0f)', $b['text'], $b['x'], $b['y']);
         }
     }
 
-    // ۲) هم‌پوشانی متن‌ها
     $count = count($boxes);
     for ($i = 0; $i < $count; $i++) {
         for ($j = $i + 1; $j < $count; $j++) {
             $a = $boxes[$i];
             $b = $boxes[$j];
-            // کمی رواداری برای دنباله‌ی حروف فارسی
             $pad = 1.5;
             $ox = min($a['x'] + $a['w'], $b['x'] + $b['w']) - max($a['x'], $b['x']) - $pad;
             $oy = min($a['y'] + $a['h'], $b['y'] + $b['h']) - max($a['y'], $b['y']) - $pad;
@@ -144,7 +152,6 @@ foreach ($runs as $name => [$digits, $factory]) {
         }
     }
 
-    // کوچک‌ترین کادری که هر متن داخلش نشسته
     $holders = [];
     foreach ($boxes as $k => $b) {
         [$ix0, $iy0, $ix1, $iy1] = $b['ink'];
@@ -160,14 +167,12 @@ foreach ($runs as $name => [$digits, $factory]) {
     }
     $inPill = static fn (int $k): bool => $holders[$k] !== null && $shapes[$holders[$k]]['h'] <= CENTER_MAX_H;
 
-    // ۳) متن داخل قرص/برچسب/کادر کوچک باید دقیقاً وسط باشد (نه بالا، نه پایین)
     foreach ($boxes as $k => $b) {
         [$ix0, $iy0, $ix1, $iy1] = $b['ink'];
         $holder = $holders[$k] === null ? null : $shapes[$holders[$k]];
         if ($holder === null || $holder['h'] > CENTER_MAX_H) {
             continue;
         }
-        // مرکزی که چشم می‌بیند (بدنه‌ی ارقام برای عددها، جوهر برای نوشته‌ی تنها)
         $offset = $b['optical'] - ($holder['y'] + $holder['h'] / 2);
         if (abs($offset) > CENTER_TOLERANCE) {
             $issues[] = sprintf(
@@ -183,7 +188,6 @@ foreach ($runs as $name => [$digits, $factory]) {
         }
     }
 
-    // ۴) دو متنِ روی هم (عنوان و عدد) باید فاصله‌ی واقعی داشته باشند
     for ($i = 0; $i < $count; $i++) {
         for ($j = 0; $j < $count; $j++) {
             if ($i === $j) {
@@ -193,9 +197,9 @@ foreach ($runs as $name => [$digits, $factory]) {
             [$bx0, $by0, $bx1, $by1] = $boxes[$j]['ink'];
             $overlapX = min($ax1, $bx1) - max($ax0, $bx0);
             if ($overlapX < 0.3 * min($ax1 - $ax0, $bx1 - $bx0)) {
-                continue; // روی هم نیستند
+                continue;
             }
-            $gap = $by0 - $ay1; // j زیر i
+            $gap = $by0 - $ay1;
             if ($gap >= 0 && $gap < MIN_STACK_GAP) {
                 $issues[] = sprintf(
                     '«%s» و «%s» زیر هم خیلی نزدیک‌اند (%.1f پیکسل)',
@@ -207,8 +211,6 @@ foreach ($runs as $name => [$digits, $factory]) {
         }
     }
 
-    // ۵) متن‌های هم‌اندازه و هم‌وزن در یک ردیف باید دقیقاً روی یک خط پایه باشند
-    //    (مثلاً نام ارزها در کاشی‌های کنار هم، برچسب‌های تاریخچه، عددهای محور)
     for ($i = 0; $i < $count; $i++) {
         for ($j = $i + 1; $j < $count; $j++) {
             $a = $boxes[$i];
@@ -216,16 +218,13 @@ foreach ($runs as $name => [$digits, $factory]) {
             if ($a['size'] !== $b['size'] || $a['weight'] !== $b['weight']) {
                 continue;
             }
-            // متنِ داخل قرص با قرص خودش وسط‌چین می‌شود، نه با متن‌های بیرون
             if (($inPill($i) || $inPill($j)) && $holders[$i] !== $holders[$j]) {
                 continue;
             }
-            // هم‌ردیف: جعبه‌ی فونتشان تقریباً کامل روی هم می‌افتد
             $oy = min($a['y'] + $a['h'], $b['y'] + $b['h']) - max($a['y'], $b['y']);
             if ($oy < 0.6 * min($a['h'], $b['h'])) {
                 continue;
             }
-            // کنار هم، نه روی هم
             if (min($a['x'] + $a['w'], $b['x'] + $b['w']) - max($a['x'], $b['x']) > 0) {
                 continue;
             }

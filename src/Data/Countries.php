@@ -3,12 +3,8 @@ declare(strict_types=1);
 
 namespace Nikto\Data;
 
-/**
- * نگاشت ارز ↔ کشور و نام فارسی کشورها.
- */
 final class Countries
 {
-    /** ارز => [کد کشور, نام فارسی] */
     private const CURRENCY = [
         'USD' => ['US', 'آمریکا'],
         'EUR' => ['EU', 'اتحادیه اروپا'],
@@ -38,7 +34,6 @@ final class Countries
         'ALL' => ['WW', 'جهانی'],
     ];
 
-    /** کد کشور => ارز (برای منابعی که کشور می‌دهند) */
     private const COUNTRY_TO_CURRENCY = [
         'US' => 'USD', 'EU' => 'EUR', 'DE' => 'EUR', 'FR' => 'EUR', 'IT' => 'EUR', 'ES' => 'EUR',
         'NL' => 'EUR', 'PT' => 'EUR', 'IE' => 'EUR', 'GR' => 'EUR', 'AT' => 'EUR', 'BE' => 'EUR',
@@ -63,7 +58,6 @@ final class Countries
         return self::COUNTRY_TO_CURRENCY[strtoupper($countryCode)] ?? strtoupper($countryCode);
     }
 
-    /** @return string[] */
     public static function currencies(): array
     {
         return array_keys(self::CURRENCY);

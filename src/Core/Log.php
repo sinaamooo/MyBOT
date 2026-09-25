@@ -9,13 +9,6 @@ final class Log
 
     private static bool $guarded = false;
 
-    /**
-     * ثبت خطاهای کشنده‌ی PHP.
-     *
-     * وب‌هوک پیش از پردازش، پاسخ ۲۰۰ را می‌فرستد؛ بنابراین اگر بعد از آن خطایی
-     * رخ دهد تلگرام چیزی نمی‌بیند و دکمه بی‌صدا می‌ماند. این تابع چنین خطاهایی
-     * را در لاگ می‌نویسد تا در صفحه‌ی عیب‌یابی دیده شوند.
-     */
     public static function guardFatals(): void
     {
         if (self::$guarded) {
@@ -42,7 +35,6 @@ final class Log
         });
     }
 
-    /** @return array<int,array{level:string,message:string,context:string,created_at:int}> */
     public static function recent(int $limit = 8): array
     {
         try {
@@ -89,7 +81,6 @@ final class Log
             );
             if (random_int(1, 50) === 1) {
                 Db::exec('DELETE FROM logs WHERE created_at < :t', [':t' => time() - 7 * 86400]);
-                // فایل‌های روزانه‌ی قدیمی هم پاک می‌شوند تا فضای هاست پر نشود
                 foreach (glob(APP_STORAGE . '/logs/bot-*.log') ?: [] as $file) {
                     if (filemtime($file) < time() - 14 * 86400) {
                         @unlink($file);
@@ -97,7 +88,6 @@ final class Log
                 }
             }
         } catch (\Throwable) {
-            // دیتابیس هنوز آماده نیست — نادیده بگیر
         }
     }
 }

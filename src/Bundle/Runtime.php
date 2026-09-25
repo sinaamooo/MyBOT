@@ -15,24 +15,16 @@ use Nikto\Jobs\Scheduler;
 use Nikto\Telegram\Api;
 use Nikto\Telegram\Panel;
 
-/**
- * هسته‌ی نسخه‌ی «دو فایلی».
- *
- * وقتی پروژه با tools/build.php فشرده می‌شود، این کلاس مسیرها را می‌سازد،
- * فونت‌ها و لوگوها را از دل فایل بیرون می‌کشد و ورودی وب/خط فرمان را مدیریت می‌کند.
- */
 final class Runtime
 {
     public const VERSION = '2.0';
 
-    /** @param array<string,mixed> $config */
     public static function boot(array $config): void
     {
         $token = trim((string) ($config['bot_token'] ?? ''));
         $botId = (int) (strtok($token, ':') ?: 0);
         $root  = (string) ($config['root'] ?? __DIR__);
 
-        // پوشه‌ی داده برای هر ربات جداست تا چند ربات روی یک هاست قاطی نشوند
         $data = rtrim($root, '/') . '/nikto-' . ($botId ?: 'bot') . '-data';
 
         if (!defined('APP_ROOT')) {
@@ -81,7 +73,6 @@ final class Runtime
         Config::set('admins', array_values(array_unique(array_filter(array_map('intval', $admins)))));
     }
 
-    /** جلوگیری از دسترسی وب به پوشه‌ی داده */
     private static function protect(string $dir): void
     {
         $htaccess = $dir . '/.htaccess';
@@ -94,11 +85,10 @@ final class Runtime
         }
     }
 
-    /** نوشتن فونت‌ها، لوگوها و داده‌های نمونه روی دیسک (فقط بار اول) */
     private static function extractAssets(): void
     {
         if (!class_exists(Assets::class)) {
-            return; // اجرای عادی پروژه، نه نسخه‌ی فشرده
+            return;
         }
         $marker = APP_ASSETS . '/.version';
         if (is_file($marker) && trim((string) file_get_contents($marker)) === Assets::VERSION) {
@@ -119,8 +109,6 @@ final class Runtime
         @file_put_contents($marker, Assets::VERSION);
     }
 
-    // ------------------------------------------------------------ ورودی وب
-
     public static function handleWeb(): void
     {
         $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
@@ -129,7 +117,6 @@ final class Runtime
             header('Content-Type: text/plain; charset=utf-8');
             http_response_code(200);
 
-            // صفحه‌ی عیب‌یابی:  ...nikto-bot.php?check=<webhook_secret>
             $secret = (string) Config::get('webhook_secret', '');
             $given = (string) ($_GET['check'] ?? '');
             if ($given !== '' && $secret !== '' && hash_equals($secret, $given)) {
@@ -137,8 +124,6 @@ final class Runtime
                 return;
             }
 
-            // ثبت وب‌هوک از مرورگر (برای هاست‌هایی که خط فرمان ندارند):
-            //   ...nikto-bot.php?setup=<webhook_secret>
             $setup = (string) ($_GET['setup'] ?? '');
             if ($setup !== '') {
                 if ($secret === '' || !hash_equals($secret, $setup)) {
@@ -188,10 +173,6 @@ final class Runtime
         }
     }
 
-    /**
-     * ثبت وب‌هوک روی همین فایل و گزارش نتیجه (صفحه‌ی متنی).
-     * آدرس از خودِ درخواست خوانده می‌شود تا با جای واقعی فایل یکی باشد.
-     */
     private static function webSetup(): string
     {
         if (!Config::isConfigured()) {
@@ -203,7 +184,7 @@ final class Runtime
         $strip = static fn (string $u): string => rtrim((string) preg_replace('#^https?://#i', '', $u), '/');
 
         if ($configured !== '' && $strip($configured) === $strip($current)) {
-            $url = $configured;                       // همان آدرس، با https تنظیمات
+            $url = $configured;
         } elseif (str_starts_with(strtolower($current), 'https://')) {
             $url = $current;
         } else {
@@ -247,9 +228,6 @@ final class Runtime
         return implode("\n", $lines) . "\n";
     }
 
-    // ------------------------------------------------------- ورودی خط فرمان
-
-    /** @param string[] $argv */
     public static function handleCli(array $argv): int
     {
         $command = $argv[1] ?? 'poll';
@@ -402,7 +380,6 @@ final class Runtime
         return 0;
     }
 
-    /** اجرای دائمی زمان‌بند (هر دقیقه یک بار) */
     private static function cronLoop(): int
     {
         $running = true;
@@ -425,7 +402,6 @@ final class Runtime
         return 0;
     }
 
-    /** بررسی سلامت نصب در نسخه‌ی دو فایلی */
     private static function doctor(): int
     {
         echo "\n" . Diagnostics::renderText() . "\n";
@@ -433,7 +409,6 @@ final class Runtime
         return 0;
     }
 
-    /** نسخه‌ی قدیمی بررسی سلامت (دیگر استفاده نمی‌شود) */
     private static function doctorLegacy(): int
     {
         $problems = 0;
@@ -489,7 +464,6 @@ final class Runtime
         return $problems === 0 ? 0 : 1;
     }
 
-    /** اجرای زمان‌بند از طریق وب (برای هاست‌هایی که فقط کرون اینترنتی دارند) */
     public static function handleWebCron(): void
     {
         header('Content-Type: text/plain; charset=utf-8');
@@ -498,7 +472,6 @@ final class Runtime
 
         if ($secret === '' || !hash_equals($secret, $given)) {
             http_response_code(403);
-            // راهنمای تنظیم کرون (کلید نمایش داده نمی‌شود)
             $url = PublicUrl::current();
             echo "NIKTO CRYPTO BOT — scheduler\n\n";
             echo "این آدرس باید هر دقیقه صدا زده شود:\n";

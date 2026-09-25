@@ -3,9 +3,6 @@ declare(strict_types=1);
 
 namespace Nikto\Render;
 
-/**
- * رسم برداری پرچم کشورها (بدون نیاز به فایل تصویر).
- */
 final class Flags
 {
     public static function draw(Canvas $c, string $code, float $x, float $y, float $w, float $h): void
@@ -21,8 +18,6 @@ final class Flags
         }
         $c->strokeRoundRect($x, $y, $w, $h, 2, '#8B93A7', 1.1, 0.55);
     }
-
-    // ---------------------------------------------------------- کمکی‌ها
 
     private static function bandsH(Canvas $c, float $x, float $y, float $w, float $h, array $colors): void
     {
@@ -62,8 +57,6 @@ final class Flags
             $c->circle($cx + cos($ang) * $radius, $cy + sin($ang) * $radius, $dot, $color);
         }
     }
-
-    // ---------------------------------------------------------- پرچم‌ها
 
     private static function flagUS(Canvas $c, float $x, float $y, float $w, float $h): void
     {
@@ -116,7 +109,6 @@ final class Flags
         $c->rect($x, $y, $w, $h, '#FFFFFF');
         $c->rect($x, $y, $w * 0.25, $h, '#D80621');
         $c->rect($x + $w * 0.75, $y, $w * 0.25, $h, '#D80621');
-        // برگ افرا (ساده‌شده)
         $cx = $x + $w / 2;
         $cy = $y + $h / 2;
         $s = min($w, $h) * 0.34;

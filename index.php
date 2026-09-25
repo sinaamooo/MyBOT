@@ -1,10 +1,4 @@
 <?php
-/**
- * نقطه‌ی ورود ریشه‌ی دامنه.
- *
- * اگر دامنه‌ی شما مستقیماً به پوشه‌ی پروژه اشاره می‌کند، وب‌هوک هم روی
- * https://your-domain/ و هم روی https://your-domain/webhook.php کار می‌کند.
- */
 if (version_compare(PHP_VERSION, '8.0.0', '<')) {
     header('Content-Type: text/plain; charset=utf-8');
     echo "NIKTO CRYPTO BOT\n\n";

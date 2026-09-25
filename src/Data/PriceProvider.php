@@ -7,21 +7,11 @@ use Nikto\Core\Http;
 use Nikto\Core\Log;
 use Nikto\Core\Settings;
 
-/**
- * دریافت قیمت و نوسان ۲۴ ساعته‌ی ارزها (بایننس با جایگزین کوین‌گکو).
- *
- * خروجی هر ارز:
- *   symbol, name, name_fa, color, price, change_pct, change_abs, high, low, volume, spark[]
- */
 final class PriceProvider
 {
     private const BINANCE = 'https://api.binance.com/api/v3';
     private const GECKO   = 'https://api.coingecko.com/api/v3';
 
-    /**
-     * @param string[] $symbols
-     * @return array<int,array<string,mixed>>
-     */
     public static function fetch(array $symbols, bool $withSparkline = true): array
     {
         $symbols = array_values(array_unique(array_map('strtoupper', $symbols)));
@@ -48,7 +38,6 @@ final class PriceProvider
         return $rows;
     }
 
-    /** @return array<int,array<string,mixed>> */
     private static function fromBinance(array $symbols, bool $withSparkline): array
     {
         $pairs = array_map(static fn (string $s): string => self::pair($s), $symbols);
@@ -86,7 +75,6 @@ final class PriceProvider
         return $out;
     }
 
-    /** @return float[] */
     private static function sparkline(string $pair): array
     {
         $data = Http::getJson(self::BINANCE . '/klines?symbol=' . $pair . '&interval=1h&limit=24', [], 15, 1);
@@ -102,7 +90,6 @@ final class PriceProvider
         return $out;
     }
 
-    /** @return array<int,array<string,mixed>> */
     private static function fromGecko(array $symbols): array
     {
         $ids = [];
@@ -149,7 +136,6 @@ final class PriceProvider
             );
         }
 
-        // ترتیب درخواستی کاربر حفظ شود
         usort($out, static function (array $a, array $b) use ($symbols): int {
             return array_search($a['symbol'], $symbols, true) <=> array_search($b['symbol'], $symbols, true);
         });
@@ -157,7 +143,6 @@ final class PriceProvider
         return $out;
     }
 
-    /** @return array<string,mixed> */
     public static function row(
         string $symbol,
         float $price,
@@ -192,7 +177,6 @@ final class PriceProvider
         return $symbol . 'USDT';
     }
 
-    /** قالب‌بندی قیمت بر اساس بزرگی عدد */
     public static function formatPrice(float $price): string
     {
         if ($price >= 1000) {
@@ -231,7 +215,6 @@ final class PriceProvider
         return rtrim(rtrim(sprintf('%.6f', $value), '0'), '.') ?: '0';
     }
 
-    /** حذف صفرهای انتهایی اعشار */
     private static function trim(string $value): string
     {
         if (!str_contains($value, '.')) {

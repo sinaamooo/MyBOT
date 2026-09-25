@@ -8,14 +8,10 @@ use Nikto\Core\Settings;
 use Nikto\Render\Card;
 use Nikto\Render\Theme;
 
-/**
- * پایه‌ی «کار»ها: هر کارت یک Job است با تنظیمات، کانال‌ها و زمان‌بندی خودش.
- */
 abstract class Job
 {
     public const KEY = '';
 
-    /** @var array<string,mixed> */
     protected array $row;
 
     public function __construct()
@@ -27,19 +23,14 @@ abstract class Job
 
     abstract public function icon(): string;
 
-    /** توضیح کوتاه برای پنل */
     abstract public function description(): string;
 
-    /** داده‌ی مورد نیاز کارت را می‌گیرد؛ در صورت خطا null */
     abstract public function fetch(): mixed;
 
-    /** کارت را از داده می‌سازد */
     abstract public function card(mixed $data): Card;
 
-    /** خلاصه‌ی متنی برای کپشن */
     abstract public function summary(mixed $data): string;
 
-    /** گزینه‌های پیش‌فرض این کار */
     public function defaultOptions(): array
     {
         return [];
@@ -55,8 +46,6 @@ abstract class Job
         return "{summary}\n\n🗓 {date} — ⏰ {time}\n{link}";
     }
 
-    // ------------------------------------------------------- دسترسی به تنظیمات
-
     public function key(): string
     {
         return static::KEY;
@@ -69,7 +58,6 @@ abstract class Job
 
     public function theme(): string
     {
-        // تم‌های قدیمی (تیره) دیگر وجود ندارند؛ به تم پیش‌فرض روشن نگاشت می‌شوند
         $theme = (string) $this->row['theme'];
 
         return isset(Theme::PALETTES[$theme]) ? $theme : Theme::DEFAULT;
@@ -80,7 +68,6 @@ abstract class Job
         return (string) $this->row['caption'];
     }
 
-    /** @return array<string,mixed> */
     public function options(): array
     {
         $opts = json_decode((string) $this->row['options'], true);
@@ -128,7 +115,6 @@ abstract class Job
         $this->row = $this->loadRow();
     }
 
-    /** @return array<int,array<string,mixed>> کانال‌های مقصد این کار */
     public function channels(): array
     {
         return Db::all(
@@ -159,13 +145,11 @@ abstract class Job
         return true;
     }
 
-    /** @return array<int,array<string,mixed>> */
     public function schedules(): array
     {
         return Db::all('SELECT * FROM schedules WHERE job_key = :k ORDER BY at_time', [':k' => static::KEY]);
     }
 
-    /** ساخت کپشن نهایی با جایگزینی متغیرها */
     public function renderCaption(mixed $data): string
     {
         $now = Settings::now();
@@ -188,7 +172,6 @@ abstract class Job
         return trim($caption);
     }
 
-    /** @return array<string,mixed> */
     private function loadRow(): array
     {
         $row = Db::one('SELECT * FROM jobs WHERE key = :k', [':k' => static::KEY]);

@@ -5,9 +5,6 @@ namespace Nikto\Core;
 
 use PDO;
 
-/**
- * لایه‌ی دیتابیس (SQLite) + ساخت جداول.
- */
 final class Db
 {
     private static ?PDO $pdo = null;
@@ -129,7 +126,6 @@ final class Db
         SQL);
     }
 
-    /** @return array<int,array<string,mixed>> */
     public static function all(string $sql, array $params = []): array
     {
         $st = self::pdo()->prepare($sql);
@@ -137,7 +133,6 @@ final class Db
         return $st->fetchAll();
     }
 
-    /** @return array<string,mixed>|null */
     public static function one(string $sql, array $params = []): ?array
     {
         $st = self::pdo()->prepare($sql);

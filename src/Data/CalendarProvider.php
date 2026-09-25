@@ -9,22 +9,12 @@ use Nikto\Core\Http;
 use Nikto\Core\Log;
 use Nikto\Core\Settings;
 
-/**
- * تقویم اقتصادی روز (ForexFactory با جایگزین TradingView).
- *
- * خروجی هر ردیف:
- *   time, timestamp, currency, country, impact(0..3), title_en, title_fa,
- *   previous, forecast, actual, speech(bool), all_day(bool)
- */
 final class CalendarProvider
 {
     private const FF_WEEK = 'https://nfs.faireconomy.media/ff_calendar_thisweek.json';
     private const FF_NEXT = 'https://nfs.faireconomy.media/ff_calendar_nextweek.json';
     private const TV      = 'https://economic-calendar.tradingview.com/events';
 
-    /**
-     * @return array<int,array<string,mixed>>
-     */
     public static function forDay(?DateTimeImmutable $day = null): array
     {
         $tz = Settings::timezone();
@@ -51,7 +41,6 @@ final class CalendarProvider
         return self::filter($rows, $day);
     }
 
-    /** @return array<int,array<string,mixed>> */
     private static function fromForexFactory(DateTimeImmutable $day): array
     {
         $tz = $day->getTimezone();
@@ -90,14 +79,13 @@ final class CalendarProvider
                 );
             }
             if ($out !== []) {
-                break; // هفته‌ی جاری کافی بود
+                break;
             }
         }
 
         return $out;
     }
 
-    /** @return array<int,array<string,mixed>> */
     private static function fromTradingView(DateTimeImmutable $day): array
     {
         $tz = $day->getTimezone();
@@ -149,7 +137,6 @@ final class CalendarProvider
         return $out;
     }
 
-    /** @return array<string,mixed> */
     private static function row(
         DateTimeImmutable $at,
         string $currency,
@@ -178,10 +165,6 @@ final class CalendarProvider
         ];
     }
 
-    /**
-     * @param array<int,array<string,mixed>> $rows
-     * @return array<int,array<string,mixed>>
-     */
     private static function filter(array $rows, DateTimeImmutable $day): array
     {
         $minImpact = max(0, min(3, Settings::int('calendar_min_impact', 2)));
@@ -213,7 +196,6 @@ final class CalendarProvider
         return $out;
     }
 
-    /** آیا رویداد از نوع سخنرانی/کنفرانس خبری است؟ */
     public static function isSpeech(string $title): bool
     {
         return (bool) preg_match(

@@ -3,19 +3,8 @@ declare(strict_types=1);
 
 namespace Nikto\Text;
 
-/**
- * موتور آماده‌سازی متن فارسی/عربی برای GD.
- *
- * GD خودش «شکل‌دهی» (اتصال حروف) و «دوسویگی» (RTL) را انجام نمی‌دهد،
- * بنابراین اینجا متن منطقی به متن بصری تبدیل می‌شود:
- *   ۱) نرمال‌سازی حروف عربی به فارسی
- *   ۲) تبدیل حروف به فرم‌های نمایشی (ابتدایی/میانی/پایانی/تنها)
- *   ۳) ادغام لام‌الف
- *   ۴) الگوریتم ساده‌شده‌ی Bidi + آینه‌کردن پرانتزها
- */
 final class Persian
 {
-    /** جدول فرم‌های نمایشی: کد => [تنها, پایانی, ابتدایی, میانی] */
     private const FORMS = [
         0x0621 => [0xFE80, 0, 0, 0],
         0x0622 => [0xFE81, 0xFE82, 0, 0],
@@ -66,7 +55,6 @@ final class Persian
         0x06D2 => [0xFBAE, 0xFBAF, 0, 0],
     ];
 
-    /** ترکیب لام + الف => [تنها, پایانی] */
     private const LAM_ALEF = [
         0x0622 => [0xFEF5, 0xFEF6],
         0x0623 => [0xFEF7, 0xFEF8],
@@ -82,7 +70,6 @@ final class Persian
     private const FA_DIGITS = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
     private const EN_DIGITS = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
 
-    /** یکسان‌سازی حروف عربی/اعداد به شکل فارسی */
     public static function normalize(string $text): string
     {
         return strtr($text, [
@@ -92,13 +79,11 @@ final class Persian
         ]);
     }
 
-    /** تبدیل ارقام به فارسی */
     public static function faDigits(string $text): string
     {
         return str_replace(self::EN_DIGITS, self::FA_DIGITS, $text);
     }
 
-    /** تبدیل ارقام به لاتین */
     public static function enDigits(string $text): string
     {
         return str_replace(
@@ -113,9 +98,6 @@ final class Persian
         return (bool) preg_match('/[\x{0600}-\x{06FF}\x{FB50}-\x{FDFF}\x{FE70}-\x{FEFF}]/u', $text);
     }
 
-    /**
-     * تبدیل متن منطقی به رشته‌ی بصری آماده‌ی رسم با imagettftext.
-     */
     public static function prepare(string $text, ?bool $rtlParagraph = null): string
     {
         if ($text === '') {
@@ -123,7 +105,7 @@ final class Persian
         }
         $text = self::normalize($text);
         if (!self::hasRtl($text)) {
-            return $text; // متن لاتین خالص — دست‌نخورده
+            return $text;
         }
         $rtlParagraph ??= true;
 
@@ -131,7 +113,6 @@ final class Persian
         return self::reorder($shaped, $rtlParagraph);
     }
 
-    /** مرحله‌ی شکل‌دهی: تبدیل حروف به فرم‌های نمایشی */
     private static function shape(string $text): array
     {
         $chars = preg_split('//u', $text, -1, PREG_SPLIT_NO_EMPTY) ?: [];
@@ -143,25 +124,22 @@ final class Persian
             $cp = $codes[$i];
 
             if (self::isDiacritic($cp)) {
-                // اعراب به خوشه‌ی حرف قبلی می‌چسبد
                 if ($out !== []) {
                     $out[count($out) - 1]['marks'] .= $chars[$i];
                 }
                 continue;
             }
-            if ($cp === 0x200C) { // نیم‌فاصله فقط برای قطع اتصال است
+            if ($cp === 0x200C) {
                 continue;
             }
 
             $prevCp = self::prevJoinable($codes, $i);
             $nextCp = self::nextJoinable($codes, $i);
 
-            // ادغام لام‌الف
             if ($cp === 0x0644 && $nextCp !== null && isset(self::LAM_ALEF[$nextCp])) {
                 $joinPrev = $prevCp !== null && self::joinsForward($prevCp);
                 $lig = self::LAM_ALEF[$nextCp][$joinPrev ? 1 : 0];
                 $out[] = ['ch' => self::chr($lig), 'marks' => '', 'type' => 'R'];
-                // از الف عبور کن
                 for ($j = $i + 1; $j < $n; $j++) {
                     if ($codes[$j] === $nextCp) {
                         $i = $j;
@@ -195,7 +173,6 @@ final class Persian
         return $out;
     }
 
-    /** مرحله‌ی چینش دوسویه */
     private static function reorder(array $clusters, bool $rtlParagraph): string
     {
         if ($clusters === []) {
@@ -205,7 +182,6 @@ final class Persian
 
         $types = array_column($clusters, 'type');
 
-        // ۰) چسباندن جداکننده‌ها و علائم عددی به عدد (قواعد W4/W5 استاندارد Bidi)
         $isNum = static fn (?string $t): bool => $t === 'N';
         foreach (['CS', 'ES', 'ET'] as $weak) {
             for ($i = 0; $i < $count; $i++) {
@@ -215,15 +191,14 @@ final class Persian
                 $prev = $i > 0 ? $types[$i - 1] : null;
                 $next = $i + 1 < $count ? $types[$i + 1] : null;
                 $attach = match ($weak) {
-                    'CS' => $isNum($prev) && $isNum($next),           // ۱٬۰۰۰ یا ۱۲:۳۰
+                    'CS' => $isNum($prev) && $isNum($next),
                     'ES' => $isNum($next) || ($isNum($prev) && $isNum($next)),
-                    default => $isNum($prev) || $isNum($next),        // ٪ و $
+                    default => $isNum($prev) || $isNum($next),
                 };
                 $types[$i] = $attach ? 'N' : 'X';
             }
         }
 
-        // ۱) حل ابهام کاراکترهای خنثی
         $strong = static fn (string $t): bool => $t === 'R' || $t === 'L' || $t === 'N';
 
         for ($i = 0; $i < $count; $i++) {
@@ -242,7 +217,6 @@ final class Persian
             for ($k = $j; $k < $count; $k++) {
                 if ($strong($types[$k])) { $after = $types[$k]; break; }
             }
-            // طبق قاعده‌ی N1، اعداد در متن راست‌چین مانند حروف راست‌چین رفتار می‌کنند
             $norm = static fn (?string $t): ?string => $t === 'N' ? 'R' : $t;
             $b = $norm($before);
             $a = $norm($after);
@@ -253,7 +227,6 @@ final class Persian
             $i = $j - 1;
         }
 
-        // ۲) ساخت دنباله‌ای از بازه‌ها (run)
         $runs = [];
         $start = 0;
         for ($i = 1; $i <= $count; $i++) {
@@ -265,7 +238,6 @@ final class Persian
             }
         }
 
-        // ۳) چینش بصری
         $ordered = $rtlParagraph ? array_reverse($runs) : $runs;
         $buffer = '';
         foreach ($ordered as $run) {
@@ -288,20 +260,20 @@ final class Persian
 
     private static function classify(int $cp): string
     {
-        if ($cp >= 0x0030 && $cp <= 0x0039) return 'N';                 // ارقام لاتین
-        if ($cp >= 0x06F0 && $cp <= 0x06F9) return 'N';                 // ارقام فارسی
-        if ($cp >= 0x0660 && $cp <= 0x0669) return 'N';                 // ارقام عربی
+        if ($cp >= 0x0030 && $cp <= 0x0039) return 'N';
+        if ($cp >= 0x06F0 && $cp <= 0x06F9) return 'N';
+        if ($cp >= 0x0660 && $cp <= 0x0669) return 'N';
         if ($cp === 0x002C || $cp === 0x002E || $cp === 0x003A || $cp === 0x002F
-            || $cp === 0x066B || $cp === 0x066C) return 'CS';           // جداکننده‌ی عددی
-        if ($cp === 0x002B || $cp === 0x002D || $cp === 0x2212) return 'ES'; // علامت مثبت/منفی
+            || $cp === 0x066B || $cp === 0x066C) return 'CS';
+        if ($cp === 0x002B || $cp === 0x002D || $cp === 0x2212) return 'ES';
         if ($cp === 0x0025 || $cp === 0x0024 || $cp === 0x00B0 || $cp === 0x066A
-            || $cp === 0x20AC || $cp === 0x00A3) return 'ET';           // درصد و واحد پول
+            || $cp === 0x20AC || $cp === 0x00A3) return 'ET';
         if ($cp >= 0x0041 && $cp <= 0x005A) return 'L';
         if ($cp >= 0x0061 && $cp <= 0x007A) return 'L';
         if ($cp >= 0x00C0 && $cp <= 0x024F) return 'L';
         if ($cp >= 0x0600 && $cp <= 0x06FF) return 'R';
         if ($cp >= 0xFB50 && $cp <= 0xFEFF) return 'R';
-        return 'X';                                                      // خنثی
+        return 'X';
     }
 
     private static function isDiacritic(int $cp): bool
@@ -310,7 +282,6 @@ final class Persian
             || ($cp >= 0x06D6 && $cp <= 0x06ED) || $cp === 0x0653 || $cp === 0x0654;
     }
 
-    /** آیا این حرف به حرف بعدی می‌چسبد؟ */
     private static function joinsForward(int $cp): bool
     {
         return isset(self::FORMS[$cp]) && (self::FORMS[$cp][2] !== 0 || $cp === 0x0640);
@@ -324,7 +295,7 @@ final class Persian
                 continue;
             }
             if ($cp === 0x200C) {
-                return null; // نیم‌فاصله اتصال را قطع می‌کند
+                return null;
             }
             return isset(self::FORMS[$cp]) ? $cp : null;
         }

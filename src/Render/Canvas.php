@@ -6,11 +6,6 @@ namespace Nikto\Render;
 use GdImage;
 use Nikto\Text\Persian;
 
-/**
- * لایه‌ی رسم روی GD با کیفیت بالا.
- * همه‌ی مختصات «منطقی» هستند و داخلی در ضریب سوپرسمپلینگ ضرب می‌شوند،
- * بنابراین خروجی نهایی لبه‌های نرم و تمیز دارد.
- */
 final class Canvas
 {
     public const W_REGULAR  = 'Regular';
@@ -20,7 +15,6 @@ final class Canvas
     public const W_EXTRA    = 'ExtraBold';
     public const W_BLACK    = 'Black';
 
-    /** فونت مخصوص عددها و متن لاتین (بارلو) — سبک‌تر و متمایز از فونت فارسی */
     public const W_NUM      = 'Num';
     public const W_NUM_BOLD = 'NumBold';
 
@@ -30,12 +24,8 @@ final class Canvas
     private int $height;
     private float $outputScale = 1.0;
 
-    /** برای بازرسی چیدمان: جعبه‌ی هر متن رسم‌شده ثبت می‌شود */
     public static bool $trace = false;
-    /** @var array<int,array{x:float,y:float,w:float,h:float,text:string,size:float,ink:array{0:float,1:float,2:float,3:float}}> */
     public static array $traceBoxes = [];
-    /** شکل‌های پر (قرص، برچسب، کادر) برای بررسی وسط‌چین بودن متنِ داخلشان */
-    /** @var array<int,array{x:float,y:float,w:float,h:float}> */
     public static array $traceShapes = [];
 
     public function __construct(int $width, int $height, int $scale = 2, ?string $background = null)
@@ -76,10 +66,6 @@ final class Canvas
         return $canvas;
     }
 
-    /**
-     * ضریب بزرگ‌نمایی خروجی نهایی.
-     * مثلاً ۲ یعنی کارت ۱۲۰۰ پیکسلی با عرض ۲۴۰۰ ذخیره می‌شود.
-     */
     public function setOutputScale(float $scale): void
     {
         $this->outputScale = max(0.25, min(4.0, $scale));
@@ -95,16 +81,13 @@ final class Canvas
         return (int) round($v * $this->scale);
     }
 
-    // ---------------------------------------------------------------- رنگ‌ها
-
-    /** @return array{0:int,1:int,2:int,3:int} */
     public static function parseColor(string $hex, float $alpha = 1.0): array
     {
         $hex = ltrim(trim($hex), '#');
         if (strlen($hex) === 3) {
             $hex = $hex[0] . $hex[0] . $hex[1] . $hex[1] . $hex[2] . $hex[2];
         }
-        if (strlen($hex) === 8) { // RRGGBBAA
+        if (strlen($hex) === 8) {
             $alpha *= hexdec(substr($hex, 6, 2)) / 255;
             $hex = substr($hex, 0, 6);
         }
@@ -138,8 +121,6 @@ final class Canvas
         );
     }
 
-    // ------------------------------------------------------------- شکل‌ها
-
     public function fill(string $hex, float $alpha = 1.0): void
     {
         imagealphablending($this->im, true);
@@ -158,11 +139,6 @@ final class Canvas
         );
     }
 
-    /**
-     * مستطیل گِرد.
-     * وقتی رنگ نیمه‌شفاف است، شکل روی یک لایه‌ی جدا ساخته و یک‌باره ترکیب می‌شود
-     * تا محل هم‌پوشانی گوشه‌ها دوبار رنگ نگیرد.
-     */
     public function roundRect(float $x, float $y, float $w, float $h, float $r, string $hex, float $alpha = 1.0): void
     {
         if (self::$trace && $alpha >= 0.05) {
@@ -174,7 +150,7 @@ final class Canvas
             return;
         }
         if ($a >= 127) {
-            return; // کاملاً شفاف
+            return;
         }
 
         $lw = max(1, $this->s($w));
@@ -210,7 +186,6 @@ final class Canvas
         imagefilledellipse($im, $x2 - $rs, $y2 - $rs, $d, $d, $col);
     }
 
-    /** خط دور مستطیل گِرد (یک‌بار ترکیب می‌شود تا گوشه‌ها پررنگ‌تر نشوند) */
     public function strokeRoundRect(
         float $x,
         float $y,
@@ -261,7 +236,6 @@ final class Canvas
         imagedestroy($layer);
     }
 
-    /** گرادیان خطی (dir: v عمودی، h افقی، d مورب) با ماسک مستطیل گِرد */
     public function gradient(
         float $x,
         float $y,
@@ -327,11 +301,10 @@ final class Canvas
         imagedestroy($layer);
     }
 
-    /** گرادیان شعاعی (درخشش) */
     public function radialGlow(float $cx, float $cy, float $radius, string $hex, float $alpha = 0.6, int $steps = 72): void
     {
         $steps = max(8, $steps);
-        $perStep = 28 / $steps; // تعداد گام بیشتر = گرادیان نرم‌تر بدون پررنگ‌شدن
+        $perStep = 28 / $steps;
         for ($i = $steps; $i > 0; $i--) {
             $t = $i / $steps;
             $rr = $radius * $t;
@@ -350,7 +323,6 @@ final class Canvas
         }
     }
 
-    /** سایه‌ی نرم زیر یک مستطیل گِرد */
     public function shadow(
         float $x,
         float $y,
@@ -365,7 +337,7 @@ final class Canvas
         $pad = (int) ($blur * 2);
         $lw = max(4, $this->s($w + $pad * 2));
         $lh = max(4, $this->s($h + $pad * 2));
-        $down = 4; // سایه در ابعاد کوچک‌تر محو می‌شود (سریع‌تر و نرم‌تر)
+        $down = 4;
         $sw = max(4, (int) ($lw / $down));
         $sh = max(4, (int) ($lh / $down));
 
@@ -404,11 +376,6 @@ final class Canvas
         imagedestroy($layer);
     }
 
-    /**
-     * جعبه‌ی شیشه‌ای: پس‌زمینه را محو می‌کند و روی آن لایه‌ی نیمه‌شفاف می‌کشد.
-     *
-     * @param array{fill?:float,border?:float,blur?:int,highlight?:bool,tint?:string,shadow?:bool} $options
-     */
     public function glass(float $x, float $y, float $w, float $h, float $radius = 16, array $options = []): void
     {
         $fill      = (float) ($options['fill'] ?? 0.055);
@@ -427,7 +394,6 @@ final class Canvas
 
         $this->roundRect($x, $y, $w, $h, $radius, $tint, $fill);
         if ($highlight) {
-            // بازتاب نور در بالای جعبه (محوشونده، بدون لبه‌ی تیز)
             $band = min($h * 0.5, 56.0);
             for ($i = 0; $i < $band; $i += 2) {
                 $a = 0.05 * (1 - $i / $band) ** 2;
@@ -444,7 +410,6 @@ final class Canvas
         }
     }
 
-    /** محو کردن ناحیه‌ای از خود بوم (افکت شیشه‌ی مات) */
     public function backdropBlur(float $x, float $y, float $w, float $h, float $radius, int $passes = 3): void
     {
         $sx = max(0, $this->s($x));
@@ -480,7 +445,6 @@ final class Canvas
         imagedestroy($layer);
     }
 
-    /** رسم فایل تصویری (با کش) */
     public function image(string $path, float $x, float $y, float $w, float $h, float $alpha = 1.0): bool
     {
         $src = self::loadImage($path);
@@ -507,7 +471,6 @@ final class Canvas
         return true;
     }
 
-    /** @var array<string,\GdImage|null> */
     private static array $imageCache = [];
 
     public static function loadImage(string $path): ?GdImage
@@ -531,7 +494,6 @@ final class Canvas
         return self::$imageCache[$path] = $image;
     }
 
-    /** میانگین روشنایی بخش‌های مات یک تصویر (۰ تا ۱) */
     public static function imageLuminance(string $path): float
     {
         $src = self::loadImage($path);
@@ -549,7 +511,7 @@ final class Canvas
                 $rgba = imagecolorat($src, $x, $y);
                 $a = ($rgba >> 24) & 0x7F;
                 if ($a > 90) {
-                    continue; // تقریباً شفاف
+                    continue;
                 }
                 $r = ($rgba >> 16) & 0xFF;
                 $g = ($rgba >> 8) & 0xFF;
@@ -562,7 +524,6 @@ final class Canvas
         return $count > 0 ? $sum / $count : 0.5;
     }
 
-    /** خطی که رنگش از یک سر به سر دیگر تغییر می‌کند */
     public function gradientLine(
         float $x1,
         float $y1,
@@ -588,11 +549,6 @@ final class Canvas
         }
     }
 
-    /**
-     * ناحیه‌ی زیر نمودار با محوشدگی عمودی.
-     *
-     * @param array<int,array{0:float,1:float}> $points نقاط منحنی
-     */
     public function areaGradient(array $points, float $x, float $y, float $w, float $h, string $hex, float $alphaTop = 0.35): void
     {
         if (count($points) < 2 || $w <= 0 || $h <= 0) {
@@ -619,7 +575,6 @@ final class Canvas
             );
         }
 
-        // هرچه بالای منحنی است پاک می‌شود
         $clear = imagecolorallocatealpha($layer, 0, 0, 0, 127);
         $count = count($points);
         for ($i = 0; $i < $count - 1; $i++) {
@@ -638,7 +593,6 @@ final class Canvas
                 }
             }
         }
-        // دو طرف بیرون از منحنی
         $firstX = $this->s($points[0][0] - $x);
         $lastX = $this->s($points[$count - 1][0] - $x);
         if ($firstX > 0) {
@@ -699,7 +653,6 @@ final class Canvas
         imagefilledpolygon($this->im, $pts, $col);
     }
 
-    /** @param array<int,array{0:float,1:float}> $points */
     public function polygon(array $points, string $hex, float $alpha = 1.0): void
     {
         $flat = [];
@@ -713,7 +666,6 @@ final class Canvas
         imagefilledpolygon($this->im, $flat, $this->color($hex, $alpha));
     }
 
-    /** @param array<int,array{0:float,1:float}> $points */
     public function polyline(array $points, string $hex, float $thickness = 2, float $alpha = 1.0): void
     {
         $n = count($points);
@@ -725,7 +677,6 @@ final class Canvas
         }
     }
 
-    /** مثلث جهت‌دار (برای فلش صعودی/نزولی) */
     public function triangle(float $cx, float $cy, float $size, bool $up, string $hex, float $alpha = 1.0): void
     {
         $h = $size * 0.86;
@@ -735,7 +686,6 @@ final class Canvas
         $this->polygon($points, $hex, $alpha);
     }
 
-    /** فلش صعودی/نزولی با دنباله */
     public function arrow(float $cx, float $cy, float $size, bool $up, string $hex, float $alpha = 1.0): void
     {
         $this->triangle($cx, $cy - ($up ? $size * 0.18 : -$size * 0.18), $size * 0.82, $up, $hex, $alpha);
@@ -748,8 +698,6 @@ final class Canvas
             $alpha
         );
     }
-
-    // ------------------------------------------------------------- متن
 
     public static function fontPath(string $weight = self::W_BOLD): string
     {
@@ -772,17 +720,8 @@ final class Canvas
         return '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf';
     }
 
-    /** @var array<string,array{top:float,height:float}> */
     private static array $metricsCache = [];
 
-    /**
-     * سنجه‌ی ثابت خط برای یک فونت و اندازه.
-     *
-     * از یک رشته‌ی مرجع استفاده می‌شود تا همه‌ی متن‌ها با هر حرفی که دارند
-     * دقیقاً روی یک خط بنشینند؛ وگرنه ارتفاع هر متن به حروف خودش وابسته می‌شد.
-     *
-     * @return array{top:float,height:float} نسبت به خط پایه (top منفی است)
-     */
     public function metrics(float $size, string $weight = self::W_BOLD): array
     {
         $fs = $size * $this->scale;
@@ -798,10 +737,6 @@ final class Canvas
         return self::$metricsCache[$key] = ['top' => $top, 'height' => $bottom - $top];
     }
 
-    /**
-     * فونت اعداد (Barlow) ارقام و حروف فارسی ندارد؛ اگر متن شامل آن‌ها باشد
-     * همان وزن از وزیرمتن استفاده می‌شود تا به‌جای عدد، مربع خالی چاپ نشود.
-     */
     private static function fontFor(string $weight, string $text): string
     {
         if (($weight === self::W_NUM || $weight === self::W_NUM_BOLD)
@@ -813,14 +748,8 @@ final class Canvas
         return $weight;
     }
 
-    /** @var array<string,float> */
     private static array $digitCache = [];
 
-    /**
-     * فاصله‌ی مرکزِ بدنه‌ی ارقام تا خط پایه.
-     * همه‌ی عددهای یک اندازه، با هر علامتی ($ , % −)، روی یک خط می‌نشینند
-     * و خودِ ارقام دقیقاً وسط قرار می‌گیرند.
-     */
     private function digitCenter(string $text, float $fs, string $font): float
     {
         $reference = preg_match('/[\x{06F0}-\x{06F9}\x{0660}-\x{0669}]/u', $text) === 1
@@ -837,7 +766,6 @@ final class Canvas
         return self::$digitCache[$key];
     }
 
-    /** فاصله‌ی مرکزِ حروفِ یک رشته تا خط پایه (برای وسط‌چین کردن نوری) */
     private function inkCenter(string $visual, float $fs, string $font): float
     {
         $box = imagettfbbox($fs, 0, $font, $visual);
@@ -848,10 +776,6 @@ final class Canvas
         return ((float) $box[7] + (float) $box[1]) / 2;
     }
 
-    /**
-     * ارتفاع واقعی جوهر حروف یک متن (پیکسل منطقی).
-     * برای چیدن عمودی دقیق عنوان و عدد با فاصله‌ی برابر.
-     */
     public function inkHeight(string $text, float $size, string $weight = self::W_BOLD): float
     {
         $weight = self::fontFor($weight, $text);
@@ -864,13 +788,11 @@ final class Canvas
         return $box === false ? $size * 0.7 : ((float) $box[1] - (float) $box[7]) / $this->scale;
     }
 
-    /** ارتفاع یک خط متن در این اندازه (پیکسل منطقی) */
     public function lineHeight(float $size, string $weight = self::W_BOLD): float
     {
         return $this->metrics($size, $weight)['height'] / $this->scale;
     }
 
-    /** @return array{w:float,h:float,top:float} */
     public function measure(string $text, float $size, string $weight = self::W_BOLD, bool $prepared = false): array
     {
         $weight = self::fontFor($weight, $text);
@@ -896,17 +818,6 @@ final class Canvas
         return $this->measure($text, $size, $weight)['w'];
     }
 
-    /**
-     * رسم متن.
-     *
-     * $align  : right | center | left
-     * $valign :
-     *   top      — y بالای خط (برای ردیف‌های پشت‌سرهم)
-     *   middle   — y وسط خطِ فونت (برای هم‌ترازی چند متن در یک ردیف)
-     *   ink      — y وسط خودِ حروف (برای متنی که داخل دایره یا قرص می‌نشیند)
-     *   num      — y وسط بدنه‌ی ارقام (برای همه‌ی عددها: قیمت، درصد، ساعت، محور)
-     *   baseline — y خط پایه
-     */
     public function text(
         string $text,
         float $x,
@@ -952,14 +863,12 @@ final class Canvas
         imagettftext($this->im, $fs, 0, (int) $drawX - $box[0], $drawY, $col, $font, $visual);
 
         if (self::$trace) {
-            // جعبه‌ی واقعی جوهر حروف (نه ارتفاع کلی فونت)
             $ink = [
                 ($drawX) / $this->scale,
                 ($drawY + $box[7]) / $this->scale,
                 ($drawX + $w) / $this->scale,
                 ($drawY + $box[1]) / $this->scale,
             ];
-            // مرکزی که چشم می‌بیند: بدنه‌ی ارقام، جوهر حروف، یا وسط خط فونت
             $optical = match ($valign) {
                 'num'   => $drawY + $this->digitCenter($text, $fs, $font),
                 'ink'   => $drawY + ($box[7] + $box[1]) / 2,
@@ -1026,7 +935,6 @@ final class Canvas
         return $total / $this->scale;
     }
 
-    /** متن با اندازه‌ی خودکارِ کوچک‌شونده تا جا شود */
     public function textFit(
         string $text,
         float $x,
@@ -1047,7 +955,6 @@ final class Canvas
         if ($this->textWidth($text, $s, $weight) > $maxWidth) {
             $text = $this->ellipsize($text, $maxWidth, $s, $weight);
         }
-        // اندازه هرچه باشد، متن روی همان خطِ اندازه‌ی اصلی می‌نشیند
         $offset = $valign === 'top'
             ? ($this->lineHeight($size, $weight) - $this->lineHeight($s, $weight)) / 2
             : 0.0;
@@ -1072,7 +979,6 @@ final class Canvas
         return rtrim($out) . '…';
     }
 
-    /** @return string[] */
     public function wrap(string $text, float $maxWidth, float $size, string $weight = self::W_REGULAR, int $maxLines = 3): array
     {
         $words = preg_split('/\s+/u', trim($text)) ?: [];
@@ -1099,8 +1005,6 @@ final class Canvas
         }
         return $lines;
     }
-
-    // ------------------------------------------------------------- تصویر
 
     public function paste(GdImage $src, float $x, float $y, ?float $w = null, ?float $h = null): void
     {
@@ -1140,8 +1044,6 @@ final class Canvas
             }
         }
     }
-
-    // ------------------------------------------------------------- خروجی
 
     public function savePng(string $path): string
     {
@@ -1198,9 +1100,6 @@ final class Canvas
         }
     }
 
-    // ------------------------------------------------------------- کمکی
-
-    /** گوشه‌های یک لایه را شفاف می‌کند */
     private function applyRoundMask(GdImage $layer, int $radius): void
     {
         $w = imagesx($layer);

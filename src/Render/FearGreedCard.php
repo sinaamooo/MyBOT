@@ -5,12 +5,8 @@ namespace Nikto\Render;
 
 use Nikto\Data\FearGreedProvider;
 
-/**
- * کارت شاخص ترس و طمع — سنجه‌ی افقی قرمز به سبز، کارت‌های تاریخچه و نمودار ۳۰ روزه.
- */
 final class FearGreedCard extends Card
 {
-    /** @var array<string,mixed> */
     private array $data;
 
     private const HISTORY_LABELS = [
@@ -19,7 +15,6 @@ final class FearGreedCard extends Card
         'month'     => '۱ ماه پیش',
     ];
 
-    /** مرز ناحیه‌ها روی سنجه */
     private const BOUNDS = [0, 25, 45, 56, 76, 101];
 
     public function __construct(array $data, ?string $theme = null, array $options = [])
@@ -63,22 +58,20 @@ final class FearGreedCard extends Card
         return count(FearGreedProvider::ZONES) - 1;
     }
 
-    /** رنگ ناحیه: از قرمز (ترس) تا سبز (طمع) */
     private function zoneColor(Theme $t, int $index): string
     {
         $down = $t->c('down');
         $up = $t->c('up');
 
         return [
-            $down,                                  // ترس شدید — قرمز پررنگ
-            Canvas::mix($down, '#FFFFFF', 0.42),    // ترس — قرمز روشن
+            $down,
+            Canvas::mix($down, '#FFFFFF', 0.42),
             Canvas::mix($t->c('flat'), '#FFFFFF', 0.25),
-            Canvas::mix($up, '#FFFFFF', 0.42),      // طمع — سبز روشن
-            $up,                                    // طمع شدید — سبز پررنگ
+            Canvas::mix($up, '#FFFFFF', 0.42),
+            $up,
         ][$index] ?? $t->c('ink');
     }
 
-    /** رنگ پررنگ ناحیه برای پلاک و نمودار (بدون روشن‌سازی) */
     private function zoneStrong(Theme $t, int $index): string
     {
         return match (true) {
@@ -88,7 +81,6 @@ final class FearGreedCard extends Card
         };
     }
 
-    /** پنل اصلی: عدد بزرگ در راست و سنجه‌ی افقی در چپ */
     private function meter(Canvas $c, Theme $t, float $x, float $y, float $w, float $h): void
     {
         $value = max(0, min(100, (int) $this->data['value']));
@@ -102,16 +94,12 @@ final class FearGreedCard extends Card
         $boxW = 246.0;
         $boxX = $x + $w - $pad - $boxW;
 
-        // ── بلوک عدد امروز
         $boxY = $y + $pad;
         $boxH = $h - $pad * 2;
         $c->roundRect($boxX, $boxY, $boxW, $boxH, 16, $t->c('surface_alt'), 1.0);
         $c->strokeRoundRect($boxX, $boxY, $boxW, $boxH, 16, $t->c('line'), 1.6, 0.85);
-        // نوار رنگی ناحیه در لبه‌ی راست بلوک
         $c->roundRect($boxX + $boxW - 10, $boxY + 12, 5, $boxH - 24, 2.5, $color, 1.0);
 
-        // سه جزء (عنوان، عدد، برچسب ناحیه) با فاصله‌های کاملاً برابر روی هم چیده می‌شوند.
-        // فاصله‌ها از ارتفاع واقعی جوهر حروف حساب می‌شوند، نه از اندازه‌ی فونت.
         $boxCx = $boxX + ($boxW - 14) / 2;
         $title = 'شاخص امروز';
         $number = $this->dnum((string) $value);
@@ -135,7 +123,6 @@ final class FearGreedCard extends Card
         $c->roundRect($boxCx - $chipW / 2, $chipY, $chipW, $chipH, 9, $color, 1.0);
         $c->text($label, $boxCx, $chipY + $chipH / 2, 13, '#FFFFFF', Canvas::W_BOLD, 'center', 1.0, 'ink');
 
-        // ── سنجه‌ی افقی
         $mx = $x + $pad;
         $mw = $boxX - 20 - $mx;
         $barH = 26.0;
@@ -152,7 +139,6 @@ final class FearGreedCard extends Card
             $segW = $usable * (($to - $from) / 100);
             $active = $i === $index;
 
-            // طیف از قرمز تا سبز؛ قطعه‌ی فعال بلندتر و با حاشیه‌ی مشکی
             $segColor = $this->zoneColor($t, $i);
             $segY = $active ? $barY - 5 : $barY;
             $segH = $active ? $barH + 10 : $barH;
@@ -161,7 +147,6 @@ final class FearGreedCard extends Card
                 $c->strokeRoundRect($segX, $segY, $segW, $segH, 7, $t->c('line'), 1.8, 0.9);
             }
 
-            // نام ناحیه زیر همان قطعه
             $c->textFit(
                 (string) $zoneDef['fa'],
                 $segX + $segW / 2,
@@ -188,7 +173,6 @@ final class FearGreedCard extends Card
             );
         }
 
-        // ── نشانگر مقدار
         $markX = $mx + $usable * ($value / 100) + $segGap * min(4, $index);
         $markX = max($mx + 6, min($mx + $mw - 6, $markX));
 
@@ -203,7 +187,6 @@ final class FearGreedCard extends Card
         $c->line($markX, $barY - 7, $markX, $barY + $barH + 7, $t->c('line'), 2.2, 0.9);
     }
 
-    /** سه کارت کوچک تاریخچه */
     private function history(Canvas $c, Theme $t, float $x, float $y, float $w, float $h): void
     {
         $history = (array) ($this->data['history'] ?? []);
@@ -223,7 +206,6 @@ final class FearGreedCard extends Card
         $cellW = ($w - $gap * (count($items) - 1)) / count($items);
 
         foreach ($items as $i => [$label, $v]) {
-            // راست‌به‌چپ: دیروز در راست‌ترین خانه
             $cx = $x + $w - ($i + 1) * $cellW - $i * $gap;
             $diff = $current - $v;
             $color = $diff > 0 ? $t->c('up') : ($diff < 0 ? $t->c('down') : $t->c('flat'));
@@ -253,7 +235,6 @@ final class FearGreedCard extends Card
         }
     }
 
-    /** نمودار ۳۰ روز اخیر */
     private function chart(Canvas $c, Theme $t, float $x, float $y, float $w, float $h): void
     {
         if ($h < 60) {
@@ -283,7 +264,6 @@ final class FearGreedCard extends Card
             return;
         }
 
-        // خطوط راهنما و مقیاس عمودی
         foreach ([0.0, 0.5, 1.0] as $f) {
             $gy = $chartY + $chartH * $f;
             $c->dashedLine($chartX, $gy, $chartX + $chartW, $gy, $t->c('line_soft'), 1, 6, 6, 1.0);

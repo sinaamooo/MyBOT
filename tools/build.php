@@ -1,22 +1,8 @@
 <?php
-/**
- * ساخت نسخه‌ی «دو فایلی» برای هاست اشتراکی.
- *
- *   php tools/build.php                     خروجی در پوشه‌ی build/
- *   php tools/build.php --out=/tmp/x        مسیر خروجی دلخواه
- *   php tools/build.php --with-secrets      توکن فعلی را داخل فایل بنویس
- *   php tools/build.php --public            نسخه‌ی قابل انتشار: بدون توکن، مدیر، آدرس و کلید شما
- *   php tools/build.php --name=mybot        نام فایل‌ها (پیش‌فرض nikto)
- *
- * خروجی:
- *   <name>-bot.php    همه‌ی کدها + فونت‌ها + لوگوها (وب‌هوک، پنل و خط فرمان)
- *   <name>-cron.php   زمان‌بند (کرون سروری یا کرون اینترنتی)
- */
 declare(strict_types=1);
 
 require dirname(__DIR__) . '/src/bootstrap.php';
 
-use Nikto\Bundle\Runtime;
 use Nikto\Core\Config;
 
 $args = [];
@@ -42,21 +28,18 @@ if (!is_dir($outDir) && !@mkdir($outDir, 0775, true)) {
 
 echo "\n📦 ساخت نسخه‌ی دو فایلی\n" . str_repeat('─', 48) . "\n";
 
-// ───────────────────────────────────────────── ۱) کدها
-// همه‌ی فایل‌های src خودکار پیدا می‌شوند تا هیچ کلاسی جا نماند.
 $sources = [];
 $iterator = new RecursiveIteratorIterator(
     new RecursiveDirectoryIterator(APP_SRC, FilesystemIterator::SKIP_DOTS)
 );
 foreach ($iterator as $file) {
-    /** @var SplFileInfo $file */
     if ($file->getExtension() !== 'php') {
         continue;
     }
     $relative = 'src/' . ltrim(str_replace(APP_SRC, '', $file->getPathname()), '/\\');
     $relative = str_replace('\\', '/', $relative);
     if ($relative === 'src/bootstrap.php') {
-        continue; // بارگذارنده در نسخه‌ی فشرده لازم نیست
+        continue;
     }
     $sources[] = $relative;
 }
@@ -87,7 +70,6 @@ foreach ($sources as $relative) {
 }
 printf("  ✅ %d کلاس ادغام شد\n", $classCount);
 
-// ───────────────────────────────────────────── ۲) دارایی‌ها
 $assetFiles = [];
 $addAsset = static function (string $source, string $target) use (&$assetFiles): void {
     if (!is_file($source)) {
@@ -126,12 +108,10 @@ printf(
 $assetsVersion = substr(sha1(implode('', array_keys($assetFiles)) . $rawBytes), 0, 12);
 $assetsClass = <<<PHP
 namespace Nikto\\Bundle {
-    /** فونت‌ها، لوگوها و داده‌های نمونه — فشرده‌شده داخل همین فایل */
     final class Assets
     {
         public const VERSION = '{$assetsVersion}';
 
-        /** @return array<string,string> */
         public static function files(): array
         {
             \$packed = self::PACKED;
@@ -154,10 +134,8 @@ namespace Nikto\\Bundle {
 
 PHP;
 
-// ───────────────────────────────────────────── ۳) تنظیمات بالای فایل
 $token  = $withSecrets ? (string) Config::token() : 'PUT-YOUR-BOT-TOKEN-HERE';
 $owner  = $public ? 0 : (int) Config::get('owner_id', 0);
-// نسخه‌ی عمومی همیشه کلید تازه و تصادفی می‌گیرد
 $secret = $public ? bin2hex(random_bytes(16)) : ((string) Config::get('webhook_secret', '') ?: bin2hex(random_bytes(16)));
 $webhook = $public ? '' : (string) Config::get('webhook_url', '');
 if ($webhook !== '') {
@@ -168,73 +146,30 @@ $brand = (string) Config::get('brand', 'NIKTO CRYPTO');
 
 $header = <<<PHP
 <?php
-
-/**
- * ███ NIKTO CRYPTO BOT — نسخه‌ی تک‌فایلی (نسخه {$name}) ███
- *
- * این فایل شامل همه‌ی کدها، فونت فارسی و لوگوی ارزهاست.
- * فقط همین فایل و {$name}-cron.php را روی هاست آپلود کنید.
- *
- * راه‌اندازی:
- *   ۱) bot_token و owner_id را پایین‌تر بنویسید.
- *   ۲) وب‌هوک را یک بار از مرورگر ثبت کنید:
- *        https://دامنه/مسیر/{$name}-bot.php?setup=<webhook_secret>
- *      (یا از خط فرمان: php {$name}-bot.php webhook)
- *   ۳) کرون هر دقیقه: php {$name}-cron.php
- *      (یا کرون اینترنتی: {$name}-cron.php?key=<webhook_secret>)
- *   عیب‌یابی: {$name}-bot.php?check=<webhook_secret>
- *
- * ساخته‌شده در %BUILD_DATE% — نسخه‌ی هسته %CORE_VERSION%
- */
-
 declare(strict_types=1);
-
-// ═══════════════════ تنظیمات (فقط این بخش را ویرایش کنید) ═══════════════════
 
 namespace {
 
 const NIKTO_CONFIG = [
-    // توکن ربات از @BotFather
-    'bot_token' => '{$token}',
-
-    // شناسه‌ی عددی مدیر اصلی (اگر نمی‌دانید، به ربات /start بفرستید تا نشانتان دهد)
-    'owner_id'  => {$owner},
-
-    // مدیران بیشتر: [111111111, 222222222]
-    'admins'    => [],
-
-    // آدرس عمومی همین فایل روی دامنه (برای حالت وب‌هوک)
+    'bot_token'      => '{$token}',
+    'owner_id'       => {$owner},
+    'admins'         => [],
     'webhook_url'    => '{$webhook}',
-
-    // کلید امنیتی وب‌هوک و کرون اینترنتی — عوضش نکنید مگر اینکه بخواهید
     'webhook_secret' => '{$secret}',
-
-    'timezone'  => '{$timezone}',
-    'brand'     => '{$brand}',
-
-    // در صورت نیاز به پروکسی: 'socks5h://127.0.0.1:1080'
-    'http_proxy' => '',
+    'timezone'       => '{$timezone}',
+    'brand'          => '{$brand}',
+    'http_proxy'     => '',
 ];
 
 }
 
-// ════════════════════════ از اینجا به بعد را دست نزنید ════════════════════════
-
-
 PHP;
-
-$header = str_replace(
-    ['%BUILD_DATE%', '%CORE_VERSION%'],
-    [date('Y-m-d H:i'), Runtime::VERSION],
-    $header
-);
 
 $entry = <<<'PHP'
 namespace {
 
     \Nikto\Bundle\Runtime::boot(NIKTO_CONFIG + ['root' => __DIR__]);
 
-    // اگر این فایل از cron فراخوانی شده باشد، فقط نقش کتابخانه را دارد
     if (!defined('NIKTO_LIBRARY')) {
         if (PHP_SAPI === 'cli') {
             exit(\Nikto\Bundle\Runtime::handleCli($argv ?? []));
@@ -247,23 +182,8 @@ PHP;
 
 $botFile = $header . $assetsClass . $code . $entry;
 
-// ───────────────────────────────────────────── ۴) فایل کرون
 $cronFile = <<<PHP
 <?php
-
-/**
- * ███ NIKTO CRYPTO BOT — زمان‌بند ███
- *
- * این فایل کنار {$name}-bot.php قرار می‌گیرد و کارت‌ها را سر ساعت می‌فرستد.
- *
- * روش‌های اجرا:
- *   ۱) کرون سرور (هر دقیقه):
- *        * * * * * /usr/bin/php %PATH%/{$name}-cron.php >/dev/null 2>&1
- *   ۲) اجرای دائمی:
- *        php {$name}-cron.php --loop
- *   ۳) کرون اینترنتی (هاست‌هایی که کرون خط فرمان ندارند) — هر دقیقه این آدرس را صدا بزنید:
- *        https://your-domain/{$name}-cron.php?key={$secret}
- */
 
 if (version_compare(PHP_VERSION, '8.0.0', '<')) {
     header('Content-Type: text/plain; charset=utf-8');
@@ -289,11 +209,20 @@ if (PHP_SAPI === 'cli') {
 \Nikto\Bundle\Runtime::handleWebCron();
 
 PHP;
-$cronFile = str_replace('%PATH%', '/home/user/public_html', $cronFile);
 
-// ───────────────────────────────────────────── ۵) نوشتن و بررسی
 $botPath = $outDir . '/' . $name . '-bot.php';
 $cronPath = $outDir . '/' . $name . '-cron.php';
+$botFile = strip_comments($botFile);
+$cronFile = strip_comments($cronFile);
+foreach (['bot' => $botFile, 'cron' => $cronFile] as $label => $source) {
+    foreach (token_get_all($source) as $token) {
+        if (is_array($token) && in_array($token[0], [T_COMMENT, T_DOC_COMMENT], true)) {
+            fwrite(STDERR, "❌ فایل {$label} هنوز توضیح دارد\n");
+            exit(1);
+        }
+    }
+}
+
 file_put_contents($botPath, $botFile);
 file_put_contents($cronPath, $cronFile);
 
@@ -305,7 +234,6 @@ foreach ([$botPath, $cronPath] as $path) {
     }
 }
 
-// بررسی اینکه هیچ کلاسی از قلم نیفتاده باشد
 $bundle = (string) file_get_contents($botPath);
 $missing = [];
 foreach ($bundledClasses as $class) {
@@ -319,7 +247,6 @@ if ($missing !== []) {
     exit(1);
 }
 
-// بررسی اینکه هر کلاسی که در کد صدا زده می‌شود واقعاً وجود دارد
 $referenced = [];
 preg_match_all('/\\\\?(Nikto\\\\[A-Za-z_\\\\]+)::/', $bundle, $refMatches);
 foreach ($refMatches[1] as $ref) {
@@ -349,3 +276,68 @@ echo "📁 {$outDir}\n";
 echo $withSecrets
     ? "🔐 توکن داخل فایل نوشته شد — فایل را جایی امن نگه دارید.\n\n"
     : "ℹ️  توکن نوشته نشد؛ آن را در بالای فایل bot وارد کنید (یا --with-secrets).\n\n";
+
+function strip_comments(string $code): string
+{
+    $out = [];
+    $dropNewline = false;
+    foreach (token_get_all($code) as $tok) {
+        [$id, $text] = is_array($tok) ? [$tok[0], $tok[1]] : [null, $tok];
+
+        if ($id === T_COMMENT || $id === T_DOC_COMMENT) {
+            $last = count($out) - 1;
+            $prev = $last >= 0 ? $out[$last] : ['code', ''];
+            if ($prev[0] === 'ws' && preg_match('/\n[ \t]*$/', $prev[1])) {
+                $out[$last][1] = rtrim($prev[1], " \t");
+                $dropNewline = !str_ends_with($text, "\n");
+            } else {
+                if ($prev[0] === 'ws') {
+                    $out[$last][1] = rtrim($prev[1], " \t");
+                }
+                if (str_ends_with($text, "\n")) {
+                    $out[] = ['ws', "\n"];
+                }
+                $dropNewline = false;
+            }
+            continue;
+        }
+
+        if ($id === T_WHITESPACE) {
+            if ($dropNewline) {
+                $text = (string) preg_replace('/^[ \t]*\n/', '', $text, 1);
+                $dropNewline = false;
+            }
+            $last = count($out) - 1;
+            if ($last >= 0 && $out[$last][0] === 'ws') {
+                $out[$last][1] .= $text;
+            } else {
+                $out[] = ['ws', $text];
+            }
+            continue;
+        }
+
+        $dropNewline = false;
+        $kind = in_array($id, [T_CONSTANT_ENCAPSED_STRING, T_ENCAPSED_AND_WHITESPACE, T_START_HEREDOC, T_END_HEREDOC, T_INLINE_HTML], true)
+            ? 'str' : 'code';
+        $out[] = [$kind, $text];
+    }
+
+    $result = '';
+    foreach ($out as $i => [$kind, $text]) {
+        if ($kind === 'ws') {
+            $text = (string) preg_replace('/[ \t]+\n/', "\n", $text);
+            $text = (string) preg_replace('/\n{3,}/', "\n\n", $text);
+            $prev = $out[$i - 1][1] ?? '';
+            $next = $out[$i + 1][1] ?? '';
+            if (str_ends_with($prev, '{') || str_ends_with($prev, '[') || str_ends_with($prev, '(')) {
+                $text = (string) preg_replace('/^\n\n+/', "\n", $text);
+            }
+            if (str_starts_with($next, '}') || str_starts_with($next, ']') || str_starts_with($next, ')')) {
+                $text = (string) preg_replace('/\n\n+([ \t]*)$/', "\n$1", $text);
+            }
+        }
+        $result .= $text;
+    }
+
+    return $result;
+}

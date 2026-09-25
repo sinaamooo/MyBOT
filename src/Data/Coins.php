@@ -3,9 +3,6 @@ declare(strict_types=1);
 
 namespace Nikto\Data;
 
-/**
- * شناسنامه‌ی ارزها: نام فارسی/انگلیسی، شناسه‌ی کوین‌گکو و رنگ برند.
- */
 final class Coins
 {
     private const MAP = [
@@ -71,7 +68,6 @@ final class Coins
     public static function color(string $symbol): string
     {
         $c = self::MAP[strtoupper($symbol)][3] ?? '#5B6478';
-        // رنگ‌های خیلی تیره روی پس‌زمینه‌ی روشن دیده نمی‌شوند
         return in_array(strtoupper($c), ['#000000', '#1E1E1E', '#0F0F0F'], true) ? '#3A4256' : $c;
     }
 
@@ -80,7 +76,6 @@ final class Coins
         return isset(self::MAP[strtoupper($symbol)]);
     }
 
-    /** @return string[] */
     public static function popular(): array
     {
         return array_slice(array_keys(self::MAP), 0, 24);

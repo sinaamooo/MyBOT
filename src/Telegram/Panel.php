@@ -8,18 +8,14 @@ use Nikto\Core\Jalali;
 use Nikto\Core\Settings;
 use Nikto\Jobs\CalendarJob;
 use Nikto\Jobs\Dispatcher;
+use Nikto\Jobs\LiquidityJob;
+use Nikto\Jobs\MoversJob;
 use Nikto\Jobs\PricesJob;
 use Nikto\Jobs\Registry;
 use Nikto\Jobs\Scheduler;
 use Nikto\Render\Theme;
 use Nikto\Text\Persian;
 
-/**
- * پنل مدیریت داخل تلگرام.
- *
- * کل پنل روی «یک پیام» کار می‌کند: با هر کلیک همان پیام ویرایش می‌شود
- * و پیام تازه‌ای ساخته نمی‌شود.
- */
 final class Panel
 {
     private const DAYS = [
@@ -32,8 +28,6 @@ final class Panel
     public function __construct(private Api $api)
     {
     }
-
-    // ==================================================== ورودی‌ها
 
     public function handleUpdate(array $update): void
     {
@@ -68,15 +62,12 @@ final class Panel
             return;
         }
 
-        // ورودی‌های حالت‌دار (کاربر منتظر تایپ چیزی است)
         $state = State::get($userId);
         if ($state['action'] !== '' && !str_starts_with($text, '/')) {
             $this->handleStateInput($chatId, $userId, $messageId, $state, $msg);
             return;
         }
 
-        // هر دستوری ورودیِ نیمه‌کاره را لغو می‌کند؛ وگرنه متن بعدی کاربر
-        // بی‌خبر به‌جای کپشن یا ساعت ذخیره می‌شد.
         if ($state['action'] !== '' && str_starts_with($text, '/')) {
             State::clear($userId);
             if (str_starts_with($text, '/cancel')) {
@@ -86,7 +77,6 @@ final class Panel
             }
         }
 
-        // افزودن کانال با فوروارد پست
         $forwardChat = $msg['forward_origin']['chat'] ?? ($msg['forward_from_chat'] ?? null);
         if (is_array($forwardChat) && isset($forwardChat['id'])) {
             $this->api->deleteMessage($chatId, $messageId);
@@ -107,7 +97,6 @@ final class Panel
             default => $this->fresh($chatId, $userId, $this->screenMain()),
         };
 
-        // پیام دستور کاربر پاک می‌شود تا چت تمیز بماند
         if (str_starts_with($text, '/start') || str_starts_with($text, '/panel')) {
             $this->api->deleteMessage($chatId, $messageId);
         }
@@ -126,7 +115,6 @@ final class Panel
             return;
         }
 
-        // همین پیام از این پس «پیام پنل» است
         Anchor::set($userId, $chatId, $messageId);
 
         $parts = explode(':', $data);
@@ -149,10 +137,6 @@ final class Panel
         $this->answered = false;
     }
 
-    /**
-     * مسیریابی دکمه‌ها.
-     * @return array{text:string,kb:array}|null
-     */
     private function route(array $p, int $chatId, int $userId, string $cbId, string &$toast): ?array
     {
         $head = $p[0] ?? 'm';
@@ -314,6 +298,30 @@ final class Panel
             case 'spark':
                 $job->setOption('sparkline', !$job->option('sparkline', true));
                 $toast = 'تغییر کرد';
+                return $this->screenJobOptions($key);
+
+            case 'cnt':
+                $n = (int) ($p[3] ?? 0);
+                if ($job instanceof MoversJob && in_array($n, MoversJob::COUNTS, true)) {
+                    $job->setOption('count', $n);
+                    $toast = 'تغییر کرد';
+                }
+                return $this->screenJobOptions($key);
+
+            case 'vol':
+                $v = (int) ($p[3] ?? 0);
+                if ($job instanceof MoversJob && in_array($v, MoversJob::VOLUMES, true)) {
+                    $job->setOption('min_volume', $v);
+                    $toast = 'تغییر کرد';
+                }
+                return $this->screenJobOptions($key);
+
+            case 'lvl':
+                $n = (int) ($p[3] ?? 0);
+                if ($job instanceof LiquidityJob && in_array($n, LiquidityJob::LEVELS, true)) {
+                    $job->setOption('levels', $n);
+                    $toast = 'تغییر کرد';
+                }
                 return $this->screenJobOptions($key);
 
             case 'pv':
@@ -480,15 +488,12 @@ final class Panel
         return $this->screenSettings();
     }
 
-    // ==================================================== ورودی متنی
-
     private function handleStateInput(int $chatId, int $userId, int $messageId, array $state, array $msg): void
     {
         $text = trim((string) ($msg['text'] ?? ''));
         $action = $state['action'];
         $payload = $state['payload'];
 
-        // پیام کاربر پاک می‌شود تا فقط پیام پنل بماند
         $this->api->deleteMessage($chatId, $messageId);
 
         if ($text === '/cancel' || $text === 'لغو') {
@@ -523,7 +528,6 @@ final class Panel
             case 'caption':
                 $job = Registry::refresh($payload);
                 if ($job !== null) {
-                    // قالب‌بندی تلگرام (بولد، نقل‌قول و …) به HTML تبدیل می‌شود
                     $formatted = $text === 'خالی'
                         ? ''
                         : (Entities::looksLikeHtml($text)
@@ -613,7 +617,6 @@ final class Panel
         $this->render($chatId, $userId, $this->screenMain());
     }
 
-    /** @return string[] */
     private function parseCoins(string $text): array
     {
         $raw = preg_split('/[,\s]+/u', Persian::enDigits(strtoupper(trim($text)))) ?: [];
@@ -672,7 +675,6 @@ final class Panel
         return $parts === [] ? 'زمانی ثبت نشد. قالب درست: 09:00' : implode(' | ', $parts);
     }
 
-    /** کانال تازه را به کارهایی که کانالی ندارند وصل می‌کند */
     private function autoAssign(array $result): void
     {
         if (!($result['ok'] ?? false) || !isset($result['channel']['id'])) {
@@ -686,9 +688,6 @@ final class Panel
         }
     }
 
-    // ==================================================== نمایش
-
-    /** ویرایش پیام پنل؛ اگر نبود، یک پیام تازه ساخته و همان را لنگر می‌کند */
     private function render(int $chatId, int $userId, array $screen, string $notice = ''): void
     {
         $text = $screen['text'];
@@ -706,7 +705,6 @@ final class Panel
         $this->fresh($chatId, $userId, ['text' => $text, 'kb' => $screen['kb']]);
     }
 
-    /** ساخت پیام تازه‌ی پنل و ثبت آن به‌عنوان لنگر */
     private function fresh(int $chatId, int $userId, array $screen): void
     {
         $res = $this->api->sendMessage($chatId, $screen['text'], $screen['kb']);
@@ -726,7 +724,6 @@ final class Panel
             return;
         }
 
-        // پیش‌نمایش قبلی پاک می‌شود تا چت شلوغ نشود
         $anchor = Anchor::get($userId);
         if ($anchor !== null && $anchor['preview_message_id'] > 0) {
             $this->api->deleteMessage($chatId, $anchor['preview_message_id']);
@@ -756,8 +753,6 @@ final class Panel
         $result = Dispatcher::run($key);
         $this->render($chatId, $userId, $this->screenJob($key), $result['message']);
     }
-
-    // ==================================================== صفحه‌ها
 
     private function screenPrompt(string $title, string $body, string $back): array
     {
@@ -800,23 +795,17 @@ final class Panel
         return ['text' => implode("\n", $lines), 'kb' => $kb];
     }
 
-    /**
-     * نمایش کپشن فعلی: اول همان‌طور که در کانال دیده می‌شود،
-     * بعد متن خام برای کپی و ویرایش.
-     */
     private function captionPreview(string $caption): string
     {
         if (trim($caption) === '') {
             return "کپشن فعلی: <i>خالی</i>\n\n";
         }
 
-        // نقل‌قول و pre را نمی‌شود تو‌در‌تو گذاشت؛ در آن حالت بدون قاب نشان می‌دهیم
         $nested = (bool) preg_match('#<(blockquote|pre)\b#i', $caption);
 
         $out = "کپشن فعلی (همان‌طور که در کانال دیده می‌شود):\n"
             . ($nested ? $caption . "\n" : '<blockquote>' . $caption . "</blockquote>\n");
 
-        // متن خام فقط وقتی جدا نشان داده می‌شود که قالب‌بندی داشته باشد
         if ($caption !== strip_tags($caption)) {
             $out .= mb_strlen($caption) > 700
                 ? "\n(متن خام طولانی است و نشان داده نمی‌شود؛ برای تغییر، کپشن تازه بفرستید.)\n"
@@ -1037,9 +1026,50 @@ final class Panel
             $kb[] = [$this->btn('حداقل اهمیت رویدادها', 's:imp')];
         }
 
+        if ($job instanceof MoversJob) {
+            $count = $job->count();
+            $volume = (int) $job->minVolume();
+            $lines[] = 'تعداد ارز در هر ستون: ' . $this->fa((string) $count);
+            $lines[] = 'حداقل حجم ۲۴ ساعته: ' . $this->fa($this->money($volume));
+            $lines[] = 'نمودار کوچک: ' . ($job->option('sparkline', true) ? 'روشن' : 'خاموش');
+            $lines[] = '';
+            $lines[] = 'قراردادهای کم‌حجم‌تر از این مقدار در رتبه‌بندی حساب نمی‌شوند.';
+            $row = [];
+            foreach (MoversJob::COUNTS as $n) {
+                $row[] = $this->btn($this->fa((string) $n) . ' ارز' . ($n === $count ? ' (انتخاب‌شده)' : ''), 'j:' . $key . ':cnt:' . $n);
+            }
+            $kb[] = array_slice($row, 0, 2);
+            $kb[] = array_slice($row, 2);
+            $row = [];
+            foreach (MoversJob::VOLUMES as $v) {
+                $row[] = $this->btn('حجم ' . $this->fa($this->money($v)) . ($v === $volume ? ' (انتخاب‌شده)' : ''), 'j:' . $key . ':vol:' . $v);
+            }
+            $kb[] = array_slice($row, 0, 2);
+            $kb[] = array_slice($row, 2);
+            $kb[] = [$this->btn('نمودار کوچک: ' . ($job->option('sparkline', true) ? 'روشن' : 'خاموش'), 'j:' . $key . ':spark')];
+        }
+
+        if ($job instanceof LiquidityJob) {
+            $levels = $job->levels();
+            $lines[] = 'تعداد دیوار در هر سمت: ' . $this->fa((string) $levels);
+            $lines[] = '';
+            $lines[] = 'منبع: دفتر سفارش فیوچرز و اسپات بایننس (رایگان، بدون کلید).';
+            $row = [];
+            foreach (LiquidityJob::LEVELS as $n) {
+                $row[] = $this->btn($this->fa((string) $n) . ' سطح' . ($n === $levels ? ' (انتخاب‌شده)' : ''), 'j:' . $key . ':lvl:' . $n);
+            }
+            $kb[] = array_slice($row, 0, 2);
+            $kb[] = array_slice($row, 2);
+        }
+
         $kb[] = [$this->btn('بازگشت', 'j:' . $key)];
 
         return ['text' => implode("\n", $lines), 'kb' => $kb];
+    }
+
+    private function money(int $usd): string
+    {
+        return $usd >= 1_000_000 ? '$' . intdiv($usd, 1_000_000) . 'M' : '$' . number_format($usd);
     }
 
     private function screenChannels(): array
@@ -1238,8 +1268,6 @@ final class Panel
 
         return ['text' => $text, 'kb' => [[$this->btn('بازگشت', 'm')]]];
     }
-
-    // ==================================================== کمکی‌ها
 
     private function btn(string $text, string $data): array
     {

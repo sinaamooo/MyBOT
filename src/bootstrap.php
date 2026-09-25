@@ -1,8 +1,4 @@
 <?php
-/**
- * NIKTO CRYPTO BOT — bootstrap
- * بارگذارنده‌ی خودکار کلاس‌ها و راه‌اندازی اولیه
- */
 declare(strict_types=1);
 
 define('APP_ROOT', dirname(__DIR__));

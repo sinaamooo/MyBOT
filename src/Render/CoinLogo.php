@@ -5,15 +5,10 @@ namespace Nikto\Render;
 
 use Nikto\Data\Coins;
 
-/**
- * لوگوی ارزها؛ اگر فایل لوگو نبود، دایره‌ای با نماد ارز رسم می‌شود.
- */
 final class CoinLogo
 {
-    /** روی کاغذ سفید هرگز نسخه‌ی سفید لوگو استفاده نمی‌شود */
     public static bool $lightSurface = true;
 
-    /** @var array<string,bool> */
     private static array $preferWhite = [];
 
     public static function path(string $symbol, bool $white = false): ?string
@@ -28,10 +23,6 @@ final class CoinLogo
         return self::path($symbol) !== null;
     }
 
-    /**
-     * رسم لوگو داخل یک دایره.
-     * $size قطر کل دایره است.
-     */
     public static function draw(Canvas $c, string $symbol, float $cx, float $cy, float $size, bool $plate = true): void
     {
         $symbol = strtoupper($symbol);
@@ -50,7 +41,6 @@ final class CoinLogo
         $path = self::path($symbol);
         if ($path !== null) {
             if (!self::$lightSurface) {
-                // روی کاغذ تیره، لوگوهای خیلی تیره با نسخه‌ی سفید جایگزین می‌شوند
                 if (!isset(self::$preferWhite[$symbol])) {
                     self::$preferWhite[$symbol] = Canvas::imageLuminance($path) < 0.22
                         && self::path($symbol, true) !== null;
@@ -65,14 +55,14 @@ final class CoinLogo
             return;
         }
 
-        // جایگزین: حرف اول نماد
         $color = Coins::color($symbol);
         $c->circle($cx, $cy, $radius - 1, $color, self::$lightSurface ? 1.0 : 0.22);
+        $mark = mb_strlen($symbol) <= 3 ? $symbol : mb_substr($symbol, 0, 1);
         $c->text(
-            mb_substr($symbol, 0, min(3, mb_strlen($symbol))),
+            $mark,
             $cx,
             $cy,
-            $size * 0.32,
+            $size * (mb_strlen($mark) === 1 ? 0.42 : 0.32),
             '#FFFFFF',
             Canvas::W_BOLD,
             'center',

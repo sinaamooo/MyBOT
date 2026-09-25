@@ -3,18 +3,16 @@ declare(strict_types=1);
 
 namespace Nikto\Jobs;
 
-/**
- * فهرست کارهای قابل زمان‌بندی.
- */
 final class Registry
 {
     private const CLASSES = [
         PricesJob::KEY    => PricesJob::class,
         FearGreedJob::KEY => FearGreedJob::class,
         CalendarJob::KEY  => CalendarJob::class,
+        MoversJob::KEY    => MoversJob::class,
+        LiquidityJob::KEY => LiquidityJob::class,
     ];
 
-    /** @var array<string,Job> */
     private static array $instances = [];
 
     public static function get(string $key): ?Job
@@ -30,7 +28,6 @@ final class Registry
         return self::$instances[$key];
     }
 
-    /** @return array<string,Job> */
     public static function all(): array
     {
         $out = [];
@@ -44,7 +41,6 @@ final class Registry
         return $out;
     }
 
-    /** @return string[] */
     public static function keys(): array
     {
         return array_keys(self::CLASSES);

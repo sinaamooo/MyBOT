@@ -1,10 +1,4 @@
 <?php
-/**
- * NIKTO CRYPTO BOT — نقطه‌ی ورود وب‌هوک (جایگزین bot.php برای هاست‌های وب)
- *
- * تنظیم:
- *   php tools/webhook-set.php https://example.com/webhook.php
- */
 if (version_compare(PHP_VERSION, '8.0.0', '<')) {
     header('Content-Type: text/plain; charset=utf-8');
     echo "NIKTO CRYPTO BOT\n\n";
@@ -22,7 +16,6 @@ use Nikto\Core\PublicUrl;
 use Nikto\Telegram\Api;
 use Nikto\Telegram\Panel;
 
-// درخواست معمولی مرورگر: نمایش آدرس درست وب‌هوک
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
     header('Content-Type: text/plain; charset=utf-8');
     http_response_code(200);

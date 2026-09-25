@@ -3,26 +3,22 @@ declare(strict_types=1);
 
 namespace Nikto\Core;
 
-/**
- * تنظیمات پویا (قابل تغییر از پنل ربات).
- */
 final class Settings
 {
-    /** @var array<string,string>|null */
     private static ?array $cache = null;
 
     public const DEFAULTS = [
         'timezone'          => 'Asia/Tehran',
-        'brand'             => 'NIKTO CRYPTO',   // فقط نام نمایشی در پنل
-        'brand_link'        => '',               // اگر پر شود، زیر کارت‌ها نوشته می‌شود
-        'digits'            => 'fa',      // ارقام متن و تاریخ‌ها: fa | en
-        'digits_data'       => 'en',      // ارقام داده‌ها (قیمت، درصد): fa | en
-        'catchup_minutes'   => '10',      // اگر زمانبند دیر اجرا شد، تا چند دقیقه جبران کند
-        'quality'           => 'high',    // high | normal  (سوپرسمپلینگ رندر)
-        'send_mode'         => 'photo',   // photo | document
-        'calendar_source'   => 'auto',    // auto | forexfactory | tradingview
-        'price_source'      => 'auto',    // auto | binance | coingecko
-        'calendar_min_impact' => '2',     // 1=کم 2=متوسط 3=زیاد
+        'brand'             => 'NIKTO CRYPTO',
+        'brand_link'        => '',
+        'digits'            => 'fa',
+        'digits_data'       => 'en',
+        'catchup_minutes'   => '10',
+        'quality'           => 'high',
+        'send_mode'         => 'photo',
+        'calendar_source'   => 'auto',
+        'price_source'      => 'auto',
+        'calendar_min_impact' => '2',
         'calendar_currencies' => 'USD,EUR,GBP,JPY,CAD,AUD,NZD,CHF,CNY',
         'coins'             => 'BTC,ETH,XRP,BNB,SOL,TRX',
         'silent_night'      => '0',
@@ -80,7 +76,6 @@ final class Settings
         self::$cache = null;
     }
 
-    /** @return array<string,string> */
     public static function all(): array
     {
         self::load();
@@ -102,7 +97,6 @@ final class Settings
         return new \DateTimeImmutable('now', self::timezone());
     }
 
-    /** ارزهای انتخاب‌شده برای کارت قیمت‌ها */
     public static function coins(): array
     {
         $raw = self::get('coins');

@@ -3,16 +3,8 @@ declare(strict_types=1);
 
 namespace Nikto\Telegram;
 
-/**
- * تبدیل قالب‌بندی تلگرام (entities) به HTML.
- *
- * وقتی کاربر متنی را با بولد یا نقل‌قول می‌فرستد، تلگرام متن خام و فهرست
- * قالب‌ها را جدا می‌فرستد. این کلاس آن‌ها را دوباره به HTML تبدیل می‌کند
- * تا همان قالب‌بندی در کپشن کارت‌ها دیده شود.
- */
 final class Entities
 {
-    /** @param array<int,array<string,mixed>> $entities */
     public static function toHtml(string $text, array $entities): string
     {
         if ($text === '') {
@@ -22,13 +14,10 @@ final class Entities
             return self::escape($text);
         }
 
-        // تلگرام موقعیت‌ها را بر اساس UTF-16 می‌شمارد
         $chars = self::toUtf16Units($text);
         $length = count($chars);
 
-        /** @var array<int,string[]> $opens */
         $opens = [];
-        /** @var array<int,string[]> $closes */
         $closes = [];
 
         foreach ($entities as $entity) {
@@ -45,7 +34,6 @@ final class Entities
                 continue;
             }
             $opens[$offset][] = $open;
-            // تگ‌های تودرتو باید به ترتیب معکوس بسته شوند
             $closes[$end] ??= [];
             array_unshift($closes[$end], $close);
         }
@@ -67,7 +55,6 @@ final class Entities
         return $out;
     }
 
-    /** @return array{0:string,1:string} */
     private static function tags(string $type, array $entity): array
     {
         return match ($type) {
@@ -85,7 +72,6 @@ final class Entities
         };
     }
 
-    /** @return array{0:string,1:string} */
     private static function preTags(array $entity): array
     {
         $language = (string) ($entity['language'] ?? '');
@@ -95,14 +81,12 @@ final class Entities
             : ['<pre>', '</pre>'];
     }
 
-    /** شکستن متن به واحدهای UTF-16 (هم‌راستا با شمارش تلگرام) */
     private static function toUtf16Units(string $text): array
     {
         $units = [];
         foreach (preg_split('//u', $text, -1, PREG_SPLIT_NO_EMPTY) ?: [] as $char) {
             $code = mb_ord($char, 'UTF-8');
             if ($code !== false && $code > 0xFFFF) {
-                // کاراکترهای خارج از BMP (مثل ایموجی) دو واحد حساب می‌شوند
                 $units[] = $char;
                 $units[] = '';
             } else {
@@ -118,7 +102,6 @@ final class Entities
         return htmlspecialchars($text, ENT_NOQUOTES | ENT_SUBSTITUTE, 'UTF-8');
     }
 
-    /** آیا متن از قبل شامل تگ HTML است؟ */
     public static function looksLikeHtml(string $text): bool
     {
         return (bool) preg_match('#</?(b|strong|i|em|u|s|code|pre|a|blockquote|tg-spoiler)\b[^>]*>#i', $text);

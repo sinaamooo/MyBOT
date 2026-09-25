@@ -5,12 +5,8 @@ namespace Nikto\Telegram;
 
 use Nikto\Core\Db;
 
-/**
- * پیام «لنگر» پنل: هر کاربر یک پیام دارد که به‌جای ارسال پیام تازه، ویرایش می‌شود.
- */
 final class Anchor
 {
-    /** @return array{chat_id:string,message_id:int,preview_message_id:int}|null */
     public static function get(int $userId): ?array
     {
         $row = Db::one('SELECT * FROM panel_anchor WHERE user_id = :u', [':u' => $userId]);

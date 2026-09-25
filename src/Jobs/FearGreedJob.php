@@ -10,9 +10,6 @@ use Nikto\Render\Theme;
 use Nikto\Render\FearGreedCard;
 use Nikto\Text\Persian;
 
-/**
- * کارت شاخص ترس و طمع.
- */
 final class FearGreedJob extends Job
 {
     public const KEY = 'feargreed';
@@ -29,7 +26,7 @@ final class FearGreedJob extends Job
 
     public function description(): string
     {
-        return 'گیج شاخص ترس و طمع همراه با مقادیر دیروز، هفته و ماه گذشته';
+        return 'سنجه‌ی شاخص ترس و طمع همراه با مقادیر دیروز، هفته و ماه گذشته';
     }
 
     public function defaultTheme(): string

@@ -3,13 +3,8 @@ declare(strict_types=1);
 
 namespace Nikto\Data;
 
-/**
- * ترجمه‌ی عنوان رویدادهای اقتصادی به فارسی.
- * اگر معادلی پیدا نشود، عنوان انگلیسی دست‌نخورده برمی‌گردد.
- */
 final class EventTranslator
 {
-    /** پیشوندهای کشوری/نوع انتشار */
     private const PREFIX = [
         'german'        => 'آلمان',
         'french'        => 'فرانسه',
@@ -29,7 +24,6 @@ final class EventTranslator
         'weekly'        => 'هفتگی',
     ];
 
-    /** بانک‌های مرکزی */
     private const BANKS = [
         'fed'    => 'فدرال رزرو آمریکا',
         'fomc'   => 'کمیته بازار آزاد فدرال (FOMC)',
@@ -45,9 +39,7 @@ final class EventTranslator
         'norges' => 'بانک مرکزی نروژ',
     ];
 
-    /** فرهنگ اصلی: الگو => ترجمه */
     private const DICTIONARY = [
-        // اشتغال
         '/^adp non-?farm employment change$/i'      => 'گزارش تغییرات اشتغال بخش خصوصی و غیرکشاورزی — ADP',
         '/^non-?farm employment change$/i'          => 'تغییرات اشتغال بخش غیرکشاورزی (NFP)',
         '/^non-?farm payrolls?$/i'                  => 'اشتغال بخش غیرکشاورزی (NFP)',
@@ -63,7 +55,6 @@ final class EventTranslator
         '/^labou?r cost/i'                          => 'هزینه نیروی کار',
         '/^participation rate$/i'                   => 'نرخ مشارکت اقتصادی',
 
-        // تورم
         '/^core cpi/i'                              => 'شاخص قیمت مصرف‌کننده هسته (CPI هسته)',
         '/^cpi flash estimate/i'                    => 'برآورد اولیه شاخص قیمت مصرف‌کننده',
         '/^cpi/i'                                   => 'شاخص قیمت مصرف‌کننده (CPI)',
@@ -77,7 +68,6 @@ final class EventTranslator
         '/^inflation (rate|expectations)/i'         => 'نرخ/انتظارات تورم',
         '/^wpi/i'                                   => 'شاخص قیمت عمده‌فروشی',
 
-        // شاخص‌های فعالیت
         '/^ism (manufacturing|services|non-?manufacturing) pmi$/i' => 'شاخص PMI مؤسسه ISM',
         '/^ism (manufacturing|services|non-?manufacturing) prices$/i' => 'شاخص قیمت‌های ISM',
         '/^manufacturing pmi$/i'                    => 'شاخص PMI بخش تولید',
@@ -101,7 +91,6 @@ final class EventTranslator
         '/^sentix investor confidence$/i'           => 'اعتماد سرمایه‌گذاران Sentix',
         '/^tankan/i'                                => 'نظرسنجی تانکان ژاپن',
 
-        // مصرف و خرده‌فروشی
         '/^core retail sales/i'                     => 'خرده‌فروشی هسته',
         '/^retail sales/i'                          => 'خرده‌فروشی',
         '/^cb consumer confidence$/i'               => 'اعتماد مصرف‌کننده کنفرانس بورد (CB)',
@@ -111,7 +100,6 @@ final class EventTranslator
         '/^consumer credit/i'                       => 'اعتبار مصرف‌کننده',
         '/^personal (spending|income)/i'            => 'درآمد و مخارج شخصی',
 
-        // مسکن
         '/^building permits$/i'                     => 'مجوزهای ساخت‌وساز',
         '/^housing starts$/i'                       => 'شروع ساخت مسکن',
         '/^new home sales$/i'                       => 'فروش خانه‌های نوساز',
@@ -119,7 +107,6 @@ final class EventTranslator
         '/^pending home sales/i'                    => 'فروش‌های در انتظار مسکن',
         '/^s&p\/cs composite/i'                     => 'شاخص قیمت مسکن کیس-شیلر',
 
-        // رشد و تجارت
         '/gdp( (q\/q|m\/m|y\/y))?$/i'               => 'تولید ناخالص داخلی (GDP)',
         '/^trade balance$/i'                        => 'تراز تجاری',
         '/^current account$/i'                      => 'حساب جاری',
@@ -130,7 +117,6 @@ final class EventTranslator
         '/^wholesale inventories/i'                 => 'موجودی انبار عمده‌فروشی',
         '/^federal budget balance$/i'               => 'تراز بودجه فدرال',
 
-        // انرژی
         '/^crude oil inventories$/i'                => 'گزارش هفتگی ذخایر نفت خام — اداره اطلاعات انرژی آمریکا (EIA)',
         '/^api weekly (statistical bulletin|crude oil stock)/i' => 'گزارش هفتگی ذخایر نفت خام — مؤسسه فرآورده‌های نفتی آمریکا (API)',
         '/^cushing crude oil inventories$/i'        => 'ذخایر نفت خام Cushing — اداره اطلاعات انرژی آمریکا (EIA)',
@@ -140,7 +126,6 @@ final class EventTranslator
         '/^baker hughes/i'                          => 'شمار دکل‌های نفتی بیکر هیوز',
         '/^opec/i'                                  => 'نشست/گزارش اوپک',
 
-        // سیاست پولی
         '/^federal funds rate$/i'                   => 'نرخ بهره فدرال رزرو آمریکا',
         '/^fomc statement$/i'                       => 'بیانیه کمیته بازار آزاد فدرال (FOMC)',
         '/^fomc press conference$/i'                => 'کنفرانس خبری فدرال رزرو',
@@ -162,12 +147,10 @@ final class EventTranslator
         '/^beige book$/i'                           => 'گزارش بژ بوک فدرال رزرو',
         '/^bank (of )?(japan|england|canada) (outlook|report)/i' => 'گزارش چشم‌انداز بانک مرکزی',
 
-        // اوراق و حراج
         '/(\d+)-?(y|yr|year) bond auction$/i'       => 'حراج اوراق قرضه دولتی',
         '/^(\d+)-?(m|month) bill auction$/i'        => 'حراج اسناد خزانه',
         '/^treasury currency report$/i'             => 'گزارش ارزی خزانه‌داری آمریکا',
 
-        // تعطیلات
         '/bank holiday$/i'                          => 'تعطیلی بانکی',
         '/^constitution day$/i'                     => 'روز قانون اساسی',
         '/^(labou?r|may) day$/i'                    => 'روز کارگر',
@@ -211,7 +194,6 @@ final class EventTranslator
             return '';
         }
 
-        // سخنرانی مقام‌ها
         if (preg_match('/^(.*?)\s+speaks$/i', $title, $m)) {
             return 'سخنرانی ' . self::speaker(trim($m[1]));
         }
@@ -219,7 +201,6 @@ final class EventTranslator
             return 'اظهارات ' . self::speaker(trim($m[1]));
         }
 
-        // جداکردن توضیح داخل پرانتز و پسوندهای m/m و y/y
         $qualifiers = [];
         $core = $title;
 
@@ -235,11 +216,10 @@ final class EventTranslator
 
         $translated = self::lookup($core);
         if ($translated === null) {
-            // تعطیلات ناشناخته: دست‌کم نوع رویداد مشخص شود
             if (preg_match('/\b(day|holiday|festival|observed)\b/i', $core)) {
                 return 'تعطیل رسمی — ' . $core;
             }
-            return $title; // ترجمه‌ای نداریم — همان انگلیسی نمایش داده می‌شود
+            return $title;
         }
 
         $qualifiers = array_values(array_filter($qualifiers));
@@ -263,7 +243,6 @@ final class EventTranslator
             }
         }
 
-        // تلاش دوم: حذف پیشوندها و جست‌وجوی مجدد
         $words = preg_split('/\s+/', $core) ?: [];
         if (count($words) > 1) {
             $first = strtolower($words[0]);

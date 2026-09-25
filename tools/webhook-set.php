@@ -1,13 +1,4 @@
 <?php
-/**
- * تنظیم یا حذف وب‌هوک
- *
- *   php tools/webhook-set.php                      آدرس webhook_url از config.php
- *   php tools/webhook-set.php https://dom/webhook.php
- *   php tools/webhook-set.php --url                فقط نمایش آدرس تنظیم‌شده
- *   php tools/webhook-set.php --info               وضعیت فعلی وب‌هوک
- *   php tools/webhook-set.php --delete             حذف وب‌هوک
- */
 declare(strict_types=1);
 
 require dirname(__DIR__) . '/src/bootstrap.php';

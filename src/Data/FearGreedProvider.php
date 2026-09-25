@@ -6,9 +6,6 @@ namespace Nikto\Data;
 use Nikto\Core\Http;
 use Nikto\Core\Log;
 
-/**
- * شاخص ترس و طمع بازار رمزارز (alternative.me).
- */
 final class FearGreedProvider
 {
     private const URL = 'https://api.alternative.me/fng/?limit=32&format=json';
@@ -21,7 +18,6 @@ final class FearGreedProvider
         ['max' => 100, 'fa' => 'طمع شدید',  'en' => 'Extreme Greed', 'color' => '#15A05F'],
     ];
 
-    /** @return array<string,mixed>|null */
     public static function fetch(): ?array
     {
         if (Mock::enabled()) {
@@ -46,7 +42,6 @@ final class FearGreedProvider
         return self::build($series);
     }
 
-    /** @param array<int,array{value:int,class:string,timestamp:int}> $series */
     public static function build(array $series): array
     {
         $today = $series[0] ?? ['value' => 50, 'class' => 'Neutral', 'timestamp' => time()];
@@ -78,7 +73,6 @@ final class FearGreedProvider
         ];
     }
 
-    /** @return array{fa:string,en:string,color:string} */
     public static function zone(int $value, string $classification = ''): array
     {
         if ($classification !== '') {

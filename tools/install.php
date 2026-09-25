@@ -1,12 +1,4 @@
 <?php
-/**
- * نصب سریع: ثبت توکن در config.local.php
- *
- *   php tools/install.php                                     حالت پرسش‌وپاسخ
- *   php tools/install.php --token=123:ABC                     حالت مستقیم
- *   php tools/install.php --token=... --owner=6595849261 \
- *                         --domain=nikto.s14.telviprobot.top --force
- */
 declare(strict_types=1);
 
 require dirname(__DIR__) . '/src/bootstrap.php';
@@ -80,7 +72,6 @@ if (file_put_contents($target, $content) === false) {
 }
 @chmod($target, 0600);
 
-// آماده‌سازی دیتابیس و تنظیمات اولیه
 Db::migrate();
 Config::set('timezone', $tz);
 \Nikto\Core\Settings::set('timezone', $tz);

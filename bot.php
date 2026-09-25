@@ -1,11 +1,4 @@
 <?php
-/**
- * NIKTO CRYPTO BOT — اجرای ربات در حالت Long Polling
- *
- *   php bot.php
- *
- * برای اجرای دائمی از systemd یا screen/tmux استفاده کنید.
- */
 declare(strict_types=1);
 
 require __DIR__ . '/src/bootstrap.php';
@@ -28,7 +21,7 @@ if (!Config::isConfigured()) {
 }
 
 Db::migrate();
-Registry::all(); // ساخت ردیف کارها در اولین اجرا
+Registry::all();
 
 $api = new Api();
 $me = $api->getMe();
@@ -41,7 +34,7 @@ $username = (string) ($me['result']['username'] ?? '');
 $botId = (int) ($me['result']['id'] ?? 0);
 Config::set('bot_id', $botId);
 
-$api->deleteWebhook(); // long polling با وب‌هوک هم‌زمان کار نمی‌کند
+$api->deleteWebhook();
 
 echo "✅ ربات @{$username} روشن شد (id: {$botId})\n";
 echo "   برای توقف Ctrl+C را بزنید.\n";
