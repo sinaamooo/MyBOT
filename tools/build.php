@@ -143,6 +143,9 @@ if ($webhook !== '') {
 }
 $timezone = (string) Config::get('timezone', 'Asia/Tehran');
 $brand = (string) Config::get('brand', 'NIKTO CRYPTO');
+$dataProxy = $public ? '' : (string) Config::get('data_proxy', '');
+$coinglassKey = $withSecrets ? (string) Config::get('coinglass_key', '') : '';
+$coingeckoKey = $withSecrets ? (string) Config::get('coingecko_key', '') : '';
 
 $header = <<<PHP
 <?php
@@ -159,6 +162,9 @@ const NIKTO_CONFIG = [
     'timezone'       => '{$timezone}',
     'brand'          => '{$brand}',
     'http_proxy'     => '',
+    'data_proxy'     => '{$dataProxy}',
+    'coinglass_key'  => '{$coinglassKey}',
+    'coingecko_key'  => '{$coingeckoKey}',
 ];
 
 }

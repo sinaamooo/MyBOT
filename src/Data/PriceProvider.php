@@ -9,7 +9,7 @@ use Nikto\Core\Settings;
 
 final class PriceProvider
 {
-    private const BINANCE = 'https://api.binance.com/api/v3';
+    private const BINANCE = ['https://api.binance.com/api/v3', 'https://data-api.binance.vision/api/v3'];
     private const GECKO   = 'https://api.coingecko.com/api/v3';
 
     public static function fetch(array $symbols, bool $withSparkline = true): array
@@ -23,14 +23,27 @@ final class PriceProvider
         }
 
         $source = Settings::get('price_source');
-        $rows = [];
+        $order = match (true) {
+            $source === 'binance'   => ['binance'],
+            $source === 'coingecko' => ['coingecko'],
+            CoinGeckoApi::enabled() => ['coingecko', 'binance', 'exchanges'],
+            default                 => ['binance', 'coingecko', 'exchanges'],
+        };
 
-        if ($source === 'binance' || $source === 'auto') {
-            $rows = self::fromBinance($symbols, $withSparkline);
+        $rows = [];
+        foreach ($order as $provider) {
+            $missing = array_values(array_diff($symbols, array_column($rows, 'symbol')));
+            if ($missing === []) {
+                break;
+            }
+            $rows = array_merge($rows, match ($provider) {
+                'binance'   => self::fromBinance($missing, $withSparkline),
+                'coingecko' => self::fromGecko($missing),
+                default     => self::fromExchanges($missing, $withSparkline),
+            });
         }
-        if ($rows === [] && ($source === 'coingecko' || $source === 'auto')) {
-            $rows = self::fromGecko($symbols);
-        }
+        usort($rows, static fn (array $a, array $b): int =>
+            array_search($a['symbol'], $symbols, true) <=> array_search($b['symbol'], $symbols, true));
         if ($rows === []) {
             Log::error('Price fetch failed from every source', ['symbols' => $symbols]);
         }
@@ -42,7 +55,24 @@ final class PriceProvider
     {
         $pairs = array_map(static fn (string $s): string => self::pair($s), $symbols);
         $query = '["' . implode('","', $pairs) . '"]';
-        $data = Http::getJson(self::BINANCE . '/ticker/24hr?symbols=' . rawurlencode($query));
+
+        $data = null;
+        $base = '';
+        foreach (self::BINANCE as $base) {
+            $data = Http::getJson($base . '/ticker/24hr?symbols=' . rawurlencode($query), [], 0, 1);
+            if (!is_array($data) && count($pairs) > 1 && Http::lastCode($base) === 400) {
+                $data = [];
+                foreach ($pairs as $pair) {
+                    $one = Http::getJson($base . '/ticker/24hr?symbol=' . $pair, [], 15, 0);
+                    if (is_array($one) && isset($one['symbol'])) {
+                        $data[] = $one;
+                    }
+                }
+            }
+            if (is_array($data) && $data !== []) {
+                break;
+            }
+        }
 
         if (!is_array($data) || $data === []) {
             return [];
@@ -68,16 +98,63 @@ final class PriceProvider
                 (float) ($row['highPrice'] ?? 0),
                 (float) ($row['lowPrice'] ?? 0),
                 (float) ($row['quoteVolume'] ?? 0),
-                $withSparkline ? self::sparkline($pairs[$i]) : []
+                $withSparkline ? self::sparkline($base, $pairs[$i]) : []
             );
         }
 
         return $out;
     }
 
-    private static function sparkline(string $pair): array
+    private static function fromExchanges(array $symbols, bool $withSparkline): array
     {
-        $data = Http::getJson(self::BINANCE . '/klines?symbol=' . $pair . '&interval=1h&limit=24', [], 15, 1);
+        $rows = [];
+        foreach (Exchanges::SPOT as $exchange) {
+            $missing = array_values(array_diff($symbols, array_column($rows, 'symbol')));
+            if ($missing === []) {
+                break;
+            }
+            $rows = array_merge($rows, self::fromExchange($exchange, $missing, $withSparkline));
+        }
+
+        return $rows;
+    }
+
+    private static function fromExchange(string $exchange, array $symbols, bool $withSparkline): array
+    {
+        $tickers = Exchanges::spotTickers($exchange, array_map(static fn (string $s): string => substr(self::pair($s), 0, -4), $symbols));
+        $out = [];
+        foreach ($symbols as $symbol) {
+            $t = $tickers[self::pair($symbol)] ?? null;
+            if ($t === null || (float) $t['lastPrice'] <= 0) {
+                continue;
+            }
+            $spark = [];
+            if ($withSparkline) {
+                foreach (Exchanges::klines($exchange, 'spot', self::pair($symbol), 24) as $candle) {
+                    $spark[] = (float) $candle[4];
+                }
+            }
+            $out[] = self::row(
+                $symbol,
+                (float) $t['lastPrice'],
+                (float) $t['priceChangePercent'],
+                (float) $t['priceChange'],
+                (float) $t['highPrice'],
+                (float) $t['lowPrice'],
+                (float) $t['quoteVolume'],
+                $spark
+            );
+        }
+        if ($out !== []) {
+            Log::warn('Prices served by fallback exchange', ['exchange' => $exchange, 'symbols' => array_column($out, 'symbol')]);
+        }
+
+        return $out;
+    }
+
+    private static function sparkline(string $base, string $pair): array
+    {
+        $data = Http::getJson($base . '/klines?symbol=' . $pair . '&interval=1h&limit=24', [], 15, 1);
         if (!is_array($data)) {
             return [];
         }
@@ -104,7 +181,7 @@ final class PriceProvider
         }
         $url = self::GECKO . '/coins/markets?vs_currency=usd&ids=' . implode(',', array_keys($ids))
             . '&order=market_cap_desc&sparkline=true&price_change_percentage=24h';
-        $data = Http::getJson($url);
+        $data = Http::getJson($url, CoinGeckoApi::headers());
         if (!is_array($data)) {
             return [];
         }

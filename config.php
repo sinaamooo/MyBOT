@@ -10,5 +10,8 @@ return [
     'brand'     => 'NIKTO CRYPTO',
     'http_timeout' => 25,
     'http_proxy' => '',
+    'data_proxy' => '',
+    'coinglass_key' => '',
+    'coingecko_key' => '',
     'log_level' => 'info',
 ];

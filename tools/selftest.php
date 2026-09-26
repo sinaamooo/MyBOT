@@ -315,13 +315,13 @@ $check('روشن‌کردن کارت قیمت‌ها', function () use ($panel, 
     return Registry::refresh('prices')->enabled() ? true : 'فعال نشد';
 });
 $check('تغییر تم', function () use ($panel, $callback) {
-    $panel->handleUpdate($callback('j:prices:th:mint'));
-    return Registry::refresh('prices')->theme() === 'mint' ? true : 'تم عوض نشد';
+    $panel->handleUpdate($callback('j:prices:th:mono'));
+    return Registry::refresh('prices')->theme() === 'mono' ? true : 'تم عوض نشد';
 });
 $check('تم نامعتبر ذخیره نمی‌شود', function () use ($panel, $callback) {
     $panel->handleUpdate($callback('j:prices:th:hacked'));
     $raw = (string) (Db::one("SELECT theme FROM jobs WHERE key = 'prices'")['theme'] ?? '');
-    return $raw === 'mint' ? true : 'ذخیره شد: ' . $raw;
+    return $raw === 'mono' ? true : 'ذخیره شد: ' . $raw;
 });
 $check('افزودن چند زمان ارسال', function () use ($panel, $callback, $message) {
     $panel->handleUpdate($callback('j:prices:sc:add'));
@@ -380,12 +380,15 @@ $check('قالب‌بندی بولد و نقل‌قول در کپشن حفظ م�
         ? true
         : 'کپشن ذخیره‌شده: ' . $caption;
 });
-$check('تم قدیمی ذخیره‌شده (neo) به تم روشن جدید نگاشت می‌شود', function () {
-    Db::exec("UPDATE jobs SET theme = 'neo' WHERE key = 'prices'");
-    $theme = Registry::refresh('prices')->theme();
+$check('تم‌های قدیمی ذخیره‌شده (neo، light، mint) به تم شیشه‌ای جدید نگاشت می‌شوند', function () {
+    $seen = [];
+    foreach (['neo', 'light', 'mint'] as $old) {
+        Db::exec('UPDATE jobs SET theme = :t WHERE key = :k', [':t' => $old, ':k' => 'prices']);
+        $seen[$old] = Registry::refresh('prices')->theme();
+    }
     Registry::refresh('prices')->setTheme(\Nikto\Render\Theme::DEFAULT);
 
-    return $theme === \Nikto\Render\Theme::DEFAULT ? true : 'تم: ' . $theme;
+    return array_unique(array_values($seen)) === ['glass'] ? true : json_encode($seen);
 });
 $check('توکن نمونه (PUT-YOUR-BOT-TOKEN-HERE) تنظیم‌شده حساب نمی‌شود', function () {
     $real = Config::token();

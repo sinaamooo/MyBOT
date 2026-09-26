@@ -27,7 +27,7 @@ final class LiquidityJob extends Job
 
     public function description(): string
     {
-        return 'دیوارهای پرحجم خرید و فروش بیت‌کوین از دفتر سفارش بایننس روی نمودار ۴۸ ساعته';
+        return 'دیوارهای پرحجم خرید و فروش بیت‌کوین از دفتر سفارش صرافی‌ها (رایگان) روی نمودار ۴۸ ساعته';
     }
 
     public function defaultOptions(): array

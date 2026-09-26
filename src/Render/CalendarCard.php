@@ -29,7 +29,7 @@ final class CalendarCard extends Card
 
         $tableH = self::TABLE_PAD * 2 + self::HEAD_H + max(1, count($rows)) * self::ROW_H;
         $noteH = $extra > 0 ? 26.0 : 0.0;
-        $height = (int) round(84 + Frame::HEADER_H + $tableH + $noteH + 14 + 46 + 40);
+        $height = (int) round(84 + Frame::HEADER_H + $tableH + $noteH + 14 + 38);
 
         $c = new Canvas(1200, $height, $this->quality);
         $c->setOutputScale($this->outputScale);
@@ -63,7 +63,7 @@ final class CalendarCard extends Card
             return $c;
         }
 
-        Frame::panel($c, $t, $rect['x'], $top, $rect['w'], $tableH, 18, ['border_alpha' => 0.55, 'border_w' => 1.8]);
+        Frame::panel($c, $t, $rect['x'], $top, $rect['w'], $tableH, 18);
 
         $cols = $this->columns($rect['x'], $rect['w']);
         $y = $this->headRow($c, $t, $rect['x'], $top + self::TABLE_PAD, $rect['w'], $cols);
@@ -115,7 +115,7 @@ final class CalendarCard extends Card
     private function headRow(Canvas $c, Theme $t, float $x, float $y, float $w, array $cols): float
     {
         $inner = $w - self::TABLE_PAD * 2;
-        $c->roundRect($x + self::TABLE_PAD, $y, $inner, self::HEAD_H, 10, $t->c('surface_alt'), 1.0);
+        Frame::well($c, $t, $x + self::TABLE_PAD, $y, $inner, self::HEAD_H, 10, 1.3);
 
         $mid = $y + self::HEAD_H / 2;
         $labels = [
@@ -144,7 +144,7 @@ final class CalendarCard extends Card
         $mid = $y + self::ROW_H / 2;
 
         if ($index % 2 === 1) {
-            $c->roundRect($x, $y, $w, self::ROW_H, 8, $t->c('surface_alt'), 0.75);
+            Frame::well($c, $t, $x, $y, $w, self::ROW_H, 8, 0.6);
         }
         if ($index > 0) {
             $c->rect($x + 6, $y, $w - 12, 1, $t->c('line_soft'), 1.0);
@@ -160,7 +160,11 @@ final class CalendarCard extends Card
         $badgeH = 28.0;
         $badgeX = $cols['time'] - $badgeW / 2;
 
-        $c->roundRect($badgeX, $mid - $badgeH / 2, $badgeW, $badgeH, 8, $hasTime ? $t->c('line') : $t->c('surface_alt'), $hasTime ? 1.0 : 1.0);
+        if ($hasTime) {
+            $c->roundRect($badgeX, $mid - $badgeH / 2, $badgeW, $badgeH, 8, $t->c('line'), 1.0);
+        } else {
+            Frame::well($c, $t, $badgeX, $mid - $badgeH / 2, $badgeW, $badgeH, 8, 1.2);
+        }
         if (!$hasTime) {
             $c->strokeRoundRect($badgeX, $mid - $badgeH / 2, $badgeW, $badgeH, 8, $t->c('line'), 1.2, 0.45);
         }

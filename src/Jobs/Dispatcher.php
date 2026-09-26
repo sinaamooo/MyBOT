@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Nikto\Jobs;
 
 use Nikto\Core\Db;
+use Nikto\Core\Http;
 use Nikto\Core\Log;
 use Nikto\Core\Settings;
 use Nikto\Telegram\Api;
@@ -30,6 +31,7 @@ final class Dispatcher
         }
 
         $started = microtime(true);
+        Http::resetFailures();
 
         try {
             $data = $job->fetch();
@@ -41,7 +43,7 @@ final class Dispatcher
         if ($data === null || $data === []) {
             $empty = $jobKey === CalendarJob::KEY && $data === [];
             if (!$empty) {
-                return self::fail($jobKey, $options, 'داده‌ای از سرویس دریافت نشد (اینترنت یا API).', true);
+                return self::fail($jobKey, $options, self::noDataMessage(), true);
             }
         }
 
@@ -115,9 +117,10 @@ final class Dispatcher
             return ['ok' => false, 'message' => 'کار ناشناخته'];
         }
         try {
+            Http::resetFailures();
             $data = $job->fetch();
             if ($data === null) {
-                return ['ok' => false, 'message' => 'داده‌ای از سرویس دریافت نشد.'];
+                return ['ok' => false, 'message' => self::noDataMessage()];
             }
             $path = $job->card($data)->save();
 
@@ -127,6 +130,22 @@ final class Dispatcher
 
             return ['ok' => false, 'message' => 'خطا: ' . $e->getMessage()];
         }
+    }
+
+    private static function noDataMessage(): string
+    {
+        $message = 'داده‌ای از سرویس دریافت نشد (اینترنت یا API).';
+        $reasons = Http::explainFailures();
+        if ($reasons !== '') {
+            $message .= "\nعلت:\n" . $reasons;
+        }
+        if (Http::allRegionBlocked()) {
+            $message .= "\n\nهمه‌ی منابع، کشورِ سرورِ ربات را مسدود کرده‌اند. راهِ قطعی: بالای فایل nikto-bot.php مقدارِ "
+                . "data_proxy را یک پراکسیِ خارج از این کشور بگذارید (مثلاً socks5h://user:pass@1.2.3.4:1080) "
+                . 'یا ربات را روی هاستی در کشورِ دیگر ببرید.';
+        }
+
+        return $message;
     }
 
     private static function deliver(

@@ -8,7 +8,10 @@ use Nikto\Core\Log;
 
 final class FuturesProvider
 {
+    public const SOURCE_BINANCE = 'Binance Futures';
+
     private const FAPI = 'https://fapi.binance.com/fapi/v1';
+    private const SPOT_MIRROR = 'https://data-api.binance.vision/api/v3';
 
     public static function movers(int $count = 5, float $minVolume = 5_000_000, bool $withSparkline = true): ?array
     {
@@ -17,16 +20,14 @@ final class FuturesProvider
         if (Mock::enabled()) {
             $tickers = Mock::futuresTickers();
             $tradable = self::tradable(Mock::futuresExchangeInfo());
+            $exchange = 'Binance';
+            $coinIds = [];
         } else {
-            $tickers = Http::getJson(self::FAPI . '/ticker/24hr', [], 20, 2);
-            $tradable = Http::remember('fapi:tradable', 6 * 3600, static function (): ?array {
-                $info = Http::getJson(self::FAPI . '/exchangeInfo', [], 25, 1);
-                return is_array($info) ? self::tradable($info) : null;
-            });
+            [$tickers, $tradable, $exchange, $coinIds] = self::tickers();
         }
 
-        if (!is_array($tickers) || array_values($tickers) !== $tickers) {
-            Log::error('Futures tickers unavailable');
+        if (!is_array($tickers) || $tickers === [] || array_values($tickers) !== $tickers) {
+            Log::error('Futures tickers unavailable from every source');
             return null;
         }
 
@@ -34,16 +35,63 @@ final class FuturesProvider
         if ($result === null) {
             return null;
         }
+        $result['exchange'] = $exchange === 'CoinGecko' ? 'Binance' : $exchange;
+        $result['source'] = match ($exchange) {
+            'CoinGlass' => 'CoinGlass · All exchanges',
+            'CoinGecko' => 'CoinGecko · Binance Futures',
+            default     => $exchange . ' Futures',
+        };
 
         if ($withSparkline) {
+            $shown = array_merge(array_column($result['gainers'], 'pair'), array_column($result['losers'], 'pair'));
+            $geckoSparks = $exchange === 'CoinGecko'
+                ? CoinGeckoApi::sparklines(array_map(static fn (string $p): string => $coinIds[$p] ?? '', $shown))
+                : [];
             foreach (['gainers', 'losers'] as $side) {
                 foreach ($result[$side] as $i => $row) {
-                    $result[$side][$i]['spark'] = self::sparkline((string) $row['pair'], (float) $row['change_pct']);
+                    $pair = (string) $row['pair'];
+                    $result[$side][$i]['spark'] = $geckoSparks[$coinIds[$pair] ?? ''] ?? self::sparkline($pair, (float) $row['change_pct'], $exchange);
                 }
             }
         }
 
         return $result;
+    }
+
+    private static function tickers(): array
+    {
+        if (CoinGlass::enabled()) {
+            $rows = CoinGlass::futuresTickers();
+            if ($rows !== []) {
+                return [$rows, null, 'CoinGlass', []];
+            }
+        }
+        if (CoinGeckoApi::enabled()) {
+            [$rows, $ids] = CoinGeckoApi::futuresTickers();
+            if ($rows !== []) {
+                return [$rows, null, 'CoinGecko', $ids];
+            }
+        }
+
+        $tickers = Http::getJson(self::FAPI . '/ticker/24hr', [], 20, 1);
+        if (is_array($tickers) && $tickers !== [] && array_values($tickers) === $tickers) {
+            $tradable = Http::remember('fapi:tradable', 6 * 3600, static function (): ?array {
+                $info = Http::getJson(self::FAPI . '/exchangeInfo', [], 25, 1);
+                return is_array($info) ? self::tradable($info) : null;
+            });
+
+            return [$tickers, $tradable, 'Binance', []];
+        }
+
+        foreach (Exchanges::FUTURES as $exchange) {
+            $rows = Exchanges::futuresTickers($exchange);
+            if ($rows !== []) {
+                Log::warn('Futures tickers served by fallback exchange', ['exchange' => $exchange]);
+                return [$rows, null, $exchange, []];
+            }
+        }
+
+        return [null, null, 'Binance', []];
     }
 
     public static function tradable(array $exchangeInfo): array
@@ -155,18 +203,25 @@ final class FuturesProvider
         return (string) (preg_replace('/^(1000000|100000|10000|1000|1M)(?=[A-Z])/', '', strtoupper($base)) ?: $base);
     }
 
-    private static function sparkline(string $pair, float $changePct): array
+    private static function sparkline(string $pair, float $changePct, string $exchange = 'Binance'): array
     {
         if (Mock::enabled()) {
             return Mock::series(crc32($pair), 24, $changePct);
         }
-        $data = Http::getJson(self::FAPI . '/klines?symbol=' . rawurlencode($pair) . '&interval=1h&limit=24', [], 12, 1);
-        if (!is_array($data)) {
-            return [];
+
+        $candles = match ($exchange) {
+            'Binance'   => Http::getJson(self::FAPI . '/klines?symbol=' . rawurlencode($pair) . '&interval=1h&limit=24', [], 12, 1),
+            'CoinGlass' => CoinGlass::klines('Binance', $pair, 24),
+            'CoinGecko' => [],
+            default     => Exchanges::klines($exchange, 'futures', $pair, 24),
+        };
+        if (!is_array($candles) || $candles === []) {
+            $candles = Http::getJson(self::SPOT_MIRROR . '/klines?symbol=' . rawurlencode($pair) . '&interval=1h&limit=24', [], 12, 0);
         }
+
         $out = [];
-        foreach ($data as $candle) {
-            if (is_array($candle) && isset($candle[4])) {
+        foreach (is_array($candles) ? $candles : [] as $candle) {
+            if (is_array($candle) && isset($candle[4]) && is_numeric($candle[4])) {
                 $out[] = (float) $candle[4];
             }
         }

@@ -27,7 +27,7 @@ final class MoversCard extends Card
     {
         $rows = max(1, count($this->data['gainers'] ?? []), count($this->data['losers'] ?? []));
         $columnH = self::HEAD_H + $rows * self::ROW_H + 10;
-        $height = (int) round(84 + Frame::HEADER_H + self::STRIP_H + self::GAP + $columnH + 42);
+        $height = (int) round(84 + Frame::HEADER_H + self::STRIP_H + self::GAP + $columnH);
 
         $c = new Canvas(1200, $height, $this->quality);
         $c->setOutputScale($this->outputScale);
@@ -35,7 +35,8 @@ final class MoversCard extends Card
         CoinLogo::$lightSurface = true;
 
         $rect = Frame::draw($c, $t, ['footer' => $this->footer]);
-        $top = Frame::header($c, $t, $rect, $this->title, $this->dateLine(), 'Binance Futures · 24h');
+        $source = (string) ($this->data['source'] ?? 'Binance Futures');
+        $top = Frame::header($c, $t, $rect, $this->title, $this->dateLine(), $source . ' · 24h');
 
         $this->breadth($c, $t, $rect['x'], $top, $rect['w'], self::STRIP_H);
 

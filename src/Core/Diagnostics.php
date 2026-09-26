@@ -10,6 +10,28 @@ use Nikto\Telegram\Channels;
 
 final class Diagnostics
 {
+    private const DATA_SOURCES = [
+        'منبع: Binance Futures'   => 'https://fapi.binance.com/fapi/v1/ping',
+        'منبع: Binance Spot'      => 'https://api.binance.com/api/v3/ping',
+        'منبع: Binance (mirror)'  => 'https://data-api.binance.vision/api/v3/ping',
+        'منبع: Bybit'             => 'https://api.bybit.com/v5/market/time',
+        'منبع: OKX'               => 'https://www.okx.com/api/v5/public/time',
+        'منبع: Gate.io'           => 'https://api.gateio.ws/api/v4/spot/time',
+        'منبع: MEXC'              => 'https://api.mexc.com/api/v3/ping',
+        'منبع: MEXC Futures'      => 'https://contract.mexc.com/api/v1/contract/ping',
+        'منبع: KuCoin'            => 'https://api.kucoin.com/api/v1/timestamp',
+        'منبع: KuCoin Futures'    => 'https://api-futures.kucoin.com/api/v1/timestamp',
+        'منبع: Nobitex'           => 'https://api.nobitex.ir/market/stats?srcCurrency=btc&dstCurrency=usdt',
+        'منبع: Bitget'            => 'https://api.bitget.com/api/v2/public/time',
+        'منبع: BingX'             => 'https://open-api.bingx.com/openApi/swap/v2/server/time',
+        'منبع: CoinEx'            => 'https://api.coinex.com/v2/time',
+        'منبع: HTX'               => 'https://api.hbdm.com/api/v1/timestamp',
+        'منبع: Hyperliquid'       => ['https://api.hyperliquid.xyz/info', '{"type":"l2Book","coin":"BTC"}'],
+        'منبع: CoinGecko'         => 'https://api.coingecko.com/api/v3/ping',
+        'منبع: ترس و طمع'          => 'https://api.alternative.me/fng/?limit=1&format=json',
+        'منبع: ForexFactory'      => 'https://nfs.faireconomy.media/ff_calendar_thisweek.json',
+    ];
+
     public static function run(): array
     {
         $out = [];
@@ -96,6 +118,41 @@ final class Diagnostics
             }
 
             $add(null, 'کلید امنیتی وب‌هوک', ($result['has_custom_certificate'] ?? false) ? 'گواهی سفارشی' : 'استاندارد');
+        }
+
+        $proxy = Http::proxy();
+        $add(null, 'پراکسی داده', $proxy === '' ? 'ندارد (اتصال مستقیم)' : (string) preg_replace('#//[^@/]*@#', '//***@', $proxy));
+
+        if (\Nikto\Data\CoinGeckoApi::enabled()) {
+            Http::resetFailures();
+            $ping = \Nikto\Data\CoinGeckoApi::get('/ping', [], 10);
+            $add(
+                is_array($ping),
+                'کلید CoinGecko',
+                is_array($ping) ? 'کلید معتبر است' : (Http::explainFailures(1) !== '' ? ltrim(Http::explainFailures(1), '• ') : 'پاسخی نیامد')
+            );
+        } else {
+            $add(null, 'کلید CoinGecko', 'تنظیم نشده (رایگان؛ coingecko_key بالای فایل)');
+        }
+
+        if (\Nikto\Data\CoinGlass::enabled()) {
+            Http::resetFailures();
+            $coins = \Nikto\Data\CoinGlass::get('/futures/supported-coins');
+            $add(
+                is_array($coins),
+                'منبع: CoinGlass',
+                is_array($coins) ? 'کلید معتبر است' : (Http::explainFailures(1) !== '' ? ltrim(Http::explainFailures(1), '• ') : 'پاسخی نیامد')
+            );
+        } else {
+            $add(null, 'منبع: CoinGlass', 'کلید تنظیم نشده (اختیاری؛ coinglass_key بالای فایل)');
+        }
+
+        foreach (Http::probe(self::DATA_SOURCES) as $label => $r) {
+            $add(
+                $r['ok'],
+                $label,
+                $r['ok'] ? 'در دسترس (' . $r['ms'] . ' ms)' : Http::explain($r['code'], $r['error'], $r['body'])
+            );
         }
 
         foreach (Registry::all() as $key => $job) {

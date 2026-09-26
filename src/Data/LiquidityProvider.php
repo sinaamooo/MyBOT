@@ -26,6 +26,20 @@ final class LiquidityProvider
         }
 
         $books = [];
+        $klines = [];
+        if (CoinGlass::enabled()) {
+            foreach (['Binance', 'Bybit'] as $exchange) {
+                $book = CoinGlass::book($exchange, 'BTCUSDT');
+                if ($book !== null) {
+                    $books[($books === [] ? 'CoinGlass · ' : '') . $exchange] = $book;
+                }
+            }
+            $klines = CoinGlass::klines('Binance', 'BTCUSDT', 48);
+            if ($books !== []) {
+                return self::analyze($books, $klines !== [] ? $klines : self::klines(null), $levels);
+            }
+        }
+
         $futures = Http::getJson(self::FAPI . '/depth?symbol=BTCUSDT&limit=1000', [], 15, 1);
         if (self::isBook($futures)) {
             $books['Binance Futures'] = $futures;
@@ -37,11 +51,39 @@ final class LiquidityProvider
                 break;
             }
         }
+
+        $fallback = null;
+        if ($books === []) {
+            foreach (Exchanges::BOOKS as $exchange => $name) {
+                $book = Exchanges::book($exchange, 'BTCUSDT');
+                if ($book === null) {
+                    continue;
+                }
+                $books[$name] = $book;
+                $fallback ??= $exchange;
+                if (count($books) >= 3) {
+                    break;
+                }
+            }
+            if (count($books) > 1 && isset($books['Hyperliquid'])) {
+                $grouped = $books['Hyperliquid'];
+                unset($books['Hyperliquid']);
+                $books['Hyperliquid'] = $grouped;
+            }
+            if ($books !== []) {
+                Log::warn('BTC order book served by fallback exchanges', ['sources' => array_keys($books)]);
+            }
+        }
         if ($books === []) {
             Log::error('BTC order book unavailable');
             return null;
         }
 
+        return self::analyze($books, $klines !== [] ? $klines : self::klines($fallback), $levels);
+    }
+
+    private static function klines(?string $preferred): array
+    {
         $klines = Http::getJson(self::FAPI . '/klines?symbol=BTCUSDT&interval=1h&limit=48', [], 15, 1);
         if (!is_array($klines)) {
             foreach (self::SPOT as $base) {
@@ -51,8 +93,17 @@ final class LiquidityProvider
                 }
             }
         }
+        if (!is_array($klines) || $klines === []) {
+            $order = array_unique(array_merge($preferred !== null ? [$preferred] : [], ['Hyperliquid'], Exchanges::SPOT));
+            foreach ($order as $exchange) {
+                $klines = Exchanges::klines($exchange, 'spot', 'BTCUSDT', 48);
+                if ($klines !== []) {
+                    break;
+                }
+            }
+        }
 
-        return self::analyze($books, is_array($klines) ? $klines : [], $levels);
+        return is_array($klines) ? $klines : [];
     }
 
     private static function isBook(mixed $data): bool

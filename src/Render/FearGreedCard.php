@@ -96,8 +96,8 @@ final class FearGreedCard extends Card
 
         $boxY = $y + $pad;
         $boxH = $h - $pad * 2;
-        $c->roundRect($boxX, $boxY, $boxW, $boxH, 16, $t->c('surface_alt'), 1.0);
-        $c->strokeRoundRect($boxX, $boxY, $boxW, $boxH, 16, $t->c('line'), 1.6, 0.85);
+        Frame::well($c, $t, $boxX, $boxY, $boxW, $boxH, 16, 1.2);
+        $c->strokeRoundRect($boxX, $boxY, $boxW, $boxH, 16, $t->c('line'), 1.0, 0.22);
         $c->roundRect($boxX + $boxW - 10, $boxY + 12, 5, $boxH - 24, 2.5, $color, 1.0);
 
         $boxCx = $boxX + ($boxW - 14) / 2;

@@ -7,8 +7,6 @@ final class Frame
 {
     public const HEADER_H = 84.0;
 
-    private const BORDER_W = 2.4;
-
     public static function draw(Canvas $c, Theme $t, array $options = []): array
     {
         $margin = (float) ($options['margin'] ?? 18);
@@ -36,26 +34,17 @@ final class Frame
     {
         $w = $c->width();
         $h = $c->height();
+        $smoke = $t->c('smoke', $t->c('line'));
 
         $c->gradient(0, 0, $w, $h, $t->c('bg_from'), $t->c('bg_to'), 'v');
 
-        $c->radialGlow($w * 0.86, -$h * 0.06, $w * 0.44, $t->c('glow'), 0.07);
-        $c->radialGlow($w * 0.08, $h * 1.04, $w * 0.40, $t->c('glow_alt'), 0.055);
+        $c->radialGlow($w * 0.06, $h * 0.10, $w * 0.34, $smoke, 0.055);
+        $c->radialGlow($w * 0.97, $h * 1.00, $w * 0.40, $smoke, 0.075);
+        $c->radialGlow($w * 0.84, $h * 0.02, $w * 0.40, '#FFFFFF', 0.60);
+        $c->radialGlow($w * 0.22, $h * 0.92, $w * 0.30, '#FFFFFF', 0.40);
 
-        self::texture($c, $t);
-    }
-
-    private static function texture(Canvas $c, Theme $t): void
-    {
-        $w = $c->width();
-        $h = $c->height();
-        $step = 24;
-        $color = $t->c('line_soft');
-
-        for ($y = $step; $y < $h; $y += $step) {
-            for ($x = $step; $x < $w; $x += $step) {
-                $c->rect($x, $y, 1.4, 1.4, $color, 0.55);
-            }
+        for ($x = -$h; $x < $w; $x += 34) {
+            $c->line($x, 0, $x + $h, $h, '#FFFFFF', 1, 0.10);
         }
     }
 
@@ -67,25 +56,21 @@ final class Frame
         $bh = $h - $margin * 2;
         $r = 28.0;
 
-        $c->strokeRoundRect($margin, $margin, $bw, $bh, $r, $t->c('line'), self::BORDER_W, 0.92);
-        $c->strokeRoundRect($margin + 5, $margin + 5, $bw - 10, $bh - 10, $r - 5, $t->c('line_soft'), 1, 0.85);
+        $c->strokeRoundRect($margin, $margin, $bw, $bh, $r, $t->c('line'), 1.3, 0.30);
+        $c->strokeRoundRect($margin + 1.6, $margin + 1.6, $bw - 3.2, $bh - 3.2, $r - 1.6, '#FFFFFF', 1.2, 0.85);
 
-        $segY = $margin + self::BORDER_W / 2;
-        $segW = $bw * 0.085;
-        $x0 = $margin + $bw * 0.5 - ($segW * 3 + 12) / 2;
-        foreach ([$t->c('up'), $t->c('line'), $t->c('down')] as $i => $color) {
-            $c->roundRect($x0 + $i * ($segW + 6), $segY - 2.6, $segW, 5.2, 2.6, $color, 1.0);
-        }
+        $capW = 64.0;
+        $c->roundRect($w / 2 - $capW / 2, $margin - 2, $capW, 4.4, 2.2, $t->c('line'), 0.92);
     }
 
     private static function footer(Canvas $c, Theme $t, string $text, float $margin): void
     {
         $y = $c->height() - $margin - 24;
-        $tw = $c->textWidth($text, 10.5, Canvas::W_SEMIBOLD) + $c->textWidth($text, 10.5, Canvas::W_SEMIBOLD) * 0.14;
+        $tw = $c->textWidth($text, 10.5, Canvas::W_SEMIBOLD) * 1.14;
         $cx = $c->width() / 2;
 
-        $c->line($cx - $tw / 2 - 40, $y, $cx - $tw / 2 - 14, $y, $t->c('line_soft'), 1.4, 1.0);
-        $c->line($cx + $tw / 2 + 14, $y, $cx + $tw / 2 + 40, $y, $t->c('line_soft'), 1.4, 1.0);
+        $c->line($cx - $tw / 2 - 40, $y, $cx - $tw / 2 - 14, $y, $t->c('line'), 1.2, 0.18);
+        $c->line($cx + $tw / 2 + 14, $y, $cx + $tw / 2 + 40, $y, $t->c('line'), 1.2, 0.18);
         $c->text($text, $cx, $y, 10.5, $t->c('ink_faint'), Canvas::W_SEMIBOLD, 'center', 1.0, 'middle', 2.0);
     }
 
@@ -116,9 +101,9 @@ final class Frame
         }
 
         $lineY = $y + 66;
-        $c->rect($x, $lineY, $w, 1, $t->c('line_soft'), 1.0);
-        $c->roundRect($x + $w - 120, $lineY - 1.4, 120, 3, 1.5, $t->c('line'), 0.95);
-        $c->roundRect($x + $w - 120, $lineY - 1.4, 42, 3, 1.5, $t->c('accent'), 1.0);
+        $c->rect($x, $lineY, $w, 1, $t->c('line'), 0.12);
+        $c->rect($x, $lineY + 1, $w, 1, '#FFFFFF', 0.7);
+        $c->roundRect($x + $w - 96, $lineY - 1.2, 96, 3, 1.5, $t->c('line'), 0.95);
 
         return $lineY + 18;
     }
@@ -128,8 +113,9 @@ final class Frame
         $w = $c->textWidth($text, $size, Canvas::W_SEMIBOLD) + 26;
         $h = $size + 15;
 
-        $c->roundRect($x, $y, $w, $h, 8, $t->c('surface_alt'), 1.0);
-        $c->strokeRoundRect($x, $y, $w, $h, 8, $t->c('line'), 1.2, 0.55);
+        $c->roundRect($x, $y, $w, $h, $h / 2, '#FFFFFF', 0.72);
+        $c->strokeRoundRect($x, $y, $w, $h, $h / 2, $t->c('line'), 1.0, 0.22);
+        $c->strokeRoundRect($x + 1, $y + 1, $w - 2, $h - 2, $h / 2 - 1, '#FFFFFF', 1.0, 0.9);
         $c->text($text, $x + $w / 2, $y + $h / 2, $size, $t->c('ink_dim'), Canvas::W_SEMIBOLD, 'center', 1.0, 'ink');
 
         return $w;
@@ -137,18 +123,35 @@ final class Frame
 
     public static function panel(Canvas $c, Theme $t, float $x, float $y, float $w, float $h, float $radius = 18, array $o = []): void
     {
-        $fill        = (string) ($o['fill'] ?? $t->c('surface'));
-        $border      = (string) ($o['border'] ?? $t->c('line'));
-        $borderAlpha = (float) ($o['border_alpha'] ?? 0.16);
-        $borderW     = (float) ($o['border_w'] ?? 1.4);
+        if (isset($o['fill']) && $o['fill'] !== $t->c('surface')) {
+            self::well($c, $t, $x, $y, $w, $h, $radius);
+            return;
+        }
 
         if ($o['shadow'] ?? true) {
-            $c->shadow($x, $y, $w, $h, $radius, $t->c('shadow'), 0.10, 15, 5);
+            $c->shadowOutside($x, $y, $w, $h, $radius, $t->c('shadow'), 0.10, 20, 8);
         }
-        $c->roundRect($x, $y, $w, $h, $radius, $fill, 1.0);
-        if ($borderAlpha > 0) {
-            $c->strokeRoundRect($x, $y, $w, $h, $radius, $border, $borderW, $borderAlpha);
+        $c->backdropBlur($x, $y, $w, $h, $radius, 4);
+        $c->roundRect($x, $y, $w, $h, $radius, '#FFFFFF', $t->glassAlpha());
+
+        $band = min($h * 0.45, 72.0);
+        for ($i = 0; $i < $band; $i += 2) {
+            $a = 0.30 * (1 - $i / $band) ** 2;
+            if ($a < 0.004) {
+                break;
+            }
+            $inset = $i < $radius ? $radius - sqrt(max(0.0, $radius ** 2 - ($radius - $i) ** 2)) : 0.0;
+            $c->rect($x + $inset + 1, $y + $i + 1, $w - ($inset + 1) * 2, 2, '#FFFFFF', $a);
         }
+
+        $c->strokeRoundRect($x - 0.6, $y - 0.6, $w + 1.2, $h + 1.2, $radius + 0.6, $t->c('line'), 1.0, 0.15);
+        $c->strokeRoundRect($x + 0.8, $y + 0.8, $w - 1.6, $h - 1.6, $radius - 0.8, '#FFFFFF', 1.4, 0.95);
+    }
+
+    public static function well(Canvas $c, Theme $t, float $x, float $y, float $w, float $h, float $radius = 10, float $strength = 1.0): void
+    {
+        $c->roundRect($x, $y, $w, $h, $radius, $t->c('line'), 0.045 * $strength);
+        $c->strokeRoundRect($x, $y, $w, $h, $radius, '#FFFFFF', 1.0, 0.75 * $strength);
     }
 
     public static function chip(

@@ -341,24 +341,33 @@ final class Canvas
         $sw = max(4, (int) ($lw / $down));
         $sh = max(4, (int) ($lh / $down));
 
-        $layer = imagecreatetruecolor($sw, $sh);
-        imagealphablending($layer, false);
-        imagesavealpha($layer, true);
-        imagefilledrectangle($layer, 0, 0, $sw, $sh, imagecolorallocatealpha($layer, 0, 0, 0, 127));
-
-        [$r, $g, $b] = self::parseColor($hex);
-        $col = imagecolorallocatealpha($layer, $r, $g, $b, (int) round(127 * (1 - $alpha)));
+        $mask = imagecreatetruecolor($sw, $sh);
+        imagefilledrectangle($mask, 0, 0, $sw, $sh, imagecolorallocate($mask, 0, 0, 0));
         $rx = (int) ($this->s($pad) / $down);
         $rw = (int) ($this->s($w) / $down);
         $rh = (int) ($this->s($h) / $down);
         $rr = max(1, (int) ($this->s($radius) / $down));
-        $this->roundRectColor($layer, $rx, $rx, $rw, $rh, $rr, $col);
-        imagealphablending($layer, true);
+        $this->roundRectColor($mask, $rx, $rx, $rw, $rh, $rr, imagecolorallocate($mask, 255, 255, 255));
 
         $passes = max(1, (int) round($blur / 3));
         for ($i = 0; $i < $passes; $i++) {
-            imagefilter($layer, IMG_FILTER_GAUSSIAN_BLUR);
+            imagefilter($mask, IMG_FILTER_GAUSSIAN_BLUR);
         }
+
+        [$r, $g, $b] = self::parseColor($hex);
+        $layer = imagecreatetruecolor($sw, $sh);
+        imagealphablending($layer, false);
+        imagesavealpha($layer, true);
+        $palette = [];
+        for ($v = 0; $v < 256; $v++) {
+            $palette[$v] = imagecolorallocatealpha($layer, $r, $g, $b, 127 - (int) round($v / 255 * $alpha * 127));
+        }
+        for ($py = 0; $py < $sh; $py++) {
+            for ($px = 0; $px < $sw; $px++) {
+                imagesetpixel($layer, $px, $py, $palette[imagecolorat($mask, $px, $py) & 0xFF]);
+            }
+        }
+        imagedestroy($mask);
 
         imagealphablending($this->im, true);
         imagecopyresampled(
@@ -374,6 +383,39 @@ final class Canvas
             $sh
         );
         imagedestroy($layer);
+    }
+
+    public function shadowOutside(
+        float $x,
+        float $y,
+        float $w,
+        float $h,
+        float $radius,
+        string $hex = '#000000',
+        float $alpha = 0.3,
+        float $blur = 18,
+        float $offsetY = 6
+    ): void {
+        $sx = max(0, $this->s($x));
+        $sy = max(0, $this->s($y));
+        $sw = min($this->s($w), imagesx($this->im) - $sx);
+        $sh = min($this->s($h), imagesy($this->im) - $sy);
+        if ($sw < 4 || $sh < 4) {
+            $this->shadow($x, $y, $w, $h, $radius, $hex, $alpha, $blur, $offsetY);
+            return;
+        }
+
+        $saved = imagecreatetruecolor($sw, $sh);
+        imagealphablending($saved, false);
+        imagesavealpha($saved, true);
+        imagecopy($saved, $this->im, 0, 0, $sx, $sy, $sw, $sh);
+
+        $this->shadow($x, $y, $w, $h, $radius, $hex, $alpha, $blur, $offsetY);
+
+        $this->applyRoundMask($saved, $this->s($radius));
+        imagealphablending($this->im, true);
+        imagecopy($this->im, $saved, $sx, $sy, 0, 0, $sw, $sh);
+        imagedestroy($saved);
     }
 
     public function glass(float $x, float $y, float $w, float $h, float $radius = 16, array $options = []): void

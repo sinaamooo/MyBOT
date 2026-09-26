@@ -30,7 +30,7 @@ final class LiquidityCard extends Card
     {
         $rows = max(1, count($this->data['bid_walls'] ?? []), count($this->data['ask_walls'] ?? []));
         $tableH = self::HEAD_H + self::LABEL_H + $rows * self::ROW_H + 10;
-        $height = (int) round(84 + Frame::HEADER_H + self::MAP_H + self::GAP + $tableH + self::GAP + self::STRIP_H + 42);
+        $height = (int) round(84 + Frame::HEADER_H + self::MAP_H + self::GAP + $tableH + self::GAP + self::STRIP_H);
 
         $c = new Canvas(1200, $height, $this->quality);
         $c->setOutputScale($this->outputScale);
@@ -79,7 +79,7 @@ final class LiquidityCard extends Card
             $x,
             $y + $h + 14,
             9.5,
-            $t->c('ink_faint'),
+            $t->c('ink_dim'),
             Canvas::W_NUM,
             'left',
             1.0,
@@ -305,7 +305,7 @@ final class LiquidityCard extends Card
         ];
 
         $labelY = $y + self::HEAD_H + self::LABEL_H / 2;
-        $c->roundRect($x + 8, $y + self::HEAD_H, $w - 16, self::LABEL_H, 8, $t->c('surface_alt'), 1.0);
+        Frame::well($c, $t, $x + 8, $y + self::HEAD_H, $w - 16, self::LABEL_H, 8, 1.3);
         foreach ([['قیمت', $cols['price']], ['حجم', $cols['qty']], ['ارزش', $cols['usd']], ['فاصله', $cols['dist']]] as [$label, $lx]) {
             $c->text($label, $lx, $labelY, 10, $t->c('ink'), Canvas::W_BOLD, 'right', 1.0, 'middle');
         }

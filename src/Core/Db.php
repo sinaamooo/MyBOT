@@ -56,7 +56,7 @@ final class Db
             key        TEXT PRIMARY KEY,
             title      TEXT NOT NULL,
             enabled    INTEGER NOT NULL DEFAULT 0,
-            theme      TEXT NOT NULL DEFAULT 'light',
+            theme      TEXT NOT NULL DEFAULT 'glass',
             caption    TEXT NOT NULL DEFAULT '',
             options    TEXT NOT NULL DEFAULT '{}',
             updated_at INTEGER NOT NULL DEFAULT 0

@@ -4,6 +4,8 @@ declare(strict_types=1);
 namespace Nikto\Jobs;
 
 use Nikto\Core\Settings;
+use Nikto\Data\CoinGlass;
+use Nikto\Data\Exchanges;
 use Nikto\Data\FuturesProvider;
 use Nikto\Render\Card;
 use Nikto\Render\MoversCard;
@@ -67,8 +69,24 @@ final class MoversJob extends Job
     public function card(mixed $data): Card
     {
         return new MoversCard((array) $data, $this->theme(), [
-            'title' => (string) $this->option('headline', 'برترین‌های فیوچرز بایننس'),
+            'title' => $this->withSource((string) $this->option('headline', 'برترین‌های فیوچرز بایننس'), $data),
         ]);
+    }
+
+    public function renderCaption(mixed $data): string
+    {
+        return $this->withSource(parent::renderCaption($data), $data);
+    }
+
+    private function withSource(string $text, mixed $data): string
+    {
+        $exchange = (string) (((array) $data)['exchange'] ?? 'Binance');
+        $name = $exchange === 'CoinGlass' ? CoinGlass::NAME_FA : (Exchanges::NAMES_FA[$exchange] ?? $exchange);
+        if ($exchange === 'Binance') {
+            return $text;
+        }
+
+        return str_replace('فیوچرز بایننس', 'فیوچرز ' . $name, $text);
     }
 
     public function summary(mixed $data): string

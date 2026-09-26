@@ -5,18 +5,66 @@ namespace Nikto\Render;
 
 final class Theme
 {
-    public const DEFAULT = 'light';
+    public const DEFAULT = 'glass';
 
     public const PALETTES = [
-        'light' => [
-            'label'       => 'روشن (سفید، سبز، قرمز)',
-            'bg_from'     => '#FFFFFF',
-            'bg_to'       => '#F1F5F3',
+        'glass' => [
+            'label'       => 'شیشه‌ای (سفید و گرافیتی)',
+            'bg_from'     => '#F8F8F6',
+            'bg_to'       => '#E2E2DF',
             'surface'     => '#FFFFFF',
-            'surface_alt' => '#F6F9F7',
-            'glow'        => '#008A4B',
-            'glow_alt'    => '#F0364F',
-            'accent'      => '#008A4B',
+            'surface_alt' => '#EFEFEC',
+            'glass'       => '0.66',
+            'smoke'       => '#1E1E1E',
+            'glow'        => '#FFFFFF',
+            'glow_alt'    => '#1E1E1E',
+            'accent'      => '#111111',
+            'accent_alt'  => '#6E6E6B',
+            'ink'         => '#111111',
+            'ink_dim'     => '#4A4A48',
+            'ink_faint'   => '#767673',
+            'line'        => '#111111',
+            'line_soft'   => '#D6D6D2',
+            'shadow'      => '#141414',
+            'up'          => '#0F6B42',
+            'down'        => '#E0605A',
+            'flat'        => '#9A9A96',
+            'tint'        => '#111111',
+        ],
+        'mono' => [
+            'label'       => 'مونو (فقط سیاه و سفید)',
+            'bg_from'     => '#F9F9F9',
+            'bg_to'       => '#E0E0E0',
+            'surface'     => '#FFFFFF',
+            'surface_alt' => '#EEEEEE',
+            'glass'       => '0.68',
+            'smoke'       => '#151515',
+            'glow'        => '#FFFFFF',
+            'glow_alt'    => '#151515',
+            'accent'      => '#0D0D0D',
+            'accent_alt'  => '#707070',
+            'ink'         => '#0D0D0D',
+            'ink_dim'     => '#474747',
+            'ink_faint'   => '#767676',
+            'line'        => '#0D0D0D',
+            'line_soft'   => '#D4D4D4',
+            'shadow'      => '#101010',
+            'up'          => '#0D0D0D',
+            'down'        => '#8A8A8A',
+            'flat'        => '#B5B5B5',
+            'tint'        => '#0D0D0D',
+        ],
+        'vivid' => [
+            'label'       => 'شیشه‌ای سبز و قرمز',
+            'bg_from'     => '#FFFFFF',
+            'bg_to'       => '#E8ECEA',
+            'surface'     => '#FFFFFF',
+            'surface_alt' => '#F1F4F2',
+            'glass'       => '0.62',
+            'smoke'       => '#1B2622',
+            'glow'        => '#FFFFFF',
+            'glow_alt'    => '#1B2622',
+            'accent'      => '#0A0F0D',
             'accent_alt'  => '#F0364F',
             'ink'         => '#0A0F0D',
             'ink_dim'     => '#4C5A56',
@@ -28,69 +76,6 @@ final class Theme
             'down'        => '#F0364F',
             'flat'        => '#8A9794',
             'tint'        => '#0A0F0D',
-        ],
-        'snow' => [
-            'label'       => 'برفی (سفید و طوسی)',
-            'bg_from'     => '#FFFFFF',
-            'bg_to'       => '#ECEFF4',
-            'surface'     => '#FFFFFF',
-            'surface_alt' => '#F4F6FA',
-            'glow'        => '#008A4B',
-            'glow_alt'    => '#F0364F',
-            'accent'      => '#008A4B',
-            'accent_alt'  => '#F0364F',
-            'ink'         => '#090C11',
-            'ink_dim'     => '#4A525F',
-            'ink_faint'   => '#79828F',
-            'line'        => '#090C11',
-            'line_soft'   => '#D6DCE6',
-            'shadow'      => '#1B2433',
-            'up'          => '#008A4B',
-            'down'        => '#F0364F',
-            'flat'        => '#858E9C',
-            'tint'        => '#090C11',
-        ],
-        'mint' => [
-            'label'       => 'نعنایی (سفید و سبز)',
-            'bg_from'     => '#FFFFFF',
-            'bg_to'       => '#E8F5EE',
-            'surface'     => '#FFFFFF',
-            'surface_alt' => '#F0F9F4',
-            'glow'        => '#008A4B',
-            'glow_alt'    => '#F0364F',
-            'accent'      => '#008A4B',
-            'accent_alt'  => '#F0364F',
-            'ink'         => '#06120C',
-            'ink_dim'     => '#41564C',
-            'ink_faint'   => '#72897E',
-            'line'        => '#06120C',
-            'line_soft'   => '#CCE2D7',
-            'shadow'      => '#0C3A26',
-            'up'          => '#008A4B',
-            'down'        => '#F0364F',
-            'flat'        => '#7E9389',
-            'tint'        => '#06120C',
-        ],
-        'paper' => [
-            'label'       => 'کاغذی (سفید گرم)',
-            'bg_from'     => '#FFFFFF',
-            'bg_to'       => '#F3F0E9',
-            'surface'     => '#FFFFFF',
-            'surface_alt' => '#F8F5EE',
-            'glow'        => '#008A4B',
-            'glow_alt'    => '#F0364F',
-            'accent'      => '#008A4B',
-            'accent_alt'  => '#F0364F',
-            'ink'         => '#12100B',
-            'ink_dim'     => '#575143',
-            'ink_faint'   => '#8A8271',
-            'line'        => '#12100B',
-            'line_soft'   => '#E0DACB',
-            'shadow'      => '#3A3222',
-            'up'          => '#008A4B',
-            'down'        => '#F0364F',
-            'flat'        => '#968D7C',
-            'tint'        => '#12100B',
         ],
     ];
 
@@ -108,7 +93,12 @@ final class Theme
 
     public function label(): string { return $this->palette['label']; }
 
-    public function isMono(): bool { return $this->name === 'snow'; }
+    public function isMono(): bool { return $this->name === 'mono'; }
+
+    public function glassAlpha(): float
+    {
+        return (float) ($this->palette['glass'] ?? 0.6);
+    }
 
     public function c(string $key, string $fallback = '#000000'): string
     {

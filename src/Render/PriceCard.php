@@ -171,7 +171,7 @@ final class PriceCard extends Card
         $chartH = $y + $h - 14 - $chartY;
         $spark = array_values(array_map('floatval', (array) ($coin['spark'] ?? [])));
         if (count($spark) >= 4 && $chartH > 20) {
-            $c->roundRect($left - 4, $chartY, $inner + 8, $chartH, 10, $t->c('surface_alt'), 1.0);
+            Frame::well($c, $t, $left - 4, $chartY, $inner + 8, $chartH, 10, 0.9);
             $this->sparkline($c, $t, $spark, $left - 2, $chartY + 4, $inner + 4, $chartH - 8, $trend);
         }
     }
