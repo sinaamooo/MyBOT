@@ -49,21 +49,27 @@ final class CoinLogo
                     $path = self::path($symbol, true) ?? $path;
                 }
             }
-            $inner = $size * 0.72;
-            $c->image($path, $cx - $inner / 2, $cy - $inner / 2, $inner, $inner);
+            $inner = $plate ? $size * 0.72 : $size;
+            $c->image($path, $cx - $inner / 2, $cy - $inner / 2, $inner, $inner, 1.0, !$plate);
 
             return;
         }
 
         $color = Coins::color($symbol);
-        $c->circle($cx, $cy, $radius - 1, $color, self::$lightSurface ? 1.0 : 0.22);
+        $ink = '#FFFFFF';
+        if (self::$lightSurface) {
+            $c->circle($cx, $cy, $radius - 1, '#E4E4E1', 1.0);
+            $ink = '#3A3A38';
+        } else {
+            $c->circle($cx, $cy, $radius - 1, $color, 0.22);
+        }
         $mark = mb_strlen($symbol) <= 3 ? $symbol : mb_substr($symbol, 0, 1);
         $c->text(
             $mark,
             $cx,
             $cy,
             $size * (mb_strlen($mark) === 1 ? 0.42 : 0.32),
-            '#FFFFFF',
+            $ink,
             Canvas::W_BOLD,
             'center',
             0.96,

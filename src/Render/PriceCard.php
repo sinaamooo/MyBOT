@@ -7,8 +7,8 @@ use Nikto\Data\PriceProvider;
 
 final class PriceCard extends Card
 {
-    private const TILE_H = 240.0;
-    private const GAP    = 18.0;
+    private const TILE_H = 172.0;
+    private const GAP    = 16.0;
 
     private array $coins;
     private string $title;
@@ -34,15 +34,7 @@ final class PriceCard extends Card
         CoinLogo::$lightSurface = true;
 
         $rect = Frame::draw($c, $t, ['footer' => $this->footer]);
-        $top = Frame::header(
-            $c,
-            $t,
-            $rect,
-            $this->title,
-            $this->dateLine(),
-            '',
-            fn (float $x, float $y) => $this->score($c, $t, $x, $y)
-        );
+        $top = Frame::header($c, $t, $rect, $this->title, $this->dateLine());
 
         $tileW = ($rect['w'] - self::GAP * ($cols - 1)) / $cols;
 
@@ -57,180 +49,49 @@ final class PriceCard extends Card
         return $c;
     }
 
-    private function score(Canvas $c, Theme $t, float $x, float $y): void
-    {
-        $up = 0;
-        $down = 0;
-        foreach ($this->coins as $coin) {
-            $pct = (float) $coin['change_pct'];
-            if ($pct > 0.005) {
-                $up++;
-            } elseif ($pct < -0.005) {
-                $down++;
-            }
-        }
-
-        $cursor = $x;
-        foreach ([[$up, 'صعودی', $t->c('up'), true], [$down, 'نزولی', $t->c('down'), false]] as [$n, $label, $color, $isUp]) {
-            $text = $this->dnum((string) $n);
-            $boxW = 34.0;
-            $boxH = 26.0;
-
-            $c->roundRect($cursor, $y + 2, $boxW, $boxH, 8, $color, 1.0);
-            $c->text($text, $cursor + $boxW / 2, $y + 2 + $boxH / 2, 13, '#FFFFFF', Canvas::W_NUM_BOLD, 'center', 1.0, 'num');
-            $c->triangle($cursor + $boxW + 16, $y + 2 + $boxH / 2, 8, $isUp, $color);
-
-            $c->text($label, $cursor + $boxW + 27, $y + 2 + $boxH / 2, 11, $t->c('ink_dim'), Canvas::W_SEMIBOLD, 'left', 1.0, 'middle');
-            $cursor += $boxW + 30 + $c->textWidth($label, 11, Canvas::W_SEMIBOLD) + 18;
-        }
-
-        $c->text(
-            'از ' . $this->dnum((string) count($this->coins)) . ' ارز',
-            $x,
-            $y + 46,
-            10.5,
-            $t->c('ink_faint'),
-            Canvas::W_MEDIUM,
-            'left',
-            1.0,
-            'middle'
-        );
-    }
-
     private function tile(Canvas $c, Theme $t, array $coin, float $x, float $y, float $w, float $h): void
     {
-        $pct    = (float) $coin['change_pct'];
-        $isUp   = $pct > 0;
-        $isFlat = abs($pct) < 0.005;
-        $trend  = $t->trend($pct);
-        $radius = 18.0;
+        $pct   = (float) $coin['change_pct'];
+        $trend = $t->trend($pct);
 
-        Frame::panel($c, $t, $x, $y, $w, $h, $radius, ['border_alpha' => 0.14]);
-
-        $c->roundRect($x + $radius * 0.55, $y - 0.5, $w - $radius * 1.1, 5, 2.5, $trend, 1.0);
+        Frame::panel($c, $t, $x, $y, $w, $h, 18);
 
         $pad   = 18.0;
         $left  = $x + $pad;
         $right = $x + $w - $pad;
         $inner = $w - $pad * 2;
 
-        $logoSize = 38.0;
+        $logoSize = 32.0;
         $logoCx = $right - $logoSize / 2;
-        $logoCy = $y + 20 + $logoSize / 2;
-        CoinLogo::draw($c, (string) $coin['symbol'], $logoCx, $logoCy, $logoSize, true);
+        $logoCy = $y + 34;
+        CoinLogo::draw($c, (string) $coin['symbol'], $logoCx, $logoCy, $logoSize, false);
 
-        $labelRight = $logoCx - $logoSize / 2 - 12;
-        $c->text(
-            strtoupper((string) $coin['symbol']),
-            $labelRight,
-            $logoCy - 10,
-            15.5,
-            $t->c('ink'),
-            Canvas::W_NUM_BOLD,
-            'right',
-            1.0,
-            'num'
-        );
-        $c->textFit(
-            (string) $coin['name_fa'],
-            $labelRight,
-            $logoCy + 12,
-            $w * 0.44,
-            10.5,
-            $t->c('ink_dim'),
-            Canvas::W_MEDIUM,
-            'right',
-            8.5,
-            1.0,
-            'middle'
-        );
+        $labelRight = $logoCx - $logoSize / 2 - 10;
+        $c->text(strtoupper((string) $coin['symbol']), $labelRight, $logoCy - 10, 14.5, $t->c('ink'), Canvas::W_NUM_BOLD, 'right', 1.0, 'num');
+        $c->textFit((string) $coin['name_fa'], $labelRight, $logoCy + 12, $w * 0.44, 10, $t->c('ink_faint'), Canvas::W_MEDIUM, 'right', 8.5, 1.0, 'middle');
 
-        $pctText = $this->dnum(number_format(abs($pct), 2) . '%');
-        $chipH = 28.0;
-        $chipW = $c->textWidth($pctText, 13, Canvas::W_NUM_BOLD) + 38;
-        $chipCy = $logoCy;
-        $c->roundRect($left, $chipCy - $chipH / 2, $chipW, $chipH, 9, $trend, 1.0);
-        if ($isFlat) {
-            $c->rect($left + 12, $chipCy - 1.2, 9, 2.4, '#FFFFFF');
-        } else {
-            $c->triangle($left + 16, $chipCy, 9, $isUp, '#FFFFFF');
-        }
-        $c->text($pctText, $left + $chipW - 12, $chipCy, 13, '#FFFFFF', Canvas::W_NUM_BOLD, 'right', 1.0, 'num');
+        $this->change($c, $t, $pct, $left, $logoCy, $trend);
 
-        $priceY = $y + 98;
         $price = '$' . PriceProvider::formatPrice((float) $coin['price']);
-        $c->textFit($this->dnum($price), $right, $priceY, $inner * 0.80, 30, $t->c('ink'), Canvas::W_NUM_BOLD, 'right', 16, 1.0, 'num');
+        $c->textFit($this->dnum($price), $right, $y + 86, $inner, 28, $t->c('ink'), Canvas::W_NUM_BOLD, 'right', 16, 1.0, 'num');
 
-        $c->text('قیمت لحظه‌ای', $left, $priceY, 10, $t->c('ink_faint'), Canvas::W_MEDIUM, 'left', 1.0, 'middle');
-
-        $c->rect($left, $y + 124, $inner, 1, $t->c('line_soft'), 1.0);
-
-        $this->range($c, $t, $coin, $left, $y + 134, $inner, $trend);
-
-        $chartY = $y + 178;
-        $chartH = $y + $h - 14 - $chartY;
         $spark = array_values(array_map('floatval', (array) ($coin['spark'] ?? [])));
-        if (count($spark) >= 4 && $chartH > 20) {
-            Frame::well($c, $t, $left - 4, $chartY, $inner + 8, $chartH, 10, 0.9);
-            $this->sparkline($c, $t, $spark, $left - 2, $chartY + 4, $inner + 4, $chartH - 8, $trend);
+        if (count($spark) >= 4) {
+            $this->sparkline($c, $spark, $left, $y + 114, $inner, $h - 114 - 16, $trend);
         }
     }
 
-    private function range(Canvas $c, Theme $t, array $coin, float $x, float $y, float $w, string $trend): void
+    private function change(Canvas $c, Theme $t, float $pct, float $x, float $cy, string $color): void
     {
-        $low = (float) ($coin['low'] ?? 0);
-        $high = (float) ($coin['high'] ?? 0);
-        $price = (float) $coin['price'];
-
-        $labelY = $y + 8;
-        $valueY = $y + 28;
-
-        $c->text('بیشترین', $x + $w, $labelY, 9.5, $t->c('ink_faint'), Canvas::W_MEDIUM, 'right', 1.0, 'middle');
-        $c->text('کمترین', $x, $labelY, 9.5, $t->c('ink_faint'), Canvas::W_MEDIUM, 'left', 1.0, 'middle');
-
-        $c->textFit(
-            $this->dnum(PriceProvider::formatPrice($high)),
-            $x + $w,
-            $valueY,
-            $w * 0.42,
-            11,
-            $t->c('up'),
-            Canvas::W_NUM_BOLD,
-            'right',
-            8.5,
-            1.0,
-            'num'
-        );
-        $c->textFit(
-            $this->dnum(PriceProvider::formatPrice($low)),
-            $x,
-            $valueY,
-            $w * 0.42,
-            11,
-            $t->c('down'),
-            Canvas::W_NUM_BOLD,
-            'left',
-            8.5,
-            1.0,
-            'num'
-        );
-
-        if ($high <= $low) {
-            return;
+        if (abs($pct) < 0.005) {
+            $c->rect($x, $cy - 1, 8, 2, $color);
+        } else {
+            $c->triangle($x + 4, $cy, 8, $pct > 0, $color);
         }
-
-        $barY = ($labelY + $valueY) / 2 - 2.5;
-        $barX = $x + $w * 0.32;
-        $barW = $w * 0.36;
-        $ratio = max(0.02, min(0.98, ($price - $low) / ($high - $low)));
-
-        $c->roundRect($barX, $barY, $barW, 5, 2.5, $t->c('line_soft'), 1.0);
-        $c->roundRect($barX, $barY, $barW * $ratio, 5, 2.5, $trend, 1.0);
-        $c->circle($barX + $barW * $ratio, $barY + 2.5, 4.6, $t->c('line'));
-        $c->circle($barX + $barW * $ratio, $barY + 2.5, 2.8, '#FFFFFF');
+        $c->text($this->dnum(number_format(abs($pct), 2) . '%'), $x + 13, $cy, 13, $color, Canvas::W_NUM_BOLD, 'left', 1.0, 'num');
     }
 
-    private function sparkline(Canvas $c, Theme $t, array $values, float $x, float $y, float $w, float $h, string $color): void
+    private function sparkline(Canvas $c, array $values, float $x, float $y, float $w, float $h, string $color): void
     {
         $min = min($values);
         $max = max($values);
@@ -239,19 +100,10 @@ final class PriceCard extends Card
 
         $points = [];
         foreach ($values as $i => $v) {
-            $points[] = [
-                $x + $w * ($i / ($n - 1)),
-                $y + $h - (($v - $min) / $span) * ($h - 8) - 4,
-            ];
+            $points[] = [$x + $w * ($i / ($n - 1)), $y + $h - (($v - $min) / $span) * ($h - 4) - 2];
         }
 
-        $c->dashedLine($x, $y + $h / 2, $x + $w, $y + $h / 2, $t->c('line_soft'), 1, 5, 5, 0.9);
-
-        $c->areaGradient($points, $x, $y, $w, $h, $color, 0.22);
-        $c->polyline($points, $color, 2.1, 1.0);
-
-        $last = $points[$n - 1];
-        $c->circle($last[0], $last[1], 4.0, '#FFFFFF');
-        $c->circle($last[0], $last[1], 3.0, $color);
+        $c->areaGradient($points, $x, $y, $w, $h, $color, 0.10);
+        $c->polyline($points, $color, 1.8, 1.0);
     }
 }

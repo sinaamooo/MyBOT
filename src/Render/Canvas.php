@@ -487,7 +487,7 @@ final class Canvas
         imagedestroy($layer);
     }
 
-    public function image(string $path, float $x, float $y, float $w, float $h, float $alpha = 1.0): bool
+    public function image(string $path, float $x, float $y, float $w, float $h, float $alpha = 1.0, bool $round = false): bool
     {
         $src = self::loadImage($path);
         if ($src === null) {
@@ -501,6 +501,10 @@ final class Canvas
         imagesavealpha($scaled, true);
         imagefilledrectangle($scaled, 0, 0, $dw, $dh, imagecolorallocatealpha($scaled, 0, 0, 0, 127));
         imagecopyresampled($scaled, $src, 0, 0, 0, 0, $dw, $dh, imagesx($src), imagesy($src));
+        if ($round) {
+            $this->applyRoundMask($scaled, (int) floor(min($dw, $dh) / 2));
+            imagealphablending($scaled, false);
+        }
 
         imagealphablending($this->im, true);
         if ($alpha >= 1.0) {

@@ -1031,7 +1031,6 @@ final class Panel
             $volume = (int) $job->minVolume();
             $lines[] = 'تعداد ارز در هر ستون: ' . $this->fa((string) $count);
             $lines[] = 'حداقل حجم ۲۴ ساعته: ' . $this->fa($this->money($volume));
-            $lines[] = 'نمودار کوچک: ' . ($job->option('sparkline', true) ? 'روشن' : 'خاموش');
             $lines[] = '';
             $lines[] = 'قراردادهای کم‌حجم‌تر از این مقدار در رتبه‌بندی حساب نمی‌شوند.';
             $row = [];
@@ -1046,7 +1045,6 @@ final class Panel
             }
             $kb[] = array_slice($row, 0, 2);
             $kb[] = array_slice($row, 2);
-            $kb[] = [$this->btn('نمودار کوچک: ' . ($job->option('sparkline', true) ? 'روشن' : 'خاموش'), 'j:' . $key . ':spark')];
         }
 
         if ($job instanceof LiquidityJob) {

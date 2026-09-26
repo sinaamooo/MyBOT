@@ -40,7 +40,6 @@ final class MoversJob extends Job
             'headline'   => 'برترین‌های فیوچرز بایننس',
             'count'      => 5,
             'min_volume' => 5_000_000,
-            'sparkline'  => true,
         ];
     }
 
@@ -63,7 +62,7 @@ final class MoversJob extends Job
 
     public function fetch(): mixed
     {
-        return FuturesProvider::movers($this->count(), $this->minVolume(), (bool) $this->option('sparkline', true));
+        return FuturesProvider::movers($this->count(), $this->minVolume(), false);
     }
 
     public function card(mixed $data): Card
