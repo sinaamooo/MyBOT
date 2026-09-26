@@ -108,10 +108,7 @@ final class LiquidityCard extends Card
         $labels = [['y' => $yOf($price), 'text' => $this->dnum(number_format($price, 1)), 'color' => $t->c('line'), 'pill' => true]];
         foreach ([[$bidWalls, $t->c('up')], [$askWalls, $t->c('down')]] as [$walls, $color]) {
             foreach ($walls as $wall) {
-                $wy = $yOf((float) $wall['price']);
-                $c->rect($chartL, $wy - 4, $chartR - $chartL, 8, $color, 0.07);
-                $c->rect($chartL, $wy - 0.7, $chartR - $chartL, 1.4, $color, 0.85);
-                $labels[] = ['y' => $wy, 'text' => $this->price((float) $wall['price']), 'color' => $color, 'pill' => false];
+                $labels[] = ['y' => $yOf((float) $wall['price']), 'text' => $this->price((float) $wall['price']), 'color' => $color, 'pill' => false];
             }
         }
 
@@ -120,7 +117,7 @@ final class LiquidityCard extends Card
         $py = $yOf($price);
         $c->dashedLine($chartL, $py, $chartR, $py, $t->c('line'), 1.2, 5, 4, 0.8);
 
-        $this->labels($c, $t, $labels, $gutterL, $chartR, $top, $bottom);
+        $this->labels($c, $t, $labels, $gutterL, $top, $bottom);
     }
 
     private function candles(Canvas $c, Theme $t, array $candles, float $left, float $right, callable $yOf): void
@@ -149,7 +146,7 @@ final class LiquidityCard extends Card
         }
     }
 
-    private function labels(Canvas $c, Theme $t, array $labels, float $left, float $chartR, float $top, float $bottom): void
+    private function labels(Canvas $c, Theme $t, array $labels, float $left, float $top, float $bottom): void
     {
         $h = 20.0;
         $gap = 2.0;
@@ -175,9 +172,6 @@ final class LiquidityCard extends Card
         $w = self::GUTTER;
         foreach ($labels as $i => $label) {
             $ly = $pos[$i];
-            if (abs($ly - $label['y']) > 0.5) {
-                $c->line($chartR, $label['y'], $left, $ly, $label['color'], 1.0, 0.5);
-            }
             if ($label['pill']) {
                 $c->roundRect($left, $ly - $h / 2, $w, $h, 6, $label['color'], 1.0);
                 $c->textFit($label['text'], $left + $w / 2, $ly, $w - 10, 11, '#FFFFFF', Canvas::W_NUM_BOLD, 'center', 8, 1.0, 'num');
