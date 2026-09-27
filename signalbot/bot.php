@@ -1320,6 +1320,24 @@ final class AdminPanel
         'SCANNER_GAINER_SHARE'        => ['سهم بیشترین رشد', 'درصد. مثال: 40'],
         'SCANNER_LOSER_SHARE'         => ['سهم بیشترین ضرر', 'درصد. مثال: 25'],
         'SCANNER_MIN_MOVE_PCT'        => ['حداقل حرکت ۲۴ ساعته', 'درصد. مثال: 4'],
+        'LEVERAGE_FLOOR'              => ['حداقل اهرم همه ارزها', 'عدد صحیح. مثال: 20'],
+        'TP_MODE'                     => ['روش محاسبه تارگت‌ها', 'rr = بر اساس فاصله حد ضرر (وین‌ریت بالا) | leveraged = درصد ثابت با اهرم'],
+        'TP1_R'                       => ['تارگت ۱ بر حسب R', 'ضریب فاصله حد ضرر. مثال: 0.75'],
+        'TP2_R'                       => ['تارگت ۲ بر حسب R', 'مثال: 1.5'],
+        'TP3_R'                       => ['تارگت ۳ بر حسب R', 'مثال: 2.5'],
+        'TP4_R'                       => ['تارگت ۴ بر حسب R', 'مثال: 4'],
+        'TP1_MIN_MOVE_PCT'            => ['حداقل حرکت قیمت تا تارگت ۱', 'درصد قیمت (بدون اهرم). مثال: 0.3'],
+        'INDICATOR_PACK_ENABLED'      => ['پکیج اندیکاتورها', 'true یا false'],
+        'MIN_TREND_CONSENSUS'         => ['حداقل هم‌جهتی اندیکاتورهای روند', 'بین 0 و 1. مثال: 0.6 (یعنی ۶۰٪)'],
+        'MIN_REVERSAL_TRIGGERS'       => ['حداقل تریگر برای ورود برگشتی', 'عدد، ۰ = خاموش. مثال: 1'],
+        'PACK_TRIGGER_MAX_AGE'        => ['حداکثر عمر تریگرها', 'تعداد کندل. مثال: 3'],
+        'CHOP_FILTER_ENABLED'         => ['فیلتر بازار رنج (ADX + Braid)', 'true یا false'],
+        'CHOP_ADX_MAX'                => ['سقف ADX بازار رنج', 'عدد. مثال: 15'],
+        'EXHAUSTION_FILTER_ENABLED'   => ['فیلتر خستگی حرکت (TD9، WaveTrend، RSI، MRC)', 'true یا false'],
+        'GRAVITY_VETO_LEVEL'          => ['آستانه وتوی جاذبه نقدینگی', '۰ تا ۱۰۰، ۰ = خاموش. مثال: 60'],
+        'OPPOSITE_TRIGGER_VETO'       => ['تعداد سیگنال تازه مخالف برای رد', 'عدد، ۰ = خاموش. مثال: 2'],
+        'PACK_BONUS_CAP'              => ['سقف امتیاز اضافه اندیکاتورها', 'عدد. مثال: 18'],
+        'CARD_STYLE'                  => ['طرح کارت سیگنال', 'neo = طرح جدید | classic = طرح قبلی (بکاپ)'],
     ];
 
     private const AUTO_CATEGORIES = [
@@ -1329,10 +1347,19 @@ final class AdminPanel
             'PRIMARY_EXCHANGE',
         ]],
         'targets' => ['اهرم و تارگت‌ها', [
+            'LEVERAGE_FLOOR', 'TP_MODE', 'TP1_R', 'TP2_R', 'TP3_R', 'TP4_R', 'TP1_MIN_MOVE_PCT',
             'TP1_LEVERAGED_PCT', 'TP2_LEVERAGED_PCT', 'TP3_LEVERAGED_PCT', 'TP4_LEVERAGED_PCT', 'TP1_CLOSE_PERCENT',
             'MAX_STOP_LEVERAGED_PCT', 'LEVERAGE_MAJOR_ASSETS',
             'LEVERAGE_MAJOR', 'LEVERAGE_ALT_MIN', 'LEVERAGE_ALT_MAX', 'LEVERAGE_LIQUIDATION_BUFFER',
             'ADVISORY_STOP_WARN_PCT', 'ADVISORY_STALL_RETRACE_PCT',
+        ]],
+        'indicators' => ['اندیکاتورها و فیلتر وین‌ریت', [
+            'INDICATOR_PACK_ENABLED', 'MIN_TREND_CONSENSUS', 'MIN_REVERSAL_TRIGGERS', 'PACK_TRIGGER_MAX_AGE',
+            'CHOP_FILTER_ENABLED', 'CHOP_ADX_MAX', 'EXHAUSTION_FILTER_ENABLED', 'GRAVITY_VETO_LEVEL',
+            'OPPOSITE_TRIGGER_VETO', 'PACK_BONUS_CAP',
+        ]],
+        'card' => ['کارت سیگنال', [
+            'CARD_STYLE',
         ]],
         'capital' => ['مدیریت سرمایه', [
             'ACCOUNT_BALANCE', 'RISK_PER_TRADE_PCT', 'MAX_DAILY_LOSSES', 'MAX_DAILY_SIGNALS', 'MAX_OPEN_TRADES',
@@ -1522,8 +1549,8 @@ final class AdminPanel
             'سیگنال بعدی: آماده (منتظر ستاپ مناسب)',
             sprintf('ریسک‌فری بعد از تارگت ۱: %s', Config::riskFreeEnabled() ? 'فعال' : 'غیرفعال'),
             '',
-            sprintf('کارنامه: %d برد | %d باخت | %d بدون ضرر از %d معامله | نرخ برد %.1f%%',
-                $perf['wins'], $perf['losses'], $perf['breakeven'], $perf['total'], $perf['win_rate']),
+            sprintf('کارنامه: %d برد (%d ریسک‌فری) | %d باخت | %d بسته‌شده بی‌سود از %d معامله | نرخ برد (رسیدن به تارگت ۱) %.1f%%',
+                $perf['wins'], $perf['breakeven'], $perf['losses'], $perf['flat'], $perf['total'], $perf['win_rate']),
             sprintf('امروز: %d باخت، %d سیگنال', $today['losses'], $today['published']),
         ];
 
@@ -1616,6 +1643,11 @@ final class AdminPanel
                 sprintf('حداقل حجم ۲۴ ساعته: %s دلار', number_format(Config::minVolumeUsdt())),
             ],
             'targets' => [
+                sprintf('حداقل اهرم همه ارزها: %dx', Config::leverageFloor()),
+                Config::targetsByRisk()
+                    ? sprintf('روش تارگت: بر اساس حد ضرر (rr) → ۱) %sR | ۲) %sR | ۳) %sR | ۴) %sR | حداقل حرکت تی۱ %s%%',
+                        Config::tpR(1), Config::tpR(2), Config::tpR(3), Config::tpR(4), Config::tp1MinMovePercent())
+                    : 'روش تارگت: درصد ثابت با اهرم (leveraged)',
                 sprintf('تارگت‌ها با اهرم: ۱) %.0f%% | ۲) %.0f%% | ۳) %.0f%% | ۴) %.0f%% | حد ضرر حداکثر %.0f%%',
                     Config::tp1LeveragedPercent(), Config::tp2LeveragedPercent(), Config::tp3LeveragedPercent(),
                     Config::tp4LeveragedPercent(), Config::maxStopLeveragedPercent()),
@@ -1624,8 +1656,10 @@ final class AdminPanel
                 sprintf('درصد خروج در تارگت ۱: %.0f%%', Config::tp1ClosePercent()),
                 sprintf('هشدار قبل تی۱: %.0f%% | هشدار بعد تی۳: %.0f%%',
                     Config::advisoryStopWarnPercent(), Config::advisoryStallRetracePercent()),
-                sprintf('%s → اهرم %dx', implode(',', Config::majorAssets()), Config::leverageMajor()),
-                sprintf('بقیه ارزها → اهرم %dx تا %dx', Config::leverageAltMin(), Config::leverageAltMax()),
+                sprintf('%s → اهرم %dx', implode(',', Config::majorAssets()), max(Config::leverageFloor(), Config::leverageMajor())),
+                sprintf('بقیه ارزها → اهرم %dx تا %dx',
+                    max(Config::leverageFloor(), Config::leverageAltMin()),
+                    max(Config::leverageFloor(), Config::leverageAltMin(), Config::leverageAltMax())),
             ],
             'capital' => [
                 sprintf('سرمایه مرجع: %s USDT | ریسک هر معامله: %.1f%%',
@@ -1653,6 +1687,23 @@ final class AdminPanel
             'scanner' => [
                 sprintf('سهم بیشترین رشد/ضرر در لیست اسکن: %.0f%% / %.0f%%', Config::scannerGainerShare(), Config::scannerLoserShare()),
                 sprintf('حداقل حرکت ۲۴ ساعته: %.0f%%', Config::scannerMinMovePercent()),
+            ],
+            'indicators' => [
+                sprintf('پکیج اندیکاتورها: %s (۱۱ اندیکاتور روند + تریگرهای WaveTrend، SFP، جارو، تی‌دی، خط روند، سه‌کندلی)',
+                    Config::indicatorPackEnabled() ? 'فعال' : 'خاموش'),
+                sprintf('حداقل هم‌جهتی روند (برای شکست/ادامه روند): %.0f%% | حداقل تریگر برای برگشت: %d | عمر تریگر: %d کندل',
+                    Config::minTrendConsensus() * 100, Config::minReversalTriggers(), Config::packTriggerMaxAge()),
+                sprintf('فیلتر رنج: %s (ADX زیر %.0f) | فیلتر خستگی: %s',
+                    Config::chopFilterEnabled() ? 'فعال' : 'خاموش', Config::chopAdxMax(),
+                    Config::exhaustionFilterEnabled() ? 'فعال' : 'خاموش'),
+                sprintf('وتوی جاذبه نقدینگی: %s | وتوی سیگنال مخالف: %s | سقف امتیاز اضافه: %.0f',
+                    Config::gravityVetoLevel() > 0 ? number_format(Config::gravityVetoLevel(), 0) : 'خاموش',
+                    Config::oppositeTriggerVeto() > 0 ? Config::oppositeTriggerVeto() . ' سیگنال' : 'خاموش',
+                    Config::packBonusCap()),
+            ],
+            'card' => [
+                sprintf('طرح فعلی: %s', Config::cardStyle() === 'classic' ? 'کلاسیک (طرح قبلی)' : 'نئو (طرح جدید)'),
+                'برای دیدن نمونه از «Test Signal» استفاده کنید.',
             ],
             default => [],
         };
@@ -1685,9 +1736,9 @@ final class AdminPanel
 
     private function previewSignal(): Signal
     {
-        $leverage = Config::leverageMajor();
+        $leverage = max(Config::leverageFloor(), Config::leverageMajor());
         $entry = 65000.5;
-        $risk = $entry * (Config::leverageLiquidationBuffer() * (100.0 / max(1, $leverage))) / 100;
+        $risk = $entry * (Config::maxStopLeveragedPercent() * 0.8 / max(1, $leverage)) / 100;
         return new Signal(
             uuid: SignalGenerator::uuid4(),
             exchange: 'binance',
@@ -2235,10 +2286,48 @@ final class AdminPanel
                         'CONFLUENCE_STRUCTURE_CAP', 'CONFLUENCE_LIQUIDITY_CAP', 'CONFLUENCE_LOCATION_CAP',
                         'CONFLUENCE_MOMENTUM_CAP', 'CONFLUENCE_VOLUME_CAP', 'CONFLUENCE_HTF_CAP',
                         'MIN_ROOM_TO_TARGET_R', 'SYMBOL_LOSS_COOLDOWN_SECONDS', 'APLUS_MIN_CONFIRMATIONS', 'MIN_ADX',
-                        'MIN_SIGNAL_GAP_MINUTES', 'MAX_TRADE_HOURS', 'MAX_OPPOSING_VOTE_RATIO'];
+                        'MIN_SIGNAL_GAP_MINUTES', 'MAX_TRADE_HOURS', 'MAX_OPPOSING_VOTE_RATIO',
+                        'LEVERAGE_FLOOR', 'TP1_R', 'TP2_R', 'TP3_R', 'TP4_R', 'TP1_MIN_MOVE_PCT',
+                        'MIN_TREND_CONSENSUS', 'MIN_REVERSAL_TRIGGERS', 'PACK_TRIGGER_MAX_AGE', 'CHOP_ADX_MAX',
+                        'GRAVITY_VETO_LEVEL', 'OPPOSITE_TRIGGER_VETO', 'PACK_BONUS_CAP'];
             if (in_array($key, $numeric, true) && !is_numeric($value)) {
                 $this->telegram->sendMessage($chatId, "این مقدار باید عدد باشه.");
                 return true;
+            }
+            if ($key === 'TP_MODE' && !in_array(strtolower($value), ['rr', 'leveraged'], true)) {
+                $this->telegram->sendMessage($chatId, "فقط rr یا leveraged قابل قبول است.");
+                return true;
+            }
+            if ($key === 'CARD_STYLE' && !in_array(strtolower($value), ['neo', 'classic'], true)) {
+                $this->telegram->sendMessage($chatId, "فقط neo یا classic قابل قبول است.");
+                return true;
+            }
+            if (in_array($key, ['TP_MODE', 'CARD_STYLE'], true)) {
+                $value = strtolower($value);
+            }
+            if ($key === 'MIN_TREND_CONSENSUS' && ((float) $value < 0 || (float) $value > 1)) {
+                $this->telegram->sendMessage($chatId, "این مقدار باید بین 0 تا 1 باشه (مثلاً 0.6 یعنی ۶۰٪).");
+                return true;
+            }
+            if ($key === 'GRAVITY_VETO_LEVEL' && ((float) $value < 0 || (float) $value > 100)) {
+                $this->telegram->sendMessage($chatId, "این مقدار باید بین 0 تا 100 باشه.");
+                return true;
+            }
+            if ($key === 'LEVERAGE_FLOOR' && (int) $value < 1) {
+                $this->telegram->sendMessage($chatId, "حداقل اهرم باید حداقل ۱ باشه.");
+                return true;
+            }
+            if (preg_match('/^TP([1-4])_R$/', $key, $m) === 1) {
+                $level = (int) $m[1];
+                $v = (float) $value;
+                if ($level > 1 && $v <= Config::tpR($level - 1)) {
+                    $this->telegram->sendMessage($chatId, sprintf("تارگت %d باید بزرگ‌تر از تارگت %d باشه (الان %sR است).", $level, $level - 1, Config::tpR($level - 1)));
+                    return true;
+                }
+                if ($level < 4 && $v >= Config::tpR($level + 1)) {
+                    $this->telegram->sendMessage($chatId, sprintf("تارگت %d باید کوچک‌تر از تارگت %d باشه (الان %sR است).", $level, $level + 1, Config::tpR($level + 1)));
+                    return true;
+                }
             }
             if ($key === 'TP2_LEVERAGED_PCT' && (float) $value <= Config::tp1LeveragedPercent()) {
                 $this->telegram->sendMessage($chatId, "تارگت ۲ باید بزرگ‌تر از تارگت ۱ باشه (الان تارگت ۱ روی " . Config::tp1LeveragedPercent() . "٪ است).");
@@ -2285,7 +2374,8 @@ final class AdminPanel
                     return true;
                 }
             }
-            if (in_array($key, ['REQUIRE_REVERSAL_CANDLE', 'REQUIRE_KILLZONE', 'REQUIRE_FRESH_REVERSAL_ZONE', 'REQUIRE_SWEEP_AT_ZONE', 'REQUIRE_ADX_FILTER', 'REQUIRE_BREAKOUT_MOMENTUM'], true)
+            if (in_array($key, ['REQUIRE_REVERSAL_CANDLE', 'REQUIRE_KILLZONE', 'REQUIRE_FRESH_REVERSAL_ZONE', 'REQUIRE_SWEEP_AT_ZONE', 'REQUIRE_ADX_FILTER', 'REQUIRE_BREAKOUT_MOMENTUM',
+                'INDICATOR_PACK_ENABLED', 'CHOP_FILTER_ENABLED', 'EXHAUSTION_FILTER_ENABLED'], true)
                 && !in_array(strtolower($value), ['true', 'false', '1', '0', 'yes', 'no', 'on', 'off'], true)) {
                 $this->telegram->sendMessage($chatId, "این مقدار باید true یا false باشه.");
                 return true;

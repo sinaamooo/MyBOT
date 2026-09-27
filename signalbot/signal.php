@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/card.php';
+require_once __DIR__ . '/indicators.php';
 
 enum Direction: string
 {
@@ -188,6 +189,7 @@ final class Signal
         public readonly int $leverage = 1,
         public readonly string $tier = 'alt',
         public ?float $activeStop = null,
+        public readonly array $meta = [],
     ) {
         $this->activeStop ??= $stopLoss;
     }
@@ -781,6 +783,38 @@ final class BinanceAdapter extends AbstractExchangeAdapter
     }
 }
 
+final class CandleAggregator
+{
+    // Merges lower-timeframe candles into complete buckets of $timeframe aligned to UTC.
+    public static function merge(array $candles, string $timeframe): array
+    {
+        $bucketMs = Candle::timeframeSeconds($timeframe) * 1000;
+        $groups = [];
+        foreach ($candles as $c) {
+            $groups[intdiv($c->openTime, $bucketMs) * $bucketMs][] = $c;
+        }
+        $out = [];
+        foreach ($groups as $start => $group) {
+            $first = $group[0];
+            $last = $group[count($group) - 1];
+            $expected = (int) round($bucketMs / (Candle::timeframeSeconds($first->timeframe) * 1000));
+            if (count($group) < $expected) {
+                continue;
+            }
+            $out[] = new Candle(
+                openTime: $start,
+                open: $first->open,
+                high: max(array_map(static fn(Candle $c) => $c->high, $group)),
+                low: min(array_map(static fn(Candle $c) => $c->low, $group)),
+                close: $last->close,
+                volume: array_sum(array_map(static fn(Candle $c) => $c->volume, $group)),
+                timeframe: $timeframe,
+            );
+        }
+        return $out;
+    }
+}
+
 final class MexcAdapter extends AbstractExchangeAdapter
 {
     protected array $timeframeMap = [
@@ -838,6 +872,10 @@ final class MexcAdapter extends AbstractExchangeAdapter
 
     public function fetchCandles(string $symbol, string $timeframe, int $limit): array
     {
+        if ($timeframe === '2h') {
+            // MEXC spot has no 2h interval; build it from aligned pairs of 1h candles.
+            return CandleAggregator::merge($this->fetchCandles($symbol, '1h', min(1000, $limit * 2 + 2)), '2h');
+        }
         $interval = $this->mapTimeframe($timeframe);
         if ($interval === null) {
             return [];
@@ -1821,6 +1859,19 @@ final class CandleManager
         return $v === false || $v === null ? null : (int) $v;
     }
 
+    public function countSeries(string $exchange, string $symbol, string $timeframe): int
+    {
+        $exchangeId = ExchangeRepository::idForName($exchange);
+        if ($exchangeId === null) {
+            return 0;
+        }
+        $stmt = Database::pdo()->prepare(
+            'SELECT COUNT(*) FROM candles WHERE exchange_id = :eid AND symbol = :symbol AND timeframe = :tf'
+        );
+        $stmt->execute([':eid' => $exchangeId, ':symbol' => $symbol, ':tf' => $timeframe]);
+        return (int) $stmt->fetchColumn();
+    }
+
     public function pruneSeries(string $exchange, string $symbol, string $timeframe, int $keep): void
     {
         $exchangeId = ExchangeRepository::idForName($exchange);
@@ -1896,6 +1947,9 @@ final class OrderbookManager
 
 final class MarketDataStore
 {
+    // EMA200 and the 200-bar mean reversion channel need a warm-up margin beyond 200 bars.
+    public const SNAPSHOT_CANDLES = 300;
+
     private CandleManager $candles;
     private TickerManager $tickers;
     private OrderbookManager $orderbooks;
@@ -1959,7 +2013,7 @@ final class MarketDataStore
         return $best;
     }
 
-    public function buildSnapshot(string $exchange, string $symbol, array $timeframes, int $candleLimit = 200): MarketSnapshot
+    public function buildSnapshot(string $exchange, string $symbol, array $timeframes, int $candleLimit = self::SNAPSHOT_CANDLES): MarketSnapshot
     {
         $ticker = $this->tickers->get($exchange, $symbol);
         $now = time();
@@ -5023,6 +5077,21 @@ final class ConfluenceProStrategy implements Strategy
             }
         }
 
+        // The indicator pack only ever removes signals or re-ranks them: the core score
+        // above already cleared the threshold, so the pack cannot push a weak setup through.
+        $packSummary = null;
+        $packBonus = 0.0;
+        if (Config::indicatorPackEnabled()) {
+            $pack = IndicatorPack::analyse($candles, $snapshot);
+            $gate = $this->packGate($pack, $isLong, $continuation);
+            if ($gate['reject'] !== null) {
+                return $this->reject($gate['reject']);
+            }
+            $packBonus = $gate['bonus'];
+            $packSummary = $gate['summary'];
+            array_unshift($why, ...$gate['reasons']);
+        }
+
         $this->lastVotes = [
             'volatility_ratio' => round($volRatio, 2),
             'stop_pad_atr' => $stopPad,
@@ -5054,6 +5123,8 @@ final class ConfluenceProStrategy implements Strategy
             'ote' => $smc['in_ote'],
             'htf' => $htf,
             'liquidity_target' => $target,
+            'pack' => $packSummary,
+            'pack_bonus' => $packBonus,
         ];
 
         return [
@@ -5067,9 +5138,106 @@ final class ConfluenceProStrategy implements Strategy
             'structural_target' => $target,
             'setup' => $isLong ? 'breakout' : 'reversal',
             'event' => $structure['event'] ?? ($wave['event'] ?? 'confluence'),
-            'confluence_score' => round($score, 1),
+            'confluence_score' => round($score + $packBonus, 1),
             'confluence_reasons' => $why,
+            'pack' => $packSummary,
         ];
+    }
+
+    private function packGate(array $pack, bool $isLong, bool $continuation): array
+    {
+        $result = ['reject' => null, 'bonus' => 0.0, 'reasons' => [], 'summary' => null];
+        $consensus = IndicatorPack::consensus($pack, $isLong);
+        $maxAge = Config::packTriggerMaxAge();
+        $triggers = IndicatorPack::triggers($pack, $isLong, $maxAge);
+        $opposite = IndicatorPack::triggers($pack, !$isLong, 1);
+        $gravity = (float) $pack['gravity']['net'];
+        $gravityWith = $isLong ? $gravity : -$gravity;
+        $mtf = $pack['mtf'];
+        $mtfWith = $isLong ? $mtf['up'] : $mtf['down'];
+
+        $result['summary'] = [
+            'with' => $consensus['with'],
+            'total' => $consensus['total'],
+            'triggers' => array_keys($triggers),
+            'opposite' => array_keys($opposite),
+            'gravity' => $gravityWith,
+            'mtf' => $mtf['total'] > 0 ? $mtfWith . '/' . $mtf['total'] : null,
+            'adx15' => is_nan($pack['adx15']) ? null : round($pack['adx15'], 1),
+            'braid' => $pack['braid']['state'],
+            'wt2' => $pack['wavetrend']['wt2'] === null || is_nan($pack['wavetrend']['wt2']) ? null : round($pack['wavetrend']['wt2'], 1),
+            'mrc' => $pack['mrc']['zone'],
+            'ssl_quality' => $pack['ssl']['quality'],
+        ];
+
+        if ($continuation && Config::chopFilterEnabled() && IndicatorPack::isChop($pack)) {
+            $result['reject'] = sprintf('بازار بی‌روند و رنج است (ADX %.0f و فیلتر Braid خاکستری)', $pack['adx15']);
+            return $result;
+        }
+        if (Config::exhaustionFilterEnabled()) {
+            $tired = IndicatorPack::exhaustion($pack, $isLong);
+            if ($tired !== null) {
+                $result['reject'] = $tired;
+                return $result;
+            }
+        }
+        $minConsensus = Config::minTrendConsensus();
+        if ($continuation && $consensus['ratio'] + 1e-9 < $minConsensus) {
+            $result['reject'] = sprintf(
+                'فقط %d از %d اندیکاتور روند هم‌جهت بودند (حداقل %d لازم است)',
+                $consensus['with'],
+                $consensus['total'],
+                (int) ceil($minConsensus * $consensus['total'])
+            );
+            return $result;
+        }
+        if (!$continuation && count($triggers) < Config::minReversalTriggers()) {
+            $result['reject'] = 'هیچ تریگر برگشتی تازه‌ای (WaveTrend، SFP، جارو، تی‌دی ۹، سه‌کندلی، تغییر جهت) این برگشت را تایید نکرد';
+            return $result;
+        }
+        $oppositeVeto = Config::oppositeTriggerVeto();
+        if ($oppositeVeto > 0 && count($opposite) >= $oppositeVeto) {
+            $result['reject'] = 'سیگنال‌های تازه خلاف جهت: ' . implode('، ', array_slice(array_values($opposite), 0, 2));
+            return $result;
+        }
+        $gravityVeto = Config::gravityVetoLevel();
+        $bothSides = $pack['gravity']['upper'] !== null && $pack['gravity']['lower'] !== null;
+        if ($gravityVeto > 0 && $bothSides && $gravityWith <= -$gravityVeto) {
+            $result['reject'] = sprintf('جاذبه نقدینگی (Market Gravity) قوی خلاف جهت است (%.0f)', $gravityWith);
+            return $result;
+        }
+        if ($continuation && $mtf['total'] >= 3 && $mtfWith === 0) {
+            $result['reject'] = 'هیچ تایم‌فریمی بالای/زیر EMA200 در جهت معامله نیست';
+            return $result;
+        }
+
+        $bonus = $consensus['ratio'] * 8.0 + min(3, count($triggers)) * 2.5;
+        if ($mtf['total'] > 0) {
+            $bonus += ($mtfWith / $mtf['total']) * 4.0;
+        }
+        if ($gravityWith >= 30.0) {
+            $bonus += 2.0;
+        }
+        $pvsra = $pack['pvsra']['climax'];
+        if ($pvsra === ($isLong ? 'bullish' : 'bearish')) {
+            $bonus += 2.0;
+        }
+        $result['bonus'] = round(min(Config::packBonusCap(), $bonus), 1);
+
+        $result['reasons'][] = sprintf('هم‌جهتی اندیکاتورها: %d از %d', $consensus['with'], $consensus['total']);
+        foreach (array_slice(array_values($triggers), 0, 3) as $label) {
+            $result['reasons'][] = $label;
+        }
+        if ($mtf['total'] > 0) {
+            $result['reasons'][] = sprintf('روند چندتایم‌فریمی (EMA200): %d از %d هم‌جهت', $mtfWith, $mtf['total']);
+        }
+        if ($gravityWith >= 30.0) {
+            $result['reasons'][] = sprintf('کشش نقدینگی (Market Gravity) به سمت هدف: %+.0f', $gravityWith);
+        }
+        if ($pvsra === ($isLong ? 'bullish' : 'bearish')) {
+            $result['reasons'][] = 'کندل حجم کلایمکس (PVSRA) هم‌جهت';
+        }
+        return $result;
     }
 
     private function isContinuation(array $firedSetups, array $range, array $structure, array $smc): bool
@@ -5403,11 +5571,12 @@ final class LeverageEngine
     public static function forSymbol(string $baseAsset, float $volume24h, float $volatilityPct): int
     {
         $tier = SymbolClassifier::tier($baseAsset, $volume24h);
+        $floor = Config::leverageFloor();
         if ($tier === SymbolClassifier::TIER_MAJOR) {
-            return Config::leverageMajor();
+            return max($floor, Config::leverageMajor());
         }
 
-        $min = Config::leverageAltMin();
+        $min = max($floor, Config::leverageAltMin());
         $max = max($min, Config::leverageAltMax());
 
         $liquidity = self::normalize(log10(max(1.0, $volume24h)), 6.0, 8.7);
@@ -5449,6 +5618,11 @@ final class TradePlanner
         $tier = SymbolClassifier::tier($baseAsset, $volume24h);
 
         $minStopPct = Config::minStopPercent();
+        if (Config::targetsByRisk()) {
+            // A stop tighter than this would force TP1 (which must clear fees) beyond its R
+            // multiple and sink the hit rate, so the stop gets that much extra room instead.
+            $minStopPct = max($minStopPct, Config::tp1MinMovePercent() / Config::tpR(1));
+        }
         $distance = max(abs($entry - $structuralStop), $entry * ($minStopPct / 100));
         if ($distance <= 0) {
             return null;
@@ -5460,8 +5634,9 @@ final class TradePlanner
             Config::leverageLiquidationBuffer() * (100.0 / $stopPct)
         );
 
-        $ceiling = $tier === SymbolClassifier::TIER_MAJOR ? Config::leverageMajor() : Config::leverageAltMax();
-        $floor = $tier === SymbolClassifier::TIER_MAJOR ? 1 : Config::leverageAltMin();
+        $globalFloor = Config::leverageFloor();
+        $floor = max($globalFloor, $tier === SymbolClassifier::TIER_MAJOR ? 1 : Config::leverageAltMin());
+        $ceiling = max($floor, $tier === SymbolClassifier::TIER_MAJOR ? Config::leverageMajor() : Config::leverageAltMax());
         if ($maxLeverageForStop < $floor) {
             return null;
         }
@@ -5470,15 +5645,30 @@ final class TradePlanner
         $preferred = LeverageEngine::forSymbol($baseAsset, $volume24h, $volatilityPct);
         $leverage = (int) max($floor, min($ceiling, $preferred, floor($maxLeverageForStop)));
 
-        $tp1Distance = $entry * (Config::tp1LeveragedPercent() / $leverage) / 100;
-        $tp2Distance = $entry * (Config::tp2LeveragedPercent() / $leverage) / 100;
-        $tp3Distance = $entry * (Config::tp3LeveragedPercent() / $leverage) / 100;
-        $tp4Distance = $entry * (Config::tp4LeveragedPercent() / $leverage) / 100;
+        if (Config::targetsByRisk()) {
+            // Targets as multiples of the actual stop distance. TP1 sits inside 1R so it is
+            // reached more often than the stop; each later target keeps at least 0.25R spacing.
+            $tp1Distance = max($distance * Config::tpR(1), $entry * Config::tp1MinMovePercent() / 100);
+            $tp2Distance = max($distance * Config::tpR(2), $tp1Distance + $distance * 0.25);
+            $tp3Distance = max($distance * Config::tpR(3), $tp2Distance + $distance * 0.25);
+            $tp4Distance = max($distance * Config::tpR(4), $tp3Distance + $distance * 0.25);
+            if ($structuralTarget !== null) {
+                $targetDistance = abs($structuralTarget - $entry);
+                if ($targetDistance > 0 && $targetDistance < $tp4Distance) {
+                    $tp4Distance = max($targetDistance, $tp3Distance + $distance * 0.25);
+                }
+            }
+        } else {
+            $tp1Distance = $entry * (Config::tp1LeveragedPercent() / $leverage) / 100;
+            $tp2Distance = $entry * (Config::tp2LeveragedPercent() / $leverage) / 100;
+            $tp3Distance = $entry * (Config::tp3LeveragedPercent() / $leverage) / 100;
+            $tp4Distance = $entry * (Config::tp4LeveragedPercent() / $leverage) / 100;
 
-        if ($structuralTarget !== null) {
-            $targetDistance = abs($structuralTarget - $entry);
-            if ($targetDistance > 0 && $targetDistance < $tp4Distance) {
-                $tp4Distance = $targetDistance;
+            if ($structuralTarget !== null) {
+                $targetDistance = abs($structuralTarget - $entry);
+                if ($targetDistance > 0 && $targetDistance < $tp4Distance) {
+                    $tp4Distance = $targetDistance;
+                }
             }
         }
 
@@ -6313,21 +6503,31 @@ final class SignalRepository
         $timeouts = Database::pdo()->query(
             "SELECT direction, entry_price, resolved_price FROM signals WHERE resolved_at IS NOT NULL AND result = 'timeout'"
         )->fetchAll();
+        $timeoutFlat = 0;
         foreach ($timeouts as $t) {
             $entry = (float) $t['entry_price'];
             $exit = (float) $t['resolved_price'];
             $gain = (string) $t['direction'] === 'LONG' ? $exit - $entry : $entry - $exit;
-            $counts[$gain < 0 ? 'sl' : 'be']++;
+            if ($gain < 0) {
+                $counts['sl']++;
+            } else {
+                $counts['be']++;
+                $timeoutFlat++;
+            }
         }
-        $wins = $counts['tp1'] + $counts['tp2'] + $counts['tp3'] + $counts['tp4'] + $counts['trail'];
-        $total = $wins + $counts['sl'] + $counts['be'];
+        // 'be' only happens after TP1 was hit (half closed in profit, rest stopped at entry),
+        // so it is a win for the TP1 hit rate. Timeouts before TP1 were folded in above.
+        $beAfterTp1 = $counts['be'] - $timeoutFlat;
+        $wins = $counts['tp1'] + $counts['tp2'] + $counts['tp3'] + $counts['tp4'] + $counts['trail'] + $beAfterTp1;
+        $total = $wins + $counts['sl'] + $timeoutFlat;
         $decided = $wins + $counts['sl'];
 
         return [
             'total' => $total,
             'wins' => $wins,
             'losses' => $counts['sl'],
-            'breakeven' => $counts['be'],
+            'breakeven' => $beAfterTp1,
+            'flat' => $timeoutFlat,
             'win_rate' => $decided > 0 ? round($wins / $decided * 100, 1) : 0.0,
         ];
     }
@@ -6817,6 +7017,8 @@ final class SignalGenerator
     private SignalRepository $signalRepo;
 
     private ?array $bestObservation = null;
+    private bool $stateless = false;
+    private ?string $lastReason = null;
 
     public function resetObservations(): void
     {
@@ -6828,8 +7030,14 @@ final class SignalGenerator
         return $this->bestObservation;
     }
 
+    public function lastReason(): ?string
+    {
+        return $this->lastReason;
+    }
+
     private function observe(MarketSnapshot $snapshot, string $timeframe, float $score, string $bias, string $reason): void
     {
+        $this->lastReason = $reason;
         if ($this->bestObservation !== null && $this->bestObservation['score'] >= $score) {
             return;
         }
@@ -6858,13 +7066,29 @@ final class SignalGenerator
         $this->signalRepo = new SignalRepository();
     }
 
+    // Backtests replay history through the exact live pipeline, minus everything that reads
+    // or writes live state (open positions, loss cooldowns, dedup, news window, persistence).
+    public function evaluateStateless(
+        MarketSnapshot $snapshot,
+        string $timeframe,
+        array $meta = [],
+        ?string $strategyName = null,
+    ): ?Signal {
+        $this->stateless = true;
+        try {
+            return $this->evaluate($snapshot, $timeframe, $meta, $strategyName);
+        } finally {
+            $this->stateless = false;
+        }
+    }
+
     public function evaluate(
         MarketSnapshot $snapshot,
         string $timeframe,
         array $meta = [],
         ?string $strategyName = null,
     ): ?Signal {
-        if (Config::isNewsBlackoutActive()) {
+        if (!$this->stateless && Config::isNewsBlackoutActive()) {
             return null;
         }
 
@@ -6874,17 +7098,19 @@ final class SignalGenerator
             return null;
         }
 
-        if ($this->signalRepo->hasOpenPosition($snapshot->exchange, $snapshot->symbol)) {
-            return null;
-        }
+        if (!$this->stateless) {
+            if ($this->signalRepo->hasOpenPosition($snapshot->exchange, $snapshot->symbol)) {
+                return null;
+            }
 
-        $baseAsset = SymbolClassifier::baseAsset($snapshot->symbol, $meta['base_asset'] ?? null);
-        if ($this->signalRepo->hasOpenPositionForBaseAsset($baseAsset)) {
-            return null;
-        }
+            $baseAsset = SymbolClassifier::baseAsset($snapshot->symbol, $meta['base_asset'] ?? null);
+            if ($this->signalRepo->hasOpenPositionForBaseAsset($baseAsset)) {
+                return null;
+            }
 
-        if ($this->signalRepo->recentLossOnBaseAsset($baseAsset, Config::symbolLossCooldownSeconds())) {
-            return null;
+            if ($this->signalRepo->recentLossOnBaseAsset($baseAsset, Config::symbolLossCooldownSeconds())) {
+                return null;
+            }
         }
 
         try {
@@ -6894,7 +7120,7 @@ final class SignalGenerator
             $trend = SwingPivots::structuralTrend($candles);
             $indicatorResults = $this->indicatorEngine->runAll($candles);
 
-            if (Config::persistStructure()) {
+            if (!$this->stateless && Config::persistStructure()) {
                 $this->zoneRepo->replaceForSymbol($snapshot->exchange, $snapshot->symbol, $timeframe, $zones);
                 $this->obRepo->replaceForSymbol($snapshot->exchange, $snapshot->symbol, $timeframe, $orderBlocks);
                 $this->fvgRepo->replaceForSymbol($snapshot->exchange, $snapshot->symbol, $timeframe, $fvgs);
@@ -6957,7 +7183,7 @@ final class SignalGenerator
                 ? (float) $setup['confluence_score']
                 : $confluence['score'];
 
-            if ($this->deduplicator->isDuplicate($fingerprint, Config::cooldownSeconds())) {
+            if (!$this->stateless && $this->deduplicator->isDuplicate($fingerprint, Config::cooldownSeconds())) {
                 $this->observe($snapshot, $timeframe, $score, $confluence['bias'], 'تکراری است (Cooldown)');
                 return null;
             }
@@ -6991,6 +7217,11 @@ final class SignalGenerator
                 status: 'pending',
                 leverage: $plan['leverage'],
                 tier: $plan['tier'],
+                meta: [
+                    'pack' => $setup['pack'] ?? null,
+                    'stop_pct' => $plan['stop_pct'],
+                    'rr_final' => $plan['rr_final'],
+                ],
             );
 
             $validation = $this->validator->validate($signal, $snapshot);

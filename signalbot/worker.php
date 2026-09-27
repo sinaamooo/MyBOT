@@ -402,7 +402,7 @@ final class Worker
 
     private const TICK_RESERVE_SECONDS = 15;
 
-    private const CANDLE_HISTORY = 200;
+    private const CANDLE_HISTORY = MarketDataStore::SNAPSHOT_CANDLES;
 
     private const CANDLE_KEEP = 500;
 
@@ -608,10 +608,12 @@ final class Worker
         foreach (array_unique($timeframes) as $tf) {
             $step = Candle::timeframeSeconds($tf);
             $last = $candleManager->latestOpenTime($exchange, $symbol, $tf);
-            if ($last !== null && intdiv($last, 1000) + $step > $now) {
+            // Series stored before the history grew to CANDLE_HISTORY get one full refetch.
+            $short = $last !== null && $candleManager->countSeries($exchange, $symbol, $tf) < self::CANDLE_HISTORY - 5;
+            if (!$short && $last !== null && intdiv($last, 1000) + $step > $now) {
                 continue;
             }
-            $limit = $last === null
+            $limit = $last === null || $short
                 ? self::CANDLE_HISTORY
                 : min(self::CANDLE_HISTORY, intdiv($now - intdiv($last, 1000), $step) + 2);
             $candles = $this->exchangeManager->withIsolation($exchange, fn(ExchangeAdapter $a) => $a->fetchCandles($symbol, $tf, $limit));

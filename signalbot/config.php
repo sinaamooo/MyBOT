@@ -487,22 +487,126 @@ final class Config
 
     public static function tp1RiskReward(): float
     {
-        return round(self::tp1LeveragedPercent() / self::maxStopLeveragedPercent(), 2);
+        return self::targetsByRisk() ? self::tpR(1) : round(self::tp1LeveragedPercent() / self::maxStopLeveragedPercent(), 2);
     }
 
     public static function tp2RiskReward(): float
     {
-        return round(self::tp2LeveragedPercent() / self::maxStopLeveragedPercent(), 2);
+        return self::targetsByRisk() ? self::tpR(2) : round(self::tp2LeveragedPercent() / self::maxStopLeveragedPercent(), 2);
     }
 
     public static function tp3RiskReward(): float
     {
-        return round(self::tp3LeveragedPercent() / self::maxStopLeveragedPercent(), 2);
+        return self::targetsByRisk() ? self::tpR(3) : round(self::tp3LeveragedPercent() / self::maxStopLeveragedPercent(), 2);
     }
 
     public static function tp4RiskReward(): float
     {
-        return round(self::tp4LeveragedPercent() / self::maxStopLeveragedPercent(), 2);
+        return self::targetsByRisk() ? self::tpR(4) : round(self::tp4LeveragedPercent() / self::maxStopLeveragedPercent(), 2);
+    }
+
+    // TP_MODE=rr places targets at multiples of the real stop distance (TP1 inside 1R for a
+    // high hit rate); TP_MODE=leveraged keeps the old fixed leveraged-percent targets.
+    public static function targetsByRisk(): bool
+    {
+        $override = self::dbOverride('TP_MODE');
+        return strtolower(trim((string) ($override ?? Env::get('TP_MODE', 'rr') ?? 'rr'))) !== 'leveraged';
+    }
+
+    public static function tpR(int $level): float
+    {
+        $defaults = [1 => 0.75, 2 => 1.5, 3 => 2.5, 4 => 4.0];
+        $key = "TP{$level}_R";
+        $override = self::dbOverride($key);
+        $v = $override !== null ? (float) $override : Env::getFloat($key, $defaults[$level] ?? 1.0);
+        return max(0.1, $v);
+    }
+
+    // Smallest TP1 move in price percent, so fees never eat the first target.
+    public static function tp1MinMovePercent(): float
+    {
+        $override = self::dbOverride('TP1_MIN_MOVE_PCT');
+        return max(0.0, $override !== null ? (float) $override : Env::getFloat('TP1_MIN_MOVE_PCT', 0.3));
+    }
+
+    // Leverage never goes below this, for any coin tier.
+    public static function leverageFloor(): int
+    {
+        $override = self::dbOverride('LEVERAGE_FLOOR');
+        return max(1, $override !== null ? (int) $override : Env::getInt('LEVERAGE_FLOOR', 20));
+    }
+
+    public static function indicatorPackEnabled(): bool
+    {
+        return self::flag('INDICATOR_PACK_ENABLED', true);
+    }
+
+    public static function minTrendConsensus(): float
+    {
+        $override = self::dbOverride('MIN_TREND_CONSENSUS');
+        $v = $override !== null ? (float) $override : Env::getFloat('MIN_TREND_CONSENSUS', 0.6);
+        return max(0.0, min(1.0, $v));
+    }
+
+    public static function minReversalTriggers(): int
+    {
+        $override = self::dbOverride('MIN_REVERSAL_TRIGGERS');
+        return max(0, $override !== null ? (int) $override : Env::getInt('MIN_REVERSAL_TRIGGERS', 1));
+    }
+
+    public static function packTriggerMaxAge(): int
+    {
+        $override = self::dbOverride('PACK_TRIGGER_MAX_AGE');
+        return max(0, $override !== null ? (int) $override : Env::getInt('PACK_TRIGGER_MAX_AGE', 3));
+    }
+
+    public static function chopFilterEnabled(): bool
+    {
+        return self::flag('CHOP_FILTER_ENABLED', true);
+    }
+
+    public static function chopAdxMax(): float
+    {
+        $override = self::dbOverride('CHOP_ADX_MAX');
+        return max(0.0, $override !== null ? (float) $override : Env::getFloat('CHOP_ADX_MAX', 15.0));
+    }
+
+    public static function exhaustionFilterEnabled(): bool
+    {
+        return self::flag('EXHAUSTION_FILTER_ENABLED', true);
+    }
+
+    public static function gravityVetoLevel(): float
+    {
+        $override = self::dbOverride('GRAVITY_VETO_LEVEL');
+        return max(0.0, min(100.0, $override !== null ? (float) $override : Env::getFloat('GRAVITY_VETO_LEVEL', 60.0)));
+    }
+
+    public static function oppositeTriggerVeto(): int
+    {
+        $override = self::dbOverride('OPPOSITE_TRIGGER_VETO');
+        return max(0, $override !== null ? (int) $override : Env::getInt('OPPOSITE_TRIGGER_VETO', 2));
+    }
+
+    public static function packBonusCap(): float
+    {
+        return self::weight('PACK_BONUS_CAP', 18.0);
+    }
+
+    public static function cardStyle(): string
+    {
+        $override = self::dbOverride('CARD_STYLE');
+        $style = strtolower(trim((string) ($override ?? Env::get('CARD_STYLE', 'neo') ?? 'neo')));
+        return in_array($style, ['neo', 'classic'], true) ? $style : 'neo';
+    }
+
+    private static function flag(string $key, bool $default): bool
+    {
+        $override = self::dbOverride($key);
+        if ($override !== null) {
+            return in_array(strtolower($override), ['1', 'true', 'yes', 'on'], true);
+        }
+        return Env::getBool($key, $default);
     }
 
     public static function tradableVenues(): array
