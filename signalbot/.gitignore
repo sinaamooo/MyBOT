@@ -1,0 +1,8 @@
+env.php
+.env
+storage/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.log
+.DS_Store
