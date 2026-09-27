@@ -116,7 +116,7 @@ final class BacktestData
         }
         $out = [];
         foreach (file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [] as $line) {
-            $row = str_getcsv($line);
+            $row = str_getcsv($line, ",", "\"", "");
             if (count($row) < 6 || !is_numeric($row[0])) {
                 continue;
             }
@@ -139,7 +139,7 @@ final class BacktestData
             return;
         }
         foreach ($candles as $c) {
-            fputcsv($fh, [$c->openTime, $c->open, $c->high, $c->low, $c->close, $c->volume]);
+            fputcsv($fh, [$c->openTime, $c->open, $c->high, $c->low, $c->close, $c->volume], ",", "\"", "");
         }
         fclose($fh);
     }
@@ -451,14 +451,14 @@ final class Backtester
         if ($fh === false) {
             return;
         }
-        fputcsv($fh, ['symbol', 'tf', 'dir', 'opened_utc', 'entry', 'sl', 'tp1', 'tp2', 'tp3', 'tp4', 'lev', 'score', 'result', 'exit', 'r', 'lev_pnl_pct']);
+        fputcsv($fh, ['symbol', 'tf', 'dir', 'opened_utc', 'entry', 'sl', 'tp1', 'tp2', 'tp3', 'tp4', 'lev', 'score', 'result', 'exit', 'r', 'lev_pnl_pct'], ',', '"', '');
         foreach ($trades as $t) {
             $s = $t->signal;
             fputcsv($fh, [
                 $s->symbol, $s->timeframe, $s->direction->value, gmdate('Y-m-d H:i', intdiv($t->openedAt, 1000)),
                 $s->entry, $s->stopLoss, $s->tp1, $s->tp2, $s->tp3, $s->tp4, $s->leverage, round($s->score, 1),
                 $t->result, $t->exit, round($t->resultR($fee), 3), round($t->leveragedPnl($fee), 2),
-            ]);
+            ], ',', '"', '');
         }
         fclose($fh);
         echo "Trades written to {$path}\n";

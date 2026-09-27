@@ -56,11 +56,18 @@ return [
 
     'SIGNAL_TIMEFRAMES' => '15m,30m,1h,2h',
 
+    'TP_MODE' => 'rr',
+    'TP1_R' => '0.75',
+    'TP2_R' => '1.5',
+    'TP3_R' => '2.5',
+    'TP4_R' => '4',
+    'TP1_MIN_MOVE_PCT' => '0.3',
+
     'TP1_LEVERAGED_PCT' => '28',
     'TP2_LEVERAGED_PCT' => '50',
     'TP3_LEVERAGED_PCT' => '90',
     'TP4_LEVERAGED_PCT' => '160',
-    'MAX_STOP_LEVERAGED_PCT' => '35',
+    'MAX_STOP_LEVERAGED_PCT' => '45',
 
     'RISK_FREE_ENABLED' => 'true',
 
@@ -79,10 +86,12 @@ return [
 
     'SYMBOL_LOSS_COOLDOWN_SECONDS' => '10800',
 
-    'LEVERAGE_MAJOR_ASSETS' => 'BTC,ETH',
-    'LEVERAGE_MAJOR' => '15',
+    'LEVERAGE_FLOOR' => '20',
 
-    'LEVERAGE_ALT_MIN' => '8',
+    'LEVERAGE_MAJOR_ASSETS' => 'BTC,ETH',
+    'LEVERAGE_MAJOR' => '20',
+
+    'LEVERAGE_ALT_MIN' => '20',
     'LEVERAGE_ALT_MAX' => '25',
 
     'LEVERAGE_LIQUIDATION_BUFFER' => '0.75',
@@ -171,6 +180,17 @@ return [
     'MAX_OPPOSING_VOTE_RATIO' => '0.6',
     'REQUIRE_BREAKOUT_MOMENTUM' => 'true',
 
+    'INDICATOR_PACK_ENABLED' => 'true',
+    'MIN_TREND_CONSENSUS' => '0.6',
+    'MIN_REVERSAL_TRIGGERS' => '1',
+    'PACK_TRIGGER_MAX_AGE' => '3',
+    'CHOP_FILTER_ENABLED' => 'true',
+    'CHOP_ADX_MAX' => '15',
+    'EXHAUSTION_FILTER_ENABLED' => 'true',
+    'GRAVITY_VETO_LEVEL' => '60',
+    'OPPOSITE_TRIGGER_VETO' => '2',
+    'PACK_BONUS_CAP' => '18',
+
     'NEWS_BLACKOUT_START' => '',
     'NEWS_BLACKOUT_END' => '',
 
@@ -191,6 +211,7 @@ return [
     'MAX_TRADE_HOURS' => '24',
 
     'SIGNAL_CARD_ENABLED' => 'true',
+    'CARD_STYLE' => 'neo',
     'CARD_RENDER_SCALE' => '2',
     'CARD_BRAND' => 'AUTO TRADE MARKET',
 
