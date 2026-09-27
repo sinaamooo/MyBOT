@@ -6179,18 +6179,45 @@ final class SignalCardFactory
         if (!CardConfig::enabled()) {
             return null;
         }
+        $pct = static fn(?float $price): string => $price === null ? '' : SignalFormatter::signed($signal->leveragedPnlPercent($price), 1) . '%';
+        $risk = abs($signal->entry - $signal->stopLoss);
+        $last = $signal->tp4 ?? $signal->tp3 ?? $signal->tp2 ?? $signal->tp1;
+        $pack = $signal->meta['pack'] ?? null;
+
         return SignalCard::render([
             'symbol' => self::displaySymbol($signal->symbol),
             'direction' => $signal->direction->value,
             'leverage' => $signal->leverage . 'X',
+            'timeframe' => $signal->timeframe,
             'entry' => self::fmt($signal->entry),
             'sl' => self::fmt($signal->stopLoss),
+            'sl_pct' => $pct($signal->stopLoss),
             'tp1' => $signal->tp1 !== null ? self::fmt($signal->tp1) : '-',
             'tp2' => $signal->tp2 !== null ? self::fmt($signal->tp2) : '-',
             'tp3' => $signal->tp3 !== null ? self::fmt($signal->tp3) : '-',
             'tp4' => $signal->tp4 !== null ? self::fmt($signal->tp4) : '-',
+            'tp1_pct' => $pct($signal->tp1),
+            'tp2_pct' => $pct($signal->tp2),
+            'tp3_pct' => $pct($signal->tp3),
+            'tp4_pct' => $pct($signal->tp4),
+            'rr' => $risk > 0 && $last !== null ? '1 : ' . number_format(abs($last - $signal->entry) / $risk, 1) : '',
+            'confidence' => $signal->confidence,
+            'consensus' => is_array($pack) && isset($pack['with'], $pack['total']) ? $pack['with'] . ' / ' . $pack['total'] : '',
             'time' => date('Y-m-d H:i') . ' ' . date('T'),
         ]);
+    }
+
+    // How many targets the trade had reached when this result was announced.
+    private static function targetsHit(array $row, string $kind): int
+    {
+        return match ($kind) {
+            'tp1', 'be' => 1,
+            'tp2' => 2,
+            'tp3' => 3,
+            'tp4' => 4,
+            'trail' => (string) ($row['stage'] ?? '') === 'trailing_tp3' ? 3 : 2,
+            default => 0,
+        };
     }
 
     public static function result(array $row, string $kind, float $exitPrice): ?string
@@ -6200,16 +6227,25 @@ final class SignalCardFactory
         }
         $stats = SignalFormatter::resultStats($row, $exitPrice);
 
+        $level = static fn(string $key): string => isset($row[$key]) && $row[$key] !== null ? self::fmt((float) $row[$key]) : '-';
+
         return ResultCard::render([
             'kind' => $kind,
 
             'symbol' => strtoupper((string) $row['symbol']),
             'direction' => (string) $row['direction'],
             'leverage' => $stats['leverage'] . 'X',
+            'timeframe' => (string) ($row['timeframe'] ?? ''),
             'headline' => $stats['pnl_signed'] . '%',
             'move' => $stats['move_signed'] . '%',
             'entry' => self::fmt((float) $row['entry_price']),
             'exit' => self::fmt($exitPrice),
+            'sl' => $level('stop_loss'),
+            'tp1' => $level('tp1'),
+            'tp2' => $level('tp2'),
+            'tp3' => $level('tp3'),
+            'tp4' => $level('tp4'),
+            'hits' => self::targetsHit($row, $kind),
             'duration' => self::holdTime($row),
             'time' => date('Y-m-d H:i') . ' ' . date('T'),
         ]);

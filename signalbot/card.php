@@ -906,6 +906,15 @@ final class CardConfig
     {
         return (string) (self::env('CARD_BRAND', 'AUTO TRADE MARKET') ?? 'AUTO TRADE MARKET');
     }
+
+    // 'neo' (default) or 'classic' — the original glass design, kept as a backup.
+    public static function style(): string
+    {
+        if (class_exists('Config')) {
+            return Config::cardStyle();
+        }
+        return strtolower((string) self::env('CARD_STYLE', 'neo')) === 'classic' ? 'classic' : 'neo';
+    }
 }
 
 
@@ -1126,6 +1135,9 @@ final class SignalCard
         }
 
         try {
+            if (CardConfig::style() === 'neo') {
+                return NeoSignalCard::render($d);
+            }
             $isLong = strtoupper((string) ($d['direction'] ?? '')) !== 'SHORT';
             $c = CardLayout::begin($isLong ? 'long' : 'short');
             CardLayout::topRow($c, CardLayout::pair((string) ($d['symbol'] ?? '')), $isLong, strtoupper(trim((string) ($d['leverage'] ?? ''))));
@@ -1166,6 +1178,9 @@ final class ResultCard
         }
 
         try {
+            if (CardConfig::style() === 'neo') {
+                return NeoResultCard::render($d);
+            }
             $kind = strtolower((string) ($d['kind'] ?? 'tp1'));
             $headline = trim((string) ($d['headline'] ?? ''));
             $headline = $headline !== '' ? $headline : '0.00%';
@@ -1200,3 +1215,5 @@ final class ResultCard
         }
     }
 }
+
+require_once __DIR__ . '/card_neo.php';
