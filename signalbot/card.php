@@ -760,6 +760,74 @@ final class CardCanvas
         }
     }
 
+    public function polyline(array $points, float $width, array $rgb, float $opacity = 1.0): void
+    {
+        $pts = array_map(fn(array $p): array => [$this->fx($p[0]), $this->fy($p[1])], $points);
+        $this->strokePath($pts, max(1.0, $width * $this->scale), $this->color($rgb, $opacity));
+    }
+
+    // Neon halo: shapes are painted white into a small mask, blurred there, tinted and
+    // composited back, so a soft glow costs a few thousand pixels instead of a full-size blur.
+    // $paint receives (mask image, white colour, point mapper, mask pixels per canvas unit).
+    public function glow(array $box, callable $paint, array $rgb, float $opacity, int $down = 6, int $passes = 10): void
+    {
+        [$bx, $by, $bw, $bh] = $box;
+        $k = $this->scale / $down;
+        $mw = max(2, (int) ceil($bw * $k));
+        $mh = max(2, (int) ceil($bh * $k));
+        $mask = imagecreatetruecolor($mw, $mh);
+        $layer = imagecreatetruecolor($mw, $mh);
+        if ($mask === false || $layer === false) {
+            return;
+        }
+        $white = imagecolorallocate($mask, 255, 255, 255);
+        $paint($mask, (int) $white, static fn(float $x, float $y): array => [($x - $bx) * $k, ($y - $by) * $k], $k);
+        for ($i = 0; $i < $passes; $i++) {
+            imagefilter($mask, IMG_FILTER_GAUSSIAN_BLUR);
+        }
+        imagealphablending($layer, false);
+        imagesavealpha($layer, true);
+        $tint = (self::channel($rgb[0]) << 16) | (self::channel($rgb[1]) << 8) | self::channel($rgb[2]);
+        for ($y = 0; $y < $mh; $y++) {
+            for ($x = 0; $x < $mw; $x++) {
+                $lum = (imagecolorat($mask, $x, $y) >> 16) & 0xFF;
+                $alpha = 127 - (int) round(127 * min(1.0, $lum / 255 * $opacity));
+                imagesetpixel($layer, $x, $y, ($alpha << 24) | $tint);
+            }
+        }
+        imagealphablending($this->im, true);
+        imagecopyresampled($this->im, $layer, $this->px($bx), $this->py($by), 0, 0, (int) round($mw / $k * $this->scale), (int) round($mh / $k * $this->scale), $mw, $mh);
+        imagedestroy($mask);
+        imagedestroy($layer);
+    }
+
+    public function glowText(string $text, float $x, float $capTop, float $size, array $rgb, string $role, string $align, float $tracking, float $opacity, float $spread = 36.0): void
+    {
+        $font = CardConfig::fontFor($role, $text);
+        if ($font === null) {
+            return;
+        }
+        $width = $this->measure($text, $size, $role, $tracking);
+        $start = match ($align) {
+            'center' => $x - $width / 2,
+            'right' => $x - $width,
+            default => $x,
+        };
+        $cap = $size * self::capRatio($font);
+        $box = [$start - $spread, $capTop - $spread, $width + $spread * 2, $cap + $spread * 2];
+        $shaped = PersianShaper::shape($text);
+        $perChar = abs($tracking) >= 0.0001 && !PersianShaper::containsPersian($text);
+        $this->glow($box, function ($mask, int $white, callable $map, float $k) use ($shaped, $start, $capTop, $cap, $size, $font, $tracking, $perChar): void {
+            $pt = $size * 0.75 * $k;
+            $pen = $start;
+            foreach ($perChar ? mb_str_split($shaped) : [$shaped] as $chunk) {
+                [$mx, $my] = $map($pen, $capTop + $cap);
+                @imagettftext($mask, $pt, 0, (int) round($mx), (int) round($my), $white, $font, $chunk);
+                $pen += self::advance($font, $chunk) * $size + $tracking * $size;
+            }
+        }, $rgb, $opacity);
+    }
+
     public function toPng(): string
     {
         $out = $this->im;

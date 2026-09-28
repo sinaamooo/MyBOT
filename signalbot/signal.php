@@ -6203,6 +6203,7 @@ final class SignalCardFactory
             'rr' => $risk > 0 && $last !== null ? '1 : ' . number_format(abs($last - $signal->entry) / $risk, 1) : '',
             'confidence' => $signal->confidence,
             'consensus' => is_array($pack) && isset($pack['with'], $pack['total']) ? $pack['with'] . ' / ' . $pack['total'] : '',
+            'spark' => $signal->meta['spark'] ?? [],
             'time' => date('Y-m-d H:i') . ' ' . date('T'),
         ]);
     }
@@ -7257,6 +7258,7 @@ final class SignalGenerator
                     'pack' => $setup['pack'] ?? null,
                     'stop_pct' => $plan['stop_pct'],
                     'rr_final' => $plan['rr_final'],
+                    'spark' => array_map(static fn(Candle $c) => $c->close, array_slice($candles, -72)),
                 ],
             );
 
