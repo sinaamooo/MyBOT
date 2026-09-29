@@ -1,0 +1,6 @@
+# Contains the bot token
+config.php
+
+# Runtime data (user states, logs)
+data/*
+!data/.htaccess
