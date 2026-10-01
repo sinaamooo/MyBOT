@@ -31,7 +31,7 @@
 <div class="dash-grid">
   <div class="card span-8">
     <div class="card-head"><h3><?= icon('chart') ?> فعالیت ۱۴ روز اخیر</h3>
-      <div class="legend"><span><i style="background:#38BDF8"></i>تعداد سفارش</span><span><i style="background:#8B5CF6"></i>مبلغ خرید</span></div></div>
+      <div class="legend"><span><i style="background:#22D3EE;color:#22D3EE"></i>تعداد سفارش</span><span><i style="background:#C084FC;color:#C084FC"></i>مبلغ خرید</span></div></div>
     <div class="chart-box sm"><canvas data-chart="<?= e(json_encode($chart, JSON_UNESCAPED_UNICODE)) ?>"></canvas></div>
   </div>
   <div class="card span-4">

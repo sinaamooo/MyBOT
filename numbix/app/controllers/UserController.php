@@ -42,8 +42,8 @@ final class UserController
             'stats' => $stats,
             'recent' => $recent,
             'chart' => ['labels' => $labels, 'datasets' => [
-                ['label' => 'تعداد سفارش', 'data' => $counts, 'color' => '#38BDF8', 'type' => 'bar'],
-                ['label' => 'مبلغ خرید', 'data' => $amounts, 'color' => '#8B5CF6', 'type' => 'line', 'axis' => 'y1'],
+                ['label' => 'تعداد سفارش', 'data' => $counts, 'color' => '#22D3EE', 'type' => 'bar'],
+                ['label' => 'مبلغ خرید', 'data' => $amounts, 'color' => '#C084FC', 'type' => 'line', 'axis' => 'y1'],
             ]],
             'charts' => true,
             'suggest' => $suggest,

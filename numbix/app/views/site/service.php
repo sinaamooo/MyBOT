@@ -18,7 +18,7 @@ $badges = service_badges();
     <div class="stack" style="gap:22px">
       <div class="svc-show-cover reveal" style="--c1:<?= e($s['color']) ?>;--c2:<?= e($s['color2']) ?>">
         <?php if ($s['image']): ?><img src="<?= e(upload_url($s['image'])) ?>" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:-2"><?php endif; ?>
-        <span class="big-ic"><?= brand($s['icon']) ?></span>
+        <span class="svc-orb"><i class="orbit-ring"></i><?= brand_tile(['icon' => $s['icon'], 'color' => $s['color'], 'color2' => $s['color2']], '2xl') ?></span>
         <?php if ($s['badge'] && isset($badges[$s['badge']])): ?><span class="svc-badge <?= $badges[$s['badge']][1] ?>" style="top:20px;right:20px"><?= e($badges[$s['badge']][0]) ?></span><?php endif; ?>
         <button type="button" class="fav-btn<?= in_array((int)$s['id'], $favs, true) ? ' on' : '' ?>" data-fav="<?= (int)$s['id'] ?>" style="top:18px;left:18px;width:44px;height:44px" aria-label="علاقه‌مندی"><?= icon('heart') ?></button>
       </div>

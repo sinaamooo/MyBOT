@@ -90,6 +90,11 @@
   /* ---------------- Charts ---------------- */
   const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
   const charts = [];
+  const glow = {
+    id: 'nbxGlow',
+    beforeDatasetDraw(chart, args) { const ds = chart.data.datasets[args.index]; if (ds.type === 'line') { chart.ctx.save(); chart.ctx.shadowColor = ds.borderColor; chart.ctx.shadowBlur = 16; } },
+    afterDatasetDraw(chart, args) { if (chart.data.datasets[args.index].type === 'line') chart.ctx.restore(); },
+  };
   function buildCharts() {
     if (!window.Chart) return;
     charts.forEach((c) => c.destroy()); charts.length = 0;
@@ -103,13 +108,13 @@
       const datasets = cfg.datasets.map((d) => {
         const base = { label: d.label, data: d.data, yAxisID: d.axis || 'y', order: d.type === 'line' ? 0 : 1 };
         if (d.type === 'line') return Object.assign(base, { type: 'line', borderColor: d.color, backgroundColor: grad(d.color, 0.25), fill: d.fill !== false, cubicInterpolationMode: 'monotone', borderWidth: 3, pointRadius: 0, pointHoverRadius: 6, pointHoverBackgroundColor: d.color, pointHoverBorderColor: '#fff', pointHoverBorderWidth: 3 });
-        if (d.type === 'doughnut') return Object.assign(base, { backgroundColor: d.colors, borderWidth: 0, hoverOffset: 8 });
-        return Object.assign(base, { type: 'bar', backgroundColor: grad(d.color, 0.9, 0.25), hoverBackgroundColor: d.color, borderRadius: 8, borderSkipped: false, maxBarThickness: 22 });
+        if (d.type === 'doughnut') return Object.assign(base, { backgroundColor: d.colors, borderWidth: 2, borderColor: css('--card-solid') || '#110B27', hoverOffset: 10, spacing: 2 });
+        return Object.assign(base, { type: 'bar', backgroundColor: grad(d.color, 0.85, 0.08), hoverBackgroundColor: d.color, borderRadius: 10, borderSkipped: false, maxBarThickness: 20 });
       });
       const isPie = cfg.type === 'doughnut';
       const grid = css('--border');
       const chart = new Chart(ctx, {
-        type: isPie ? 'doughnut' : 'bar',
+        type: isPie ? 'doughnut' : 'bar', plugins: [glow],
         data: { labels: cfg.labels, datasets },
         options: {
           responsive: true, maintainAspectRatio: false, animation: { duration: 900, easing: 'easeOutQuart' },

@@ -13,22 +13,22 @@ $keep = array_filter(['q' => $q, 'sort' => $sort !== 'popular' ? $sort : null]);
         <?php if ($banner['button_text']): ?><span class="btn btn-white"><?= e($banner['button_text']) ?> <?= icon('arrow-left') ?></span><?php endif; ?>
       </div>
       <div class="promo-art" aria-hidden="true">
-        <?= brand_tile(['icon' => 'instagram', 'color' => '#F58529', 'color2' => '#C13584'], 'xl') ?>
-        <?= brand_tile(['icon' => 'telegram', 'color' => '#37BBFE', 'color2' => '#007DBB'], 'lg') ?>
-        <?= brand_tile(['icon' => 'youtube', 'color' => '#FF4E45', 'color2' => '#C4302B'], 'lg') ?>
-        <?= brand_tile(['icon' => 'tiktok', 'color' => '#2B2B2B', 'color2' => '#000'], 'md') ?>
+        <span class="p-planet"></span>
+        <?= brand_tile(['icon' => 'instagram', 'color' => '#F77737', 'color2' => '#C13584'], 'lg') ?>
+        <?= brand_tile(['icon' => 'telegram', 'color' => '#37BBFE', 'color2' => '#0369A1'], 'md') ?>
+        <?= brand_tile(['icon' => 'youtube', 'color' => '#FF4E45', 'color2' => '#B91C1C'], 'md') ?>
       </div>
     </a>
   <?php endif; ?>
 
   <div class="cat-strip" style="margin:0 0 28px">
     <div class="inner" style="box-shadow:var(--sh-sm)">
-      <a href="<?= url('services', $keep) ?>" class="cat-tile<?= !$cat ? ' active' : '' ?>" style="--c1:#6C4CF1">
-        <span class="btile btile-md" style="--c1:#8B5CF6;--c2:#4F46E5"><?= icon('grid') ?></span><b>همه خدمات</b><small><?= num($totalActive) ?> سرویس</small>
+      <a href="<?= url('services', $keep) ?>" class="cat-tile<?= !$cat ? ' active' : '' ?>" style="--c1:#8B5CF6"><i class="orbit-ring"></i>
+        <span class="btile btile-lg" style="--c1:#A78BFA;--c2:#4C1D95"><?= icon('grid') ?></span><b>همه خدمات</b><small><?= num($totalActive) ?> سرویس</small>
       </a>
       <?php foreach ($categories as $c): ?>
-        <a href="<?= url('services/' . $c['slug'], $keep) ?>" class="cat-tile<?= $cat && $cat['id'] == $c['id'] ? ' active' : '' ?>" style="--c1:<?= e($c['color']) ?>">
-          <?= brand_tile($c, 'md') ?><b><?= e($c['name']) ?></b><small><?= num($c['services_count']) ?> سرویس</small>
+        <a href="<?= url('services/' . $c['slug'], $keep) ?>" class="cat-tile<?= $cat && $cat['id'] == $c['id'] ? ' active' : '' ?>" style="--c1:<?= e($c['color']) ?>"><i class="orbit-ring"></i>
+          <?= brand_tile($c, 'lg') ?><b><?= e($c['name']) ?></b><small><?= num($c['services_count']) ?> سرویس</small>
         </a>
       <?php endforeach; ?>
     </div>

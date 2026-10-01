@@ -145,7 +145,7 @@ $v = fn($k, $d = '') => htmlspecialchars((string)($_POST[$k] ?? $d), ENT_QUOTES)
   .inst { min-height: 100vh; padding: 48px 16px; position: relative; isolation: isolate; }
   .inst-box { max-width: 920px; margin: 0 auto; }
   .inst-head { text-align: center; margin-bottom: 30px; }
-  .inst-head .logo-mark { width: 72px; height: 72px; margin: 0 auto 16px; }
+  .inst-head .logo-mark { width: 84px; height: 84px; margin: 0 auto 16px; filter: drop-shadow(0 0 24px rgba(139,92,246,.8)); animation: floaty 6s ease-in-out infinite; }
   .inst-head h1 { font-size: 32px; font-weight: 900; color: #fff; }
   .inst-head p { color: rgba(255,255,255,.65); }
   .req { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; }
@@ -157,11 +157,11 @@ $v = fn($k, $d = '') => htmlspecialchars((string)($_POST[$k] ?? $d), ENT_QUOTES)
 </style>
 </head>
 <body class="no-bottom-nav">
+<canvas id="cosmos" aria-hidden="true"></canvas>
 <div class="inst dark-zone">
-  <div class="aurora"><div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div><div class="grid-bg"></div><div class="noise"></div></div>
   <div class="inst-box">
     <div class="inst-head">
-      <svg class="logo-mark" viewBox="0 0 48 48"><defs><linearGradient id="la" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#A78BFA"/><stop offset=".5" stop-color="#6C4CF1"/><stop offset="1" stop-color="#4338CA"/></linearGradient></defs><rect x="2" y="2" width="44" height="44" rx="14" fill="url(#la)"/><path d="M15 33V15l18 18V15" fill="none" stroke="#fff" stroke-width="4.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="36.5" cy="11.5" r="3.4" fill="#67E8F9"/></svg>
+      <svg class="logo-mark" viewBox="0 0 48 48"><defs><radialGradient id="ip" cx="34%" cy="30%" r="75%"><stop offset="0" stop-color="#F5F3FF"/><stop offset=".28" stop-color="#A78BFA"/><stop offset=".62" stop-color="#7C3AED"/><stop offset="1" stop-color="#2E1065"/></radialGradient><linearGradient id="ir" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#67E8F9"/><stop offset=".5" stop-color="#F0ABFC"/><stop offset="1" stop-color="#A78BFA"/></linearGradient></defs><path d="M5.5 30.5C2.6 26 9.6 19.1 21.2 15c11.6-4 22.4-3.6 25.3.9" fill="none" stroke="url(#ir)" stroke-width="2.4" stroke-linecap="round" opacity=".55"/><circle cx="24" cy="24" r="15" fill="url(#ip)"/><path d="M18 30V18l12 12V18" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M46.5 15.9c2.9 4.5-4.1 11.4-15.7 15.5-11.6 4.1-22.4 3.7-25.3-.9" fill="none" stroke="url(#ir)" stroke-width="2.4" stroke-linecap="round"/></svg>
       <h1>نصب <span class="gtext">نامبیکس</span></h1>
       <p>نصب خودکار در کمتر از یک دقیقه — فقط اطلاعات دیتابیس را وارد کنید.</p>
     </div>
@@ -253,5 +253,6 @@ $v = fn($k, $d = '') => htmlspecialchars((string)($_POST[$k] ?? $d), ENT_QUOTES)
   }).catch(function () { document.getElementById('pretty').value = '0'; el.innerHTML = no + '<span>آدرس‌های زیبا غیرفعال</span>'; });
 })();
 </script>
+<script src="<?= $assets ?>/js/cosmos.js?v=<?= NBX_VERSION ?>"></script>
 </body>
 </html>

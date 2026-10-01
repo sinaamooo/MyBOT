@@ -30,7 +30,7 @@
     <div class="card-head">
       <h3><?= icon('chart') ?> نمودار فروش و سفارش‌ها</h3>
       <div class="row" style="flex-wrap:wrap">
-        <div class="legend"><span><i style="background:#8B5CF6"></i>درآمد (<?= $cur ?>)</span><span><i style="background:#38BDF8"></i>تعداد سفارش‌ها</span></div>
+        <div class="legend"><span><i style="background:#C084FC;color:#C084FC"></i>درآمد (<?= $cur ?>)</span><span><i style="background:#22D3EE;color:#22D3EE"></i>تعداد سفارش‌ها</span></div>
         <div class="tabs" style="padding:3px"><?php foreach ([7 => '۷ روز', 30 => '۳۰ روز', 90 => '۹۰ روز'] as $d => $l): ?><a href="<?= url('admin', ['days' => $d]) ?>" class="<?= $days === $d ? 'active' : '' ?>" style="padding:4px 10px;font-size:12px"><?= $l ?></a><?php endforeach; ?></div>
       </div>
     </div>

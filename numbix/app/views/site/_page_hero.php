@@ -1,5 +1,5 @@
 <section class="dark-zone page-hero">
-  <div class="aurora"><div class="blob b1"></div><div class="blob b3"></div><div class="grid-bg"></div><div class="noise"></div></div>
+  <span class="mini-planet" data-depth="1" aria-hidden="true"></span><span class="mini-planet b" data-depth="1.6" aria-hidden="true"></span>
   <div class="container">
     <nav class="crumbs"><a href="<?= url('/') ?>">خانه</a><?= icon('chevron-left') ?><span><?= e($heroTitle) ?></span></nav>
     <h1><?= e($heroTitle) ?></h1>

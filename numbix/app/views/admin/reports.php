@@ -8,7 +8,7 @@
   <div class="stat s-amber"><div><div class="st-label">شارژ کیف پول</div><div class="st-value"><?= short_num($deposits) ?></div><div class="st-foot">تخفیف: <?= money_text($sum['discounts']) ?> · بازگشتی: <?= money_text($sum['refunds']) ?></div></div><span class="st-ic"><?= icon('wallet') ?></span></div>
 </div>
 <div class="dash-grid">
-  <div class="card span-8"><div class="card-head"><h3><?= icon('chart') ?> درآمد و سود روزانه</h3><div class="legend"><span><i style="background:#8B5CF6"></i>درآمد</span><span><i style="background:#10B981"></i>سود</span></div></div>
+  <div class="card span-8"><div class="card-head"><h3><?= icon('chart') ?> درآمد و سود روزانه</h3><div class="legend"><span><i style="background:#C084FC;color:#C084FC"></i>درآمد</span><span><i style="background:#34D399;color:#34D399"></i>سود</span></div></div>
     <div class="chart-box"><canvas data-chart="<?= e(json_encode($chart, JSON_UNESCAPED_UNICODE)) ?>"></canvas></div></div>
   <div class="card span-4"><div class="card-head"><h3><?= icon('pie') ?> سهم دسته‌بندی‌ها</h3></div>
     <div class="chart-box"><?php if ($byCat): ?><canvas data-chart="<?= e(json_encode($pie, JSON_UNESCAPED_UNICODE)) ?>"></canvas><?php else: ?><?= partial('empty', ['icon' => 'pie', 'title' => 'داده‌ای نیست']) ?><?php endif; ?></div></div>

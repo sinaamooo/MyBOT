@@ -72,8 +72,8 @@ final class AdminDashboardController
             'k' => $k,
             'days' => $days,
             'chart' => ['labels' => $series['labels'], 'datasets' => [
-                ['label' => 'تعداد سفارش', 'data' => $series['count'], 'color' => '#38BDF8', 'type' => 'bar'],
-                ['label' => 'درآمد', 'data' => $series['amount'], 'color' => '#8B5CF6', 'type' => 'line', 'axis' => 'y1'],
+                ['label' => 'تعداد سفارش', 'data' => $series['count'], 'color' => '#22D3EE', 'type' => 'bar'],
+                ['label' => 'درآمد', 'data' => $series['amount'], 'color' => '#C084FC', 'type' => 'line', 'axis' => 'y1'],
             ]],
             'charts' => true,
             'recent' => $recent,
@@ -132,7 +132,7 @@ final class AdminDashboardController
             'charts' => true,
             'chart' => ['labels' => $series['labels'], 'datasets' => [
                 ['label' => 'درآمد', 'data' => $series['amount'], 'color' => '#8B5CF6', 'type' => 'bar'],
-                ['label' => 'سود', 'data' => $series['profit'], 'color' => '#10B981', 'type' => 'line'],
+                ['label' => 'سود', 'data' => $series['profit'], 'color' => '#34D399', 'type' => 'line'],
             ]],
             'pie' => ['type' => 'doughnut', 'money' => true, 'labels' => array_column($byCat, 'name'), 'datasets' => [
                 ['label' => 'فروش', 'data' => array_map('intval', array_column($byCat, 'amt')), 'type' => 'doughnut', 'colors' => array_column($byCat, 'color')],
