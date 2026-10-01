@@ -52,7 +52,7 @@ echo partial('head', get_defined_vars());
           </div>
         </div>
       <?php else: ?>
-        <a href="<?= url('login') ?>" class="btn btn-primary"><?= icon('user') ?><span>ورود / ثبت‌نام</span></a>
+        <a href="<?= url('login') ?>" class="btn btn-primary header-login"><?= icon('user') ?><span>ورود / ثبت‌نام</span></a>
       <?php endif; ?>
     </div>
   </div>

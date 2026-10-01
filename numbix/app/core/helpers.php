@@ -628,3 +628,10 @@ function http_post(string $url, array|string $data, array $headers = [], int $ti
     $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
     return ['ok' => $body !== false && $code < 500, 'code' => $code, 'body' => $body === false ? '' : $body, 'error' => $err];
 }
+
+/** Only http(s) links may become clickable (blocks javascript: and data: URLs from user input). */
+function safe_href(?string $url): string
+{
+    $url = trim((string)$url);
+    return preg_match('~^https?://~i', $url) ? $url : '#';
+}

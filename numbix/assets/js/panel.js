@@ -102,7 +102,7 @@
       const grad = (c1, a1 = 0.35, a2 = 0) => { const g = ctx.createLinearGradient(0, 0, 0, h); g.addColorStop(0, hexA(c1, a1)); g.addColorStop(1, hexA(c1, a2)); return g; };
       const datasets = cfg.datasets.map((d) => {
         const base = { label: d.label, data: d.data, yAxisID: d.axis || 'y', order: d.type === 'line' ? 0 : 1 };
-        if (d.type === 'line') return Object.assign(base, { type: 'line', borderColor: d.color, backgroundColor: grad(d.color, 0.25), fill: d.fill !== false, tension: 0.42, borderWidth: 3, pointRadius: 0, pointHoverRadius: 6, pointHoverBackgroundColor: d.color, pointHoverBorderColor: '#fff', pointHoverBorderWidth: 3 });
+        if (d.type === 'line') return Object.assign(base, { type: 'line', borderColor: d.color, backgroundColor: grad(d.color, 0.25), fill: d.fill !== false, cubicInterpolationMode: 'monotone', borderWidth: 3, pointRadius: 0, pointHoverRadius: 6, pointHoverBackgroundColor: d.color, pointHoverBorderColor: '#fff', pointHoverBorderWidth: 3 });
         if (d.type === 'doughnut') return Object.assign(base, { backgroundColor: d.colors, borderWidth: 0, hoverOffset: 8 });
         return Object.assign(base, { type: 'bar', backgroundColor: grad(d.color, 0.9, 0.25), hoverBackgroundColor: d.color, borderRadius: 8, borderSkipped: false, maxBarThickness: 22 });
       });
@@ -125,8 +125,8 @@
           },
           scales: isPie ? {} : {
             x: { grid: { display: false }, border: { display: false }, ticks: { maxRotation: 0, autoSkipPadding: 14, callback: function (v) { return NBX.fa(this.getLabelForValue(v)); } } },
-            y: { position: 'right', grid: { color: grid, drawTicks: false }, border: { display: false }, beginAtZero: true, ticks: { padding: 8, callback: (v) => NBX.fmt(v), maxTicksLimit: 6 } },
-            y1: { position: 'left', display: datasets.some((d) => d.yAxisID === 'y1'), grid: { display: false }, border: { display: false }, beginAtZero: true, ticks: { padding: 8, callback: (v) => short(v), maxTicksLimit: 6 } },
+            y: { position: 'right', grid: { color: grid, drawTicks: false }, border: { display: false }, beginAtZero: true, suggestedMax: 4, ticks: { padding: 8, precision: 0, callback: (v) => NBX.fmt(v), maxTicksLimit: 6 } },
+            y1: { position: 'left', display: datasets.some((d) => d.yAxisID === 'y1'), grid: { display: false }, border: { display: false }, beginAtZero: true, suggestedMax: 1000, ticks: { padding: 8, precision: 0, callback: (v) => short(v), maxTicksLimit: 6 } },
           },
         },
       });

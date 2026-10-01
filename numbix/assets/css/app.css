@@ -84,6 +84,7 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+html { overflow-x: hidden; }
 body {
   margin: 0;
   font-family: var(--font);
@@ -107,7 +108,8 @@ small, .small { font-size: .82em; }
 hr { border: 0; border-top: 1px solid var(--border); margin: 20px 0; }
 ::selection { background: rgba(var(--p-rgb), .25); }
 :focus-visible { outline: 2px solid var(--p); outline-offset: 2px; border-radius: 6px; }
-.ltr { direction: ltr; unicode-bidi: plaintext; }
+.ltr { direction: ltr; unicode-bidi: plaintext; font-feature-settings: normal; }
+input[type=email], input[type=url], code, kbd, .code-box { font-feature-settings: normal; }
 .muted { color: var(--muted); }
 .text-2 { color: var(--text-2); }
 .nowrap { white-space: nowrap; }
@@ -935,6 +937,12 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 20px 0; }
 }
 @media (max-width: 720px) {
   :root { --header-h: 64px; }
+  .site-header .container { gap: 10px; }
+  .header-actions { gap: 6px; }
+  .header-login { width: 44px; padding: 0; }
+  .header-login span { display: none; }
+  .logo { font-size: 19px; }
+  .logo-mark { width: 34px; height: 34px; }
   body { font-size: 14.5px; padding-bottom: 76px; }
   body.no-bottom-nav { padding-bottom: 0; }
   .container { padding-inline: 16px; }
@@ -944,8 +952,9 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 20px 0; }
   .hv-ring.r2 { display: none; }
   .g-2, .g-3 { grid-template-columns: 1fr; }
   .g-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-  .cat-strip .inner { grid-template-columns: repeat(3, 1fr); padding: 10px; gap: 6px; border-radius: 22px; }
-  .cat-tile { padding: 12px 4px 10px; }
+  .cat-strip .inner { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; padding: 10px; gap: 6px; border-radius: 22px; }
+  .cat-strip .inner::-webkit-scrollbar { display: none; }
+  .cat-tile { padding: 12px 4px 10px; flex: 0 0 92px; scroll-snap-align: start; }
   .cat-tile .btile { --s: 40px; }
   .cat-tile b { font-size: 12.5px; }
   .svc-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }

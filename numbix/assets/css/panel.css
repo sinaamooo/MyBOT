@@ -19,9 +19,9 @@
 .sb-collapse:hover { color: #fff; }
 .sb-collapse .i { width: 16px; height: 16px; transition: transform .3s; }
 .sb-nav { flex: 1; overflow-y: auto; overflow-x: hidden; margin: 0 -6px; padding: 0 6px; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.1) transparent; }
-.sb-label { font-size: 11px; font-weight: 800; letter-spacing: .06em; color: rgba(255,255,255,.35); padding: 14px 12px 8px; white-space: nowrap; }
+.sb-label { font-size: 11px; font-weight: 800; letter-spacing: .06em; color: rgba(255,255,255,.35); padding: 10px 12px 6px; white-space: nowrap; }
 .sb-link {
-  position: relative; display: flex; align-items: center; gap: 14px; padding: 11px 14px; margin-bottom: 3px; border-radius: 14px;
+  position: relative; display: flex; align-items: center; gap: 14px; padding: 9px 14px; margin-bottom: 2px; border-radius: 13px;
   font-weight: 600; font-size: 14.5px; white-space: nowrap; transition: background .2s, color .2s;
 }
 .sb-link .i { width: 21px; height: 21px; flex-shrink: 0; transition: transform .3s var(--ease); }
@@ -41,6 +41,8 @@
 .panel.collapsed .sb-link { justify-content: center; padding: 12px; }
 .panel.collapsed .sb-top { flex-direction: column; gap: 14px; }
 .panel.collapsed .sb-collapse .i { transform: rotate(180deg); }
+
+.sb-overlay { display: none; }
 
 /* ---------- Main ---------- */
 .main { min-width: 0; display: flex; flex-direction: column; }

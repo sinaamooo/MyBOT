@@ -112,3 +112,20 @@ function jalali_to_date(?string $jalali): ?string
     [$gy, $gm, $gd] = jalali_to_gregorian((int)$m[1], (int)$m[2], (int)$m[3]);
     return sprintf('%04d-%02d-%02d', $gy, $gm, $gd);
 }
+
+/** SQL literal for the first moment of the current Jalali month (+/- $offset months). */
+function jmonth_sql(int $offset = 0): string
+{
+    [$jy, $jm] = gregorian_to_jalali((int)date('Y'), (int)date('n'), (int)date('j'));
+    $jm += $offset;
+    while ($jm < 1) {
+        $jm += 12;
+        $jy--;
+    }
+    while ($jm > 12) {
+        $jm -= 12;
+        $jy++;
+    }
+    [$gy, $gm, $gd] = jalali_to_gregorian($jy, $jm, 1);
+    return sprintf("'%04d-%02d-%02d 00:00:00'", $gy, $gm, $gd);
+}
