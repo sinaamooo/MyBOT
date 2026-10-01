@@ -1139,3 +1139,5 @@ html.lite .reveal { opacity: 1; transform: none; }
 :root[data-theme="light"] .dark-zone { --grad-text: linear-gradient(100deg, #7C3AED, #C026D3 50%, #0891B2); }
 :root[data-theme="light"] .auth-side { --grad-text: linear-gradient(100deg, #FDE68A, #FFFFFF 50%, #A5F3FC); }
 @media (max-width: 720px) { .hero .moon { display: none; } }
+:root[data-theme="light"] .blank-page .btn-glass { --b-bg: #fff; --b-fg: var(--p-ink); --b-bd: var(--border-2); }
+@media (max-width: 720px) { .blank-page .mini-planet, .hero .mini-planet { display: none; } }
