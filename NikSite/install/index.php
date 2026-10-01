@@ -68,7 +68,15 @@ if (!$installed && ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             try {
                 DB::connect($db);
             } catch (PDOException $e) {
-                throw new RuntimeException('اتصال به دیتابیس ناموفق بود: ' . $e->getMessage());
+                $hint = '';
+                if (str_contains($e->getMessage(), 'Access denied')) {
+                    $prefix = str_contains($db['name'], '_') ? explode('_', $db['name'], 2)[0] . '_' : '';
+                    $hint = ' — نام کاربری یا رمز دیتابیس اشتباه است، یا کاربر به دیتابیس متصل نشده است.';
+                    if ($prefix && !str_starts_with($db['user'], $prefix)) {
+                        $hint .= ' در cPanel نام کاربری دیتابیس پیشوند دارد؛ احتمالاً باید «' . $prefix . $db['user'] . '» را وارد کنید.';
+                    }
+                }
+                throw new RuntimeException('اتصال به دیتابیس ناموفق بود' . $hint . ' (' . $e->getMessage() . ')');
             }
             if ((int)DB::value("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'users'") > 0 && empty($_POST['overwrite'])) {
                 throw new RuntimeException('این دیتابیس از قبل جداول نامبیکس را دارد. برای نصب مجدد، گزینه «حذف داده‌های قبلی» را فعال کنید.');
