@@ -54,7 +54,7 @@
     if (!b) return;
     const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
     document.documentElement.dataset.theme = next;
-    try { localStorage.setItem('nbx-theme', next); } catch (err) { }
+    try { localStorage.setItem('nbx-th', next); } catch (err) { }
     document.dispatchEvent(new CustomEvent('nbx:theme', { detail: next }));
   });
 

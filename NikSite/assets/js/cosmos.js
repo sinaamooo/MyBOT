@@ -1,7 +1,9 @@
 /* Numbix Cosmos — living galaxy background & motion engine (no dependencies) */
 (function () {
   'use strict';
-  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const lite = document.documentElement.classList.contains('lite');
+  const reduce = lite || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const small = window.innerWidth < 768;
   const fine = window.matchMedia('(pointer: fine)').matches;
   const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
   const mouse = { x: 0, y: 0, nx: 0, ny: 0 };
@@ -12,7 +14,7 @@
 
   /* ------------------------------------------------------------------ starfield */
   const canvas = document.getElementById('cosmos');
-  if (canvas) {
+  if (canvas && !lite) {
     const ctx = canvas.getContext('2d');
     const dense = canvas.dataset.density ? parseFloat(canvas.dataset.density) : 1;
     let W = 0, H = 0, DPR = 1, stars = [], shooters = [], nextShot = 0, last = 0;
@@ -24,7 +26,7 @@
       canvas.width = W * DPR; canvas.height = H * DPR;
       canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
       ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-      const n = Math.round(Math.min(420, (W * H) / 3600) * dense);
+      const n = Math.round(Math.min(small ? 90 : 220, (W * H) / 5200) * dense);
       stars = Array.from({ length: n }, () => {
         const z = Math.random() ** 1.6;
         return {
@@ -47,7 +49,7 @@
     }
     function frame(now) {
       requestAnimationFrame(frame);
-      if (document.hidden || now - last < 24) return;
+      if (document.hidden || isLight() || now - last < (small ? 50 : 33)) return;
       last = now;
       const t = now / 1000, light = isLight();
       const sy = window.scrollY;
@@ -130,7 +132,6 @@
           s.el.style.transform = `translate(-50%,-50%) translate(${(x + px * (0.5 + depth)).toFixed(1)}px,${(y + py * (0.5 + depth)).toFixed(1)}px) scale(${(0.62 + depth * 0.45).toFixed(3)})`;
           s.el.style.zIndex = depth > 0.5 ? 6 : 2;
           s.el.style.opacity = (0.45 + depth * 0.55).toFixed(2);
-          s.el.style.filter = depth < 0.35 ? `blur(${((0.35 - depth) * 4).toFixed(1)}px)` : '';
         });
       });
     };
@@ -165,7 +166,7 @@
   }
 
   /* ------------------------------------------------------------------ cursor glow */
-  if (fine && !reduce && document.body.dataset.glow !== '0') {
+  if (fine && !reduce && !small && document.body.dataset.glow !== '0' && document.documentElement.dataset.theme !== 'light') {
     const g = document.createElement('div');
     g.className = 'cursor-glow';
     document.body.appendChild(g);

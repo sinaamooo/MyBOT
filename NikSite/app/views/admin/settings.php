@@ -23,7 +23,7 @@ $sw = fn($k, $label, $d = '0') => '<label class="switch mb-2" style="display:fle
     <?= $field('متن معرفی هدر صفحه اصلی', '<textarea class="textarea" name="hero_text" rows="2" style="min-height:70px">' . $s('hero_text') . '</textarea>') ?>
     <div class="grid g-2" style="gap:0 16px">
       <?= $field('واحد پول', '<input class="input" name="currency" value="' . $s('currency', 'تومان') . '">') ?>
-      <?= $field('تم پیش‌فرض', '<select class="select" name="default_theme">' . implode('', array_map(fn($k, $l) => '<option value="' . $k . '"' . (setting('default_theme', 'light') === $k ? ' selected' : '') . '>' . $l . '</option>', ['light', 'dark', 'auto'], ['روشن', 'تیره', 'خودکار (طبق سیستم کاربر)'])) . '</select>') ?>
+      <?= $field('تم پیش‌فرض', '<select class="select" name="site_theme">' . implode('', array_map(fn($k, $l) => '<option value="' . $k . '"' . (setting('site_theme', 'light') === $k ? ' selected' : '') . '>' . $l . '</option>', ['light', 'dark', 'auto'], ['روشن', 'تیره', 'خودکار (طبق سیستم کاربر)'])) . '</select>') ?>
     </div>
     <?= $field('نوار اطلاعیه بالای سایت', '<input class="input" name="announcement" value="' . $s('announcement') . '" placeholder="مثلاً: ۲۰٪ تخفیف ویژه با کد WELCOME10">', 'خالی = نمایش داده نمی‌شود') ?>
     <?= $field('لینک اطلاعیه', '<input class="input ltr" name="announcement_link" value="' . $s('announcement_link') . '">') ?>

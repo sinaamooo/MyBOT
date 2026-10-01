@@ -4,7 +4,7 @@ final class AdminSettingsController
 {
     /** Allowed keys per tab — anything else posted is ignored. */
     public const FIELDS = [
-        'general' => ['site_name', 'site_tagline', 'site_description', 'hero_text', 'currency', 'default_theme', 'announcement', 'announcement_link', 'maintenance', 'maintenance_text', 'home_stats', 'home_live_orders', 'stats_orders_offset', 'stats_users_offset', 'stats_completed_offset'],
+        'general' => ['site_name', 'site_tagline', 'site_description', 'hero_text', 'currency', 'site_theme', 'announcement', 'announcement_link', 'maintenance', 'maintenance_text', 'home_stats', 'home_live_orders', 'stats_orders_offset', 'stats_users_offset', 'stats_completed_offset'],
         'contact' => ['support_phone', 'support_email', 'support_hours', 'address', 'footer_about', 'copyright', 'social_telegram', 'social_instagram', 'social_youtube', 'social_x', 'social_whatsapp', 'trust_badges', 'head_code'],
         'payment' => ['zarinpal_merchant', 'zarinpal_sandbox', 'card_number', 'card_holder', 'card_bank', 'min_deposit', 'max_deposit', 'test_gateway', 'test_gateway_public', 'unpaid_order_hours'],
         'users' => ['register_enabled', 'require_mobile', 'register_bonus', 'google_client_id', 'google_client_secret', 'telegram_login', 'canned_replies', 'ticket_autoclose_days'],

@@ -182,7 +182,7 @@ $typing = [
   </div>
 </section>
 
-<?php if (setting('home_stats', '1') === '1'): ?>
+<?php if (setting('home_stats', '1') === '1' && $stats['orders'] > 0): ?>
 <section class="section-sm">
   <div class="container">
     <div class="mission dark-zone reveal">

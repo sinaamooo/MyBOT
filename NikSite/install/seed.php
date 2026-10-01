@@ -11,7 +11,7 @@ function nbx_default_settings(string $siteName): array
         'site_description' => 'نامبیکس؛ خرید فالوور، ممبر، لایک و بازدید واقعی برای اینستاگرام، تلگرام، یوتیوب، تیک‌تاک و… با تحویل خودکار و پشتیبانی ۲۴ ساعته.',
         'hero_text' => 'افزایش فالوور، ممبر، لایک و بازدید با کیفیت بالا؛ سفارش در چند ثانیه، شروع خودکار و پیگیری لحظه‌ای — همه در یک پنل حرفه‌ای.',
         'currency' => 'تومان',
-        'default_theme' => 'dark',
+        'site_theme' => 'light',
         'register_enabled' => '1',
         'require_mobile' => '0',
         'register_bonus' => '0',
