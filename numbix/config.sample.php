@@ -20,6 +20,8 @@ if (!defined('DATA_DIR'))            define('DATA_DIR', __DIR__ . '/data_master'
 // if (!defined('DATA_DIR'))         define('DATA_DIR', '/home/USER/private/data_master');
 
 // ── ایردراپ (کریستال) — جلوگیری از سوءاستفاده ─────────────────────────────
+// این‌ها حالا از پنلِ ربات هم قابلِ تغییرند: /panel ← 🎮 بازی‌ها ← 🎁 ایردراپ
+// (مقدارِ پنل بر این define‌ها اولویت دارد؛ این‌ها فقط پیش‌فرضِ اولیه‌اند).
 // کریستال رایگان جمع می‌شود؛ تبدیلش به پولِ کیف‌پول/کدِ تخفیف این محدودیت‌ها را دارد:
 // if (!defined('AD_ON'))                  define('AD_ON', true);          // کلِ بخشِ ایردراپ
 // if (!defined('AD_CASHOUT_ON'))          define('AD_CASHOUT_ON', true);  // تبدیلِ کریستال به تومان/کد

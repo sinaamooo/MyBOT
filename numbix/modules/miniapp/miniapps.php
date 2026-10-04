@@ -1943,7 +1943,7 @@ function maApi() {
         maApiOut(['ok' => true, 'msg' => ['id' => $id, 'me' => true, 't' => $text, 'at' => time()]]);
     }
 
-    if (str_starts_with($action, 'airdrop_') && defined('AD_ON') && !AD_ON)
+    if (str_starts_with($action, 'airdrop_') && function_exists('adOn') && !adOn())
         maApiOut(['ok' => false, 'error' => 'off', 'message' => 'ایردراپ فعلا بسته است.'], 503);
     if ($action === 'airdrop_state') {
         maApiOut(['ok' => true] + adState($uid, $fname, $uname));

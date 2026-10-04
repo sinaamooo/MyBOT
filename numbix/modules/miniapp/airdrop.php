@@ -28,6 +28,30 @@ if (!defined('AD_CASHOUT_DAY_MAX')) define('AD_CASHOUT_DAY_MAX', 10000.0);  // t
 if (!defined('AD_CASHOUT_SPEND_PCT')) define('AD_CASHOUT_SPEND_PCT', 20.0); // lifetime cash-out <= this % of what the user really paid (0 = off)
 if (!defined('AD_CASHOUT_ALL_DAY_MAX')) define('AD_CASHOUT_ALL_DAY_MAX', 300000.0); // toman for all users per day (0 = no limit)
 
+// ── Admin-editable airdrop settings (from /panel) ────────────────────────────
+// Values live in cfg()['airdrop']; the constants above are the defaults/fallbacks,
+// and a define() in config.local.php still wins over the default when nothing is
+// set in the panel. So precedence is: panel value > config.local define > constant.
+function adCfg() { $c = cfg()['airdrop'] ?? null; return is_array($c) ? $c : []; }
+function adSet(callable $fn) {
+    cfgSet(function (&$c) use ($fn) {
+        if (!is_array($c['airdrop'] ?? null)) $c['airdrop'] = [];
+        $fn($c['airdrop']);
+    });
+}
+function adVal($k, $d = null) { $c = adCfg(); return array_key_exists($k, $c) ? $c[$k] : $d; }
+
+function adOn()          { return (int)adVal('on', AD_ON ? 1 : 0) === 1; }
+function adCashoutOn()   { return (int)adVal('cashout_on', AD_CASHOUT_ON ? 1 : 0) === 1; }
+function adNeedBuy()     { return max(0, (int)adVal('cashout_need_buy', AD_CASHOUT_NEED_BUY)); }
+function adDayMax()      { return max(0.0, (float)adVal('cashout_day_max', AD_CASHOUT_DAY_MAX)); }
+function adSpendPct()    { return max(0.0, min(1000.0, (float)adVal('cashout_spend_pct', AD_CASHOUT_SPEND_PCT))); }
+function adAllDayMax()   { return max(0.0, (float)adVal('cashout_all_day_max', AD_CASHOUT_ALL_DAY_MAX)); }
+function adRedeemRate()  { return max(0.0, (float)adVal('redeem_rate', AD_REDEEM_RATE)); }
+function adRedeemMin()   { return max(1.0, (float)adVal('redeem_min', AD_REDEEM_MIN)); }
+function adCouponMin()   { return max(1.0, (float)adVal('coupon_min', AD_COUPON_MIN)); }
+function adBaseRate()    { return max(0.0, (float)adVal('base_rate', AD_BASE_RATE)); }
+
 function adDbPath() { return DATA_DIR . '/airdrop.sqlite'; }
 
 function adDb() {
@@ -80,7 +104,7 @@ function adSeasonMeta() {
 function adXpForLevel($level) { return AD_XP_PER_LEVEL * max(1, (int)$level); }
 function adBoostN($u) { return max(0, min(AD_BOOST_MAX, (int)($u['data']['boost_n'] ?? 0))); }
 function adRate($level, $boostN = 0) {
-    return AD_BASE_RATE * max(1, (int)$level) * (1 + AD_BOOST_STEP * max(0, (int)$boostN));
+    return adBaseRate() * max(1, (int)$level) * (1 + AD_BOOST_STEP * max(0, (int)$boostN));
 }
 
 function adGain(&$u, $amount) {
@@ -261,9 +285,9 @@ function adState($uid, $name = '', $username = '') {
         'season'     => $meta['season'],
         'season_end' => $meta['end'],
         'missions'   => adMissions($uid, $u),
-        'redeem_rate'=> AD_REDEEM_RATE,
-        'redeem_min' => AD_REDEEM_MIN,
-        'coupon_min' => AD_COUPON_MIN,
+        'redeem_rate'=> adRedeemRate(),
+        'redeem_min' => adRedeemMin(),
+        'coupon_min' => adCouponMin(),
         'coupon_days'=> AD_COUPON_DAYS,
         'streak'         => (int)($u['data']['streak'] ?? 0),
         'wallet_balance' => function_exists('getUser') ? (float)(getUser($uid)['balance'] ?? 0) : 0.0,
@@ -447,8 +471,8 @@ function adClaimMission($uid, $missionId) {
 // up to a daily cap per user and for everyone together. Without this, any number
 // of fresh Telegram accounts could mine crystals and drain the wallet.
 function adCashoutGate($uid) {
-    if (!AD_ON || !AD_CASHOUT_ON) return 'تبدیلِ کریستال فعلا بسته است.';
-    $need = max(0, (int)AD_CASHOUT_NEED_BUY);
+    if (!adOn() || !adCashoutOn()) return 'تبدیلِ کریستال فعلا بسته است.';
+    $need = adNeedBuy();
     if ($need > 0) {
         $done = class_exists('MaOrder') ? MaOrder::doneCount($uid) : 0;
         if ($done < $need && function_exists('svPaidCount')) $done += svPaidCount($uid);
@@ -481,14 +505,14 @@ function adSpent($uid) {
 }
 
 function adSpendLeft($uid, $u) {
-    if ((float)AD_CASHOUT_SPEND_PCT <= 0) return INF;
-    return max(0.0, adSpent($uid) * (float)AD_CASHOUT_SPEND_PCT / 100 - (float)($u['data']['co_total'] ?? 0));
+    if (adSpendPct() <= 0) return INF;
+    return max(0.0, adSpent($uid) * adSpendPct() / 100 - (float)($u['data']['co_total'] ?? 0));
 }
 
 function adDayLeft($u) {
-    if ((float)AD_CASHOUT_DAY_MAX <= 0) return INF;
+    if (adDayMax() <= 0) return INF;
     $used = (($u['data']['co_day'] ?? '') === gmdate('Y-m-d')) ? (float)($u['data']['co_sum'] ?? 0) : 0.0;
-    return max(0.0, (float)AD_CASHOUT_DAY_MAX - $used);
+    return max(0.0, adDayMax() - $used);
 }
 
 function adDayNote(&$u, $toman) {
@@ -500,22 +524,22 @@ function adDayNote(&$u, $toman) {
 
 function adCapErr($uid, $u, $toman) {
     if ($toman > adDayLeft($u) + 0.001)
-        return 'سقفِ تبدیلِ روزانه‌ی شما ' . fmtNum(AD_CASHOUT_DAY_MAX) . ' تومان است؛ امروز ' .
+        return 'سقفِ تبدیلِ روزانه‌ی شما ' . fmtNum(adDayMax()) . ' تومان است؛ امروز ' .
                fmtNum(floor(adDayLeft($u))) . ' تومان دیگر می‌شود.';
     $left = adSpendLeft($uid, $u);
     if ($toman > $left + 0.001)
-        return 'تبدیلِ کریستال تا ' . fmtNum(AD_CASHOUT_SPEND_PCT) . '٪ِ خریدهای شما مجاز است؛ الان ' .
+        return 'تبدیلِ کریستال تا ' . fmtNum(adSpendPct()) . '٪ِ خریدهای شما مجاز است؛ الان ' .
                fmtNum(floor($left)) . ' تومان دیگر می‌شود. با خریدِ بیشتر، سقف بالا می‌رود.';
     return '';
 }
 
 function adGlobalTake($toman) {
-    if ((float)AD_CASHOUT_ALL_DAY_MAX <= 0) return true;
+    if (adAllDayMax() <= 0) return true;
     $ok = false;
     mutate('ad_cashout_day', function (&$a) use ($toman, &$ok) {
         $day = gmdate('Y-m-d');
         if (($a['day'] ?? '') !== $day) $a = ['day' => $day, 'sum' => 0.0];
-        if ((float)$a['sum'] + (float)$toman > (float)AD_CASHOUT_ALL_DAY_MAX + 0.001) return;
+        if ((float)$a['sum'] + (float)$toman > adAllDayMax() + 0.001) return;
         $a['sum'] = round((float)$a['sum'] + (float)$toman, 2);
         $ok = true;
     });
@@ -523,7 +547,7 @@ function adGlobalTake($toman) {
 }
 
 function adGlobalGiveBack($toman) {
-    if ((float)AD_CASHOUT_ALL_DAY_MAX <= 0) return;
+    if (adAllDayMax() <= 0) return;
     mutate('ad_cashout_day', function (&$a) use ($toman) {
         if (($a['day'] ?? '') === gmdate('Y-m-d')) $a['sum'] = max(0.0, round((float)$a['sum'] - (float)$toman, 2));
     });
@@ -531,10 +555,10 @@ function adGlobalGiveBack($toman) {
 
 function adRedeem($uid, $amount) {
     $amount = round((float)$amount, 4);
-    if (!is_finite($amount) || $amount < AD_REDEEM_MIN) return [false, 'حداقل ' . (int)AD_REDEEM_MIN . ' کریستال لازم است.'];
+    if (!is_finite($amount) || $amount < adRedeemMin()) return [false, 'حداقل ' . (int)adRedeemMin() . ' کریستال لازم است.'];
     if (($why = adCashoutGate($uid)) !== '') return [false, $why];
 
-    $toman = round($amount * AD_REDEEM_RATE, 2);
+    $toman = round($amount * adRedeemRate(), 2);
     if (!adGlobalTake($toman)) return [false, 'سقفِ تبدیلِ امروز پر شده؛ فردا دوباره امتحان کنید.'];
 
     $ok = false; $err = 'کریستال کافی نیست.';
@@ -566,11 +590,11 @@ function adRedeemCoupon($uid, $amount) {
         return [false, 'بخشِ کدِ تخفیف روی سرور نصب نیست.'];
 
     $amount = round((float)$amount, 4);
-    if (!is_finite($amount) || $amount < AD_COUPON_MIN)
-        return [false, 'حداقل ' . (int)AD_COUPON_MIN . ' کریستال لازم است.'];
+    if (!is_finite($amount) || $amount < adCouponMin())
+        return [false, 'حداقل ' . (int)adCouponMin() . ' کریستال لازم است.'];
     if (($why = adCashoutGate($uid)) !== '') return [false, $why];
 
-    $toman = round($amount * AD_REDEEM_RATE, 0);
+    $toman = round($amount * adRedeemRate(), 0);
     if ($toman <= 0) return [false, 'مبلغِ کد صفر می‌شود.'];
 
     $code = '';
@@ -660,4 +684,123 @@ function adBuyBoost($uid) {
         return [false, 'به سقفِ افزایشِ سرعت رسیده‌ای.'];
     }
     return [true, $n];
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Admin panel for the airdrop section (reachable from /panel ← 🎮 بازی‌ها ← 🎁 ایردراپ)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function adAdminHome($chatId, $msgId = null) {
+    $rate = adRedeemRate();
+    $t  = "🎁 <b>ایردراپ (کریستال)</b>\n\n";
+    $t .= 'وضعیتِ کلی: ' . (adOn() ? '✅ روشن' : '❌ خاموش') . "\n";
+    $t .= 'تبدیلِ کریستال به پول: ' . (adCashoutOn() ? '✅ روشن' : '❌ خاموش') . "\n\n";
+    $t .= '💱 قیمتِ هر کریستال: <b>' . rtrim(rtrim(number_format($rate, 2, '.', ''), '0'), '.') . "</b> تومان\n";
+    $t .= '🔽 حداقل برای تبدیل به پول: <b>' . fmtNum(adRedeemMin()) . "</b> کریستال\n";
+    $t .= '🏷 حداقل برای کدِ تخفیف: <b>' . fmtNum(adCouponMin()) . "</b> کریستال\n\n";
+    $t .= "<b>محدودیت‌های ضدِ تقلب</b>\n";
+    $t .= '🛒 حداقل خریدِ لازم پیش از تبدیل: <b>' . adNeedBuy() . "</b>\n";
+    $t .= '👤 سقفِ روزانه‌ی هر کاربر: <b>' . (adDayMax() > 0 ? fmtNum(adDayMax()) . ' تومان' : 'بی‌سقف') . "</b>\n";
+    $t .= '🌍 سقفِ روزانه‌ی همه: <b>' . (adAllDayMax() > 0 ? fmtNum(adAllDayMax()) . ' تومان' : 'بی‌سقف') . "</b>\n";
+    $t .= '📊 سقفِ کل = درصدی از خریدِ کاربر: <b>' . (adSpendPct() > 0 ? rtrim(rtrim(number_format(adSpendPct(), 2, '.', ''), '0'), '.') . '٪' : 'بی‌سقف') . "</b>\n\n";
+    $t .= '⛏ سرعتِ پایه‌ی جمع‌شدن (سطح ۱): <b>' . rtrim(rtrim(number_format(adBaseRate(), 2, '.', ''), '0'), '.') . "</b> در ساعت\n\n";
+    $t .= "💡 هر کریستال الان <b>" . rtrim(rtrim(number_format($rate, 4, '.', ''), '0'), '.') . "</b> تومان می‌ارزد.";
+
+    $rows = [
+        [btnCb(adOn() ? '✅ ایردراپ روشن' : '❌ ایردراپ خاموش', 'adadm_on', 'info'),
+         btnCb(adCashoutOn() ? '✅ تبدیل روشن' : '❌ تبدیل خاموش', 'adadm_con', 'info')],
+        [btnCb('💱 قیمتِ هر کریستال', 'adadm_e_rate', 'admin')],
+        [btnCb('🔽 حداقلِ تبدیل', 'adadm_e_rmin', 'admin'), btnCb('🏷 حداقلِ کدِ تخفیف', 'adadm_e_cmin', 'admin')],
+        [btnCb('🛒 حداقل خریدِ لازم', 'adadm_e_need', 'admin')],
+        [btnCb('👤 سقفِ روزانه‌ی هر کاربر', 'adadm_e_day', 'admin')],
+        [btnCb('🌍 سقفِ روزانه‌ی همه', 'adadm_e_all', 'admin')],
+        [btnCb('📊 درصدِ سقفِ کل', 'adadm_e_pct', 'admin'), btnCb('⛏ سرعتِ جمع‌شدن', 'adadm_e_base', 'admin')],
+        [btnCb('♻️ بازگردانی به پیش‌فرض', 'adadm_reset', 'reject')],
+        [btnCb(UT('back'), 'ag_games', 'nav')],
+    ];
+    if ($msgId) editMsg(BOT_TOKEN, $chatId, $msgId, $t, inlineKb($rows));
+    else        sendMsg(BOT_TOKEN, $chatId, $t, inlineKb($rows));
+}
+
+// field key => [state, prompt, kind]  (kind: 'float' | 'int' | 'pct')
+function adAdmFields() {
+    return [
+        'rate' => ['redeem_rate',       "💱 قیمتِ هر کریستال به تومان را بفرست (مثلاً <code>50</code>؛ <code>0</code> یعنی تبدیل عملاً بی‌ارزش).", 'float'],
+        'rmin' => ['redeem_min',        "🔽 حداقل کریستال برای تبدیل به پول را بفرست (مثلاً <code>100</code>).", 'float'],
+        'cmin' => ['coupon_min',        "🏷 حداقل کریستال برای ساختِ کدِ تخفیف را بفرست (مثلاً <code>200</code>).", 'float'],
+        'need' => ['cashout_need_buy',  "🛒 چند خریدِ تحویل‌شده لازم باشد تا کاربر بتواند تبدیل کند؟ (<code>0</code> = بدونِ شرط).", 'int'],
+        'day'  => ['cashout_day_max',   "👤 سقفِ تبدیلِ روزانه‌ی هر کاربر به تومان (<code>0</code> = بی‌سقف).", 'float'],
+        'all'  => ['cashout_all_day_max',"🌍 سقفِ تبدیلِ روزانه‌ی همه‌ی کاربران به تومان (<code>0</code> = بی‌سقف).", 'float'],
+        'pct'  => ['cashout_spend_pct', "📊 کلِ تبدیل‌های هر کاربر حداکثر چند درصدِ خریدِ واقعی‌اش باشد؟ (<code>0</code> = بی‌سقف).", 'pct'],
+        'base' => ['base_rate',         "⛏ سرعتِ پایه‌ی جمع‌شدنِ کریستال در ساعت (سطح ۱) را بفرست (مثلاً <code>30</code>).", 'float'],
+    ];
+}
+
+function adAdminCallback($data, $chatId, $msgId, $cbId) {
+    if (!str_starts_with((string)$data, 'adadm')) return false;
+    $uid = admStateUid($chatId);
+
+    if ($data === 'adadm_home') { answerCb(BOT_TOKEN, $cbId); clearState($uid); adAdminHome($chatId, $msgId); return true; }
+
+    if ($data === 'adadm_on') {
+        $now = !adOn();
+        adSet(function (&$c) use ($now) { $c['on'] = $now ? 1 : 0; });
+        answerCb(BOT_TOKEN, $cbId, $now ? '✅ روشن' : '❌ خاموش');
+        adAdminHome($chatId, $msgId);
+        return true;
+    }
+    if ($data === 'adadm_con') {
+        $now = !adCashoutOn();
+        adSet(function (&$c) use ($now) { $c['cashout_on'] = $now ? 1 : 0; });
+        answerCb(BOT_TOKEN, $cbId, $now ? '✅ روشن' : '❌ خاموش');
+        adAdminHome($chatId, $msgId);
+        return true;
+    }
+    if ($data === 'adadm_reset') {
+        adSet(function (&$c) {
+            foreach (['on','cashout_on','redeem_rate','redeem_min','coupon_min','cashout_need_buy',
+                      'cashout_day_max','cashout_all_day_max','cashout_spend_pct','base_rate'] as $k) unset($c[$k]);
+        });
+        answerCb(BOT_TOKEN, $cbId, '♻️ به پیش‌فرض برگشت');
+        adAdminHome($chatId, $msgId);
+        return true;
+    }
+    if (preg_match('/^adadm_e_(\w+)$/', (string)$data, $m) && isset(adAdmFields()[$m[1]])) {
+        [$key, $prompt, ] = adAdmFields()[$m[1]];
+        answerCb(BOT_TOKEN, $cbId);
+        setState($uid, 'ad_set', ['f' => $m[1]]);
+        sendMsg(BOT_TOKEN, $chatId, $prompt, inlineKb([[btnCb(UT('cancel'), 'adadm_home', 'cancel')]]));
+        return true;
+    }
+
+    answerCb(BOT_TOKEN, $cbId);
+    return true;
+}
+
+function adStateHandle($action, $msg, $uid, $chatId) {
+    if ($action !== 'ad_set') return false;
+    if (!isAdmin($uid)) { clearState($uid); return true; }
+    $sd = (array)(getState($uid)['data'] ?? []);
+    $f  = (string)($sd['f'] ?? '');
+    $fields = adAdmFields();
+    if (!isset($fields[$f])) { clearState($uid); return true; }
+    [$key, , $kind] = $fields[$f];
+
+    $raw = trim((string)($msg['text'] ?? ''));
+    $num = function_exists('maNum') ? maNum($raw) : (float)preg_replace('/[^0-9.]/', '', $raw);
+    $back = inlineKb([[btnCb('🎁 ایردراپ', 'adadm_home', 'admin')]]);
+
+    if ($raw === '' || !is_finite($num) || $num < 0) {
+        sendMsg(BOT_TOKEN, $chatId, '⚠️ یک عددِ معتبر بفرست.', $back);
+        return true;
+    }
+    if ($kind === 'int') $num = (int)round($num);
+    if ($kind === 'pct') $num = max(0.0, min(1000.0, (float)$num));
+
+    adSet(function (&$c) use ($key, $num) { $c[$key] = $num; });
+    clearState($uid);
+    sendMsg(BOT_TOKEN, $chatId, '✅ ذخیره شد.', $back);
+    adAdminHome($chatId, 0);
+    return true;
 }
