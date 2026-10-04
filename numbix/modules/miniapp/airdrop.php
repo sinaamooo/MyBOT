@@ -704,8 +704,7 @@ function adAdminHome($chatId, $msgId = null) {
     $t .= '👤 سقفِ روزانه‌ی هر کاربر: <b>' . (adDayMax() > 0 ? fmtNum(adDayMax()) . ' تومان' : 'بی‌سقف') . "</b>\n";
     $t .= '🌍 سقفِ روزانه‌ی همه: <b>' . (adAllDayMax() > 0 ? fmtNum(adAllDayMax()) . ' تومان' : 'بی‌سقف') . "</b>\n";
     $t .= '📊 سقفِ کل = درصدی از خریدِ کاربر: <b>' . (adSpendPct() > 0 ? rtrim(rtrim(number_format(adSpendPct(), 2, '.', ''), '0'), '.') . '٪' : 'بی‌سقف') . "</b>\n\n";
-    $t .= '⛏ سرعتِ پایه‌ی جمع‌شدن (سطح ۱): <b>' . rtrim(rtrim(number_format(adBaseRate(), 2, '.', ''), '0'), '.') . "</b> در ساعت\n\n";
-    $t .= "💡 هر کریستال الان <b>" . rtrim(rtrim(number_format($rate, 4, '.', ''), '0'), '.') . "</b> تومان می‌ارزد.";
+    $t .= '⛏ سرعتِ پایه‌ی جمع‌شدن (سطح ۱): <b>' . rtrim(rtrim(number_format(adBaseRate(), 2, '.', ''), '0'), '.') . "</b> در ساعت";
 
     $rows = [
         [btnCb(adOn() ? '✅ ایردراپ روشن' : '❌ ایردراپ خاموش', 'adadm_on', 'info'),

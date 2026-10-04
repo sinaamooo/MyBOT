@@ -3159,6 +3159,7 @@ function admHome($chatId, $msgId = null) {
         [btnCb('🎮 بازی‌ها', 'ag_games', 'admin'),      btnCb('💎 الماس', 'dm_home', 'admin')],
         [btnCb('💹 قیمت لحظه‌ای', 'px_home', 'admin'),  btnCb('🎨 ظاهر و متن‌ها', 'ag_look', 'admin')],
         [btnCb('🔒 عضویت اجباری', 'adm_join', 'admin'), btnCb('📢 پیام همگانی', 'adm_bc', 'admin')],
+        [btnCb('🎟 کدهای تخفیف', 'cpadm_home', 'admin')],
         [btnCb('🩺 چکاپِ بخش‌ها', 'adm_check', 'info')],
         [btnCb('🌐 پنل وب — کشورها، قیمت‌ها، کاربران، سفارش‌ها', 'adm_web', 'info')],
         [btnCb(UT('home'), 'home', 'nav')],
@@ -3957,7 +3958,7 @@ function masterHandle($update) {
                           'fnt_', 'fntv_',
                           'tp_home', 'tpa',
                           'tl_home', 'tla',
-                          'whp_', 'arp_', 'adadm',
+                          'whp_', 'arp_', 'adadm', 'cpadm', 'cpn_',
                           'eshop', 'epm',
                           'locks_'];
         $isAdminCb = false;
@@ -4051,6 +4052,7 @@ function masterHandle($update) {
         if (function_exists('whAdminCallback') && whAdminCallback($data, $chatId, $msgId, $cbId)) return;
         if (function_exists('arAdminCallback') && arAdminCallback($data, $chatId, $msgId, $cbId)) return;
         if (function_exists('adAdminCallback') && adAdminCallback($data, $chatId, $msgId, $cbId)) return;
+        if (function_exists('cpAdminCallback') && cpAdminCallback($data, $chatId, $msgId, $cbId)) return;
         if (tlAdminCallback($data, $chatId, $msgId, $cbId)) return;
         if (function_exists('fntCallback') && fntCallback($data, $chatId, $msgId, $cbId)) return;
         if (function_exists('tpAdminCallback') && tpAdminCallback($data, $chatId, $msgId, $cbId)) return;
@@ -4568,6 +4570,7 @@ function masterHandle($update) {
     if (function_exists('whStateHandle') && whStateHandle($action, $msg, $uid, $chatId)) return;
     if (function_exists('arStateHandle') && arStateHandle($action, $msg, $uid, $chatId)) return;
     if (function_exists('adStateHandle') && adStateHandle($action, $msg, $uid, $chatId)) return;
+    if (function_exists('cpAdminState') && cpAdminState($action, $msg, $uid, $chatId)) return;
     if (tlStateHandle($action, $msg, $uid, $chatId)) return;
     if (function_exists('tpStateHandle') && tpStateHandle($action, $msg, $uid, $chatId)) return;
     if (function_exists('payStateHandle') && payStateHandle($action, $msg, $uid, $chatId)) return;
