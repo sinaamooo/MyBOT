@@ -1,0 +1,22 @@
+# Numbix — nginx does NOT read .htaccess files. Put these rules inside the
+# server { } block of the site that serves the bot (adjust the path prefix if
+# the bot lives in a sub-folder, e.g. /numbix/...). Regex locations are matched in
+# order, so place them ABOVE your `location ~ \.php$ { ... }` block.
+# Then: nginx -t && nginx -s reload
+
+# Data folder (databases, config.json with API keys, KYC photos, logs) and modules
+location ~* /(data_master|modules)(/|$) { deny all; return 404; }
+
+# Secrets, databases, logs, backups, dotfiles
+location ~ /\.(?!well-known/)                          { deny all; return 404; }
+location ~* \.(sqlite|sqlite3|db|json|log|md|bak|tmp|lock|ini|sh|sql|zip|tar|gz|env)$ { deny all; return 404; }
+location ~* /(config\.local\.php|config\.sample\.php|error_log)$ { deny all; return 404; }
+
+# Upload size the webhook / mini-app API ever needs
+client_max_body_size 2m;
+
+add_header X-Content-Type-Options nosniff always;
+add_header Referrer-Policy no-referrer always;
+
+# Safest of all: move the data folder outside the web root and point to it from
+# config.local.php:  define('DATA_DIR', '/home/USER/private/data_master');

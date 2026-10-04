@@ -636,9 +636,9 @@ function gmFinish($g, $winnerId, $loserId) {
 
 }
 
-function gmRefund($g, $why) {
-    $back = gmSetGame($g['id'], function (&$x) {
-        if (!in_array($x['status'] ?? '', ['open', 'playing'], true)) return false;
+function gmRefund($g, $why, array $only = ['open', 'playing']) {
+    $back = gmSetGame($g['id'], function (&$x) use ($only) {
+        if (!in_array($x['status'] ?? '', $only, true)) return false;
         $x['status'] = 'cancelled';
         return ['players' => (array)$x['players'], 'stake' => (float)$x['stake']];
     });
@@ -676,7 +676,17 @@ function gmTick($limit = 20) {
         if ($done >= $limit) break;
         if (($g['status'] ?? '') === 'playing') {
             $idle = (int)($g['moved'] ?? $g['created'] ?? 0);
-            if ($idle > 0 && ($now - $idle) >= $exp) { gmRefund($g, gmT('idle')); $done++; }
+            if ($idle > 0 && ($now - $idle) >= $exp) {
+                // Stalling must not be a free way out of a lost tic-tac-toe game:
+                // the player whose turn it is forfeits, the other one wins the pot.
+                $ids = array_values(array_map(fn($p) => (int)$p['id'], (array)($g['players'] ?? [])));
+                $turn = (int)($g['turn'] ?? 0);
+                if (($g['kind'] ?? '') === 'ttt' && count($ids) === 2 && in_array($turn, $ids, true))
+                    gmFinish($g, $ids[0] === $turn ? $ids[1] : $ids[0], $turn);
+                else
+                    gmRefund($g, gmT('idle'));
+                $done++;
+            }
             continue;
         }
 
@@ -872,9 +882,19 @@ function gmCallback($data, $uid, $chatId, $msgId, $cbId, $from = []) {
     $uname = (string)($from['username'] ?? '');
 
     if ($act === 'c') {
+        if ($g['status'] === 'playing') {
+            // Once both stakes are in, "cancel" means giving up: refunding here let a
+            // losing player walk away with the stake. The other player wins.
+            if (!isset($g['players'][(string)$uid])) { answerCb(BOT_TOKEN, $cbId, gmT('not_yours'), true); return true; }
+            $ids = array_values(array_map(fn($p) => (int)$p['id'], $g['players']));
+            if (count($ids) !== 2) { answerCb(BOT_TOKEN, $cbId, gmT('gone'), true); return true; }
+            answerCb(BOT_TOKEN, $cbId, '🏳️');
+            gmFinish($g, $ids[0] === (int)$uid ? $ids[1] : $ids[0], (int)$uid);
+            return true;
+        }
         if ((int)$g['host'] !== (int)$uid) { answerCb(BOT_TOKEN, $cbId, gmT('not_yours'), true); return true; }
         answerCb(BOT_TOKEN, $cbId, '❌');
-        gmRefund($g, gmT('cancelled'));
+        gmRefund($g, gmT('cancelled'), ['open']);
         return true;
     }
 

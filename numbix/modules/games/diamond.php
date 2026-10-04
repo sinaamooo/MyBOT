@@ -335,7 +335,7 @@ function dmHit($uid, $name, $username = '') {
     $u0 = dmUser($uid);
     $jailLeft = (int)($u0['jailed_until'] ?? 0) - $now;
     if ($jailLeft > 0) {
-        return [dmT('jail_wait', ['name' => $name, 'm' => intdiv($jailLeft, 60), 's' => $jailLeft % 60]), false];
+        return [dmT('jail_wait', ['name' => h($name), 'm' => intdiv($jailLeft, 60), 's' => $jailLeft % 60]), false];
     }
 
     $cd = max(5, (int)dmVal('cooldown', 300));
@@ -345,7 +345,7 @@ function dmHit($uid, $name, $username = '') {
         $left = $cd - ($now - (int)($u['last'] ?? 0));
         if ($left > 0) {
             return [dmT('wait', [
-                'name' => $name,
+                'name' => h($name),
                 'm' => intdiv($left, 60),
                 's' => $left % 60,
                 'left' => $left,
@@ -376,13 +376,13 @@ function dmHit($uid, $name, $username = '') {
     if (!is_array($res)) return ['', false];
     if (!empty($res['wait'])) {
         $left = max(0, (int)$res['left']);
-        return [dmT('wait', ['name' => $name, 'm' => intdiv($left, 60), 's' => $left % 60, 'left' => $left]), false];
+        return [dmT('wait', ['name' => h($name), 'm' => intdiv($left, 60), 's' => $left % 60, 'left' => $left]), false];
     }
 
     $next = dmNextAt($res['level']);
 
     $msg = dmT('win', [
-        'name'     => $name,
+        'name'     => h($name),
         'reward'   => number_format($res['reward']),
         'points'   => number_format($res['points']),
         'level'    => $res['level'],
@@ -400,7 +400,7 @@ function dmMeText($uid, $name) {
     $level = dmLevel((float)($u['points'] ?? 0));
     $next  = dmNextAt($level);
     return dmT('me', [
-        'name'   => $u['name'] ?: $name,
+        'name'   => h($u['name'] ?: $name),
         'points' => number_format((float)$u['points']),
         'level'  => $level,
         'total'  => number_format((int)$u['total']),

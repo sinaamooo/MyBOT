@@ -2353,11 +2353,15 @@ function axConvert(kind){
   openSheet('ax', '<span class="fl ok' + (kind === 'redeem' ? '' : ' c') + '">' + ico(kind === 'redeem' ? 'wallet' : 'ticket') + '</span><b>' + t + '<small>موجودی: ' + axFmt(have) + ' کریستال</small></b>',
     '<div class="fld"><label>چند کریستال؟ (حداقل ' + fa(min) + ')</label><div class="inw"><input class="inp" id="axIn" inputmode="decimal"><span class="sf">کریستال</span></div></div>' +
     '<div class="card mt2"><div class="kvr"><span>' + (kind === 'redeem' ? 'به کیف پول شما' : 'ارزش کد تخفیف') + '</span><b class="g" id="axEq">—</b></div>' +
-    (kind === 'coupon' ? '<div class="kvr"><span>اعتبار</span><b>' + fa(s.coupon_days) + ' روز — یک‌بار مصرف</b></div>' : '') + '</div>' +
+    (kind === 'coupon' ? '<div class="kvr"><span>اعتبار</span><b>' + fa(s.coupon_days) + ' روز — یک‌بار مصرف</b></div>' : '') +
+    (s.cashout_left >= 0 ? '<div class="kvr"><span>سقفِ مجاز الان</span><b>' + fa(s.cashout_left) + ' تومان</b></div>' : '') + '</div>' +
+    (s.cashout_note ? '<p style="font-size:11px;color:var(--dim);margin-top:8px">' + esc(s.cashout_note) + '</p>' : '') +
     '<button class="btn mt" id="axGo">' + ico(kind === 'redeem' ? 'wallet' : 'ticket') + (kind === 'redeem' ? 'تبدیل کن' : 'ساخت کد') + '</button>' +
     '<div id="axRes"></div>');
   var inp = $('axIn');
-  inp.value = have >= min ? faD(Math.floor(have)) : '';
+  var cap = s.cashout_left >= 0 && s.redeem_rate > 0 ? Math.floor(s.cashout_left / s.redeem_rate) : have;
+  var def = Math.floor(Math.min(have, cap));
+  inp.value = def >= min ? faD(def) : '';
   var upd = function(){
     var v = Number(digits(inp.value)) || 0;
     $('axEq').textContent = v > 0 ? fa(Math.round(v * s.redeem_rate)) + ' تومان' : '—';

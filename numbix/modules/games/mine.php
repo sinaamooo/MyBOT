@@ -14,6 +14,7 @@ function mnDefaults() {
         'min_safe_for_protection' => 3,
         'rewards' => [100, 150, 250, 400, 600, 900, 1300, 1900],
         'reward_growth' => 1.5,
+        'house_edge'    => 5,
 
         'max_active_games' => 200,
         'waiting_timeout'  => 60,
@@ -95,9 +96,9 @@ function mnDefaults() {
 
             'protected' => "🛡 <b>سپر فعال شد!</b>\n" .
                            "◈━━━━━━━━━━━━━━◈\n\n" .
-                           "💥 روی مین زدی — ولی <b>{picks}</b> خانه‌ی امن پیدا کرده بودی.\n\n" .
+                           "💥 روی مین زدی — بعد از <b>{picks}</b> خانه‌ی امن.\n\n" .
                            "┌─────────────\n" .
-                           "│ 💸 از دست رفت   <b>۰</b>\n" .
+                           "│ 💸 ورودی و جایزه‌ی این دور برنگشت\n" .
                            "│ 🎯 خانه‌های امن  <b>{picks}</b>\n" .
                            "└─────────────",
 
@@ -304,6 +305,18 @@ function mnCumReward($safePicks) {
     return $sum;
 }
 
+// The configured prize table is fixed (it does not grow with the entry), so a
+// 10-diamond entry could win 100 on the first pick ~89% of the time — free diamonds
+// on repeat. The prize is therefore capped at the fair payout for this entry
+// (1 mine in 9 cells => 9/(9-k) after k safe picks) minus the house edge.
+function mnRewardFor($entry, $safePicks) {
+    $k = max(0, min(8, (int)$safePicks));
+    if ($k === 0) return 0.0;
+    $edge = max(0.0, min(50.0, (float)mnVal('house_edge', 5))) / 100;
+    $fair = (float)$entry * (1 - $edge) * 9 / (9 - $k);
+    return (float)floor(min(mnCumReward($k), $fair));
+}
+
 
 function mnFieldRows($g, $revealAll = false) {
     $sel  = $g['selected'] ?? [];
@@ -363,7 +376,7 @@ function mnActiveText($g) {
     $entry  = (float)($g['entry'] ?? 0);
     $reward = (float)($g['reward'] ?? 0);
 
-    $next = function_exists('mnRewardStep') ? mnRewardStep($picks + 1) : 0;
+    $next = $picks < 8 ? max(0, mnRewardFor($entry, $picks + 1) - $reward) : 0;
     $mult = $entry > 0 ? round($reward / $entry, 2) : 0;
 
     $need   = max(0, (int)mnVal('min_safe_for_protection', 3));
@@ -579,7 +592,7 @@ function mnCallback($data, $uid, $chatId, $msgId, $cbId, $from = []) {
 
             $g['selected'][] = $pos;
             $g['safe_picks'] = (int)($g['safe_picks'] ?? 0) + 1;
-            $g['reward'] = mnCumReward($g['safe_picks']);
+            $g['reward'] = mnRewardFor((float)$g['entry'], $g['safe_picks']);
 
             if ($g['safe_picks'] >= 8) {
                 $g['status'] = 'won'; $g['finished_at'] = time();

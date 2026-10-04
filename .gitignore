@@ -8,3 +8,4 @@ numbix/**/php_errors.log*
 numbix/error_log
 *.tmp
 .env
+dist/

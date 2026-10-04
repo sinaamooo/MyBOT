@@ -32,7 +32,8 @@ function cpDb() {
         max_discount REAL NOT NULL DEFAULT 0,
         expires_at INTEGER NOT NULL DEFAULT 0,
         on_flag INTEGER NOT NULL DEFAULT 1,
-        created_at INTEGER NOT NULL DEFAULT 0
+        created_at INTEGER NOT NULL DEFAULT 0,
+        owner INTEGER NOT NULL DEFAULT 0
     )");
     $db->exec('CREATE TABLE IF NOT EXISTS coupon_redemptions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -48,6 +49,10 @@ function cpDb() {
         code TEXT NOT NULL,
         at INTEGER NOT NULL DEFAULT 0
     )');
+    $cols = [];
+    $res = @$db->query('PRAGMA table_info(coupons)');
+    while ($res && ($x = $res->fetchArray(SQLITE3_ASSOC))) $cols[strtolower((string)$x['name'])] = true;
+    if ($cols && !isset($cols['owner'])) @$db->exec('ALTER TABLE coupons ADD COLUMN owner INTEGER NOT NULL DEFAULT 0');
     return $db;
 }
 
@@ -70,12 +75,12 @@ function cpUpsert($code, array $fields) {
     $cur = cpGet($code) ?: [
         'code' => $code, 'kind' => 'percent', 'value' => 0, 'max_uses' => 0, 'used' => 0,
         'per_user_limit' => 1, 'min_total' => 0, 'max_discount' => 0, 'expires_at' => 0,
-        'on_flag' => 1, 'created_at' => time(),
+        'on_flag' => 1, 'created_at' => time(), 'owner' => 0,
     ];
     $row = array_merge($cur, $fields);
     $stmt = $db->prepare('INSERT OR REPLACE INTO coupons
-        (code, kind, value, max_uses, used, per_user_limit, min_total, max_discount, expires_at, on_flag, created_at)
-        VALUES (:code,:kind,:value,:max_uses,:used,:pul,:min_total,:max_discount,:exp,:on,:created)');
+        (code, kind, value, max_uses, used, per_user_limit, min_total, max_discount, expires_at, on_flag, created_at, owner)
+        VALUES (:code,:kind,:value,:max_uses,:used,:pul,:min_total,:max_discount,:exp,:on,:created,:owner)');
     $stmt->bindValue(':code', $code, SQLITE3_TEXT);
     $stmt->bindValue(':kind', (string)$row['kind'], SQLITE3_TEXT);
     $stmt->bindValue(':value', (float)$row['value'], SQLITE3_FLOAT);
@@ -87,6 +92,7 @@ function cpUpsert($code, array $fields) {
     $stmt->bindValue(':exp', (int)$row['expires_at'], SQLITE3_INTEGER);
     $stmt->bindValue(':on', (int)$row['on_flag'], SQLITE3_INTEGER);
     $stmt->bindValue(':created', (int)$row['created_at'], SQLITE3_INTEGER);
+    $stmt->bindValue(':owner', (int)($row['owner'] ?? 0), SQLITE3_INTEGER);
     return (bool)$stmt->execute();
 }
 
@@ -109,6 +115,9 @@ function cpMakePercent($prefix, $percent, $days) {
 function cpValidate($code, $uid, $subtotal) {
     $c = cpGet($code);
     if (!$c) return [false, 0.0, 'کد تخفیف پیدا نشد.', ''];
+    // A personal code (e.g. bought with airdrop crystals) only works for its owner,
+    // so guessing or leaking someone else's code gives nothing.
+    if ((int)($c['owner'] ?? 0) > 0 && (int)$c['owner'] !== (int)$uid) return [false, 0.0, 'کد تخفیف پیدا نشد.', ''];
     if (empty($c['on_flag'])) return [false, 0.0, 'این کد دیگر فعال نیست.', ''];
     if ((int)$c['expires_at'] > 0 && time() > (int)$c['expires_at']) return [false, 0.0, 'این کد منقضی شده.', ''];
     if ((int)$c['max_uses'] > 0 && (int)$c['used'] >= (int)$c['max_uses']) return [false, 0.0, 'سقفِ استفاده از این کد پر شده.', ''];
@@ -153,10 +162,12 @@ function cpRedeemOnce($code, $uid, $orderId, $amount) {
 
     if ($db->exec('BEGIN IMMEDIATE') === false) return [false, true];
     try {
-        $stmt = $db->prepare('SELECT max_uses, used, per_user_limit FROM coupons WHERE code = :c');
+        $stmt = $db->prepare('SELECT * FROM coupons WHERE code = :c');
         $stmt->bindValue(':c', $code, SQLITE3_TEXT);
         $row = $stmt->execute()->fetchArray(SQLITE3_ASSOC);
         if (!$row) { $db->exec('ROLLBACK'); return [false, false]; }
+        if ((int)($row['owner'] ?? 0) > 0 && (int)$row['owner'] !== (int)$uid) { $db->exec('ROLLBACK'); return [false, false]; }
+        if (empty($row['on_flag']) || ((int)$row['expires_at'] > 0 && time() > (int)$row['expires_at'])) { $db->exec('ROLLBACK'); return [false, false]; }
 
         if ((int)$row['max_uses'] > 0 && (int)$row['used'] >= (int)$row['max_uses']) {
             $db->exec('ROLLBACK'); return [false, false];

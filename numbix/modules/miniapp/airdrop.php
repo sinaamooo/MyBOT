@@ -19,6 +19,15 @@ define('AD_TAP_REGEN', 3.0);
 define('AD_TAP_DAY', 1000);
 define('AD_TAP_RATE', 12);
 
+// Anti-abuse limits for turning free crystals into real wallet money / coupons.
+// Override any of these in config.local.php (define before the bot is loaded).
+if (!defined('AD_ON'))              define('AD_ON', true);       // whole airdrop section
+if (!defined('AD_CASHOUT_ON'))      define('AD_CASHOUT_ON', true); // crystals -> wallet / coupon
+if (!defined('AD_CASHOUT_NEED_BUY')) define('AD_CASHOUT_NEED_BUY', 1); // delivered orders needed before any cash-out
+if (!defined('AD_CASHOUT_DAY_MAX')) define('AD_CASHOUT_DAY_MAX', 10000.0);  // toman per user per day (0 = no limit)
+if (!defined('AD_CASHOUT_SPEND_PCT')) define('AD_CASHOUT_SPEND_PCT', 20.0); // lifetime cash-out <= this % of what the user really paid (0 = off)
+if (!defined('AD_CASHOUT_ALL_DAY_MAX')) define('AD_CASHOUT_ALL_DAY_MAX', 300000.0); // toman for all users per day (0 = no limit)
+
 function adDbPath() { return DATA_DIR . '/airdrop.sqlite'; }
 
 function adDb() {
@@ -266,6 +275,8 @@ function adState($uid, $name = '', $username = '') {
         'tap_left'       => adTapsLeft($u),
         'tap_day'        => AD_TAP_DAY,
         'bank'           => adBankInfo($uid),
+        'cashout_note'   => adCashoutGate($uid),
+        'cashout_left'   => is_finite($cl = min(adDayLeft($u), adSpendLeft($uid, $u))) ? floor($cl) : -1,
     ];
 }
 
@@ -432,22 +443,121 @@ function adClaimMission($uid, $missionId) {
 }
 
 
+// Free crystals are only convertible to real value by real customers, and only
+// up to a daily cap per user and for everyone together. Without this, any number
+// of fresh Telegram accounts could mine crystals and drain the wallet.
+function adCashoutGate($uid) {
+    if (!AD_ON || !AD_CASHOUT_ON) return 'تبدیلِ کریستال فعلا بسته است.';
+    $need = max(0, (int)AD_CASHOUT_NEED_BUY);
+    if ($need > 0) {
+        $done = class_exists('MaOrder') ? MaOrder::doneCount($uid) : 0;
+        if ($done < $need && function_exists('svPaidCount')) $done += svPaidCount($uid);
+        if ($done < $need)
+            return 'برای تبدیلِ کریستال باید دست‌کم ' . $need . ' خریدِ تحویل‌شده داشته باشید.';
+    }
+    return '';
+}
+
+// What the user really paid for delivered numbers and finished services.
+function adSpent($uid) {
+    $sum = 0.0;
+    if (function_exists('maOrdersDb') && ($db = maOrdersDb())) {
+        $st = $db->prepare("SELECT data FROM orders WHERE user_id = :u AND status = 'done'");
+        $st->bindValue(':u', (int)$uid, SQLITE3_INTEGER);
+        $res = $st->execute();
+        while ($res && ($r = $res->fetchArray(SQLITE3_ASSOC))) {
+            $o = json_decode((string)$r['data'], true);
+            if (is_array($o) && ($o['pay'] ?? '') !== 'diamond') $sum += max(0.0, (float)($o['total'] ?? 0));
+        }
+    }
+    if (function_exists('svDb') && ($db = svDb())) {
+        $st = $db->prepare("SELECT SUM(total - refunded) FROM svo WHERE uid = :u AND status IN ('done', 'partial')");
+        $st->bindValue(':u', (int)$uid, SQLITE3_INTEGER);
+        $res = $st->execute();
+        $row = $res ? $res->fetchArray(SQLITE3_NUM) : null;
+        $sum += max(0.0, (float)($row[0] ?? 0));
+    }
+    return $sum;
+}
+
+function adSpendLeft($uid, $u) {
+    if ((float)AD_CASHOUT_SPEND_PCT <= 0) return INF;
+    return max(0.0, adSpent($uid) * (float)AD_CASHOUT_SPEND_PCT / 100 - (float)($u['data']['co_total'] ?? 0));
+}
+
+function adDayLeft($u) {
+    if ((float)AD_CASHOUT_DAY_MAX <= 0) return INF;
+    $used = (($u['data']['co_day'] ?? '') === gmdate('Y-m-d')) ? (float)($u['data']['co_sum'] ?? 0) : 0.0;
+    return max(0.0, (float)AD_CASHOUT_DAY_MAX - $used);
+}
+
+function adDayNote(&$u, $toman) {
+    $day = gmdate('Y-m-d');
+    if (($u['data']['co_day'] ?? '') !== $day) { $u['data']['co_day'] = $day; $u['data']['co_sum'] = 0.0; }
+    $u['data']['co_sum'] = round((float)$u['data']['co_sum'] + (float)$toman, 2);
+    $u['data']['co_total'] = max(0.0, round((float)($u['data']['co_total'] ?? 0) + (float)$toman, 2));
+}
+
+function adCapErr($uid, $u, $toman) {
+    if ($toman > adDayLeft($u) + 0.001)
+        return 'سقفِ تبدیلِ روزانه‌ی شما ' . fmtNum(AD_CASHOUT_DAY_MAX) . ' تومان است؛ امروز ' .
+               fmtNum(floor(adDayLeft($u))) . ' تومان دیگر می‌شود.';
+    $left = adSpendLeft($uid, $u);
+    if ($toman > $left + 0.001)
+        return 'تبدیلِ کریستال تا ' . fmtNum(AD_CASHOUT_SPEND_PCT) . '٪ِ خریدهای شما مجاز است؛ الان ' .
+               fmtNum(floor($left)) . ' تومان دیگر می‌شود. با خریدِ بیشتر، سقف بالا می‌رود.';
+    return '';
+}
+
+function adGlobalTake($toman) {
+    if ((float)AD_CASHOUT_ALL_DAY_MAX <= 0) return true;
+    $ok = false;
+    mutate('ad_cashout_day', function (&$a) use ($toman, &$ok) {
+        $day = gmdate('Y-m-d');
+        if (($a['day'] ?? '') !== $day) $a = ['day' => $day, 'sum' => 0.0];
+        if ((float)$a['sum'] + (float)$toman > (float)AD_CASHOUT_ALL_DAY_MAX + 0.001) return;
+        $a['sum'] = round((float)$a['sum'] + (float)$toman, 2);
+        $ok = true;
+    });
+    return $ok;
+}
+
+function adGlobalGiveBack($toman) {
+    if ((float)AD_CASHOUT_ALL_DAY_MAX <= 0) return;
+    mutate('ad_cashout_day', function (&$a) use ($toman) {
+        if (($a['day'] ?? '') === gmdate('Y-m-d')) $a['sum'] = max(0.0, round((float)$a['sum'] - (float)$toman, 2));
+    });
+}
+
 function adRedeem($uid, $amount) {
     $amount = round((float)$amount, 4);
-    if ($amount < AD_REDEEM_MIN) return [false, 'حداقل ' . (int)AD_REDEEM_MIN . ' کریستال لازم است.'];
+    if (!is_finite($amount) || $amount < AD_REDEEM_MIN) return [false, 'حداقل ' . (int)AD_REDEEM_MIN . ' کریستال لازم است.'];
+    if (($why = adCashoutGate($uid)) !== '') return [false, $why];
 
-    $ok = false; $toman = 0.0;
-    adUserSet($uid, function (&$u) use ($amount, &$ok, &$toman) {
+    $toman = round($amount * AD_REDEEM_RATE, 2);
+    if (!adGlobalTake($toman)) return [false, 'سقفِ تبدیلِ امروز پر شده؛ فردا دوباره امتحان کنید.'];
+
+    $ok = false; $err = 'کریستال کافی نیست.';
+    adUserSet($uid, function (&$u) use ($uid, $amount, $toman, &$ok, &$err) {
         if ($u['crystals'] + 0.001 < $amount) return;
+        if (($e = adCapErr($uid, $u, $toman)) !== '') { $err = $e; return; }
         $u['crystals'] = round($u['crystals'] - $amount, 4);
-        $toman = round($amount * AD_REDEEM_RATE, 2);
+        adDayNote($u, $toman);
         $ok = true;
         $log = (array)($u['data']['redeem_log'] ?? []);
         array_unshift($log, ['t' => time(), 'crystals' => $amount, 'toman' => $toman]);
         $u['data']['redeem_log'] = array_slice($log, 0, 20);
     });
-    if (!$ok) return [false, 'کریستال کافی نیست.'];
-    if (function_exists('addBalance')) addBalance($uid, $toman, 'airdrop', 'redeem');
+    if (!$ok) { adGlobalGiveBack($toman); return [false, $err]; }
+    $idem = 'airdrop:' . (int)$uid . ':' . bin2hex(random_bytes(8));
+    if (!function_exists('addBalance') || !addBalance($uid, $toman, 'airdrop', 'redeem', $idem)) {
+        adUserSet($uid, function (&$u) use ($amount, $toman) {
+            $u['crystals'] = round($u['crystals'] + $amount, 4);
+            adDayNote($u, -$toman);
+        });
+        adGlobalGiveBack($toman);
+        return [false, 'الان انجام نشد؛ کریستال‌ها برگشت. کمی بعد دوباره امتحان کنید.'];
+    }
     return [true, $toman];
 }
 
@@ -456,26 +566,30 @@ function adRedeemCoupon($uid, $amount) {
         return [false, 'بخشِ کدِ تخفیف روی سرور نصب نیست.'];
 
     $amount = round((float)$amount, 4);
-    if ($amount < AD_COUPON_MIN)
+    if (!is_finite($amount) || $amount < AD_COUPON_MIN)
         return [false, 'حداقل ' . (int)AD_COUPON_MIN . ' کریستال لازم است.'];
+    if (($why = adCashoutGate($uid)) !== '') return [false, $why];
 
     $toman = round($amount * AD_REDEEM_RATE, 0);
     if ($toman <= 0) return [false, 'مبلغِ کد صفر می‌شود.'];
 
     $code = '';
     for ($i = 0; $i < 8; $i++) {
-        $try = 'AIR' . strtoupper(bin2hex(random_bytes(3)));
+        $try = 'AIR' . strtoupper(bin2hex(random_bytes(5)));
         if (cpGet($try) === null) { $code = $try; break; }
     }
     if ($code === '') return [false, 'ساختِ کد ناموفق بود؛ دوباره امتحان کنید.'];
+    if (!adGlobalTake($toman)) return [false, 'سقفِ تبدیلِ امروز پر شده؛ فردا دوباره امتحان کنید.'];
 
-    $ok = false;
-    adUserSet($uid, function (&$u) use ($amount, &$ok) {
+    $ok = false; $err = 'کریستال کافی نیست.';
+    adUserSet($uid, function (&$u) use ($uid, $amount, $toman, &$ok, &$err) {
         if ($u['crystals'] + 0.001 < $amount) return;
+        if (($e = adCapErr($uid, $u, $toman)) !== '') { $err = $e; return; }
         $u['crystals'] = round($u['crystals'] - $amount, 4);
+        adDayNote($u, $toman);
         $ok = true;
     });
-    if (!$ok) return [false, 'کریستال کافی نیست.'];
+    if (!$ok) { adGlobalGiveBack($toman); return [false, $err]; }
 
     $exp = time() + AD_COUPON_DAYS * 86400;
     $made = cpUpsert($code, [
@@ -484,11 +598,14 @@ function adRedeemCoupon($uid, $amount) {
         'min_total' => $toman,
         'max_discount' => $toman,
         'expires_at' => $exp, 'on_flag' => 1, 'created_at' => time(),
+        'owner' => (int)$uid,
     ]);
     if (!$made) {
-        adUserSet($uid, function (&$u) use ($amount) {
+        adUserSet($uid, function (&$u) use ($amount, $toman) {
             $u['crystals'] = round($u['crystals'] + $amount, 4);
+            adDayNote($u, -$toman);
         });
+        adGlobalGiveBack($toman);
         return [false, 'کد ساخته نشد؛ کریستال برگشت.'];
     }
 

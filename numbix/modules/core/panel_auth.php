@@ -20,12 +20,15 @@ if (!$__hashOk && strlen(ADMIN_PASSWORD) < 6) {
 }
 unset($__hashOk);
 
+@ini_set('session.use_strict_mode', '1');
+@ini_set('session.use_only_cookies', '1');
 session_set_cookie_params([
     'lifetime' => 0,
     'path'     => '/',
     'httponly' => true,
     'samesite' => 'Strict',
-    'secure'   => (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off'),
+    'secure'   => (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+                  || strtolower((string)($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https',
 ]);
 session_name('mybot_panel');
 session_start();

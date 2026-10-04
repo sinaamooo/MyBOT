@@ -2201,6 +2201,19 @@ class Order
         $stmt->execute();
     }
 
+    // A user pressing "cancel" on an invoice must not lose money that is already on
+    // its way: once a gateway invoice exists the order is only marked cancelled and
+    // stays pending, so a late IPN / poll still credits the wallet.
+    public static function cancel($id) {
+        $o = self::get($id);
+        if (!$o || ($o['status'] ?? '') !== self::PENDING) return;
+        if (!empty($o['gw']['invoice']) || !empty($o['ir']['ref'])) {
+            self::set($id, function (&$x) { if (($x['status'] ?? '') === self::PENDING) $x['cancelled_at'] = time(); });
+            return;
+        }
+        self::delete($id);
+    }
+
     public static function set($id, callable $fn) {
         $db = ordersDb();
         if (!$db) return false;
@@ -2260,7 +2273,19 @@ class Order
         if ($r === 'done') return [false, 'این سفارش قبلا بررسی شده است.'];
 
         $o = self::get($id);
-        addBalance($o['user_id'], $o['amount'], 'topup', (string)$id, 'topup:' . $id);
+        if (!addBalance($o['user_id'], $o['amount'], 'topup', (string)$id, 'topup:' . $id)) {
+            // Never leave a paid order "approved" with no money in the wallet: put it
+            // back to pending so the next poll/IPN retries (the idem key prevents a double credit).
+            self::set($id, function (&$x) {
+                $x['status'] = self::PENDING; $x['decided_at'] = null; $x['decided_by'] = null;
+                $x['credit_fail'] = (int)($x['credit_fail'] ?? 0) + 1;
+            });
+            error_log('[shop-bot] topup credit failed, order back to pending: ' . $id);
+            if (function_exists('adminAlertOnce'))
+                adminAlertOnce('credit_fail_' . md5((string)$id), "🔴 <b>شارژِ کیف پول انجام نشد</b>\n\nسفارش <code>" . h((string)$id) .
+                    "</code> پرداخت شده ولی نوشتنِ موجودی ناموفق بود؛ دوباره خودکار تلاش می‌شود.", 3600);
+            return [false, 'نوشتنِ موجودی ناموفق بود؛ دوباره تلاش می‌شود.'];
+        }
         return [true, $o];
     }
 
@@ -2973,7 +2998,7 @@ function handleIpn() {
 
     if ($prov === 'nowpayments') {
         $sig = $_SERVER['HTTP_X_NOWPAYMENTS_SIG'] ?? '';
-        $sorted = $d; ksort($sorted);
+        $sorted = $d; gwKsortDeep($sorted);
         $calc = hash_hmac('sha512', json_encode($sorted, JSON_UNESCAPED_SLASHES), $secret);
         if (!$sig || !hash_equals($calc, $sig)) { http_response_code(403); echo 'sig'; return; }
         $orderId = (string)($d['order_id'] ?? '');
@@ -2993,9 +3018,18 @@ function handleIpn() {
     if ($orderId === '') { http_response_code(400); echo 'no order'; return; }
     $oi = Order::get($orderId);
     if (!$oi || empty($oi['gw']['invoice']) || (string)($oi['method'] ?? '') === 'iran') { http_response_code(200); echo 'ignored'; return; }
-    if ($paid) gwSettle($orderId);
+    if ($paid && !gwSettle($orderId)) {
+        $now = Order::get($orderId);
+        if (($now['status'] ?? '') !== Order::APPROVED) { http_response_code(500); echo 'retry'; return; }
+    }
     http_response_code(200);
     echo 'ok';
+}
+
+function gwKsortDeep(array &$a) {
+    ksort($a);
+    foreach ($a as &$v) if (is_array($v)) gwKsortDeep($v);
+    unset($v);
 }
 
 function ordersArchive($days = 0, $limit = 4000) {
@@ -3779,6 +3813,8 @@ function masterHandle($update) {
         $cbId   = $cb['id'];
         $isAdmin = isAdmin($uid);
 
+        if (!$isAdmin && ($bu = getUser($uid)) && !empty($bu['banned'])) { answerCb(BOT_TOKEN, $cbId, T('banned'), true); return; }
+
         if (gmCallback($data, $uid, $chatId, $msgId, $cbId, $cb['from'] ?? [])) return;
 
         if (function_exists('dmCallback') && dmCallback($data, $uid, $chatId, $msgId, $cbId, $cb['from'] ?? [])) return;
@@ -3885,6 +3921,7 @@ function masterHandle($update) {
             if ($o['status'] === Order::APPROVED) {
                 answerCb(BOT_TOKEN, $cbId, '✅ قبلا تایید شده', true); return;
             }
+            if (!maRateOk('gwchk', (string)$uid, 8, 60)) { answerCb(BOT_TOKEN, $cbId, '⏳ کمی صبر کنید؛ خودکار هم بررسی می‌شود.', true); return; }
             [$paid, $st] = gwCheck($o);
             if ($paid) {
                 answerCb(BOT_TOKEN, $cbId, '✅ پرداخت تایید شد');
@@ -3904,7 +3941,7 @@ function masterHandle($update) {
             $o   = Order::get($oid);
             clearState($uid);
             if ($o && (int)$o['user_id'] === $uid && ($o['status'] ?? '') === Order::PENDING)
-                Order::delete($oid);
+                Order::cancel($oid);
             answerCb(BOT_TOKEN, $cbId, 'لغو شد');
 
             if ($msgId) { delMsg(BOT_TOKEN, $chatId, $msgId); slotClear($uid, 'shop'); }
@@ -4384,6 +4421,7 @@ function masterHandle($update) {
             return;
         }
         if (function_exists('maSupReply') && maSupReply($msg)) return;
+        if (!isAdmin($uid) && ($bu = getUser($uid)) && !empty($bu['banned'])) return;
         if (preg_match('/^\/start(?:@(\w+))?(?:\s|$)/i', $text, $sm)) {
             $bu = botUsername();
             if ($bu !== '' && (($sm[1] ?? '') === '' || strcasecmp($sm[1], $bu) === 0) && !maRatePeek('gstart', (string)$chatId, 1, 20)) {
@@ -4491,8 +4529,14 @@ function masterHandle($update) {
 
     if ($action === 'coupon') {
         $code = strtoupper(preg_replace('/\s+/u', '', norm_fa_digits($text)));
-        [$cok, $why, $c] = $code !== '' && function_exists('cpActivate') ? cpActivate($uid, $code) : [false, 'کد تخفیف پیدا نشد.', null];
+        if (!isAdmin($uid) && maRatePeek('cpbad', (string)$uid, 8, 3600)) {
+            clearState($uid);
+            sendMsg(BOT_TOKEN, $chatId, '⏳ تلاش‌های اشتباه برای کد تخفیف زیاد شد؛ یک ساعت دیگر دوباره امتحان کنید.', mainKeyboard());
+            return;
+        }
+        [$cok, $why, $c] = $code !== '' && mb_strlen($code) <= 40 && function_exists('cpActivate') ? cpActivate($uid, $code) : [false, 'کد تخفیف پیدا نشد.', null];
         if (!$cok) {
+            if (!isAdmin($uid)) maRateOk('cpbad', (string)$uid, 1000, 3600);
             sendMsg(BOT_TOKEN, $chatId, T('coupon_bad', ['reason' => h($why)]), inlineKb([[btnUI('cancel', 'cancel', 'cancel')]]));
             return;
         }
@@ -4528,6 +4572,30 @@ function masterHandle($update) {
     if (function_exists('payAdminState') && isAdmin($uid) && payAdminState($action, $msg, $uid, $chatId)) return;
     if (function_exists('fntState') && fntState($action, getState($uid)['data'] ?? [], $msg, $uid, $chatId)) return;
 
+
+    if ($action === 'ticket') {
+        $body = msgHtml($msg);
+        if (trim($body) === '' && empty($msg['photo'])) {
+            sendMsg(BOT_TOKEN, $chatId, "⚠️ متن خالی است");
+            return;
+        }
+        clearState($uid);
+        if (!isAdmin($uid) && !maRateOk('tkt', (string)$uid, 5, 600)) {
+            sendMsg(BOT_TOKEN, $chatId, '⏳ در ده دقیقه‌ی گذشته چند تیکت فرستاده‌اید؛ کمی صبر کنید.', mainKeyboard());
+            return;
+        }
+
+        sendMsg(BOT_TOKEN, $chatId, T('sup_sent'), mainKeyboard());
+        maSupLog($uid, 'u', trim((string)($msg['text'] ?? $msg['caption'] ?? '')) ?: '📎 ' . maSupKind($msg));
+
+        $r = chTicketAlert($uid, $uname, $fname, $body,
+            inlineKb([[btnCb('💬 پاسخ', 'reply_' . $uid, 'admin')]]));
+        if (!$r) error_log('[ticket] تیکتِ کاربر ' . $uid . ' نه به گروه رسید نه به پیویِ مدیر — ربات را در پیویِ مدیر استارت کنید');
+        return;
+    }
+
+    // Everything below edits bot settings: admins only, whatever state a user ends up in.
+    if (!isAdmin($uid)) { clearState($uid); return; }
 
     if (str_starts_with($action, 'sup_')) {
         $st    = getState($uid);
@@ -4707,23 +4775,6 @@ function masterHandle($update) {
             $out .= "<tg-emoji emoji-id=\"" . h($id) . "\">✨</tg-emoji>  <code>" . h($id) . "</code>\n";
         }
         sendMsg(BOT_TOKEN, $chatId, rtrim($out), mainKeyboard());
-        return;
-    }
-
-    if ($action === 'ticket') {
-        $body = msgHtml($msg);
-        if (trim($body) === '' && empty($msg['photo'])) {
-            sendMsg(BOT_TOKEN, $chatId, "⚠️ متن خالی است");
-            return;
-        }
-        clearState($uid);
-
-        sendMsg(BOT_TOKEN, $chatId, T('sup_sent'), mainKeyboard());
-        maSupLog($uid, 'u', trim((string)($msg['text'] ?? $msg['caption'] ?? '')) ?: '📎 ' . maSupKind($msg));
-
-        $r = chTicketAlert($uid, $uname, $fname, $body,
-            inlineKb([[btnCb('💬 پاسخ', 'reply_' . $uid, 'admin')]]));
-        if (!$r) error_log('[ticket] تیکتِ کاربر ' . $uid . ' نه به گروه رسید نه به پیویِ مدیر — ربات را در پیویِ مدیر استارت کنید');
         return;
     }
 

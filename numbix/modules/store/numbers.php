@@ -1222,7 +1222,11 @@ function numTick($limit = 10) {
 
         if ($st === 'waiting') {
             if (!$over) continue;
-            numFinish((string)$act['order'], 'expired');
+            // One last look before refunding: a code that arrived in the final seconds
+            // goes to the buyer instead of being paid to the provider while refunded here.
+            numPoll((string)$act['order']);
+            if ((string)((numGet((string)$act['order']) ?: [])['status'] ?? '') === 'waiting')
+                numFinish((string)$act['order'], 'expired');
             $n++;
             continue;
         }

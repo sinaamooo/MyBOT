@@ -40,6 +40,16 @@ function irMerchant() {
 function irOn() {
     return !empty(irCfg()['on']) && irMerchant() !== '' && payBase() !== '';
 }
+// In sandbox mode Zarinpal/Zibal approve every payment without real money, so a
+// sandbox left on in production would hand out free balance. Only admins may use it.
+function irSandboxBlocked($uid) {
+    if (empty(irCfg()['sandbox']) || isAdmin((int)$uid)) return false;
+    if (function_exists('adminAlertOnce'))
+        adminAlertOnce('ir_sandbox_live', "⚠️ <b>درگاهِ ایرانی روی حالتِ آزمایشی (sandbox) است</b>\n\n" .
+            "در این حالت هر پرداختی بدونِ پول تایید می‌شود، پس برای کاربران بسته شد. " .
+            "در پنلِ وب ← درگاه ایرانی، تیکِ sandbox را بردارید.", 3600);
+    return true;
+}
 function tuMethods() {
     $m = [];
     if (function_exists('gwOn') && gwOn()) $m[] = 'crypto';
@@ -371,6 +381,7 @@ function tuAskPhone($uid, $chatId, $amt = 0, $next = '') {
 }
 
 function tuIranNew($uid, $uname, $amt) {
+    if (irSandboxBlocked($uid)) return [null, 'down:sandbox'];
     $u = getUser($uid) ?: [];
     $phone = (string)($u['phone'] ?? '');
     if ($phone === '') return [null, 'need_phone'];
@@ -388,7 +399,7 @@ function tuIranNew($uid, $uname, $amt) {
         return [null, 'down:' . $err];
     }
     Order::set($oid, function (&$x) use ($url, $ref) {
-        $x['ir'] = ['prov' => irProv(), 'ref' => (string)$ref, 'url' => (string)$url, 'at' => time()];
+        $x['ir'] = ['prov' => irProv(), 'ref' => (string)$ref, 'url' => (string)$url, 'at' => time(), 'sb' => !empty(irCfg()['sandbox']) ? 1 : 0];
     });
     return [Order::get($oid), ''];
 }
@@ -474,6 +485,8 @@ function irVerify($o) {
     $ir = (array)($o['ir'] ?? []);
     $ref = (string)($ir['ref'] ?? '');
     if ($ref === '') return [false, 'بدونِ شناسه‌ی پرداخت'];
+    if ((!empty($ir['sb']) || !empty(irCfg()['sandbox'])) && !isAdmin((int)($o['user_id'] ?? 0)))
+        return [false, 'پرداختِ آزمایشی (sandbox) برای کاربران پذیرفته نمی‌شود'];
     $rial = (int)round((float)$o['amount'] * 10);
     $host = irHost();
     if (($ir['prov'] ?? irProv()) === 'zibal') {
@@ -481,7 +494,8 @@ function irVerify($o) {
         if (empty($r['ok'])) return [false, (string)($r['error'] ?? 'خطای شبکه')];
         $d = (array)$r['data'];
         $res = (int)($d['result'] ?? 0);
-        if (($res === 100 || $res === 201) && (!isset($d['amount']) || (int)$d['amount'] === $rial)) {
+        if (($res === 100 || $res === 201) && (!isset($d['amount']) || (int)$d['amount'] === $rial)
+            && (!isset($d['orderId']) || (string)$d['orderId'] === '' || (string)$d['orderId'] === (string)$o['id'])) {
             if (!empty($d['cardNumber'])) Order::set($o['id'], function (&$x) use ($d) { $x['ir']['card'] = (string)$d['cardNumber']; });
             return [true, (string)($d['refNumber'] ?? $ref)];
         }
@@ -845,7 +859,7 @@ function payUserCallback($data, $uid, $chatId, $msgId, $cbId, $uname) {
         $oid = substr($data, 4);
         $o = Order::get($oid);
         clearState($uid);
-        if ($o && (int)$o['user_id'] === $uid && ($o['status'] ?? '') === Order::PENDING) Order::delete($oid);
+        if ($o && (int)$o['user_id'] === $uid && ($o['status'] ?? '') === Order::PENDING) Order::cancel($oid);
         answerCb(BOT_TOKEN, $cbId, 'لغو شد');
         tuStart($uid, $chatId, null, $msgId);
         return true;
@@ -1152,7 +1166,7 @@ function payApi($action, $uid, $uname, array $body) {
     }
     if ($action === 'pay_cancel') {
         $o = Order::get((string)($body['order'] ?? ''));
-        if ($o && (int)$o['user_id'] === $uid && ($o['status'] ?? '') === Order::PENDING) Order::delete($o['id']);
+        if ($o && (int)$o['user_id'] === $uid && ($o['status'] ?? '') === Order::PENDING) Order::cancel($o['id']);
         maApiOut(['ok' => true]);
     }
     maApiOut(['ok' => false, 'error' => 'bad_action'], 400);
