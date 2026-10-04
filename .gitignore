@@ -1,0 +1,10 @@
+# Secrets and runtime data — never commit these
+numbix/config.local.php
+numbix/data_master/
+numbix/**/*.sqlite
+numbix/**/*.sqlite-wal
+numbix/**/*.sqlite-shm
+numbix/**/php_errors.log*
+numbix/error_log
+*.tmp
+.env
