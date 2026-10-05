@@ -1254,7 +1254,7 @@ final class ResultCard
 
         try {
             if (CardConfig::style() === 'glass') {
-                return GlassSymbolCard::render($d);
+                return GlassResultCard::render($d);
             }
             if (CardConfig::style() === 'orange') {
                 return OrangeResultCard::render($d);

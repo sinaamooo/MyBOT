@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-// "Glass" card design (default): only the coin symbol on a frosted glass panel.
-// Black background, two orange orbs behind the glass, white symbol. Every trade detail
-// (entry, targets, stop, result) lives in the caption, so the same card is used for
-// signals and results. 1600 x 900 (16:9).
+// "Glass" card design (default): a frosted glass panel over orange orbs on black.
+//  - Signal card: only the coin symbol. Entry, targets and stop live in the caption.
+//  - Result card (profit shot): coin + target hit, the leveraged PnL in large type, side and leverage.
+// 1600 x 900 (16:9).
 
 final class GlassSymbolCard
 {
@@ -15,10 +15,10 @@ final class GlassSymbolCard
     private const STEP = 4;   // frosted area
     private const FINE = 2;   // sharp area outside the glass
     // x, y, w, h, radius — centred
-    private const GLASS = [330.0, 200.0, 940.0, 500.0, 72.0];
+    public const GLASS = [330.0, 200.0, 940.0, 500.0, 72.0];
     private const BASE = [0, 0, 0];
-    private const WHITE = [255, 255, 255];
-    private const ORANGE = [255, 138, 0];
+    public const WHITE = [255, 255, 255];
+    public const ORANGE = [255, 138, 0];
     // centre x, centre y, radius, colour — the first two sit behind the glass corners
     private const ORBS = [
         [455.0, 250.0, 235.0, [255, 138, 0]],
@@ -28,12 +28,19 @@ final class GlassSymbolCard
 
     public static function render(array $d): string
     {
-        $c = self::backdrop();
-        self::rim($c);
+        $c = self::canvas();
         self::symbol($c, self::coin((string) ($d['symbol'] ?? '')));
         $png = $c->toPng();
         $c->destroy();
         return $png;
+    }
+
+    /** Background, frosted glass and its rim — shared by the signal and result cards. */
+    public static function canvas(): CardCanvas
+    {
+        $c = self::backdrop();
+        self::rim($c);
+        return $c;
     }
 
     /** Base asset only: "BTC/USDT", "BTCUSDT", "BTC-USDT-PERP" -> "BTC". */
@@ -174,5 +181,79 @@ final class GlassSymbolCard
         $c->write($coin, $cx, $capTop, $size, self::WHITE, 'heavy', 'center', $tracking);
         // small orange accent under the symbol
         $c->roundRect($cx - 40.0, $capTop + $cap + $barGap, 80.0, $barH, $barH / 2, self::ORANGE);
+    }
+}
+
+final class GlassResultCard
+{
+    private const LABELS = [
+        'tp1' => 'TARGET 1',
+        'tp2' => 'TARGET 2',
+        'tp3' => 'TARGET 3',
+        'tp4' => 'ALL TARGETS',
+        'trail' => 'PROFIT LOCKED',
+        'be' => 'BREAK EVEN',
+        'sl' => 'STOP LOSS',
+        'timeout' => 'TIME LIMIT',
+    ];
+    private const PROFIT = [38, 230, 150];
+    private const LOSS = [255, 77, 90];
+
+    public static function render(array $d): string
+    {
+        [$x, $y, $w, $h] = GlassSymbolCard::GLASS;
+        $white = GlassSymbolCard::WHITE;
+        $kind = strtolower((string) ($d['kind'] ?? ''));
+        $headline = trim((string) ($d['headline'] ?? ''));
+        $headline = $headline !== '' ? $headline : '0.00%';
+        $pnl = CardFormat::number($headline) ?? 0.0;
+        $tone = $pnl > 0.004 ? self::PROFIT : ($pnl < -0.004 ? self::LOSS : $white);
+        $label = self::LABELS[$kind] ?? 'TRADE CLOSED';
+        $side = strtoupper(trim((string) ($d['direction'] ?? '')));
+        $lev = strtoupper(trim((string) ($d['leverage'] ?? '')));
+        $sub = implode('  ·  ', array_filter([$side, $lev], static fn(string $v): bool => $v !== '' && $v !== 'X'));
+
+        $c = GlassSymbolCard::canvas();
+        $cx = $x + $w / 2;
+
+        // line 1: COIN  •  LABEL
+        $coin = GlassSymbolCard::coin((string) ($d['symbol'] ?? ''));
+        $s1 = 50.0;
+        $s2 = 26.0;
+        $tracking = 0.16;
+        $coinSize = $c->fit($coin, $s1, $w * 0.45, 'heavy', 0.02, 28.0);
+        $wCoin = $c->measure($coin, $coinSize, 'heavy', 0.02);
+        $wDot = 52.0;
+        $wLabel = $c->measure($label, $s2, 'semi', $tracking);
+        $cap1 = $c->capHeight($s1, 'heavy');
+        $cap2 = $c->capHeight($s2, 'semi');
+
+        // the result, big
+        $head = CardFormat::signed($headline);
+        $sH = $c->fit($head, 200.0, $w - 150.0, 'heavy', 0.0, 80.0);
+        $capH = $c->capHeight($sH, 'heavy', '0');
+
+        $s3 = 22.0;
+        $cap3 = $sub !== '' ? $c->capHeight($s3, 'semi') : 0.0;
+        $g1 = 54.0;
+        $g2 = $sub !== '' ? 50.0 : 0.0;
+        $top = $y + ($h - ($cap1 + $g1 + $capH + $g2 + $cap3)) / 2;
+
+        $lx = $cx - ($wCoin + $wDot + $wLabel) / 2;
+        $c->write($coin, $lx, $top + ($cap1 - $c->capHeight($coinSize, 'heavy')) / 2, $coinSize, $white, 'heavy', 'left', 0.02);
+        $c->roundRect($lx + $wCoin + $wDot / 2 - 4, $top + $cap1 / 2 - 4, 8, 8, 4, $white, 0.45);
+        $c->write($label, $lx + $wCoin + $wDot, $top + ($cap1 - $cap2) / 2, $s2, GlassSymbolCard::ORANGE, 'semi', 'left', $tracking);
+
+        $hy = $top + $cap1 + $g1;
+        $c->glowText($head, $cx, $hy, $sH, $tone, 'heavy', 'center', 0.0, 0.55, 56.0);
+        $c->write($head, $cx, $hy, $sH, $tone, 'heavy', 'center');
+
+        if ($sub !== '') {
+            $c->write($sub, $cx, $hy + $capH + $g2, $s3, $white, 'semi', 'center', 0.18, 0.55);
+        }
+
+        $png = $c->toPng();
+        $c->destroy();
+        return $png;
     }
 }
