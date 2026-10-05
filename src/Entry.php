@@ -68,7 +68,7 @@ final class Entry
         $bot = new Bot($config, $tg);
         $offset = 0;
         while (true) {
-            $updates = $tg->call('getUpdates', ['offset' => $offset, 'timeout' => 50, 'allowed_updates' => ['message']]);
+            $updates = $tg->call('getUpdates', ['offset' => $offset, 'timeout' => 50, 'allowed_updates' => ['message', 'callback_query']]);
             if ($updates === null) {
                 sleep(3);
                 continue;
@@ -136,7 +136,7 @@ final class Entry
         $res = $tg->call('setWebhook', [
             'url' => $url,
             'secret_token' => $config['webhook_secret'],
-            'allowed_updates' => ['message'],
+            'allowed_updates' => ['message', 'callback_query'],
             'max_connections' => 20,
         ]);
         return $res !== null ? "Webhook set: $url" : 'setWebhook failed (see logs in the storage folder)';

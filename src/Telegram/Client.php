@@ -13,6 +13,8 @@ use CURLFile;
 final class Client
 {
     public array $sent = [];
+    /** Dry-run only: canned results per method name. */
+    public array $fake = [];
 
     public function __construct(private string $token, private bool $dryRun = false)
     {
@@ -22,6 +24,9 @@ final class Client
     {
         if ($this->dryRun) {
             $this->sent[] = [$method, $params];
+            if (array_key_exists($method, $this->fake)) {
+                return $this->fake[$method];
+            }
             return ['message_id' => count($this->sent), 'chat' => ['id' => $params['chat_id'] ?? 0]];
         }
         $hasFile = false;
@@ -73,6 +78,26 @@ final class Client
             'caption' => $caption,
             'parse_mode' => 'HTML',
         ] + $extra);
+    }
+
+    /** The bot's own user id is the part of the token before the colon. */
+    public function botId(): int
+    {
+        return (int) strtok($this->token, ':');
+    }
+
+    public function editMessage(int|string $chatId, int $messageId, string $html, ?array $keyboard = null): ?array
+    {
+        $p = ['chat_id' => $chatId, 'message_id' => $messageId, 'text' => $html, 'parse_mode' => 'HTML', 'link_preview_options' => ['is_disabled' => true]];
+        if ($keyboard !== null) {
+            $p['reply_markup'] = ['inline_keyboard' => $keyboard];
+        }
+        return $this->call('editMessageText', $p);
+    }
+
+    public function answerCallback(string $id, string $text = ''): void
+    {
+        $this->call('answerCallbackQuery', ['callback_query_id' => $id] + ($text !== '' ? ['text' => $text] : []));
     }
 
     public function deleteMessage(int|string $chatId, int $messageId): void

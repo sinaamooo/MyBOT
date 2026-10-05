@@ -36,7 +36,7 @@ $run = function (string $label, array $update, array $cfg) use ($tg, $db) {
     echo "== $label\n";
     foreach ($tg->sent as [$m, $p]) {
         $txt = $p['text'] ?? $p['caption'] ?? ($p['message_id'] ?? '');
-        echo "  -> $m chat={$p['chat_id']} topic=" . ($p['direct_messages_topic_id'] ?? '-') . ' | ' . str_replace("\n", ' ⏎ ', mb_substr(strip_tags((string) $txt), 0, 150)) . "\n";
+        echo "  -> $m chat=" . ($p["chat_id"] ?? "") . " topic=" . ($p['direct_messages_topic_id'] ?? '-') . ' | ' . str_replace("\n", ' ⏎ ', mb_substr(strip_tags((string) $txt), 0, 150)) . "\n";
     }
     if (!$tg->sent) echo "  (no reply)\n";
 };
@@ -63,4 +63,28 @@ $run('admin /test on closed day', $pm('/test PEPE 1h', $admin), $closed);
 $run('admin /off then user', $pm('/off', $admin), $open);
 $run('user while paused', $dm('تحلیل BTC', 5550005), $open);
 $run('admin /on', $pm('/on', $admin), $open);
+
+// ---- panel + channel publishing
+$cb = function (string $data, int $user) use (&$uid) {
+    return ['update_id' => $uid++, 'callback_query' => ['id' => 'cb' . $uid, 'from' => ['id' => $user], 'data' => $data,
+        'message' => ['message_id' => 900, 'chat' => ['id' => $user, 'type' => 'private']]]];
+};
+$run('admin /panel', $pm('/panel', $admin), $open);
+$run('panel: set channel button', $cb('p:channel', $admin), $open);
+$tg->fake = [
+    'getChat' => ['id' => -1001234567890, 'type' => 'channel', 'title' => 'Signals', 'username' => 'signals_ch'],
+    'getChatMember' => ['status' => 'administrator', 'can_post_messages' => true],
+];
+$run('admin sends @signals_ch', $pm('@signals_ch', $admin), $open);
+$tg->fake = [];
+$run('panel: quota +1', $cb('p:quota:1', $admin), $open);
+$run('panel: days view', $cb('p:days', $admin), $open);
+$run('panel: toggle today', $cb('p:day:' . $today, $admin), $open);
+$run('panel: toggle today back on', $cb('p:day:' . $today, $admin), $open);
+$run('non-admin callback (ignored)', $cb('p:pause', 5550001), $open);
+$run('DM analysis -> published to channel', $dm('تحلیل ETH', 5550010), $open);
+$run('panel: DM notice off', $cb('p:dm', $admin), $open);
+$run('DM analysis, notice off', $dm('تحلیل SOL', 5550011), $open);
+$run('panel: remove channel', $cb('p:channel_clear', $admin), $open);
+$run('DM analysis -> back to DM', $dm('تحلیل BNB', 5550012), $open);
 @unlink($dbFile);

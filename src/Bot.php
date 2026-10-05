@@ -30,6 +30,15 @@ final class Bot
         if (isset($update['update_id']) && !$this->db->claimUpdate((int) $update['update_id'])) {
             return;
         }
+        if (isset($update['callback_query'])) {
+            $cq = $update['callback_query'];
+            if ($this->isAdmin((int) ($cq['from']['id'] ?? 0)) && str_starts_with((string) ($cq['data'] ?? ''), 'p:')) {
+                $this->panel()->callback($cq);
+            } else {
+                $this->tg->answerCallback((string) $cq['id']);
+            }
+            return;
+        }
         $msg = $update['message'] ?? null;
         if (!is_array($msg) || empty($msg['from']) || !empty($msg['from']['is_bot'])) {
             return;
@@ -56,9 +65,15 @@ final class Bot
         $text = trim((string) ($msg['text'] ?? $msg['caption'] ?? ''));
         $this->db->touchUser($from);
 
-        if ($isPrivate && $isAdmin && str_starts_with($text, '/')) {
-            $this->adminCommand($to, $text);
-            return;
+        if ($isPrivate && $isAdmin) {
+            $to['reply_to'] = null;
+            if ($this->panel()->handleState($to, $msg)) {
+                return;
+            }
+            if (str_starts_with($text, '/')) {
+                $this->adminCommand($to, $text);
+                return;
+            }
         }
         if ($isPrivate && !$isAdmin && empty($this->config['allow_private_chat'])) {
             $this->tg->sendMessage($to, '🙏 برای دریافت تحلیل به دایرکت کانال ' . htmlspecialchars($this->config['brand']['handle'] ?? '') . ' پیام بدهید.');
@@ -110,11 +125,14 @@ final class Bot
         $this->runAnalysis($to, $from, $req['base'], $tf, $isAdmin);
     }
 
-    private function runAnalysis(array $to, array $from, string $base, string $tf, bool $unlimited): void
+    /**
+     * @param bool $publish true = post to the channel set in /panel (if any) instead of replying here
+     */
+    private function runAnalysis(array $to, array $from, string $base, string $tf, bool $unlimited, bool $publish = true): void
     {
         $userId = (int) $from['id'];
         $period = $this->periodKey();
-        $limit = $unlimited ? -1 : (int) ($this->config['quota_per_user'] ?? 2);
+        $limit = $unlimited ? -1 : AdminPanel::quota($this->config, $this->db);
         $usageId = $this->db->reserve($userId, $period, $limit, $base, $tf);
         if ($usageId === null) {
             $this->tg->sendMessage($to, $this->quotaText($userId, true));
@@ -124,28 +142,43 @@ final class Bot
         $wait = $this->tg->sendMessage($to, '⏳ در حال تحلیل <b>' . htmlspecialchars($base) . '</b> در تایم ' . Fa::tf($tf) . '…' . "\n" . 'بررسی ساختار، اوردر بلاک‌ها و نقدینگی کمی زمان می‌برد.');
         $ok = false;
         try {
-            $service = new AnalysisService($this->config, (string) $this->db->get('brain_notes', ''));
+            $config = $this->config;
+            if (!AdminPanel::geminiOn($config, $this->db)) {
+                $config['gemini']['api_key'] = '';
+            }
+            $service = new AnalysisService($config, (string) $this->db->get('brain_notes', ''));
             $result = $service->analyze($base, $tf);
             $remaining = $unlimited ? null : max(0, $limit + (int) ($this->db->user($userId)['bonus'] ?? 0) - $this->db->used($userId, $period));
-            $caption = $result['caption'];
-            if ($remaining !== null) {
-                $note = "\n🎟 تحلیل باقی‌مانده شما در این دوره: " . Fa::digits((string) $remaining);
-                if (Render\Caption::length($caption . $note) <= 1024) {
-                    $caption .= $note;
+            $remainingNote = $remaining !== null ? '🎟 تحلیل باقی‌مانده شما در این هفته: ' . Fa::digits((string) $remaining) : '';
+
+            $channel = $publish ? AdminPanel::channel($this->db) : null;
+            if ($channel !== null) {
+                $post = $this->deliver(['chat_id' => $channel['id']], $result['image'], $result['caption'], $result['extra']);
+                if ($post !== null) {
+                    $ok = true;
+                    if (AdminPanel::dmNotice($this->db)) {
+                        $link = $this->postLink($channel, (int) ($post['message_id'] ?? 0));
+                        $this->tg->sendMessage($to, '✅ تحلیل <b>' . htmlspecialchars($base) . '</b> (' . Fa::tf($tf) . ') انجام شد و در کانال منتشر شد.'
+                            . ($link !== '' ? "\n👈 <a href=\"{$link}\">مشاهده تحلیل</a>" : '')
+                            . ($remainingNote !== '' ? "\n" . $remainingNote : ''));
+                    }
                 } else {
-                    $result['extra'] = trim($result['extra'] . "\n" . $note);
+                    $this->notifyAdmins('⚠️ ارسال تحلیل به کانال <b>' . htmlspecialchars((string) $channel['title']) . '</b> ناموفق بود؛ تحلیل در دایرکت کاربر ارسال شد. دسترسی ادمین ربات در کانال را بررسی کنید (/panel).');
                 }
             }
-            $sent = $this->tg->sendPhoto($to, $result['image'], $caption);
-            if ($sent === null) {
-                // Fallback: photo without formatting problems
-                $sent = $this->tg->sendPhoto($to, $result['image'], strip_tags($caption));
-            }
-            if ($sent !== null) {
-                $ok = true;
-                if ($result['extra'] !== '') {
-                    $this->tg->sendMessage(['reply_to' => $sent['message_id'] ?? null] + $to, $result['extra']);
+            if (!$ok) {
+                $caption = $result['caption'];
+                $extra = $result['extra'];
+                if ($remainingNote !== '') {
+                    if (Render\Caption::length($caption . "\n" . $remainingNote) <= 1024) {
+                        $caption .= "\n" . $remainingNote;
+                    } else {
+                        $extra = trim($extra . "\n\n" . $remainingNote);
+                    }
                 }
+                $ok = $this->deliver($to, $result['image'], $caption, $extra) !== null;
+            }
+            if ($ok) {
                 $this->adminLog($from, $result);
             }
         } catch (SymbolNotFound $e) {
@@ -165,6 +198,44 @@ final class Bot
         }
     }
 
+    /** Sends the chart with its caption (+ follow-up text). Returns the photo message or null. */
+    private function deliver(array $to, string $image, string $caption, string $extra): ?array
+    {
+        $sent = $this->tg->sendPhoto($to, $image, $caption);
+        if ($sent === null) {
+            // Retry without HTML in case the formatting was rejected
+            $sent = $this->tg->sendPhoto($to, $image, strip_tags($caption));
+        }
+        if ($sent !== null && $extra !== '') {
+            $this->tg->sendMessage(['chat_id' => $to['chat_id'], 'topic_id' => $to['topic_id'] ?? null, 'reply_to' => $sent['message_id'] ?? null], $extra);
+        }
+        return $sent;
+    }
+
+    private function postLink(array $channel, int $messageId): string
+    {
+        if ($messageId <= 0) {
+            return '';
+        }
+        if (!empty($channel['username'])) {
+            return 'https://t.me/' . $channel['username'] . '/' . $messageId;
+        }
+        $id = (string) $channel['id'];
+        return str_starts_with($id, '-100') ? 'https://t.me/c/' . substr($id, 4) . '/' . $messageId : '';
+    }
+
+    private function notifyAdmins(string $html): void
+    {
+        foreach ($this->config['admin_ids'] ?? [] as $admin) {
+            $this->tg->sendMessage(['chat_id' => $admin], $html);
+        }
+    }
+
+    private function panel(): AdminPanel
+    {
+        return new AdminPanel($this->config, $this->tg, $this->db);
+    }
+
     // ---------------------------------------------------------------- admin
 
     private function adminCommand(array $to, string $text): void
@@ -177,6 +248,10 @@ final class Bot
 
         switch ($cmd) {
             case '/start':
+            case '/panel':
+                $this->panel()->show($to);
+                return;
+
             case '/help':
             case '/admin':
                 $this->tg->sendMessage($to, $this->adminHelp());
@@ -190,7 +265,7 @@ final class Bot
                     return;
                 }
                 $tf = $req['tf'] ?? ($this->config['market']['default_timeframe'] ?? '4h');
-                $this->runAnalysis($to, ['id' => $this->config['admin_ids'][0] ?? 0, 'first_name' => 'admin'], $req['base'], $tf, true);
+                $this->runAnalysis($to, ['id' => $this->config['admin_ids'][0] ?? 0, 'first_name' => 'admin'], $req['base'], $tf, true, false);
                 return;
 
             case '/stats':
@@ -213,7 +288,7 @@ final class Bot
                     return;
                 }
                 $this->tg->sendMessage($to, '👤 ' . htmlspecialchars(trim(($u['first_name'] ?? '') . ' @' . ($u['username'] ?? ''))) . ' (<code>' . $u['user_id'] . "</code>)\n"
-                    . 'استفاده در این دوره: ' . $this->db->used((int) $u['user_id'], $period) . ' از ' . ((int) ($this->config['quota_per_user'] ?? 2) + (int) $u['bonus']) . "\n"
+                    . 'استفاده در این دوره: ' . $this->db->used((int) $u['user_id'], $period) . ' از ' . (AdminPanel::quota($this->config, $this->db) + (int) $u['bonus']) . "\n"
                     . 'مسدود: ' . ($u['banned'] ? 'بله' : 'خیر'));
                 return;
 
@@ -307,7 +382,7 @@ final class Bot
 
     private function isAnalysisDay(): bool
     {
-        return in_array((int) date('w'), array_map('intval', $this->config['analysis_days'] ?? [6, 0]), true);
+        return in_array((int) date('w'), AdminPanel::days($this->config, $this->db), true);
     }
 
     /** Quota period id; weeks start on Saturday. */
@@ -323,13 +398,18 @@ final class Bot
 
     private function dayNames(): string
     {
-        return implode(' و ', array_map(static fn ($d) => Fa::weekday((int) $d), $this->config['analysis_days'] ?? [6, 0]));
+        $days = AdminPanel::days($this->config, $this->db);
+        usort($days, static fn ($a, $b) => (($a + 1) % 7) <=> (($b + 1) % 7)); // week starts on Saturday
+        return $days ? implode(' و ', array_map(static fn ($d) => Fa::weekday($d), $days)) : '(فعلاً هیچ روزی)';
     }
 
     private function closedText(): string
     {
-        $days = array_map('intval', $this->config['analysis_days'] ?? [6, 0]);
+        $days = AdminPanel::days($this->config, $this->db);
         $today = (int) date('w');
+        if (!$days) {
+            return '⏰ تحلیل در حال حاضر غیرفعال است.';
+        }
         $wait = 7;
         foreach ($days as $d) {
             $wait = min($wait, ($d - $today + 7) % 7 ?: 7);
@@ -341,7 +421,7 @@ final class Bot
 
     private function quotaText(int $userId, bool $exhausted = false): string
     {
-        $limit = (int) ($this->config['quota_per_user'] ?? 2) + (int) ($this->db->user($userId)['bonus'] ?? 0);
+        $limit = AdminPanel::quota($this->config, $this->db) + (int) ($this->db->user($userId)['bonus'] ?? 0);
         $used = $this->db->used($userId, $this->periodKey());
         $left = max(0, $limit - $used);
         $period = match ($this->config['quota_period'] ?? 'week') {
@@ -358,7 +438,7 @@ final class Bot
 
     private function helpText(): string
     {
-        $q = Fa::digits((string) ($this->config['quota_per_user'] ?? 2));
+        $q = Fa::digits((string) AdminPanel::quota($this->config, $this->db));
         return "🤖 <b>ربات تحلیلگر</b>\n\n"
             . "برای دریافت تحلیل، نام ارز را بفرستید:\n"
             . "• <code>تحلیل BTC</code>\n"
@@ -373,7 +453,8 @@ final class Bot
     private function adminHelp(): string
     {
         return "🛠 <b>دستورات مدیر</b>\n\n"
-            . "<code>/test BTC 4h</code> تحلیل فوری (بدون محدودیت روز و سهمیه)\n"
+            . "<code>/panel</code> پنل تنظیمات (کانال انتشار، سهمیه، روزها، Gemini)\n"
+            . "<code>/test BTC 4h</code> تحلیل فوری در همین چت (بدون محدودیت روز و سهمیه)\n"
             . "<code>/stats</code> آمار\n"
             . "<code>/user 123</code> وضعیت کاربر (آیدی عددی یا @یوزرنیم)\n"
             . "<code>/addquota 123 2</code> سهمیه اضافه\n"
