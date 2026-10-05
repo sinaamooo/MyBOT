@@ -3,3 +3,4 @@
 !/storage/.htaccess
 /vendor/
 .DS_Store
+/dist/

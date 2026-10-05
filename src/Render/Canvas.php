@@ -22,7 +22,7 @@ final class Canvas
         $this->im = imagecreatetruecolor($w * $s, $h * $s);
         imagealphablending($this->im, true);
         imagesavealpha($this->im, false);
-        $this->fontDir = $fontDir ?: dirname(__DIR__, 2) . '/assets/fonts';
+        $this->fontDir = $fontDir;
     }
 
     /** @param float $opacity 0..1 */
@@ -264,7 +264,7 @@ final class Canvas
 
     public function font(string $weight): string
     {
-        return $this->fontDir . '/Vazirmatn-' . $weight . '.ttf';
+        return $this->fontDir !== '' ? $this->fontDir . '/Vazirmatn-' . $weight . '.ttf' : app_font($weight);
     }
 
     /** @return array{0: float, 1: float} width and height in logical px */

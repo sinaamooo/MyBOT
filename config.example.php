@@ -35,8 +35,9 @@ return [
     'admin_log' => true,
 
     'brand' => [
-        'name' => 'My Channel',
-        'handle' => '@mychannel',
+        'name' => '',
+        // Shown at the end of the caption (leave empty to hide), e.g. '@yourchannel'
+        'handle' => '',
         'accent' => '#7C5CFF',
     ],
 

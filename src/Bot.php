@@ -22,7 +22,7 @@ final class Bot
     public function __construct(private array $config, ?Client $client = null, ?Storage $storage = null)
     {
         $this->tg = $client ?? new Client((string) $config['bot_token']);
-        $this->db = $storage ?? new Storage(APP_ROOT . '/storage/bot.sqlite');
+        $this->db = $storage ?? new Storage(app_storage() . '/bot.sqlite');
     }
 
     public function handle(array $update): void

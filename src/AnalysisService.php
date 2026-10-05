@@ -26,17 +26,13 @@ final class AnalysisService
 
     public function __construct(private array $config, private string $brainNotes = '')
     {
-        $storage = APP_ROOT . '/storage';
-        $this->market = new MarketData($config['market'] ?? [], $storage . '/cache');
-        $brain = require APP_ROOT . '/brain/strategy.php';
+        $this->market = new MarketData($config['market'] ?? [], app_storage('cache'));
+        $brain = app_brain();
         $this->analyzer = new Analyzer($this->market, $brain, APP_ROOT . '/brain/indicators');
-        $this->news = new News($config['news'] ?? [], $storage . '/cache');
+        $this->news = new News($config['news'] ?? [], app_storage('cache'));
         $this->gemini = new Gemini((string) ($config['gemini']['api_key'] ?? ''), $config['gemini']['model'] ?? 'gemini-3.5-flash');
         $this->card = new Card($config['brand'] ?? []);
-        $this->outDir = $storage . '/out';
-        if (!is_dir($this->outDir)) {
-            @mkdir($this->outDir, 0775, true);
-        }
+        $this->outDir = app_storage('out');
     }
 
     /**

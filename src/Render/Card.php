@@ -30,7 +30,6 @@ final class Card
     private const AMBER = '#F5B94A';
     private const CYAN = '#38C6E8';
     private const VIOLET = '#9B7BFF';
-    private const EMA = ['20' => '#F5B94A', '50' => '#38C6E8', '200' => '#C084FC'];
 
     private Canvas $c;
     private array $a;
@@ -119,12 +118,6 @@ final class Card
         $c->triangle($px + 17, $chipY + 14, 10, $up, $c->color($col));
         $c->text($px + 29, $chipY + 14 + $c->capHeight(13, 'Bold') / 2, $chg, 13, $c->color($col), 'Bold');
         $c->text($px - 10, $chipY + 14 + $c->capHeight(12, 'Medium') / 2, 'تغییر ۲۴ ساعته', 12, $c->color(self::MUTED), 'Medium', 'right');
-
-        // brand in the middle
-        $handle = $this->brand['handle'] ?? '';
-        if ($handle !== '') {
-            $c->pill(self::W / 2, $y + 22, $handle, 14, $c->color(self::TEXT), $c->color('#FFFFFF', 0.06), 'Black', 'center', 20, 40);
-        }
     }
 
     private function chart(float $y, float $h): void
@@ -168,12 +161,7 @@ final class Card
         $py = static fn (float $p) => $y1 - $volH - ($p - $lo) / ($hi - $lo) * ($y1 - $volH - $y0);
         $inView = static fn (float $p) => $p >= $lo && $p <= $hi;
 
-        // legend + source
-        $lx = $x0 + 4;
-        foreach (self::EMA as $len => $col) {
-            $c->circle($lx + 5, $y + 31, 5, $c->color($col));
-            $lx += 14 + $c->text($lx + 14, $y + 36, 'EMA ' . $len, 12, $c->color(self::TEXT_2), 'Bold') + 18;
-        }
+        // source
         $c->text($M + $pw - 22, $y + 36, $a['symbol'] . ' · ' . strtoupper($a['timeframe']) . ' · ' . strtoupper($a['source']), 12, $c->color(self::MUTED), 'Bold', 'right');
 
         // grid + axis labels on round numbers
@@ -202,12 +190,6 @@ final class Card
             $c->text($bx($i), $y1 + 30, Fa::digits($jd . ' ' . $months[$jm - 1]), 11, $c->color(self::MUTED), 'Medium', 'center');
         }
 
-        // watermark
-        $handle = $this->brand['handle'] ?? '';
-        if ($handle !== '') {
-            $c->text(($x0 + $x1) / 2, ($y0 + $y1) / 2 + 20, $handle, 44, $c->color('#FFFFFF', 0.035), 'Black', 'center');
-        }
-
         // future zone
         $c->rect($nowX + $step * 0.5, $y0 - 8, $x1, $y1, $c->color($this->accent, 0.045));
         $c->dashed($nowX + $step * 0.5, $y0 - 8, $nowX + $step * 0.5, $y1, $c->color($this->accent, 0.35), 1.2, 4, 5);
@@ -222,13 +204,13 @@ final class Card
                 if (!$inView($z['mid'])) {
                     continue;
                 }
-                $ya = $py(min($z['hi'], $hi));
-                $yb = $py(max($z['lo'], $lo));
-                $c->rect($x0, $ya, $x1, $yb, $c->color($col, 0.075));
-                $c->line($x0, $ya, $x1, $ya, $c->color($col, 0.28), 1);
-                $c->line($x0, $yb, $x1, $yb, $c->color($col, 0.28), 1);
-                $tag = ($kind === 'support' ? 'حمایت ' : 'مقاومت ') . Fa::digits((string) ($k + 1));
-                $edge[] = ['y' => ($ya + $yb) / 2, 'text' => $tag, 'fg' => $c->color($col), 'bg' => $c->color(self::PANEL, 0.92), 'border' => $col, 'weight' => 'Bold'];
+                // Fine dotted line at the zone's level
+                $zy = $py($z['mid']);
+                for ($dx = $x0; $dx < $x1; $dx += 7) {
+                    $c->circle($dx, $zy, 1.3, $c->color($col));
+                }
+                $tag = ($kind === 'support' ? 'حمایت ' : 'مقاومت ') . Fa::digits((string) ($k + 1)) . '  ' . Fa::price($z['mid']);
+                $edge[] = ['y' => $zy, 'text' => $tag, 'fg' => $c->color('#FFFFFF'), 'bg' => $c->color(Canvas::mix($col, '#000000', 0.2), 0.95), 'weight' => 'Bold'];
             }
         }
 
@@ -242,21 +224,19 @@ final class Card
             $free[] = ['x' => $gx + 4, 'y' => ($py($g['top']) + $py($g['bottom'])) / 2 - 9, 'text' => 'FVG', 'fg' => $c->color('#FFFFFF'), 'bg' => $c->color(Canvas::mix(self::VIOLET, '#000000', 0.3), 0.92), 'h' => 18, 'size' => 9];
         }
 
-        // order blocks
+        // order blocks: short line at the 50% level of the block
         foreach ($a['order_blocks'] as $ob) {
-            if (!$inView($ob['top']) && !$inView($ob['bottom'])) {
+            $mid = ($ob['top'] + $ob['bottom']) / 2;
+            if (!$inView($mid)) {
                 continue;
             }
             $col = $ob['dir'] === 'bull' ? self::GREEN : self::RED;
             $ox = $ob['i'] >= $start ? $bx($ob['i']) - $step / 2 : $x0;
-            $ya = $py(min($ob['top'], $hi));
-            $yb = $py(max($ob['bottom'], $lo));
-            $c->rect($ox, $ya, $x1, $yb, $c->color($col, 0.17));
-            $c->line($ox, $ya, $ox, $yb, $c->color($col, 0.9), 2.4);
-            $c->line($ox, $ya, $x1, $ya, $c->color($col, 0.45), 1);
-            $c->line($ox, $yb, $x1, $yb, $c->color($col, 0.45), 1);
-            $label = ($ob['dir'] === 'bull' ? 'Bullish OB' : 'Bearish OB');
-            $free[] = ['x' => $ox + 6, 'y' => ($ya + $yb) / 2 - 10, 'text' => $label, 'fg' => $c->color('#FFFFFF'), 'bg' => $c->color(Canvas::mix($col, '#000000', 0.25), 0.95)];
+            $oxEnd = min($ox + 22 * $step, $nowX + $step * 6);
+            $my = $py($mid);
+            $c->dashed($ox, $my, $oxEnd, $my, $c->color($col), 2, 9, 5);
+            $c->circle($ox, $my, 3, $c->color($col));
+            $free[] = ['x' => $oxEnd + 4, 'y' => $my - 9, 'text' => '50% OB', 'fg' => $c->color('#FFFFFF'), 'bg' => $c->color(Canvas::mix($col, '#000000', 0.25), 0.95), 'h' => 18, 'size' => 9];
         }
 
         // liquidity
@@ -293,19 +273,6 @@ final class Card
             $c->rect($bx($i) - $step * 0.32, $y1 - $vh, $bx($i) + $step * 0.32, $y1, $c->color($col, 0.22));
         }
 
-        // EMAs
-        foreach (self::EMA as $len => $col) {
-            $pts = [];
-            foreach ($a['ema_series'][$len] as $i => $v) {
-                if ($i >= $start && $v !== null && $inView($v)) {
-                    $pts[] = [$bx($i), $py($v)];
-                }
-            }
-            if (count($pts) > 1) {
-                $c->polyline($pts, $c->color($col, 0.85), 1.8);
-            }
-        }
-
         // candles
         for ($i = $start; $i < $n; $i++) {
             $up = $s->c[$i] >= $s->o[$i];
@@ -334,7 +301,7 @@ final class Card
         // projected path
         if ($this->withPath) {
             $last = count($plan['path']) - 1;
-            $xScale = ($x1 - 112 - $nowX) / max(1, $plan['path'][$last][0]);
+            $xScale = ($x1 - 175 - $nowX) / max(1, $plan['path'][$last][0]);
             $pts = [];
             foreach ($plan['path'] as [$bars, $p]) {
                 $pts[] = [$nowX + $bars * $xScale, $py($p)];
