@@ -260,25 +260,19 @@ final class Card
             $c->rect($x - $step * 0.34, $top, $x + $step * 0.34, $bot, $col);
         }
 
-        // order blocks: short dashed line at the 50% level, centred on the block's own candle (drawn over it)
+        // order blocks: short dashed line at the 50% level, starting from the middle of the block's candle
         foreach ($a['order_blocks'] as $ob) {
             $mid = ($ob['top'] + $ob['bottom']) / 2;
             if (!$inView($mid)) {
                 continue;
             }
             $col = $c->color(self::OB);
+            $ox = $ob['i'] >= $start ? $bx($ob['i']) : $x0;
+            $oxEnd = max($ox + 8 * $step, min($ox + 22 * $step, $nowX));
             $my = $py($mid);
-            $half = max(3 * $step, 30);
-            if ($ob['i'] >= $start) {
-                $ox = $bx($ob['i']);
-                $c->dashed($ox - $half, $my, $ox + $half, $my, $col, 2, 7, 4);
-                $c->circle($ox, $my, 3.2, $col);
-                $free[] = ['x' => $ox, 'y' => $my - 26, 'align' => 'center', 'text' => '50% OB', 'fg' => $c->color('#001A26'), 'bg' => $c->color(self::OB, 0.95), 'h' => 18, 'size' => 9];
-            } else {
-                // block candle is left of the visible window
-                $c->dashed($x0, $my, $x0 + 2 * $half, $my, $col, 2, 7, 4);
-                $free[] = ['x' => $x0, 'y' => $my - 26, 'align' => 'left', 'text' => '50% OB', 'fg' => $c->color('#001A26'), 'bg' => $c->color(self::OB, 0.95), 'h' => 18, 'size' => 9];
-            }
+            $c->dashed($ox, $my, $oxEnd, $my, $col, 2, 9, 5);
+            $c->circle($ox, $my, 3.2, $col);
+            $free[] = ['x' => $oxEnd, 'y' => $my - 21, 'align' => 'right', 'text' => '50% OB', 'fg' => $c->color('#001A26'), 'bg' => $c->color(self::OB, 0.95), 'h' => 18, 'size' => 9];
         }
 
         // swing labels
