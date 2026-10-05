@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>درباره‌ی ما | نامبیکس</title>
+  <meta name="description" content="معرفی کسب‌وکار نامبیکس (Numbix) و تعهدات ما به کاربران.">
+  <meta name="theme-color" content="#0b7a83">
+  <link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
+  <link rel="preload" href="assets/fonts/vazirmatn-variable.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <a class="brand" href="index.html" aria-label="نامبیکس، صفحه‌ی اصلی">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9" fill="#0b7a83"/><path d="M10 23V9h2.7l6.6 9.3V9H22v14h-2.7l-6.6-9.3V23z" fill="#fff"/></svg>
+      <span>نامبیکس <small>Numbix</small></span>
+    </a>
+    <nav aria-label="منوی اصلی">
+      <ul class="nav">
+        <li><a href="index.html">خانه</a></li>
+        <li><a href="services.html">خدمات و قیمت‌ها</a></li>
+        <li><a href="about.html" aria-current="page">درباره‌ی ما</a></li>
+        <li><a href="contact.html">تماس با ما</a></li>
+        <li><a href="terms.html">قوانین و مقررات</a></li>
+        <li><a href="privacy.html">حریم خصوصی</a></li>
+      </ul>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section class="page-head">
+    <div class="container">
+      <h1>درباره‌ی ما</h1>
+      <p>نامبیکس (Numbix) یک کسب‌وکار اینترنتی است که خدمات مجازی را از طریق ربات تلگرام ارائه می‌دهد.</p>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container prose">
+      <h2>ما چه کاری انجام می‌دهیم؟</h2>
+      <p>{{SERVICES_LINE}}. هدف ما این است که خرید این خدمات برای کاربران ساده، سریع و شفاف باشد؛ به همین دلیل کل فرایند، از انتخاب خدمت تا پرداخت و تحویل، در یک ربات تلگرام و بدون نیاز به ثبت‌نام جداگانه انجام می‌شود.</p>
+
+      <h2>تعهدات ما</h2>
+      <ul>
+        <li>نمایش قیمت نهایی هر خدمت پیش از پرداخت، بدون هزینه‌ی پنهان؛</li>
+        <li>ثبت سابقه و کد پیگیری برای همه‌ی سفارش‌ها؛</li>
+        <li>بازگرداندن وجه سفارش‌های تحویل‌نشده یا معیوب طبق <a href="terms.html#refund">قوانین و مقررات</a>؛</li>
+        <li>حفاظت از اطلاعات کاربران طبق <a href="privacy.html">سیاست حریم خصوصی</a>؛</li>
+        <li>فعالیت در چارچوب قوانین جمهوری اسلامی ایران.</li>
+      </ul>
+
+      <h2>مسئول کسب‌وکار</h2>
+      <p>مسئولیت اداره‌ی این کسب‌وکار و پاسخ‌گویی به کاربران بر عهده‌ی {{OWNER_NAME}} است. برای هرگونه سؤال، پیشنهاد یا شکایت می‌توانید از راه‌های زیر با ما در ارتباط باشید.</p>
+
+      <div class="card" style="margin-top:20px">
+        <div class="contact-list">
+          <div class="contact-item"><div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3h4l2 5-2.5 1.5a11 11 0 0 0 6 6L16 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 5a2 2 0 0 1 2-2z"/></svg></div><div><strong>موبایل</strong><a class="value" href="tel:{{MOBILE_TEL}}" dir="ltr">{{MOBILE}}</a></div></div>
+          <div class="contact-item"><div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg></div><div><strong>نشانی</strong><span>{{ADDRESS}}</span></div></div>
+        </div>
+      </div>
+      <p style="margin-top:20px"><a href="contact.html">همه‌ی راه‌های ارتباطی</a></p>
+    </div>
+  </section>
+</main>
+<footer class="site-footer">
+  <div class="container">
+    <div class="footer-grid">
+      <div>
+        <h3>نامبیکس (Numbix)</h3>
+        <p>{{SERVICES_LINE}}؛ ثبت سفارش، پرداخت و تحویل از طریق ربات تلگرام.</p>
+      </div>
+      <div>
+        <h3>دسترسی سریع</h3>
+        <ul>
+          <li><a href="services.html">خدمات و قیمت‌ها</a></li>
+          <li><a href="about.html">درباره‌ی ما</a></li>
+          <li><a href="terms.html">قوانین و مقررات</a></li>
+          <li><a href="privacy.html">حریم خصوصی</a></li>
+          <li><a href="https://t.me/{{BOT_USERNAME}}" target="_blank" rel="noopener">ربات تلگرام</a></li>
+        </ul>
+      </div>
+      <div>
+        <h3>ارتباط با ما</h3>
+        <ul>
+          <li>موبایل: <a href="tel:{{MOBILE_TEL}}" dir="ltr">{{MOBILE}}</a></li>
+          <li>ایمیل: <a href="mailto:{{EMAIL}}" class="ltr">{{EMAIL}}</a></li>
+          <li>نشانی: {{ADDRESS}}</li>
+        </ul>
+      </div>
+    </div>
+    <p class="copyright">© ۱۴۰۵ نامبیکس (Numbix). تمامی حقوق محفوظ است.</p>
+  </div>
+</footer>
+</body>
+</html>

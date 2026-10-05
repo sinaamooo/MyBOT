@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>خدمات و قیمت‌ها | نامبیکس</title>
+  <meta name="description" content="فهرست خدمات نامبیکس (Numbix) و قیمت به‌روز هر خدمت.">
+  <meta name="theme-color" content="#0b7a83">
+  <link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
+  <link rel="preload" href="assets/fonts/vazirmatn-variable.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <a class="brand" href="index.html" aria-label="نامبیکس، صفحه‌ی اصلی">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9" fill="#0b7a83"/><path d="M10 23V9h2.7l6.6 9.3V9H22v14h-2.7l-6.6-9.3V23z" fill="#fff"/></svg>
+      <span>نامبیکس <small>Numbix</small></span>
+    </a>
+    <nav aria-label="منوی اصلی">
+      <ul class="nav">
+        <li><a href="index.html">خانه</a></li>
+        <li><a href="services.html" aria-current="page">خدمات و قیمت‌ها</a></li>
+        <li><a href="about.html">درباره‌ی ما</a></li>
+        <li><a href="contact.html">تماس با ما</a></li>
+        <li><a href="terms.html">قوانین و مقررات</a></li>
+        <li><a href="privacy.html">حریم خصوصی</a></li>
+      </ul>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section class="page-head">
+    <div class="container">
+      <h1>خدمات و قیمت‌ها</h1>
+      <p>{{SERVICES_LINE}}. فهرست زیر خدمات اصلی نامبیکس و قیمت فعلی آن‌ها را نشان می‌دهد.</p>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <!-- برای افزودن خدمت جدید، یک <tr> دیگر مثل ردیف‌های زیر اضافه کنید.
+           برای توضیح کوتاه زیر نام خدمت: <span class="desc">توضیح</span> را بعد از </strong> بگذارید. -->
+      <table class="price-table">
+        <thead>
+          <tr>
+            <th scope="col">خدمت</th>
+            <th scope="col" class="price">قیمت</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>{{SERVICE_1}}</strong></td>
+            <td class="price">{{PRICE_1}} تومان</td>
+          </tr>
+          <tr>
+            <td><strong>{{SERVICE_2}}</strong></td>
+            <td class="price">{{PRICE_2}} تومان</td>
+          </tr>
+          <tr>
+            <td><strong>{{SERVICE_3}}</strong></td>
+            <td class="price">{{PRICE_3}} تومان</td>
+          </tr>
+          <tr>
+            <td><strong>{{SERVICE_4}}</strong></td>
+            <td class="price">{{PRICE_4}} تومان</td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="note">قیمت‌ها به تومان است و ممکن است با تغییر نرخ تأمین‌کننده‌ها به‌روز شود. قیمت نهایی هر سفارش پیش از پرداخت در ربات نمایش داده می‌شود و ملاک، همان قیمت است.</p>
+      <div class="actions" style="margin-top:20px"><a class="btn btn-primary" href="https://t.me/{{BOT_USERNAME}}" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 3 3 10.5l7 2.5 2.5 7L21 3z"/><path d="m10 13 4.5-4.5"/></svg>ورود به ربات تلگرام</a></div>
+    </div>
+  </section>
+
+  <section class="section section-alt">
+    <div class="container">
+      <div class="section-head">
+        <h2>نحوه‌ی خرید و تحویل</h2>
+      </div>
+      <div class="grid steps">
+        <div class="card"><h3>ورود به ربات</h3><p>ربات نامبیکس را در تلگرام باز کنید و «شروع» را بزنید.</p></div>
+        <div class="card"><h3>انتخاب و پرداخت</h3><p>خدمت را انتخاب کنید، قیمت نهایی را ببینید و مبلغ را پرداخت کنید.</p></div>
+        <div class="card"><h3>تحویل در ربات</h3><p>سرویس معمولاً بلافاصله در همان گفت‌وگو تحویل داده می‌شود.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <div class="section-head">
+        <h2>پرسش‌های پرتکرار</h2>
+      </div>
+      <div class="faq">
+        <details>
+          <summary>آیا برای خرید باید در سایت ثبت‌نام کنم؟</summary>
+          <p>خیر. ثبت سفارش، پرداخت و تحویل همگی از داخل ربات تلگرام انجام می‌شود و حساب کاربری شما همان حساب تلگرامتان است.</p>
+        </details>
+        <details>
+          <summary>تحویل سفارش چقدر طول می‌کشد؟</summary>
+          <p>بیشتر سفارش‌ها خودکار و بلافاصله پس از پرداخت تحویل می‌شوند. اگر تحویل به هر دلیلی انجام نشود، سفارش را از طریق پشتیبانی پیگیری می‌کنیم.</p>
+        </details>
+        <details>
+          <summary>اگر سرویس تحویل‌شده کار نکند چه می‌شود؟</summary>
+          <p>طبق <a href="terms.html#refund">شرایط بازگشت وجه</a>، سرویس جایگزین داده می‌شود یا مبلغ به شما بازگردانده می‌شود.</p>
+        </details>
+        <details>
+          <summary>چطور سفارشم را پیگیری کنم؟</summary>
+          <p>با کد پیگیری‌ای که پس از پرداخت در ربات دریافت می‌کنید، از طریق پشتیبانی ربات یا شماره‌ی تماس صفحه‌ی <a href="contact.html">تماس با ما</a> پیگیری کنید.</p>
+        </details>
+      </div>
+    </div>
+  </section>
+</main>
+<footer class="site-footer">
+  <div class="container">
+    <div class="footer-grid">
+      <div>
+        <h3>نامبیکس (Numbix)</h3>
+        <p>{{SERVICES_LINE}}؛ ثبت سفارش، پرداخت و تحویل از طریق ربات تلگرام.</p>
+      </div>
+      <div>
+        <h3>دسترسی سریع</h3>
+        <ul>
+          <li><a href="services.html">خدمات و قیمت‌ها</a></li>
+          <li><a href="about.html">درباره‌ی ما</a></li>
+          <li><a href="terms.html">قوانین و مقررات</a></li>
+          <li><a href="privacy.html">حریم خصوصی</a></li>
+          <li><a href="https://t.me/{{BOT_USERNAME}}" target="_blank" rel="noopener">ربات تلگرام</a></li>
+        </ul>
+      </div>
+      <div>
+        <h3>ارتباط با ما</h3>
+        <ul>
+          <li>موبایل: <a href="tel:{{MOBILE_TEL}}" dir="ltr">{{MOBILE}}</a></li>
+          <li>ایمیل: <a href="mailto:{{EMAIL}}" class="ltr">{{EMAIL}}</a></li>
+          <li>نشانی: {{ADDRESS}}</li>
+        </ul>
+      </div>
+    </div>
+    <p class="copyright">© ۱۴۰۵ نامبیکس (Numbix). تمامی حقوق محفوظ است.</p>
+  </div>
+</footer>
+</body>
+</html>
