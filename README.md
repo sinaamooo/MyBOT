@@ -15,13 +15,28 @@
   - کارت سیگنال: شیشه‌ای و ساده، فقط نماد ارز (`CARD_STYLE = glass`). جزئیات معامله در کپشن است.
   - کارت شات سود / نتیجه: همان طرح شیشه‌ای با نماد ارز، تارگت خورده، درصد سود بزرگ (سبز، در ضرر قرمز) و جهت و اهرم. طرح‌های `orange`، `neo` و `classic` هم از پنل سیگنال قابل انتخاب‌اند.
 
+## فایل‌های آماده‌ی آپلود
+
+نسخه‌ی آماده‌ی ربات در دو پوشه‌ی مخزن است:
+- **`zip/AnalystBot-Hub.zip`**: همه‌ی فایل‌ها در یک زیپ.
+- **`autosomal/`**: همان فایل‌ها بدون زیپ: `bot.php`، `cron.php`، `modules/` و `config.example.php`.
+
+برای امنیت، `config.php` (توکن و کلیدها) در این دو پوشه نیست:
+- **به‌روزرسانی:** `config.php` فعلی هاست را نگه دارید.
+- **نصب جدید:** `config.example.php` را به `config.php` تغییر نام دهید و پر کنید.
+
+بعد از هر تغییر در کد، هر دو پوشه با این دستور دوباره ساخته می‌شوند:
+```bash
+php tools/release.php
+```
+
 ## نصب سریع
 
 ```bash
 php tools/build.php        # خروجی در dist/: bot.php، config.php، cron.php، modules/
 ```
 
-1. محتوای `dist/` را در یک پوشه روی هاست آپلود کنید (مثلاً `public_html/Dina`) و `config.php` را پر کنید.
+1. محتوای `dist/` (یا پوشه `autosomal/`) را در یک پوشه روی هاست آپلود کنید (مثلاً `public_html/Dina`) و `config.php` را پر کنید.
 2. **وب‌هوک:** لینک وب‌هوک آدرس `bot.php` است. این صفحه را در مرورگر باز کنید:
    `https://yourdomain.com/Dina/bot.php?setup=<webhook_secret>`
    صفحه، هاست و هر سه بخش را بررسی می‌کند و وب‌هوک را خودکار ست می‌کند.
@@ -194,7 +209,9 @@ modules/signal/        ربات سیگنال (env.php تنظیمات مشترک 
                        card_glass.php = کارت شیشه‌ای سیگنال و شات سود (پیش‌فرض)،
                        card_orange.php = طرح کارت مشکی/سفید/نارنجی با جزئیات)
 brain/                 مغز ربات تحلیل (وزن‌ها و اندیکاتورهای اختصاصی)
-tools/                 build، setup، selftest، mock_telegram
+tools/                 build، release، setup، selftest، mock_telegram
+autosomal/             نسخه آماده آپلود (ساخته‌شده با tools/release.php، بدون config.php)
+zip/                   همان نسخه به صورت AnalystBot-Hub.zip
 ```
 
 > این ربات ابزار آموزشی است و تحلیل‌هایش توصیه مالی نیست.

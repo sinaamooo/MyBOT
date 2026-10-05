@@ -1,0 +1,7 @@
+# Modules are loaded by bot.php / cron.php only; no direct web access.
+<IfModule mod_authz_core.c>
+    Require all denied
+</IfModule>
+<IfModule !mod_authz_core.c>
+    Deny from all
+</IfModule>
