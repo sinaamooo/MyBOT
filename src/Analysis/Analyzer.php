@@ -50,8 +50,7 @@ final class Analyzer
         $htfStructure = Structure::analyze($htf, $htfSwings, 2);
         $ltfStructure = Structure::analyze($ltf, Structure::swings($ltf, $len), $len);
 
-        $htfPrices = array_column(array_slice($htfSwings, -14), 'price');
-        $zones = Levels::zones($main, array_values(array_filter($swings, static fn ($s) => $s['i'] >= $n - 220)), $htfPrices, $atr);
+        $zones = Levels::zones($main, array_values(array_filter($swings, static fn ($s) => $s['i'] >= $n - 260)), array_slice($htfSwings, -30), $atr);
         $orderBlocks = Levels::orderBlocks($main, $structure['events'], $atrSeries);
         $fvgs = Levels::fairValueGaps($main, $atr);
         $liquidity = Levels::liquidity($main, $swings, $atr);
@@ -235,7 +234,8 @@ final class Analyzer
             'last_event' => $lastEvent,
             'events' => array_slice($structure['events'], -6),
             'labels' => array_slice($structure['labels'], -12),
-            'zones' => $zones,
+            'zones' => ['support' => $zones['support'], 'resistance' => $zones['resistance']],
+            'key_levels' => $zones['key'],
             'order_blocks' => $orderBlocks,
             'fvg' => $fvgs,
             'liquidity' => $liquidity,

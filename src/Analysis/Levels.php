@@ -12,23 +12,30 @@ use App\Market\Series;
 final class Levels
 {
     /**
-     * Clusters swing points into zones. $extra are higher-timeframe swing prices (weighted more).
-     * @return array{support: array, resistance: array}
+     * Clusters swing points into support/resistance zones and scores how important each one is.
+     *
+     * Strength grows with: number of touches, higher-timeframe swings at the same price,
+     * size of the reactions away from the level, role reversal (support <-> resistance)
+     * and round psychological numbers.
+     *
+     * @return array{support: array, resistance: array, key: array{support: array, resistance: array}}
+     *   support/resistance = up to 3 nearby zones (used by the engine),
+     *   key = only the strongest levels (drawn on the chart)
      */
-    public static function zones(Series $s, array $swings, array $extra, float $atr): array
+    public static function zones(Series $s, array $swings, array $htfSwings, float $atr): array
     {
         $price = $s->lastClose();
         $n = $s->count();
         $points = [];
         foreach ($swings as $sw) {
-            $points[] = ['price' => $sw['price'], 'i' => $sw['i'], 'htf' => false];
+            $points[] = ['price' => $sw['price'], 'i' => $sw['i'], 'htf' => false, 'type' => $sw['type'], 'react' => self::reaction($s, $sw, $atr)];
         }
-        foreach ($extra as $p) {
-            $points[] = ['price' => $p, 'i' => $n - 1, 'htf' => true];
+        foreach ($htfSwings as $sw) {
+            $points[] = ['price' => $sw['price'], 'i' => -1, 'htf' => true, 'type' => $sw['type'], 'react' => 0.0];
         }
         usort($points, static fn ($a, $b) => $a['price'] <=> $b['price']);
 
-        $tol = 0.55 * $atr;
+        $tol = 0.6 * $atr;
         $clusters = [];
         foreach ($points as $p) {
             $last = count($clusters) - 1;
@@ -44,39 +51,102 @@ final class Levels
 
         $zones = [];
         foreach ($clusters as $c) {
-            $prices = array_column($c['pts'], 'price');
-            $htf = count(array_filter($c['pts'], static fn ($p) => $p['htf']));
-            $touches = count($c['pts']) - $htf;
-            $lastI = max(array_column(array_filter($c['pts'], static fn ($p) => !$p['htf']) ?: [['i' => 0]], 'i'));
+            $mainPts = array_values(array_filter($c['pts'], static fn ($p) => !$p['htf']));
+            $htf = count($c['pts']) - count($mainPts);
+            $touches = count($mainPts);
             $mid = $c['mean'];
-            $lo = max(min($prices), $mid - 0.6 * $atr);
-            $hi = min(max($prices), $mid + 0.6 * $atr);
-            $lo = min($lo, $mid - 0.18 * $atr);
-            $hi = max($hi, $mid + 0.18 * $atr);
             $dist = abs($mid - $price) / $atr;
             if ($dist > 14) {
                 continue;
             }
+            $prices = array_column($c['pts'], 'price');
+            // Role reversal: the level has acted both as a top and as a bottom on this timeframe
+            $flip = count(array_unique(array_column($mainPts, 'type'))) === 2;
+            $react = 0.0;
+            foreach ($mainPts as $p) {
+                $react += min($p['react'], 6.0);
+            }
+            $lastI = $mainPts ? max(array_column($mainPts, 'i')) : 0;
+            $strength = $touches * 1.0
+                + min($htf, 3) * 2.0
+                + min($react, 15.0) * 0.4
+                + ($flip ? 2.5 : 0.0)
+                + self::roundBonus($mid, $atr)
+                + ($lastI / max($n, 1)) * 1.0;
+
+            $lo = max(min($prices), $mid - 0.6 * $atr);
+            $hi = min(max($prices), $mid + 0.6 * $atr);
             $zones[] = [
                 'mid' => $mid,
-                'lo' => $lo,
-                'hi' => $hi,
+                'lo' => min($lo, $mid - 0.18 * $atr),
+                'hi' => max($hi, $mid + 0.18 * $atr),
                 'touches' => $touches,
                 'htf' => $htf > 0,
-                'score' => $touches + 2.0 * min($htf, 2) + ($lastI / max($n, 1)) * 1.5,
+                'htf_touches' => $htf,
+                'flip' => $flip,
+                'react' => round($react, 1),
+                'score' => round($strength, 2),
                 'last_i' => $lastI,
             ];
         }
 
         $support = array_values(array_filter($zones, static fn ($z) => $z['mid'] < $price));
         $resistance = array_values(array_filter($zones, static fn ($z) => $z['mid'] >= $price));
-        $pick = static function (array $list, bool $below) use ($price): array {
+        $nearby = static function (array $list, bool $below): array {
             usort($list, static fn ($a, $b) => $b['score'] <=> $a['score']);
             $list = array_slice($list, 0, 4);
             usort($list, static fn ($a, $b) => $below ? $b['mid'] <=> $a['mid'] : $a['mid'] <=> $b['mid']);
             return array_slice($list, 0, 3);
         };
-        return ['support' => $pick($support, true), 'resistance' => $pick($resistance, false)];
+        // Key levels: only the clearly dominant ones (close to the strongest level on the chart,
+        // tested repeatedly or confirmed on the higher timeframe), max 2 per side.
+        $top = $zones ? max(array_column($zones, 'score')) : 0;
+        $cut = max(self::KEY_STRENGTH, self::KEY_RELATIVE * $top);
+        $key = static function (array $list, bool $below) use ($cut): array {
+            usort($list, static fn ($a, $b) => $b['score'] <=> $a['score']);
+            $strong = array_values(array_filter($list, static fn ($z) => $z['score'] >= $cut && ($z['touches'] >= 2 || $z['htf_touches'] >= 2)));
+            $strong = array_slice($strong, 0, 2);
+            usort($strong, static fn ($a, $b) => $below ? $b['mid'] <=> $a['mid'] : $a['mid'] <=> $b['mid']);
+            return $strong;
+        };
+        return [
+            'support' => $nearby($support, true),
+            'resistance' => $nearby($resistance, false),
+            'key' => ['support' => $key($support, true), 'resistance' => $key($resistance, false)],
+        ];
+    }
+
+    /** A key level needs at least this strength and this share of the strongest level's score. */
+    public const KEY_STRENGTH = 9.0;
+    public const KEY_RELATIVE = 0.7;
+
+    /** How far price moved away from a swing in the next candles, in ATR. */
+    private static function reaction(Series $s, array $sw, float $atr, int $look = 12): float
+    {
+        $n = $s->count();
+        $end = min($n - 1, $sw['i'] + $look);
+        if ($end <= $sw['i'] || $atr <= 0) {
+            return 0.0;
+        }
+        if ($sw['type'] === 'high') {
+            return ($sw['price'] - min(array_slice($s->l, $sw['i'] + 1, $end - $sw['i']))) / $atr;
+        }
+        return (max(array_slice($s->h, $sw['i'] + 1, $end - $sw['i'])) - $sw['price']) / $atr;
+    }
+
+    /** Bonus for psychological round numbers (e.g. 100,000 / 95,000 for BTC). */
+    private static function roundBonus(float $price, float $atr): float
+    {
+        if ($price <= 0) {
+            return 0.0;
+        }
+        $step = 10 ** floor(log10($price));
+        foreach ([[$step, 1.5], [$step / 2, 0.75]] as [$unit, $bonus]) {
+            if (abs($price - round($price / $unit) * $unit) <= 0.35 * $atr) {
+                return $bonus;
+            }
+        }
+        return 0.0;
     }
 
     /**

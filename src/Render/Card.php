@@ -187,9 +187,9 @@ final class Card
         // labels drawn last so candles never cover them
         $edge = [];   // right edge of the plot, stacked without overlap
         $free = [];   // fixed positions
-        // support / resistance zones
+        // key support / resistance levels (only the strong ones)
         foreach (['support' => self::GREEN, 'resistance' => self::RED] as $kind => $col) {
-            foreach ($a['zones'][$kind] as $k => $z) {
+            foreach ($a['key_levels'][$kind] ?? [] as $k => $z) {
                 if (!$inView($z['mid'])) {
                     continue;
                 }
