@@ -87,4 +87,27 @@ $run('panel: DM notice off', $cb('p:dm', $admin), $open);
 $run('DM analysis, notice off', $dm('تحلیل SOL', 5550011), $open);
 $run('panel: remove channel', $cb('p:channel_clear', $admin), $open);
 $run('DM analysis -> back to DM', $dm('تحلیل BNB', 5550012), $open);
+
+// ---- welcome + editable texts
+$pmUser = function (string $text, int $user, array $entities = []) use (&$uid) {
+    return ['update_id' => $uid++, 'message' => ['message_id' => 700 + $uid, 'from' => ['id' => $user, 'is_bot' => false, 'first_name' => 'Sara'],
+        'chat' => ['id' => $user, 'type' => 'private'], 'text' => $text, 'entities' => $entities]];
+};
+$run('user /start (welcome)', $pmUser('/start', 5550020), $open);
+$run('panel: texts list', $cb('p:texts', $admin), $open);
+$run('panel: edit welcome', $cb('p:text:welcome', $admin), $open);
+// "🔥 خوش آمدی {name}" with a premium emoji (2 UTF-16 units) and bold name part
+$run('admin sends new welcome', $pmUser("🔥 خوش آمدی {name}", $admin, [
+    ['type' => 'custom_emoji', 'offset' => 0, 'length' => 2, 'custom_emoji_id' => '5368324170671202286'],
+    ['type' => 'bold', 'offset' => 3, 'length' => 15],
+]), $open);
+$run('user /start (custom welcome)', $pmUser('/start', 5550021), $open);
+$run('panel: edit caption', $cb('p:text:caption', $admin), $open);
+$cap = "{side_icon} #{base} | {tf}\nورود {entry_low} - {entry_high}\nاستاپ {stop}\nتارگت {tp1}\n{reasons}";
+$run('admin sends caption with quote', $pmUser($cap, $admin, [
+    ['type' => 'bold', 'offset' => 12, 'length' => 7],
+    ['type' => 'blockquote', 'offset' => mb_strlen($cap) - 9, 'length' => 9],
+]), $open);
+$run('DM analysis with custom caption', $dm('تحلیل ADA', 5550022), $open);
+$run('panel: reset caption', $cb('p:text_reset:caption', $admin), $open);
 @unlink($dbFile);

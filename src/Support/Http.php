@@ -25,8 +25,9 @@ final class Http
             CURLOPT_ENCODING => '',
             CURLOPT_CUSTOMREQUEST => $method,
         ]);
-        if (self::$proxy !== '') {
-            curl_setopt($ch, CURLOPT_PROXY, self::$proxy);
+        $proxy = (string) ($options['proxy'] ?? self::$proxy);
+        if ($proxy !== '') {
+            curl_setopt($ch, CURLOPT_PROXY, $proxy);
         }
         if (array_key_exists('json', $options)) {
             curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($options['json'], JSON_UNESCAPED_UNICODE));

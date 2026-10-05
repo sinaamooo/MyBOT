@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App;
 
+use App\Render\Caption;
 use App\Support\Fa;
 use App\Telegram\Client;
+use App\Telegram\Entities;
 
 /**
  * /panel: inline-keyboard settings for admins. Values are stored in the settings
@@ -58,7 +60,11 @@ final class AdminPanel
 
     public function show(array $to, ?int $editId = null, string $view = 'main'): void
     {
-        [$text, $kb] = $view === 'days' ? $this->daysView() : $this->mainView();
+        [$text, $kb] = match ($view) {
+            'days' => $this->daysView(),
+            'texts' => $this->textsView(),
+            default => $this->mainView(),
+        };
         if ($editId !== null) {
             $this->tg->editMessage($to['chat_id'], $editId, $text, $kb);
             return;
@@ -75,6 +81,8 @@ final class AdminPanel
         $gem = self::geminiOn($this->config, $this->db);
         $hasKey = ($this->config['gemini']['api_key'] ?? '') !== '';
         $dm = self::dmNotice($this->db);
+        $log = $this->db->get('admin_log') === 'on';
+        $gemStatus = (string) $this->db->get('gemini_status', '');
         $dayNames = $days ? implode('، ', array_map(static fn ($d) => Fa::weekday($d), array_values(array_filter(self::WEEK, static fn ($d) => in_array($d, $days, true))))) : 'هیچ روزی';
 
         $text = "🛠 <b>پنل مدیریت ربات تحلیل</b>\n\n"
@@ -82,8 +90,10 @@ final class AdminPanel
             . '⚙️ وضعیت ربات: ' . ($paused ? '⏸ متوقف' : '✅ فعال') . "\n"
             . '🎟 سهمیه هر کاربر: ' . Fa::digits((string) $quota) . " تحلیل در هفته\n"
             . '📅 روزهای تحلیل: ' . $dayNames . "\n"
-            . '🧠 Gemini: ' . (!$hasKey ? 'کلید ندارد' : ($gem ? 'روشن' : 'خاموش')) . "\n"
-            . '🔔 اطلاع‌رسانی در دایرکت بعد از انتشار: ' . ($dm ? 'روشن' : 'خاموش');
+            . '🧠 Gemini: ' . (!$hasKey ? 'کلید ندارد' : ($gem ? 'روشن' : 'خاموش'))
+            . ($gem && $gemStatus !== '' ? "\n      └ آخرین وضعیت: <code>" . htmlspecialchars(mb_substr($gemStatus, 0, 160)) . '</code>' : '') . "\n"
+            . '🔔 اطلاع‌رسانی در دایرکت بعد از انتشار: ' . ($dm ? 'روشن' : 'خاموش') . "\n"
+            . '📝 گزارش هر تحلیل برای مدیر: ' . ($log ? 'روشن' : 'خاموش');
 
         $kb = [
             [['text' => $ch ? '📢 تغییر کانال' : '📢 تنظیم کانال', 'callback_data' => 'p:channel']],
@@ -105,10 +115,33 @@ final class AdminPanel
             ['text' => '🔔 اطلاع دایرکت: ' . ($dm ? 'روشن' : 'خاموش'), 'callback_data' => 'p:dm'],
         ];
         $kb[] = [
+            ['text' => '✏️ ویرایش متن‌ها و کپشن', 'callback_data' => 'p:texts'],
+            ['text' => '📝 گزارش مدیر: ' . ($log ? 'روشن' : 'خاموش'), 'callback_data' => 'p:log'],
+        ];
+        $kb[] = [
             ['text' => '📊 آمار', 'callback_data' => 'p:stats'],
             ['text' => '🔄 بروزرسانی', 'callback_data' => 'p:refresh'],
         ];
         return [$text, $kb];
+    }
+
+    private function textsView(): array
+    {
+        $texts = new Texts($this->db);
+        $kb = [];
+        $row = [];
+        foreach (Texts::DEFS as $key => $def) {
+            $row[] = ['text' => ($texts->isCustom($key) ? '✏️ ' : '') . $def['title'], 'callback_data' => 'p:text:' . $key];
+            if (count($row) === 2) {
+                $kb[] = $row;
+                $row = [];
+            }
+        }
+        if ($row) {
+            $kb[] = $row;
+        }
+        $kb[] = [['text' => '↩️ بازگشت', 'callback_data' => 'p:back']];
+        return ["✏️ <b>ویرایش متن‌های ربات</b>\n\nمتنی را که می‌خواهید تغییر دهید انتخاب کنید. متن‌هایی که ✏️ دارند قبلاً ویرایش شده‌اند.\n\nدر متن جدید می‌توانید از <b>بولد</b>، <i>ایتالیک</i>، نقل‌قول (Quote)، اسپویلر، لینک و ایموجی پریمیوم استفاده کنید.", $kb];
     }
 
     private function daysView(): array
@@ -155,6 +188,31 @@ final class AdminPanel
                     . "• یا یک پیام از کانال را همین‌جا فوروارد کنید.\n\n"
                     . 'برای لغو: /cancel');
                 return;
+            case 'texts':
+                $view = 'texts';
+                break;
+            case 'log':
+                $this->db->set('admin_log', $this->db->get('admin_log') === 'on' ? null : 'on');
+                break;
+            case 'text':
+                $key = (string) ($parts[2] ?? '');
+                if (!isset(Texts::DEFS[$key])) {
+                    break;
+                }
+                $this->tg->answerCallback($cq['id']);
+                $this->startTextEdit($to, (int) $cq['from']['id'], $key);
+                return;
+            case 'text_reset':
+                $key = (string) ($parts[2] ?? '');
+                if (isset(Texts::DEFS[$key])) {
+                    (new Texts($this->db))->set($key, null);
+                    $this->db->set('admin_state_' . $cq['from']['id'], null);
+                    $this->tg->answerCallback($cq['id'], 'متن پیش‌فرض برگشت');
+                    $this->tg->sendMessage($to, '♻️ متن «' . Texts::DEFS[$key]['title'] . '» به حالت پیش‌فرض برگشت.');
+                    $this->show($to, null, 'texts');
+                    return;
+                }
+                break;
             case 'channel_clear':
                 $this->db->set('channel', null);
                 $toast = 'کانال حذف شد';
@@ -208,13 +266,71 @@ final class AdminPanel
         }
     }
 
+    private function startTextEdit(array $to, int $adminId, string $key): void
+    {
+        $def = Texts::DEFS[$key];
+        $texts = new Texts($this->db);
+        $this->db->set('admin_state_' . $adminId, 'edit_text:' . $key);
+        $info = '✏️ <b>ویرایش: ' . $def['title'] . "</b>\n\n"
+            . (!empty($def['plain'])
+                ? "متن جدید را بفرستید (فقط متن ساده).\n"
+                : "متن جدید را با همان قالب‌بندی دلخواه بفرستید؛ بولد، نقل‌قول، لینک و ایموجی پریمیوم حفظ می‌شوند.\n"
+                    . "پیشنهاد: پیام بعدی (متن فعلی) را کپی کنید، تغییر دهید و بفرستید.\n")
+            . ($def['vars'] !== '' ? "\n🔤 متغیرها (عیناً بنویسید):\n<code>" . htmlspecialchars($def['vars']) . "</code>\n" : '')
+            . ($key === 'caption' ? "\nℹ️ {summary} = خلاصه و ابطال Gemini، {reasons} = لیست دلایل، {liquidity} = نقدینگی. کپشن عکس حداکثر ۱۰۲۴ کاراکتر است.\n" : '')
+            . "\nبرای لغو: /cancel";
+        $this->tg->sendMessage($to, $info, ['reply_markup' => ['inline_keyboard' => [[
+            ['text' => '♻️ بازگردانی متن پیش‌فرض', 'callback_data' => 'p:text_reset:' . $key],
+        ]]]]);
+        $current = $texts->get($key);
+        if ($this->tg->sendMessage($to, !empty($def['plain']) ? htmlspecialchars($current) : $current) === null) {
+            $this->tg->sendMessage($to, '<pre>' . htmlspecialchars($current) . '</pre>');
+        }
+    }
+
+    private function finishTextEdit(array $to, array $msg, string $stateKey, string $key): void
+    {
+        $def = Texts::DEFS[$key];
+        $raw = (string) ($msg['text'] ?? $msg['caption'] ?? '');
+        if (trim($raw) === '') {
+            $this->tg->sendMessage($to, 'متن خالی است. متن جدید را بفرستید یا /cancel');
+            return;
+        }
+        $texts = new Texts($this->db);
+        $old = $this->db->get('text_' . $key);
+        if (!empty($def['plain'])) {
+            $new = trim($raw);
+        } else {
+            $new = Entities::toHtml($raw, $msg['entities'] ?? $msg['caption_entities'] ?? []);
+        }
+        $texts->set($key, $new);
+
+        $preview = !empty($def['plain']) ? htmlspecialchars($new) : Texts::fill($new, Texts::sampleVars());
+        $note = '';
+        if ($key === 'caption') {
+            $len = Caption::length($preview);
+            $note = "\n\n📏 طول کپشن با داده نمونه: " . Fa::digits((string) $len) . ' از ۱۰۲۴'
+                . ($len > 1024 ? ' ⚠️ (طولانی است؛ بخش‌های اختیاری حذف می‌شوند یا متن جدا ارسال می‌شود)' : '');
+        }
+        $this->tg->sendMessage($to, '👁 <b>پیش‌نمایش با داده نمونه:</b>');
+        if ($this->tg->sendMessage($to, $preview) === null) {
+            $texts->set($key, $old);
+            $this->tg->sendMessage($to, '❌ تلگرام این قالب را نپذیرفت و ذخیره نشد. دوباره بفرستید یا /cancel');
+            return;
+        }
+        $this->db->set($stateKey, null);
+        $this->tg->sendMessage($to, '✅ متن «' . $def['title'] . '» ذخیره شد.' . $note);
+        $this->show($to, null, 'texts');
+    }
+
     /**
      * Handles the admin's reply while the panel waits for input. Returns true if consumed.
      */
     public function handleState(array $to, array $msg): bool
     {
         $key = 'admin_state_' . $msg['from']['id'];
-        if ($this->db->get($key) !== 'await_channel') {
+        $state = (string) $this->db->get($key, '');
+        if ($state === '') {
             return false;
         }
         $text = trim((string) ($msg['text'] ?? ''));
@@ -223,6 +339,24 @@ final class AdminPanel
             $this->tg->sendMessage($to, 'لغو شد.');
             $this->show($to);
             return true;
+        }
+        if (str_starts_with($text, '/')) {
+            // Any other command leaves the input mode and runs normally.
+            $this->db->set($key, null);
+            return false;
+        }
+        if (str_starts_with($state, 'edit_text:')) {
+            $textKey = substr($state, 10);
+            if (!isset(Texts::DEFS[$textKey])) {
+                $this->db->set($key, null);
+                return false;
+            }
+            $this->finishTextEdit($to, $msg, $key, $textKey);
+            return true;
+        }
+        if ($state !== 'await_channel') {
+            $this->db->set($key, null);
+            return false;
         }
 
         // A forwarded channel post, @username, t.me link or numeric id

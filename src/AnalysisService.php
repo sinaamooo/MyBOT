@@ -7,65 +7,61 @@ namespace App;
 use App\Ai\Gemini;
 use App\Analysis\Analyzer;
 use App\Market\MarketData;
-use App\Market\News;
 use App\Render\Caption;
 use App\Render\Card;
 
 /**
  * Full pipeline for one request:
- * engine analysis -> news -> Gemini review (sees numbers + chart) -> validation -> final chart + caption.
+ * engine analysis -> Gemini review (sees numbers + chart) -> validation -> final chart + caption.
  */
 final class AnalysisService
 {
     private MarketData $market;
     private Analyzer $analyzer;
-    private News $news;
     private Gemini $gemini;
     private Card $card;
     private string $outDir;
+    private Texts $texts;
 
-    public function __construct(private array $config, private string $brainNotes = '')
+    /** Result of the last Gemini call: 'ok', 'off' or an error message. */
+    public string $aiStatus = 'off';
+
+    public function __construct(private array $config, private string $brainNotes = '', ?Texts $texts = null)
     {
         $this->market = new MarketData($config['market'] ?? [], app_storage('cache'));
-        $brain = app_brain();
-        $this->analyzer = new Analyzer($this->market, $brain, APP_ROOT . '/brain/indicators');
-        $this->news = new News($config['news'] ?? [], app_storage('cache'));
-        $this->gemini = new Gemini((string) ($config['gemini']['api_key'] ?? ''), $config['gemini']['model'] ?? 'gemini-3.5-flash');
+        $this->analyzer = new Analyzer($this->market, app_brain(), APP_ROOT . '/brain/indicators');
+        $this->gemini = new Gemini((string) ($config['gemini']['api_key'] ?? ''), $config['gemini']['model'] ?? 'gemini-3.5-flash', (string) ($config['gemini']['proxy'] ?? ''));
         $this->card = new Card($config['brand'] ?? []);
         $this->outDir = app_storage('out');
+        $this->texts = $texts ?? new Texts(new Storage(app_storage() . '/bot.sqlite'));
     }
 
     /**
-     * @return array{image: string, caption: string, extra: string, analysis: array, news: array}
+     * @return array{image: string, caption: string, extra: string, analysis: array}
      */
     public function analyze(string $base, string $tf): array
     {
         $a = $this->analyzer->run($base, $tf);
-        $news = $this->news->forCoin($a['base']);
         $a['ai'] = ['used' => false];
+        $a['exchange_label'] = trim(strip_tags($this->texts->get('exchange_label'))) ?: 'OURBIT';
 
         if ($this->gemini->enabled()) {
             $draft = $this->outDir . '/draft_' . $a['symbol'] . '_' . getmypid() . '.jpg';
             $this->card->render($a, $draft, false);
-            $ai = $this->gemini->analyze($this->facts($a), $this->candles($a), $draft, $news, $this->brainNotes);
+            $ai = $this->gemini->analyze($this->facts($a), $this->candles($a), $draft, $this->brainNotes);
             @unlink($draft);
+            $this->aiStatus = $ai !== null ? 'ok' : ($this->gemini->lastError ?: 'unknown error');
             if ($ai !== null) {
                 $a = $this->mergeAi($a, $ai);
-                foreach ($ai['news'] ?? [] as $k => $item) {
-                    if (isset($news[$k])) {
-                        $news[$k]['title_fa'] = (string) ($item['title_fa'] ?? '');
-                        $news[$k]['sentiment'] = (string) ($item['sentiment'] ?? 'neutral');
-                    }
-                }
             }
         }
 
         $image = $this->outDir . '/' . $a['symbol'] . '_' . $a['timeframe'] . '_' . date('Ymd_His') . '.png';
         $this->card->render($a, $image);
         $this->cleanup();
-        [$caption, $extra] = Caption::build($a, $news, $this->config['brand'] ?? []);
+        [$caption, $extra] = Caption::build($a, $this->texts);
 
-        return ['image' => $image, 'caption' => $caption, 'extra' => $extra, 'analysis' => $a, 'news' => $news];
+        return ['image' => $image, 'caption' => $caption, 'extra' => $extra, 'analysis' => $a];
     }
 
     /**

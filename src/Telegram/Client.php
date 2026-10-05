@@ -64,20 +64,31 @@ final class Client
 
     public function sendMessage(array $to, string $html, array $extra = []): ?array
     {
-        return $this->call('sendMessage', self::target($to) + [
-            'text' => $html,
+        $send = fn (string $text) => $this->call('sendMessage', self::target($to) + [
+            'text' => $text,
             'parse_mode' => 'HTML',
             'link_preview_options' => ['is_disabled' => true],
         ] + $extra);
+        $res = $send($html);
+        if ($res === null && str_contains($html, '<tg-emoji')) {
+            // Premium emoji need a Premium bot owner; fall back to the plain emoji.
+            $res = $send(Entities::stripCustomEmoji($html));
+        }
+        return $res;
     }
 
     public function sendPhoto(array $to, string $path, string $caption, array $extra = []): ?array
     {
-        return $this->call('sendPhoto', self::target($to) + [
+        $send = fn (string $text) => $this->call('sendPhoto', self::target($to) + [
             'photo' => $this->dryRun ? $path : new CURLFile($path, 'image/png', basename($path)),
-            'caption' => $caption,
+            'caption' => $text,
             'parse_mode' => 'HTML',
         ] + $extra);
+        $res = $send($caption);
+        if ($res === null && str_contains($caption, '<tg-emoji')) {
+            $res = $send(Entities::stripCustomEmoji($caption));
+        }
+        return $res;
     }
 
     /** The bot's own user id is the part of the token before the colon. */
@@ -92,7 +103,12 @@ final class Client
         if ($keyboard !== null) {
             $p['reply_markup'] = ['inline_keyboard' => $keyboard];
         }
-        return $this->call('editMessageText', $p);
+        $res = $this->call('editMessageText', $p);
+        if ($res === null && str_contains($html, '<tg-emoji')) {
+            $p['text'] = Entities::stripCustomEmoji($html);
+            $res = $this->call('editMessageText', $p);
+        }
+        return $res;
     }
 
     public function answerCallback(string $id, string $text = ''): void

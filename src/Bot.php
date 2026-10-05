@@ -18,11 +18,13 @@ final class Bot
 {
     private Client $tg;
     private Storage $db;
+    private Texts $texts;
 
     public function __construct(private array $config, ?Client $client = null, ?Storage $storage = null)
     {
         $this->tg = $client ?? new Client((string) $config['bot_token']);
         $this->db = $storage ?? new Storage(app_storage() . '/bot.sqlite');
+        $this->texts = new Texts($this->db);
     }
 
     public function handle(array $update): void
@@ -87,7 +89,11 @@ final class Bot
     private function userMessage(array $to, array $from, string $text, bool $isPrivate, bool $isAdmin): void
     {
         $lower = mb_strtolower($text);
-        if ($text === '/start' || $text === '/help' || str_contains($lower, 'راهنما')) {
+        if (str_starts_with($text, '/start') || $text === 'شروع') {
+            $this->tg->sendMessage($to, $this->texts->render('welcome', ['name' => htmlspecialchars((string) ($from['first_name'] ?? ''))]));
+            return;
+        }
+        if ($text === '/help' || str_contains($lower, 'راهنما')) {
             $this->tg->sendMessage($to, $this->helpText());
             return;
         }
@@ -99,7 +105,7 @@ final class Bot
         $req = SymbolParser::parse($text);
         if ($req === null) {
             if ($isPrivate) {
-                $this->tg->sendMessage($to, 'برای تحلیل بنویسید مثلاً: <b>تحلیل BTC</b> یا <b>تحلیل ETH 1h</b>' . "\n" . 'راهنما: /help');
+                $this->tg->sendMessage($to, $this->texts->render('private_hint'));
             }
             // In channel DMs, anything that is not an analysis request is left for the admin.
             return;
@@ -110,7 +116,7 @@ final class Bot
             return;
         }
         if ($this->db->get('paused') === '1' && !$isAdmin) {
-            $this->tg->sendMessage($to, '⏸ ربات تحلیل موقتاً غیرفعال است. لطفاً بعداً دوباره پیام بدهید.');
+            $this->tg->sendMessage($to, $this->texts->render('paused'));
             return;
         }
         if (!$isAdmin && !$this->isAnalysisDay()) {
@@ -139,17 +145,23 @@ final class Bot
             return;
         }
 
-        $wait = $this->tg->sendMessage($to, '⏳ در حال تحلیل <b>' . htmlspecialchars($base) . '</b> در تایم ' . Fa::tf($tf) . '…' . "\n" . 'بررسی ساختار، اوردر بلاک‌ها و نقدینگی کمی زمان می‌برد.');
+        $wait = $this->tg->sendMessage($to, $this->texts->render('waiting', ['symbol' => htmlspecialchars($base), 'tf' => Fa::tf($tf)]));
         $ok = false;
         try {
             $config = $this->config;
             if (!AdminPanel::geminiOn($config, $this->db)) {
                 $config['gemini']['api_key'] = '';
             }
-            $service = new AnalysisService($config, (string) $this->db->get('brain_notes', ''));
+            $service = new AnalysisService($config, (string) $this->db->get('brain_notes', ''), $this->texts);
             $result = $service->analyze($base, $tf);
-            $remaining = $unlimited ? null : max(0, $limit + (int) ($this->db->user($userId)['bonus'] ?? 0) - $this->db->used($userId, $period));
-            $remainingNote = $remaining !== null ? '🎟 تحلیل باقی‌مانده شما در این هفته: ' . Fa::digits((string) $remaining) : '';
+            if ($config['gemini']['api_key'] !== '') {
+                $this->db->set('gemini_status', date('Y-m-d H:i') . ' | ' . $service->aiStatus);
+            }
+            $userLimit = $limit + (int) ($this->db->user($userId)['bonus'] ?? 0);
+            $remaining = $unlimited ? null : max(0, $userLimit - $this->db->used($userId, $period));
+            $remainingNote = $remaining !== null
+                ? $this->texts->render('quota_left', ['left' => Fa::digits((string) $remaining), 'limit' => Fa::digits((string) $userLimit)])
+                : '';
 
             $channel = $publish ? AdminPanel::channel($this->db) : null;
             if ($channel !== null) {
@@ -158,9 +170,12 @@ final class Bot
                     $ok = true;
                     if (AdminPanel::dmNotice($this->db)) {
                         $link = $this->postLink($channel, (int) ($post['message_id'] ?? 0));
-                        $this->tg->sendMessage($to, '✅ تحلیل <b>' . htmlspecialchars($base) . '</b> (' . Fa::tf($tf) . ') انجام شد و در کانال منتشر شد.'
-                            . ($link !== '' ? "\n👈 <a href=\"{$link}\">مشاهده تحلیل</a>" : '')
-                            . ($remainingNote !== '' ? "\n" . $remainingNote : ''));
+                        $this->tg->sendMessage($to, $this->texts->render('published', [
+                            'symbol' => htmlspecialchars($base),
+                            'tf' => Fa::tf($tf),
+                            'post_link' => $link !== '' ? '<a href="' . htmlspecialchars($link) . '">مشاهده تحلیل</a>' : '',
+                            'remaining' => $remaining !== null ? Fa::digits((string) $remaining) : '∞',
+                        ]));
                     }
                 } else {
                     $this->notifyAdmins('⚠️ ارسال تحلیل به کانال <b>' . htmlspecialchars((string) $channel['title']) . '</b> ناموفق بود؛ تحلیل در دایرکت کاربر ارسال شد. دسترسی ادمین ربات در کانال را بررسی کنید (/panel).');
@@ -170,8 +185,8 @@ final class Bot
                 $caption = $result['caption'];
                 $extra = $result['extra'];
                 if ($remainingNote !== '') {
-                    if (Render\Caption::length($caption . "\n" . $remainingNote) <= 1024) {
-                        $caption .= "\n" . $remainingNote;
+                    if ($caption !== '' && Render\Caption::length($caption . "\n\n" . $remainingNote) <= 1024) {
+                        $caption .= "\n\n" . $remainingNote;
                     } else {
                         $extra = trim($extra . "\n\n" . $remainingNote);
                     }
@@ -182,13 +197,13 @@ final class Bot
                 $this->adminLog($from, $result);
             }
         } catch (SymbolNotFound $e) {
-            $this->tg->sendMessage($to, '❓ ارز <b>' . htmlspecialchars($base) . '</b> در صرافی‌ها پیدا نشد. نماد را بررسی کنید (مثلاً BTC، ETH، SOL).');
+            $this->tg->sendMessage($to, $this->texts->render('not_found', ['symbol' => htmlspecialchars($base)]));
         } catch (MarketUnavailable $e) {
-            $this->tg->sendMessage($to, '⚠️ دریافت داده بازار با مشکل مواجه شد. چند دقیقه دیگر دوباره امتحان کنید.');
+            $this->tg->sendMessage($to, $this->texts->render('error'));
             app_log('market unavailable: ' . $e->getMessage());
         } catch (\Throwable $e) {
             app_log('analysis failed: ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
-            $this->tg->sendMessage($to, '⚠️ در انجام تحلیل خطایی رخ داد. لطفاً دوباره امتحان کنید.');
+            $this->tg->sendMessage($to, $this->texts->render('error'));
         } finally {
             // Failed analyses do not use up the quota.
             $this->db->finish($usageId, $ok);
@@ -202,9 +217,9 @@ final class Bot
     private function deliver(array $to, string $image, string $caption, string $extra): ?array
     {
         $sent = $this->tg->sendPhoto($to, $image, $caption);
-        if ($sent === null) {
+        if ($sent === null && $caption !== '') {
             // Retry without HTML in case the formatting was rejected
-            $sent = $this->tg->sendPhoto($to, $image, strip_tags($caption));
+            $sent = $this->tg->sendPhoto($to, $image, html_entity_decode(strip_tags($caption), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
         }
         if ($sent !== null && $extra !== '') {
             $this->tg->sendMessage(['chat_id' => $to['chat_id'], 'topic_id' => $to['topic_id'] ?? null, 'reply_to' => $sent['message_id'] ?? null], $extra);
@@ -347,6 +362,13 @@ final class Bot
                 $this->tg->sendMessage($to, "🧠 به مغز ربات اضافه شد. از تحلیل بعدی Gemini این دستورالعمل را رعایت می‌کند.");
                 return;
 
+            case '/logs':
+                $file = app_storage('logs') . '/bot-' . date('Y-m-d') . '.log';
+                $lines = is_file($file) ? array_slice(file($file, FILE_IGNORE_NEW_LINES) ?: [], -25) : [];
+                $body = $lines ? implode("\n", $lines) : '(امروز خطایی ثبت نشده)';
+                $this->tg->sendMessage($to, "🧾 <b>آخرین لاگ‌های امروز</b>\n<pre>" . htmlspecialchars(mb_substr($body, -3500)) . '</pre>');
+                return;
+
             case '/brain_clear':
                 $this->db->set('brain_notes', null);
                 $this->tg->sendMessage($to, '🧠 دستورالعمل‌های مغز ربات پاک شد.');
@@ -357,7 +379,7 @@ final class Bot
 
     private function adminLog(array $from, array $result): void
     {
-        if (empty($this->config['admin_log'])) {
+        if ($this->db->get('admin_log') !== 'on') {
             return;
         }
         $a = $result['analysis'];
@@ -408,46 +430,35 @@ final class Bot
         $days = AdminPanel::days($this->config, $this->db);
         $today = (int) date('w');
         if (!$days) {
-            return '⏰ تحلیل در حال حاضر غیرفعال است.';
+            return $this->texts->render('paused');
         }
         $wait = 7;
         foreach ($days as $d) {
             $wait = min($wait, ($d - $today + 7) % 7 ?: 7);
         }
-        return '⏰ تحلیل ارزها فقط روزهای <b>' . $this->dayNames() . '</b> انجام می‌شود.'
-            . "\n" . 'روز تحلیل بعدی: ' . Fa::weekday(($today + $wait) % 7) . ' (' . Fa::digits((string) $wait) . ' روز دیگر)'
-            . "\n" . 'همان روز پیام بدهید، مثلاً: <b>تحلیل BTC</b>';
+        return $this->texts->render('closed', [
+            'days' => $this->dayNames(),
+            'next_day' => Fa::weekday(($today + $wait) % 7),
+            'wait' => Fa::digits((string) $wait),
+        ]);
     }
 
     private function quotaText(int $userId, bool $exhausted = false): string
     {
         $limit = AdminPanel::quota($this->config, $this->db) + (int) ($this->db->user($userId)['bonus'] ?? 0);
-        $used = $this->db->used($userId, $this->periodKey());
-        $left = max(0, $limit - $used);
-        $period = match ($this->config['quota_period'] ?? 'week') {
-            'day' => 'امروز',
-            'lifetime' => '',
-            default => 'این هفته',
-        };
-        if ($exhausted) {
-            return '🎟 سهمیه تحلیل شما ' . $period . ' تمام شده است (' . Fa::digits((string) $limit) . ' تحلیل).'
-                . (($this->config['quota_period'] ?? 'week') === 'week' ? "\n" . 'از شنبه آینده دوباره می‌توانید درخواست بدهید.' : '');
-        }
-        return '🎟 ' . trim($period . ' ' . Fa::digits((string) $left) . ' تحلیل دیگر می‌توانید بگیرید') . ' (از ' . Fa::digits((string) $limit) . ').';
+        $left = max(0, $limit - $this->db->used($userId, $this->periodKey()));
+        return $this->texts->render($exhausted ? 'quota_done' : 'quota_left', [
+            'left' => Fa::digits((string) $left),
+            'limit' => Fa::digits((string) $limit),
+        ]);
     }
 
     private function helpText(): string
     {
-        $q = Fa::digits((string) AdminPanel::quota($this->config, $this->db));
-        return "🤖 <b>ربات تحلیلگر</b>\n\n"
-            . "برای دریافت تحلیل، نام ارز را بفرستید:\n"
-            . "• <code>تحلیل BTC</code>\n"
-            . "• <code>تحلیل ETH 1h</code>\n"
-            . "• <code>تحلیل سولانا روزانه</code>\n\n"
-            . "تایم‌فریم‌ها: 15m، 30m، 1h، 4h (پیش‌فرض)، 1d، 1w\n"
-            . '📅 روزهای تحلیل: ' . $this->dayNames() . "\n"
-            . "🎟 سهمیه هر کاربر: {$q} تحلیل در هفته\n"
-            . "برای دیدن سهمیه بنویسید: <code>سهمیه</code>";
+        return $this->texts->render('help', [
+            'days' => $this->dayNames(),
+            'quota' => Fa::digits((string) AdminPanel::quota($this->config, $this->db)),
+        ]);
     }
 
     private function adminHelp(): string
@@ -462,6 +473,7 @@ final class Bot
             . "<code>/ban 123</code> / <code>/unban 123</code>\n"
             . "<code>/off</code> / <code>/on</code> توقف و فعال‌سازی ربات\n"
             . "<code>/brain متن</code> آموزش سبک تحلیل به Gemini\n"
-            . "<code>/brain</code> نمایش آموزش‌ها، <code>/brain_clear</code> پاک کردن";
+            . "<code>/brain</code> نمایش آموزش‌ها، <code>/brain_clear</code> پاک کردن\n"
+            . "<code>/logs</code> آخرین لاگ‌ها (برای عیب‌یابی)";
     }
 }

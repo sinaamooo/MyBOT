@@ -96,7 +96,7 @@ final class Card
         $chipY = $y + 58;
         $cx2 = $x;
         $cx2 += $c->pill($cx2, $chipY, strtoupper($a['timeframe']), 12, $c->color(self::TEXT), $c->color('#FFFFFF', 0.14), 'Bold', 'left', 12, 28) + 8;
-        $cx2 += $c->pill($cx2, $chipY, strtoupper($a['source']), 12, $c->color(self::TEXT_2), $c->color('#FFFFFF', 0.07), 'Bold', 'left', 12, 28) + 8;
+        $cx2 += $c->pill($cx2, $chipY, strtoupper($a['exchange_label'] ?? 'OURBIT'), 12, $c->color(self::TEXT_2), $c->color('#FFFFFF', 0.07), 'Bold', 'left', 12, 28) + 8;
         $c->pill($cx2, $chipY, Fa::jalaliDate($a['time']), 12, $c->color(self::TEXT_2), $c->color('#FFFFFF', 0.07), 'Medium', 'left', 12, 28);
 
         // price + change
@@ -156,7 +156,7 @@ final class Card
         $inView = static fn (float $p) => $p >= $lo && $p <= $hi;
 
         // source
-        $c->text($M + $pw - 22, $y + 36, $a['symbol'] . ' · ' . strtoupper($a['timeframe']) . ' · ' . strtoupper($a['source']), 12, $c->color(self::MUTED), 'Bold', 'right');
+        $c->text($M + $pw - 22, $y + 36, $a['symbol'] . ' · ' . strtoupper($a['timeframe']) . ' · ' . strtoupper($a['exchange_label'] ?? 'OURBIT'), 12, $c->color(self::MUTED), 'Bold', 'right');
 
         // grid + axis labels on round numbers
         $gridCol = $c->color('#FFFFFF', 0.05);

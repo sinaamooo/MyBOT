@@ -15,10 +15,13 @@ final class Gemini
 {
     private array $models;
 
+    /** Short description of why the last call returned null ('' after a success). */
+    public string $lastError = '';
+
     /** Tried after the configured model when it is overloaded or unavailable. */
     private const FALLBACK = ['gemini-3.5-flash', 'gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.1-flash-lite'];
 
-    public function __construct(private string $apiKey, string|array $model = 'gemini-3.5-flash')
+    public function __construct(private string $apiKey, string|array $model = 'gemini-3.5-flash', private string $proxy = '')
     {
         $this->models = array_values(array_unique(array_filter(array_merge((array) $model, self::FALLBACK))));
     }
@@ -34,12 +37,13 @@ final class Gemini
      * @param string|null $image path to a chart image (JPEG/PNG)
      * @return array|null decoded JSON following the schema below
      */
-    public function analyze(array $facts, array $candles, ?string $image, array $news, string $brainNotes = ''): ?array
+    public function analyze(array $facts, array $candles, ?string $image, string $brainNotes = ''): ?array
     {
+        $this->lastError = '';
         if (!$this->enabled()) {
+            $this->lastError = 'no api key';
             return null;
         }
-        $headlines = array_map(static fn ($n) => $n['title'], array_slice($news, 0, 4));
 
         $prompt = <<<TXT
 تو یک تحلیلگر ارشد و محتاط بازار کریپتو هستی که به سبک پرایس اکشن و اسمارت مانی (SMC) تحلیل می‌کنی و برای یک کانال تلگرام فارسی می‌نویسی.
@@ -62,7 +66,6 @@ final class Gemini
 - summary: حداکثر ۲ جمله (حداکثر ۲۲۰ کاراکتر)، سناریوی اصلی.
 - invalidation: یک جمله کوتاه درباره شرط ابطال سناریو با ذکر قیمت.
 - reasons: ۴ یا ۵ دلیل کوتاه (هر کدام حداکثر ۷۵ کاراکتر) که از داده‌ها می‌آیند.
-- news: هر تیتر خبری را کوتاه به فارسی ترجمه کن و اثرش روی این ارز را positive/negative/neutral بگذار.
 بدون اغراق و بدون وعده سود بنویس.
 TXT;
         if ($brainNotes !== '') {
@@ -72,7 +75,6 @@ TXT;
         foreach ($candles as $tf => $rows) {
             $prompt .= "\n\nکندل‌های {$tf}:\n" . json_encode($rows);
         }
-        $prompt .= "\n\nتیترهای خبری:\n" . ($headlines ? '- ' . implode("\n- ", $headlines) : '(خبری نیست)');
 
         $parts = [['text' => $prompt]];
         if ($image !== null && is_file($image)) {
@@ -93,16 +95,8 @@ TXT;
                 'summary' => ['type' => 'STRING'],
                 'invalidation' => ['type' => 'STRING'],
                 'reasons' => ['type' => 'ARRAY', 'items' => ['type' => 'STRING']],
-                'news' => ['type' => 'ARRAY', 'items' => [
-                    'type' => 'OBJECT',
-                    'properties' => [
-                        'title_fa' => ['type' => 'STRING'],
-                        'sentiment' => ['type' => 'STRING', 'enum' => ['positive', 'negative', 'neutral']],
-                    ],
-                    'required' => ['title_fa', 'sentiment'],
-                ]],
             ],
-            'required' => ['side', 'confidence', 'entry_low', 'entry_high', 'stop', 'targets', 'summary', 'invalidation', 'reasons', 'news'],
+            'required' => ['side', 'confidence', 'entry_low', 'entry_high', 'stop', 'targets', 'summary', 'invalidation', 'reasons'],
         ];
 
         $body = [
@@ -122,13 +116,14 @@ TXT;
                 $left = $deadline - time();
                 if ($left < 15) {
                     app_log('gemini: time budget exhausted');
+                    $this->lastError = trim($this->lastError . ' | time budget exhausted', ' |');
                     return null;
                 }
                 $res = Http::request('POST', "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent", [
                     'headers' => ['x-goog-api-key: ' . $this->apiKey],
                     'json' => $body,
                     'timeout' => min(75, $left),
-                ]);
+                ] + ($this->proxy !== '' ? ['proxy' => $this->proxy] : []));
                 // Overloaded / rate limited: wait a moment and retry once before the next model.
                 if (!in_array($res['status'], [429, 500, 503], true)) {
                     break;
@@ -137,6 +132,8 @@ TXT;
             }
             if ($res['status'] !== 200) {
                 app_log("gemini {$model} HTTP {$res['status']}: " . substr($res['body'], 0, 300) . $res['error']);
+                $msg = json_decode($res['body'], true)['error']['message'] ?? ($res['error'] ?: 'no response');
+                $this->lastError = "{$model}: HTTP {$res['status']} " . mb_substr((string) $msg, 0, 160);
                 continue;
             }
             $data = json_decode($res['body'], true);
@@ -153,6 +150,7 @@ TXT;
                 return $out;
             }
             app_log("gemini {$model} unparsable output: " . substr($text, 0, 300));
+            $this->lastError = "{$model}: unparsable output";
         }
         return null;
     }

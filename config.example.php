@@ -31,9 +31,6 @@ return [
     // Also answer in a private chat with the bot (not only in the channel's direct messages)
     'allow_private_chat' => true,
 
-    // Send admins a short log line after each analysis
-    'admin_log' => true,
-
     'brand' => [
         'name' => '',
         // Shown at the end of the caption (leave empty to hide), e.g. '@yourchannel'
@@ -50,19 +47,11 @@ return [
         'demo' => false,
     ],
 
-    'news' => [
-        'enabled' => true,
-        'max_age_hours' => 72,
-        'feeds' => [
-            'https://cointelegraph.com/rss',
-            'https://www.coindesk.com/arc/outboundfeeds/rss/',
-            'https://decrypt.co/feed',
-        ],
-    ],
-
-    // Optional: Google Gemini writes the Persian commentary and translates the news
+    // Google Gemini reviews each analysis and writes the Persian summary and reasons
     'gemini' => [
         'api_key' => '',
         'model' => 'gemini-3.5-flash',
+        // Optional proxy only for Gemini (e.g. if Google says "User location is not supported")
+        'proxy' => '',
     ],
 ];
