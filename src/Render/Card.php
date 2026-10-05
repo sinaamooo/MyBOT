@@ -184,11 +184,6 @@ final class Card
             $c->text($bx($i), $y1 + 30, Fa::digits($jd . ' ' . $months[$jm - 1]), 11, $c->color(self::MUTED), 'Medium', 'center');
         }
 
-        // future zone
-        $c->rect($nowX + $step * 0.5, $y0 - 8, $x1, $y1, $c->color('#FFFFFF', 0.03));
-        $c->dashed($nowX + $step * 0.5, $y0 - 8, $nowX + $step * 0.5, $y1, $c->color('#FFFFFF', 0.25), 1.2, 4, 5);
-        $c->text($x1 - 8, $y0 + 8, 'سناریوی احتمالی', 11, $c->color(self::TEXT_2), 'Bold', 'right');
-
         // labels drawn last so candles never cover them
         $edge = [];   // right edge of the plot, stacked without overlap
         $free = [];   // fixed positions
@@ -216,11 +211,11 @@ final class Card
             }
             $col = self::OB;
             $ox = $ob['i'] >= $start ? $bx($ob['i']) - $step / 2 : $x0;
-            $oxEnd = min($ox + 22 * $step, $nowX + $step * 6);
+            $oxEnd = max($ox + 8 * $step, min($ox + 22 * $step, $nowX));
             $my = $py($mid);
             $c->dashed($ox, $my, $oxEnd, $my, $c->color($col), 2, 9, 5);
             $c->circle($ox, $my, 3, $c->color($col));
-            $free[] = ['x' => $oxEnd + 4, 'y' => $my - 9, 'text' => '50% OB', 'fg' => $c->color('#001A26'), 'bg' => $c->color($col, 0.95), 'h' => 18, 'size' => 9];
+            $free[] = ['x' => $oxEnd, 'y' => $my - 21, 'align' => 'right', 'text' => '50% OB', 'fg' => $c->color('#001A26'), 'bg' => $c->color($col, 0.95), 'h' => 18, 'size' => 9];
         }
 
         // liquidity
@@ -302,7 +297,7 @@ final class Card
         }
 
         foreach ($free as $l) {
-            $c->pill($l['x'], $l['y'], $l['text'], $l['size'] ?? 10, $l['fg'], $l['bg'], 'Bold', 'left', 8, $l['h'] ?? 20);
+            $c->pill($l['x'], $l['y'], $l['text'], $l['size'] ?? 10, $l['fg'], $l['bg'], 'Bold', $l['align'] ?? 'left', 8, $l['h'] ?? 20);
         }
         usort($edge, static fn ($p, $q) => $p['y'] <=> $q['y']);
         $prev = -INF;
