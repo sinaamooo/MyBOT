@@ -975,14 +975,14 @@ final class CardConfig
         return (string) (self::env('CARD_BRAND', 'AUTO TRADE MARKET') ?? 'AUTO TRADE MARKET');
     }
 
-    // 'neo' (default) or 'classic' — the original glass design, kept as a backup.
+    // 'glass' (default, symbol only), 'orange' (full details), 'neo' or 'classic' (the original glass design).
     public static function style(): string
     {
         if (class_exists('Config')) {
             return Config::cardStyle();
         }
-        $style = strtolower((string) self::env('CARD_STYLE', 'orange'));
-        return in_array($style, ['orange', 'neo', 'classic'], true) ? $style : 'orange';
+        $style = strtolower((string) self::env('CARD_STYLE', 'glass'));
+        return in_array($style, ['glass', 'orange', 'neo', 'classic'], true) ? $style : 'glass';
     }
 }
 
@@ -1204,6 +1204,9 @@ final class SignalCard
         }
 
         try {
+            if (CardConfig::style() === 'glass') {
+                return GlassSymbolCard::render($d);
+            }
             if (CardConfig::style() === 'orange') {
                 return OrangeSignalCard::render($d);
             }
@@ -1250,6 +1253,9 @@ final class ResultCard
         }
 
         try {
+            if (CardConfig::style() === 'glass') {
+                return GlassSymbolCard::render($d);
+            }
             if (CardConfig::style() === 'orange') {
                 return OrangeResultCard::render($d);
             }
@@ -1293,3 +1299,4 @@ final class ResultCard
 
 require_once __DIR__ . '/card_neo.php';
 require_once __DIR__ . '/card_orange.php';
+require_once __DIR__ . '/card_glass.php';

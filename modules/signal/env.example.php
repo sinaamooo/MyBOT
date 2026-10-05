@@ -211,7 +211,7 @@ return [
     'MAX_TRADE_HOURS' => '24',
 
     'SIGNAL_CARD_ENABLED' => 'true',
-    'CARD_STYLE' => 'orange',
+    'CARD_STYLE' => 'glass',
     'CARD_RENDER_SCALE' => '2',
     'CARD_BRAND' => 'AUTO TRADE MARKET',
 

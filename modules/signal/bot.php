@@ -1338,7 +1338,7 @@ final class AdminPanel
         'GRAVITY_VETO_LEVEL'          => ['آستانه وتوی جاذبه نقدینگی', '۰ تا ۱۰۰، ۰ = خاموش. مثال: 60'],
         'OPPOSITE_TRIGGER_VETO'       => ['تعداد سیگنال تازه مخالف برای رد', 'عدد، ۰ = خاموش. مثال: 2'],
         'PACK_BONUS_CAP'              => ['سقف امتیاز اضافه اندیکاتورها', 'عدد. مثال: 18'],
-        'CARD_STYLE'                  => ['طرح کارت سیگنال', 'orange = طرح مشکی/سفید/نارنجی (پیش‌فرض) | neo = طرح نئون | classic = طرح شیشه‌ای قدیمی'],
+        'CARD_STYLE'                  => ['طرح کارت سیگنال', 'glass = شیشه‌ای ساده، فقط نماد ارز (پیش‌فرض) | orange = مشکی/سفید/نارنجی با جزئیات | neo = طرح نئون | classic = طرح شیشه‌ای قدیمی'],
     ];
 
     private const AUTO_CATEGORIES = [
@@ -1706,7 +1706,8 @@ final class AdminPanel
                 sprintf('طرح فعلی: %s', match (Config::cardStyle()) {
                     'classic' => 'کلاسیک (شیشه‌ای قدیمی)',
                     'neo' => 'نئو (نئون)',
-                    default => 'مشکی / سفید / نارنجی',
+                    'orange' => 'مشکی / سفید / نارنجی با جزئیات',
+                    default => 'شیشه‌ای ساده (فقط نماد ارز)',
                 }),
                 'برای دیدن نمونه از «Test Signal» استفاده کنید.',
             ],
@@ -2303,8 +2304,8 @@ final class AdminPanel
                 $this->telegram->sendMessage($chatId, "فقط rr یا leveraged قابل قبول است.");
                 return true;
             }
-            if ($key === 'CARD_STYLE' && !in_array(strtolower($value), ['orange', 'neo', 'classic'], true)) {
-                $this->telegram->sendMessage($chatId, "فقط orange یا neo یا classic قابل قبول است.");
+            if ($key === 'CARD_STYLE' && !in_array(strtolower($value), ['glass', 'orange', 'neo', 'classic'], true)) {
+                $this->telegram->sendMessage($chatId, "فقط glass یا orange یا neo یا classic قابل قبول است.");
                 return true;
             }
             if (in_array($key, ['TP_MODE', 'CARD_STYLE'], true)) {

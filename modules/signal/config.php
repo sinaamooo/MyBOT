@@ -596,8 +596,8 @@ final class Config
     public static function cardStyle(): string
     {
         $override = self::dbOverride('CARD_STYLE');
-        $style = strtolower(trim((string) ($override ?? Env::get('CARD_STYLE', 'orange') ?? 'orange')));
-        return in_array($style, ['orange', 'neo', 'classic'], true) ? $style : 'orange';
+        $style = strtolower(trim((string) ($override ?? Env::get('CARD_STYLE', 'glass') ?? 'glass')));
+        return in_array($style, ['glass', 'orange', 'neo', 'classic'], true) ? $style : 'glass';
     }
 
     private static function flag(string $key, bool $default): bool
