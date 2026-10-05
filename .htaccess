@@ -1,0 +1,5 @@
+# Only webhook.php (and tools/* with ?key=) should be reachable from the web.
+<FilesMatch "\.(sqlite|sqlite-wal|sqlite-shm|log|json|md|txt)$">
+    Require all denied
+</FilesMatch>
+Options -Indexes
