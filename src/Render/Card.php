@@ -212,21 +212,6 @@ final class Card
             }
         }
 
-        // order blocks: short line at the 50% level of the block
-        foreach ($a['order_blocks'] as $ob) {
-            $mid = ($ob['top'] + $ob['bottom']) / 2;
-            if (!$inView($mid)) {
-                continue;
-            }
-            $col = self::OB;
-            $ox = $ob['i'] >= $start ? $bx($ob['i']) - $step / 2 : $x0;
-            $oxEnd = max($ox + 8 * $step, min($ox + 22 * $step, $nowX));
-            $my = $py($mid);
-            $c->dashed($ox, $my, $oxEnd, $my, $c->color($col), 2, 9, 5);
-            $c->circle($ox, $my, 3, $c->color($col));
-            $free[] = ['x' => $oxEnd, 'y' => $my - 21, 'align' => 'right', 'text' => '50% OB', 'fg' => $c->color('#001A26'), 'bg' => $c->color($col, 0.95), 'h' => 18, 'size' => 9];
-        }
-
         // liquidity
         foreach ($a['liquidity'] as $l) {
             if (!$inView($l['price'])) {
@@ -275,6 +260,27 @@ final class Card
             $c->rect($x - $step * 0.34, $top, $x + $step * 0.34, $bot, $col);
         }
 
+        // order blocks: short dashed line at the 50% level, centred on the block's own candle (drawn over it)
+        foreach ($a['order_blocks'] as $ob) {
+            $mid = ($ob['top'] + $ob['bottom']) / 2;
+            if (!$inView($mid)) {
+                continue;
+            }
+            $col = $c->color(self::OB);
+            $my = $py($mid);
+            $half = max(3 * $step, 30);
+            if ($ob['i'] >= $start) {
+                $ox = $bx($ob['i']);
+                $c->dashed($ox - $half, $my, $ox + $half, $my, $col, 2, 7, 4);
+                $c->circle($ox, $my, 3.2, $col);
+                $free[] = ['x' => $ox, 'y' => $my - 26, 'align' => 'center', 'text' => '50% OB', 'fg' => $c->color('#001A26'), 'bg' => $c->color(self::OB, 0.95), 'h' => 18, 'size' => 9];
+            } else {
+                // block candle is left of the visible window
+                $c->dashed($x0, $my, $x0 + 2 * $half, $my, $col, 2, 7, 4);
+                $free[] = ['x' => $x0, 'y' => $my - 26, 'align' => 'left', 'text' => '50% OB', 'fg' => $c->color('#001A26'), 'bg' => $c->color(self::OB, 0.95), 'h' => 18, 'size' => 9];
+            }
+        }
+
         // swing labels
         foreach ($a['labels'] as $lb) {
             if ($lb['i'] < $start + 2 || !in_array($lb['label'], ['HH', 'HL', 'LH', 'LL'], true)) {
@@ -286,7 +292,7 @@ final class Card
 
         $fx0 = $nowX + $step * 0.5;
 
-        // projected path: strong green when bullish, strong red when bearish
+        // projected path (dashed): strong green when bullish, strong red when bearish
         if ($this->withPath) {
             $last = count($plan['path']) - 1;
             $xScale = ($x1 - 175 - $nowX) / max(1, $plan['path'][$last][0]);
@@ -295,7 +301,7 @@ final class Card
                 $pts[] = [$nowX + $bars * $xScale, $py($p)];
             }
             $pathCol = $c->color($plan['side'] === 'long' ? self::PATH_UP : self::PATH_DOWN);
-            $c->polyline($pts, $pathCol, 3.4);
+            $c->dashedPolyline($pts, $pathCol, 3.4, 12, 7);
             foreach ($pts as $k => [$px, $pyy]) {
                 if ($k > 0 && $k < $last) {
                     $c->circle($px, $pyy, 5, $pathCol);
