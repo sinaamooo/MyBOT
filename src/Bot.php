@@ -34,7 +34,8 @@ final class Bot
         }
         if (isset($update['callback_query'])) {
             $cq = $update['callback_query'];
-            if ($this->isAdmin((int) ($cq['from']['id'] ?? 0)) && str_starts_with((string) ($cq['data'] ?? ''), 'p:')) {
+            $data = (string) ($cq['data'] ?? '');
+            if ($this->isAdmin((int) ($cq['from']['id'] ?? 0)) && (str_starts_with($data, 'an:') || str_starts_with($data, 'p:'))) {
                 $this->panel()->callback($cq);
             } else {
                 $this->tg->answerCallback((string) $cq['id']);

@@ -1,8 +1,8 @@
 <?php
 /**
  * Builds the single-file version:  php tools/build.php [outDir]
- * Output: <outDir>/bot.php (all code) + <outDir>/config.php (settings template).
- * Upload both files to the same folder; fonts are downloaded on first run.
+ * Output: <outDir>/bot.php (hub + analysis bot), config.php (settings template), cron.php
+ * and modules/ (banner + signal). Upload the whole folder; fonts are downloaded on first run.
  */
 if (PHP_SAPI !== 'cli') {
     exit('CLI only');
@@ -22,7 +22,7 @@ $parts = [];
 
 // 1) bootstrap (global functions) with paths relative to bot.php
 $boot = $strip(file_get_contents("$root/src/bootstrap.php"));
-$boot = str_replace("define('APP_ROOT', dirname(__DIR__));", "define('APP_ROOT', __DIR__);", $boot);
+$boot = str_replace("define('HUB_ROOT', dirname(__DIR__));", "define('HUB_ROOT', __DIR__);", $boot);
 $boot = preg_replace('/spl_autoload_register\(.*?\n\}\);\n/s', '', $boot);
 $parts[] = "namespace {\n\n$boot\n\n}";
 
@@ -60,4 +60,21 @@ file_put_contents("$out/bot.php", $header . implode("\n\n", $parts) . "\n");
 if (!is_file("$out/config.php")) {
     copy("$root/config.example.php", "$out/config.php");
 }
-echo "Built $out/bot.php (" . round(filesize("$out/bot.php") / 1024) . " KB)\n";
+
+// cron.php + the banner and signal modules (each keeps its own files)
+copy("$root/cron.php", "$out/cron.php");
+$copyTree = static function (string $from, string $to) use (&$copyTree): void {
+    if (!is_dir($to)) {
+        mkdir($to, 0775, true);
+    }
+    foreach (scandir($from) ?: [] as $name) {
+        if ($name === '.' || $name === '..' || $name === 'storage' || str_ends_with($name, '.sqlite')) {
+            continue;
+        }
+        $src = "$from/$name";
+        is_dir($src) ? $copyTree($src, "$to/$name") : copy($src, "$to/$name");
+    }
+};
+$copyTree("$root/modules", "$out/modules");
+
+echo "Built $out/bot.php (" . round(filesize("$out/bot.php") / 1024) . " KB) + cron.php + modules/\n";

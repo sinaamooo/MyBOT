@@ -39,7 +39,7 @@ final class Client
                 $params[$k] = $v ? 'true' : 'false';
             }
         }
-        $url = "https://api.telegram.org/bot{$this->token}/{$method}";
+        $url = (defined('TG_API_BASE') ? TG_API_BASE : 'https://api.telegram.org') . "/bot{$this->token}/{$method}";
         $res = Http::request('POST', $url, ['form' => $params, 'timeout' => $hasFile ? 60 : 20]);
         $data = json_decode($res['body'], true);
         if (!is_array($data) || empty($data['ok'])) {

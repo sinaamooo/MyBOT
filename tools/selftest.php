@@ -70,22 +70,22 @@ $cb = function (string $data, int $user) use (&$uid) {
         'message' => ['message_id' => 900, 'chat' => ['id' => $user, 'type' => 'private']]]];
 };
 $run('admin /panel', $pm('/panel', $admin), $open);
-$run('panel: set channel button', $cb('p:channel', $admin), $open);
+$run('panel: set channel button', $cb('an:channel', $admin), $open);
 $tg->fake = [
     'getChat' => ['id' => -1001234567890, 'type' => 'channel', 'title' => 'Signals', 'username' => 'signals_ch'],
     'getChatMember' => ['status' => 'administrator', 'can_post_messages' => true],
 ];
 $run('admin sends @signals_ch', $pm('@signals_ch', $admin), $open);
 $tg->fake = [];
-$run('panel: quota +1', $cb('p:quota:1', $admin), $open);
-$run('panel: days view', $cb('p:days', $admin), $open);
-$run('panel: toggle today', $cb('p:day:' . $today, $admin), $open);
-$run('panel: toggle today back on', $cb('p:day:' . $today, $admin), $open);
-$run('non-admin callback (ignored)', $cb('p:pause', 5550001), $open);
+$run('panel: quota +1', $cb('an:quota:1', $admin), $open);
+$run('panel: days view', $cb('an:days', $admin), $open);
+$run('panel: toggle today', $cb('an:day:' . $today, $admin), $open);
+$run('panel: toggle today back on', $cb('an:day:' . $today, $admin), $open);
+$run('non-admin callback (ignored)', $cb('an:pause', 5550001), $open);
 $run('DM analysis -> published to channel', $dm('تحلیل ETH', 5550010), $open);
-$run('panel: DM notice off', $cb('p:dm', $admin), $open);
+$run('panel: DM notice off', $cb('an:dm', $admin), $open);
 $run('DM analysis, notice off', $dm('تحلیل SOL', 5550011), $open);
-$run('panel: remove channel', $cb('p:channel_clear', $admin), $open);
+$run('panel: remove channel', $cb('an:channel_clear', $admin), $open);
 $run('DM analysis -> back to DM', $dm('تحلیل BNB', 5550012), $open);
 
 // ---- welcome + editable texts
@@ -94,20 +94,20 @@ $pmUser = function (string $text, int $user, array $entities = []) use (&$uid) {
         'chat' => ['id' => $user, 'type' => 'private'], 'text' => $text, 'entities' => $entities]];
 };
 $run('user /start (welcome)', $pmUser('/start', 5550020), $open);
-$run('panel: texts list', $cb('p:texts', $admin), $open);
-$run('panel: edit welcome', $cb('p:text:welcome', $admin), $open);
+$run('panel: texts list', $cb('an:texts', $admin), $open);
+$run('panel: edit welcome', $cb('an:text:welcome', $admin), $open);
 // "🔥 خوش آمدی {name}" with a premium emoji (2 UTF-16 units) and bold name part
 $run('admin sends new welcome', $pmUser("🔥 خوش آمدی {name}", $admin, [
     ['type' => 'custom_emoji', 'offset' => 0, 'length' => 2, 'custom_emoji_id' => '5368324170671202286'],
     ['type' => 'bold', 'offset' => 3, 'length' => 15],
 ]), $open);
 $run('user /start (custom welcome)', $pmUser('/start', 5550021), $open);
-$run('panel: edit caption', $cb('p:text:caption', $admin), $open);
+$run('panel: edit caption', $cb('an:text:caption', $admin), $open);
 $cap = "{side_icon} #{base} | {tf}\nورود {entry_low} - {entry_high}\nاستاپ {stop}\nتارگت {tp1}\n{reasons}";
 $run('admin sends caption with quote', $pmUser($cap, $admin, [
     ['type' => 'bold', 'offset' => 12, 'length' => 7],
     ['type' => 'blockquote', 'offset' => mb_strlen($cap) - 9, 'length' => 9],
 ]), $open);
 $run('DM analysis with custom caption', $dm('تحلیل ADA', 5550022), $open);
-$run('panel: reset caption', $cb('p:text_reset:caption', $admin), $open);
+$run('panel: reset caption', $cb('an:text_reset:caption', $admin), $open);
 @unlink($dbFile);

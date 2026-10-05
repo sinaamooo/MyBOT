@@ -85,7 +85,7 @@ final class AdminPanel
         $gemStatus = (string) $this->db->get('gemini_status', '');
         $dayNames = $days ? implode('، ', array_map(static fn ($d) => Fa::weekday($d), array_values(array_filter(self::WEEK, static fn ($d) => in_array($d, $days, true))))) : 'هیچ روزی';
 
-        $text = "🛠 <b>پنل مدیریت ربات تحلیل</b>\n\n"
+        $text = "📊 <b>پنل ربات تحلیل</b>\n\n"
             . '📢 کانال انتشار تحلیل‌ها: ' . ($ch ? '<b>' . htmlspecialchars($ch['title']) . '</b>' . (!empty($ch['username']) ? ' (@' . htmlspecialchars($ch['username']) . ')' : '') : '❌ تنظیم نشده (تحلیل در دایرکت ارسال می‌شود)') . "\n"
             . '⚙️ وضعیت ربات: ' . ($paused ? '⏸ متوقف' : '✅ فعال') . "\n"
             . '🎟 سهمیه هر کاربر: ' . Fa::digits((string) $quota) . " تحلیل در هفته\n"
@@ -96,32 +96,33 @@ final class AdminPanel
             . '📝 گزارش هر تحلیل برای مدیر: ' . ($log ? 'روشن' : 'خاموش');
 
         $kb = [
-            [['text' => $ch ? '📢 تغییر کانال' : '📢 تنظیم کانال', 'callback_data' => 'p:channel']],
+            [['text' => $ch ? '📢 تغییر کانال' : '📢 تنظیم کانال', 'callback_data' => 'an:channel']],
         ];
         if ($ch) {
-            $kb[0][] = ['text' => '🗑 حذف کانال', 'callback_data' => 'p:channel_clear'];
+            $kb[0][] = ['text' => '🗑 حذف کانال', 'callback_data' => 'an:channel_clear'];
         }
         $kb[] = [
-            ['text' => $paused ? '▶️ روشن کردن ربات' : '⏸ توقف ربات', 'callback_data' => 'p:pause'],
-            ['text' => '🧠 Gemini: ' . ($gem ? 'روشن' : 'خاموش'), 'callback_data' => 'p:gemini'],
+            ['text' => $paused ? '▶️ روشن کردن ربات' : '⏸ توقف ربات', 'callback_data' => 'an:pause'],
+            ['text' => '🧠 Gemini: ' . ($gem ? 'روشن' : 'خاموش'), 'callback_data' => 'an:gemini'],
         ];
         $kb[] = [
-            ['text' => '➖', 'callback_data' => 'p:quota:-1'],
-            ['text' => '🎟 سهمیه: ' . Fa::digits((string) $quota), 'callback_data' => 'p:noop'],
-            ['text' => '➕', 'callback_data' => 'p:quota:1'],
+            ['text' => '➖', 'callback_data' => 'an:quota:-1'],
+            ['text' => '🎟 سهمیه: ' . Fa::digits((string) $quota), 'callback_data' => 'an:noop'],
+            ['text' => '➕', 'callback_data' => 'an:quota:1'],
         ];
         $kb[] = [
-            ['text' => '📅 روزهای تحلیل', 'callback_data' => 'p:days'],
-            ['text' => '🔔 اطلاع دایرکت: ' . ($dm ? 'روشن' : 'خاموش'), 'callback_data' => 'p:dm'],
+            ['text' => '📅 روزهای تحلیل', 'callback_data' => 'an:days'],
+            ['text' => '🔔 اطلاع دایرکت: ' . ($dm ? 'روشن' : 'خاموش'), 'callback_data' => 'an:dm'],
         ];
         $kb[] = [
-            ['text' => '✏️ ویرایش متن‌ها و کپشن', 'callback_data' => 'p:texts'],
-            ['text' => '📝 گزارش مدیر: ' . ($log ? 'روشن' : 'خاموش'), 'callback_data' => 'p:log'],
+            ['text' => '✏️ ویرایش متن‌ها و کپشن', 'callback_data' => 'an:texts'],
+            ['text' => '📝 گزارش مدیر: ' . ($log ? 'روشن' : 'خاموش'), 'callback_data' => 'an:log'],
         ];
         $kb[] = [
-            ['text' => '📊 آمار', 'callback_data' => 'p:stats'],
-            ['text' => '🔄 بروزرسانی', 'callback_data' => 'p:refresh'],
+            ['text' => '📊 آمار', 'callback_data' => 'an:stats'],
+            ['text' => '🔄 بروزرسانی', 'callback_data' => 'an:refresh'],
         ];
+        $kb[] = [['text' => '🏠 منوی اصلی ربات', 'callback_data' => 'hub:home']];
         return [$text, $kb];
     }
 
@@ -131,7 +132,7 @@ final class AdminPanel
         $kb = [];
         $row = [];
         foreach (Texts::DEFS as $key => $def) {
-            $row[] = ['text' => ($texts->isCustom($key) ? '✏️ ' : '') . $def['title'], 'callback_data' => 'p:text:' . $key];
+            $row[] = ['text' => ($texts->isCustom($key) ? '✏️ ' : '') . $def['title'], 'callback_data' => 'an:text:' . $key];
             if (count($row) === 2) {
                 $kb[] = $row;
                 $row = [];
@@ -140,7 +141,7 @@ final class AdminPanel
         if ($row) {
             $kb[] = $row;
         }
-        $kb[] = [['text' => '↩️ بازگشت', 'callback_data' => 'p:back']];
+        $kb[] = [['text' => '↩️ بازگشت', 'callback_data' => 'an:back']];
         return ["✏️ <b>ویرایش متن‌های ربات</b>\n\nمتنی را که می‌خواهید تغییر دهید انتخاب کنید. متن‌هایی که ✏️ دارند قبلاً ویرایش شده‌اند.\n\nدر متن جدید می‌توانید از <b>بولد</b>، <i>ایتالیک</i>، نقل‌قول (Quote)، اسپویلر، لینک و ایموجی پریمیوم استفاده کنید.", $kb];
     }
 
@@ -150,7 +151,7 @@ final class AdminPanel
         $kb = [];
         $row = [];
         foreach (self::WEEK as $d) {
-            $row[] = ['text' => (in_array($d, $days, true) ? '✅ ' : '▫️ ') . Fa::weekday($d), 'callback_data' => 'p:day:' . $d];
+            $row[] = ['text' => (in_array($d, $days, true) ? '✅ ' : '▫️ ') . Fa::weekday($d), 'callback_data' => 'an:day:' . $d];
             if (count($row) === 3) {
                 $kb[] = $row;
                 $row = [];
@@ -159,7 +160,7 @@ final class AdminPanel
         if ($row) {
             $kb[] = $row;
         }
-        $kb[] = [['text' => '↩️ بازگشت', 'callback_data' => 'p:back']];
+        $kb[] = [['text' => '↩️ بازگشت', 'callback_data' => 'an:back']];
         return ["📅 <b>روزهای تحلیل</b>\nروی هر روز بزنید تا فعال یا غیرفعال شود.", $kb];
     }
 
@@ -280,7 +281,7 @@ final class AdminPanel
             . ($key === 'caption' ? "\nℹ️ {summary} = خلاصه و ابطال Gemini، {reasons} = لیست دلایل، {liquidity} = نقدینگی. کپشن عکس حداکثر ۱۰۲۴ کاراکتر است.\n" : '')
             . "\nبرای لغو: /cancel";
         $this->tg->sendMessage($to, $info, ['reply_markup' => ['inline_keyboard' => [[
-            ['text' => '♻️ بازگردانی متن پیش‌فرض', 'callback_data' => 'p:text_reset:' . $key],
+            ['text' => '♻️ بازگردانی متن پیش‌فرض', 'callback_data' => 'an:text_reset:' . $key],
         ]]]]);
         $current = $texts->get($key);
         if ($this->tg->sendMessage($to, !empty($def['plain']) ? htmlspecialchars($current) : $current) === null) {

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-define('APP_ROOT', dirname(__DIR__));
+define('HUB_ROOT', dirname(__DIR__));
 
 spl_autoload_register(static function (string $class): void {
     if (strncmp($class, 'App\\', 4) !== 0) {
@@ -23,13 +23,17 @@ function app_config(): array
     if ($config !== null) {
         return $config;
     }
-    $file = APP_ROOT . '/config.php';
+    $file = HUB_ROOT . '/config.php';
     if (!is_file($file)) {
-        $file = APP_ROOT . '/config.example.php';
+        $file = HUB_ROOT . '/config.example.php';
     }
     $config = require $file;
     date_default_timezone_set($config['timezone'] ?? 'Asia/Tehran');
     \App\Support\Http::$proxy = (string) ($config['proxy'] ?? '');
+    // Telegram Bot API address (only changed for testing with a local mock server)
+    if (!defined('TG_API_BASE') && !empty($config['telegram_api_base'])) {
+        define('TG_API_BASE', rtrim((string) $config['telegram_api_base'], '/'));
+    }
     return $config;
 }
 
@@ -40,7 +44,7 @@ function app_config(): array
 function app_storage(string $sub = ''): string
 {
     static $ready = [];
-    $dir = rtrim((string) (app_config()['storage_dir'] ?? ''), '/') ?: APP_ROOT . '/storage';
+    $dir = rtrim((string) (app_config()['storage_dir'] ?? ''), '/') ?: HUB_ROOT . '/storage';
     if (!isset($ready[$dir])) {
         if (!is_dir($dir)) {
             @mkdir($dir, 0775, true);
@@ -65,7 +69,7 @@ function app_storage(string $sub = ''): string
 /** Analysis weights: brain/strategy.php, or the copy embedded in the single-file build. */
 function app_brain(): array
 {
-    $file = APP_ROOT . '/brain/strategy.php';
+    $file = HUB_ROOT . '/brain/strategy.php';
     if (is_file($file)) {
         return require $file;
     }
@@ -75,7 +79,7 @@ function app_brain(): array
 /** Path of a Vazirmatn font weight; downloaded into storage on first use if not bundled. */
 function app_font(string $weight): string
 {
-    $local = APP_ROOT . '/assets/fonts/Vazirmatn-' . $weight . '.ttf';
+    $local = HUB_ROOT . '/assets/fonts/Vazirmatn-' . $weight . '.ttf';
     if (is_file($local)) {
         return $local;
     }

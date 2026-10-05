@@ -2,6 +2,9 @@
 /**
  * Copy this file to config.php and fill in your values.
  * config.php is git-ignored so the bot token never ends up in the repository.
+ *
+ * One bot runs three sections (analysis, banner, signal); /panel opens each one's own settings.
+ * The token, admins and timezone below are shared; everything else is per section.
  */
 return [
     // Token from @BotFather
@@ -13,8 +16,8 @@ return [
     // Random string; Telegram sends it back in a header so webhook.php can verify requests
     'webhook_secret' => 'change-this-to-a-long-random-string',
 
-    // Public HTTPS URL of webhook.php (used by tools/set_webhook.php)
-    'webhook_url' => 'https://example.com/bot/webhook.php',
+    // Public HTTPS address of bot.php (the single webhook for all three bots)
+    'webhook_url' => 'https://example.com/bot/bot.php',
 
     'timezone' => 'Asia/Tehran',
 
@@ -45,6 +48,21 @@ return [
         'providers' => ['binance', 'binance_vision', 'bybit', 'okx', 'kucoin'],
         // true = synthetic candles (for testing without internet access)
         'demo' => false,
+    ],
+
+    // 🖼 Banner bot (scheduled market banners). Everything else is set in /panel → ربات بنر.
+    'banner' => [
+        'brand' => 'NIKTO CRYPTO',
+        'coinglass_key' => '',
+        'coingecko_key' => '',
+        // Optional proxy only for market data requests of the banner bot
+        'data_proxy' => '',
+    ],
+
+    // 📡 Signal bot: optional overrides of modules/signal/env.example.php, e.g. 'CARD_BRAND' => 'MY BRAND'.
+    // Most options can also be changed in /panel → ربات سیگنال → اتومات (the panel wins).
+    'signal' => [
+        'CARD_BRAND' => 'AUTO TRADE MARKET',
     ],
 
     // Google Gemini reviews each analysis and writes the Persian summary and reasons

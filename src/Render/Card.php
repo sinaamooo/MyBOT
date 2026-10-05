@@ -13,23 +13,27 @@ use App\Support\Fa;
  */
 final class Card
 {
+    // 1600 x 900 (16:9), same frame as the signal cards; Telegram shows it at 1280 x 720.
     private const W = 1600;
-    private const H = 1000;
+    private const H = 900;
     private const M = 32;
 
+    // Frame: black / white / orange. Meaning colours (candles, levels, path) stay semantic.
     private const BG_TOP = '#000000';
     private const BG_BOTTOM = '#000000';
-    private const PANEL = '#000000';
-    private const PANEL_2 = '#000000';
-    private const STROKE = '#1C1C1C';
+    private const PANEL = '#0B0B0B';
+    private const PANEL_2 = '#0B0B0B';
+    private const STROKE = '#2A2A2A';
+    private const ORANGE = '#FF8A00';
+    private const ORANGE_SOFT = '#FFBA66';
     private const CANDLE_UP = '#FFFFFF';
     private const CANDLE_DOWN = '#FF2D2D';
     private const OB = '#4FC3F7';         // sky blue
     private const PATH_UP = '#00E000';    // strong green
     private const PATH_DOWN = '#FF1A1A';  // strong red
-    private const TEXT = '#EEF2FF';
-    private const TEXT_2 = '#A3ADCC';
-    private const MUTED = '#5E6889';
+    private const TEXT = '#FFFFFF';
+    private const TEXT_2 = '#B4B4B4';
+    private const MUTED = '#6E6E6E';
     private const GREEN = '#17C784';
     private const RED = '#F0464F';
     private const AMBER = '#F5B94A';
@@ -70,6 +74,8 @@ final class Card
     {
         $c = $this->c;
         $c->roundRect(0, 0, self::W, self::H, 0, [self::BG_TOP, self::BG_BOTTOM, 1, 1]);
+        $c->glow(110, 70, 420, self::ORANGE, 0.16);
+        $c->glow(self::W - 60, self::H, 520, self::ORANGE, 0.08);
     }
 
     private function header(float $y): void
@@ -79,25 +85,27 @@ final class Card
         $M = self::M;
 
         // coin badge
-        $hue = $this->coinColor($a['base']);
-        $cx = $M + 38;
+        $cx = $M + 40;
         $cy = $y + 46;
-        $c->circle($cx, $cy, 40, $c->color(Canvas::mix($hue, '#000000', 0.25)));
-        $c->circle($cx, $cy - 3, 37, $c->color($hue));
-        $c->circle($cx, $cy - 3, 37, $c->color('#FFFFFF', 0.08));
+        $c->circle($cx, $cy, 46, $c->color(self::ORANGE, 0.12));
+        $c->circle($cx, $cy, 39, $c->color(self::ORANGE));
+        $c->circle($cx, $cy, 35.5, $c->color('#000000'));
         $initials = mb_substr($a['base'], 0, strlen($a['base']) > 4 ? 3 : 4);
-        $size = strlen($initials) >= 4 ? 14 : (strlen($initials) === 3 ? 17 : 21);
-        $c->text($cx, $cy + $c->capHeight($size, 'Black') / 2 - 2, $initials, $size, $c->color('#FFFFFF'), 'Black', 'center');
+        $size = strlen($initials) >= 4 ? 13 : (strlen($initials) === 3 ? 16 : 20);
+        $c->text($cx, $cy + $c->capHeight($size, 'Black') / 2, $initials, $size, $c->color('#FFFFFF'), 'Black', 'center');
 
-        $x = $M + 94;
+        $x = $M + 100;
         $w = $c->text($x, $y + 44, $a['base'], 32, $c->color(self::TEXT), 'Black');
         $c->text($x + $w + 6, $y + 44, '/' . $a['quote'], 20, $c->color(self::MUTED), 'Bold');
 
         $chipY = $y + 58;
         $cx2 = $x;
-        $cx2 += $c->pill($cx2, $chipY, strtoupper($a['timeframe']), 12, $c->color(self::TEXT), $c->color('#FFFFFF', 0.14), 'Bold', 'left', 12, 28) + 8;
-        $cx2 += $c->pill($cx2, $chipY, strtoupper($a['exchange_label'] ?? 'OURBIT'), 12, $c->color(self::TEXT_2), $c->color('#FFFFFF', 0.07), 'Bold', 'left', 12, 28) + 8;
-        $c->pill($cx2, $chipY, Fa::jalaliDate($a['time']), 12, $c->color(self::TEXT_2), $c->color('#FFFFFF', 0.07), 'Medium', 'left', 12, 28);
+        $cx2 += $c->pill($cx2, $chipY, strtoupper($a['timeframe']), 12, $c->color('#000000'), $c->color(self::ORANGE), 'Black', 'left', 12, 28) + 8;
+        $w2 = $c->pill($cx2, $chipY, strtoupper($a['exchange_label'] ?? 'OURBIT'), 12, $c->color(self::ORANGE_SOFT), $c->color(self::ORANGE, 0.10), 'Bold', 'left', 12, 28);
+        $c->roundRectStroke($cx2, $chipY, $w2, 28, 14, $c->color(self::ORANGE, 0.7), 1.2);
+        $cx2 += $w2 + 8;
+        $w3 = $c->pill($cx2, $chipY, Fa::jalaliDate($a['time']), 12, $c->color(self::TEXT_2), $c->color('#FFFFFF', 0.06), 'Medium', 'left', 12, 28);
+        $c->roundRectStroke($cx2, $chipY, $w3, 28, 14, $c->color('#FFFFFF', 0.18), 1);
 
         // price + change
         $R = self::W - $M;
@@ -123,8 +131,9 @@ final class Card
         $M = self::M;
         $pw = self::W - 2 * $M;
 
-        $c->roundRect($M, $y, $pw, $h, 24, [self::PANEL_2, self::PANEL, 0.96, 0.96]);
+        $c->roundRect($M, $y, $pw, $h, 24, $c->color(self::PANEL));
         $c->roundRectStroke($M, $y, $pw, $h, 24, $c->color(self::STROKE), 1.2);
+        $c->roundRect($M + 130, $y - 1.5, 120, 3, 1.5, $c->color(self::ORANGE));
 
         $x0 = $M + 22;
         $x1 = $M + $pw - 104; // right axis
@@ -156,7 +165,7 @@ final class Card
         $inView = static fn (float $p) => $p >= $lo && $p <= $hi;
 
         // source
-        $c->text($M + $pw - 22, $y + 36, $a['symbol'] . ' · ' . strtoupper($a['timeframe']) . ' · ' . strtoupper($a['exchange_label'] ?? 'OURBIT'), 12, $c->color(self::MUTED), 'Bold', 'right');
+        $c->text($M + $pw - 22, $y + 36, $a['symbol'] . ' · ' . strtoupper($a['timeframe']) . ' · ' . strtoupper($a['exchange_label'] ?? 'OURBIT'), 12, $c->color(self::ORANGE_SOFT), 'Bold', 'right');
 
         // grid + axis labels on round numbers
         $gridCol = $c->color('#FFFFFF', 0.05);
@@ -225,9 +234,9 @@ final class Card
             }
             $ly = $py($l['price']);
             $lx = $l['i'] >= $start ? $bx($l['i']) : $x0;
-            $c->dashed($lx, $ly, $x1, $ly, $c->color('#FFE04D', 0.8), 1.4, 2, 4);
+            $c->dashed($lx, $ly, $x1, $ly, $c->color(self::ORANGE, 0.85), 1.4, 2, 4);
             $tag = ($l['side'] === 'buy' ? 'BSL' : 'SSL') . ' $$$';
-            $edge[] = ['y' => $ly, 'text' => $tag, 'fg' => $c->color('#1A1405'), 'bg' => $c->color('#FFE04D', 0.95), 'weight' => 'Black'];
+            $edge[] = ['y' => $ly, 'text' => $tag, 'fg' => $c->color('#000000'), 'bg' => $c->color(self::ORANGE), 'weight' => 'Black'];
         }
 
         // structure events

@@ -29,7 +29,7 @@ final class AnalysisService
     public function __construct(private array $config, private string $brainNotes = '', ?Texts $texts = null)
     {
         $this->market = new MarketData($config['market'] ?? [], app_storage('cache'));
-        $this->analyzer = new Analyzer($this->market, app_brain(), APP_ROOT . '/brain/indicators');
+        $this->analyzer = new Analyzer($this->market, app_brain(), HUB_ROOT . '/brain/indicators');
         $this->gemini = new Gemini((string) ($config['gemini']['api_key'] ?? ''), $config['gemini']['model'] ?? 'gemini-3.5-flash', (string) ($config['gemini']['proxy'] ?? ''));
         $this->card = new Card($config['brand'] ?? []);
         $this->outDir = app_storage('out');

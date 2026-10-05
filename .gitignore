@@ -4,3 +4,6 @@
 /vendor/
 .DS_Store
 /dist/
+/modules/signal/storage/
+/modules/banner/nikto-*-data/
+/modules/banner/storage/

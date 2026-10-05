@@ -46,7 +46,7 @@ final class Entry
         }
 
         try {
-            (new Bot($config))->handle($update);
+            (new Hub($config))->handle($update);
         } catch (\Throwable $e) {
             app_log('webhook error: ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
         }
@@ -65,10 +65,10 @@ final class Entry
             exit("Bot token is invalid or Telegram is unreachable.\n");
         }
         echo 'Running as @' . $me['username'] . "\n";
-        $bot = new Bot($config, $tg);
+        $bot = new Hub($config, $tg);
         $offset = 0;
         while (true) {
-            $updates = $tg->call('getUpdates', ['offset' => $offset, 'timeout' => 50, 'allowed_updates' => ['message', 'callback_query']]);
+            $updates = $tg->call('getUpdates', ['offset' => $offset, 'timeout' => 50, 'allowed_updates' => ['message', 'callback_query', 'my_chat_member']]);
             if ($updates === null) {
                 sleep(3);
                 continue;
@@ -120,6 +120,15 @@ final class Entry
             $ok(false, 'market data', 'no exchange API reachable from this server; set "proxy" in config or use another host');
         }
 
+        // Modules
+        $ok(Modules::installed(Modules::BANNER), 'banner module (modules/banner/nikto-bot.php)', 'upload the modules/banner folder');
+        $signalFiles = is_file(Modules::signalDir() . '/bot.php');
+        $ok($signalFiles && PHP_VERSION_ID >= 80100, 'signal module (modules/signal)', $signalFiles ? 'the signal bot needs PHP 8.1 or newer' : 'upload the modules/signal folder');
+        $last = is_file(app_storage() . '/cron.last') ? (string) file_get_contents(app_storage() . '/cron.last') : '';
+        $lastTs = $last !== '' ? strtotime(substr($last, 0, 19)) : false;
+        $ok($lastTs !== false && $lastTs > time() - 180, 'cron' . ($last !== '' ? ' (last run ' . substr($last, 0, 19) . ')' : ' (never ran)'),
+            'add a cron job every minute: php ' . HUB_ROOT . '/cron.php');
+
         $key = (string) ($config['gemini']['api_key'] ?? '');
         if ($key === '') {
             $out[] = '[--]   Gemini disabled (no api_key)';
@@ -136,7 +145,7 @@ final class Entry
         $res = $tg->call('setWebhook', [
             'url' => $url,
             'secret_token' => $config['webhook_secret'],
-            'allowed_updates' => ['message', 'callback_query'],
+            'allowed_updates' => ['message', 'callback_query', 'my_chat_member'],
             'max_connections' => 20,
         ]);
         return $res !== null ? "Webhook set: $url" : 'setWebhook failed (see logs in the storage folder)';

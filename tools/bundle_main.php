@@ -1,6 +1,8 @@
 <?php
 // Entry point of the single-file build (appended by tools/build.php).
+// cron.php defines HUB_LIBRARY and only needs the classes.
 
+if (!defined('HUB_LIBRARY')) {
 $config = app_config();
 
 if (PHP_SAPI === 'cli') {
@@ -49,3 +51,4 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
 
 header('Content-Type: text/plain; charset=utf-8');
 echo "Bot is running.\n";
+}
