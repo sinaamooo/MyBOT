@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>{% block title %}پنل مدیر{% endblock %} | نامبیکس</title>
+  <link rel="stylesheet" href="{{ url_for('stylesheet_view') }}?v={{ stylesheet_tag }}">
+</head>
+<body class="admin">
+  <div class="galaxy" aria-hidden="true"></div>
+  <div class="admin-shell">
+    {% if g.admin %}
+    <header class="admin-top glass">
+      <a class="brand" href="{{ url_for('admin.dashboard') }}">
+        <span class="icon-tile icon-tile--sm">{{ icon("layout-dashboard") }}</span>
+        <strong>پنل مدیر نامبیکس</strong>
+      </a>
+      <nav class="admin-nav" aria-label="منوی مدیر">
+        <a href="{{ url_for('admin.dashboard') }}"{% if request.endpoint in ("admin.dashboard", "admin.product_new", "admin.product_edit") %} aria-current="page"{% endif %}>{{ icon("package") }}محصولات و API</a>
+        <a href="{{ url_for('admin.audit_log') }}"{% if request.endpoint == "admin.audit_log" %} aria-current="page"{% endif %}>{{ icon("list-checks") }}گزارش فعالیت</a>
+      </nav>
+      <div class="admin-top__end">
+        <span class="chip">{{ icon("user-round") }}{{ g.admin }}</span>
+        <form class="inline-form" method="post" action="{{ url_for('admin.logout') }}">
+          <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+          <button class="btn btn--ghost btn--sm" type="submit">خروج</button>
+        </form>
+      </div>
+    </header>
+    {% endif %}
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, message in messages %}
+    <div class="alert tone-{{ 'success' if category == 'success' else 'error' }}" role="status">
+      <span class="alert__icon">{{ icon("circle-check" if category == "success" else "triangle-alert") }}</span>
+      <p>{{ message }}</p>
+    </div>
+    {% endfor %}
+    {% endwith %}
+
+    <main class="admin-main">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</body>
+</html>

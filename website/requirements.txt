@@ -1,2 +1,7 @@
+# Building the static site
 Jinja2>=3.1
 tomli>=2.0; python_version < "3.11"
+# Admin panel
+Flask>=3.0
+cryptography>=42
+gunicorn>=22

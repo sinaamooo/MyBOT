@@ -5,16 +5,32 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>{{ page.title if page.slug == "home" else page.title ~ " | " ~ site.brand_fa }}</title>
   <meta name="description" content="{{ page.description }}">
+  <meta http-equiv="Content-Security-Policy" content="{{ csp }}">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
   <meta name="color-scheme" content="dark">
-  <meta name="theme-color" content="#05060f">
+  <meta name="theme-color" content="#0a0722">
+  {% if page.slug == "404" %}
+  <meta name="robots" content="noindex">
+  {% else %}
+  <link rel="canonical" href="https://{{ site.domain }}{{ page.url }}">
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="fa_IR">
+  <meta property="og:site_name" content="{{ site.brand_fa }}">
+  <meta property="og:title" content="{{ page.title }}">
+  <meta property="og:description" content="{{ page.description }}">
+  <meta property="og:url" content="https://{{ site.domain }}{{ page.url }}">
+  {% endif %}
   {% if page.slug == "home" and site.enamad_meta %}
   <meta name="enamad" content="{{ site.enamad_meta }}">
   {% endif %}
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
   <link rel="preload" href="/assets/fonts/vazirmatn-variable.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="{{ assets.css }}">
-  <script>{% include "partials/boot.js" %}</script>
+  <script>{{ boot_script }}</script>
   <script src="{{ assets.js }}" defer></script>
+  {% if page.slug == "home" %}
+  <script type="application/ld+json">{{ structured_data }}</script>
+  {% endif %}
 </head>
 <body data-page="{{ page.slug }}">
   <a class="skip-link" href="#main">پرش به محتوای اصلی</a>

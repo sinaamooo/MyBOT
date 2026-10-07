@@ -1,0 +1,60 @@
+{% extends "admin/base.html" %}
+{% block title %}محصولات و API{% endblock %}
+{% block content %}
+<header class="admin-head">
+  <div>
+    <h1>محصولات و API</h1>
+    <p class="hint">قیمت، موجودی و تنظیمات API هر محصول را این‌جا مدیریت کنید. تغییرات پس از «انتشار» روی سایت می‌آیند.</p>
+  </div>
+  <div class="actions">
+    <a class="btn btn--glass" href="{{ url_for('admin.product_new') }}">{{ icon("sparkles") }}محصول جدید</a>
+    <form class="inline-form" method="post" action="{{ url_for('admin.publish_site') }}">
+      <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+      <button class="btn btn--primary" type="submit">{{ icon("zap") }}انتشار در سایت</button>
+    </form>
+  </div>
+</header>
+
+<div class="kpis kpis--admin" data-hues>
+  <div class="card kpi"><div class="stat"><span class="stat__label">{{ icon("package") }}محصولات</span><span class="stat__value">{{ rows|length|fa }}</span></div></div>
+  <div class="card kpi"><div class="stat"><span class="stat__label">{{ icon("circle-check") }}موجود</span><span class="stat__value">{{ rows|selectattr("available")|list|length|fa }}</span></div></div>
+  <div class="card kpi"><div class="stat"><span class="stat__label">{{ icon("activity") }}API آماده</span><span class="stat__value">{{ api_ready|fa }}</span></div></div>
+</div>
+
+<section class="card card--static">
+  {% if rows %}
+  <div class="table-wrap">
+    <table class="data data--stack">
+      <thead><tr><th>نام</th><th>دسته</th><th>قیمت (تومان)</th><th>وضعیت</th><th>API</th><th></th></tr></thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td class="wrap" data-label="نام"><strong>{{ row["name"] }}</strong></td>
+          <td data-label="دسته">{{ row["category"] or "—" }}</td>
+          <td data-label="قیمت (تومان)">{{ price_label(row["price"]) }}</td>
+          <td data-label="وضعیت"><span class="badge tone-{{ 'success' if row['available'] else 'warning' }}"><span class="dot"></span>{{ "موجود" if row["available"] else "ناموجود" }}</span></td>
+          <td data-label="API">
+            {% if row["api_enabled"] and row["api_key"] %}<span class="badge tone-success">فعال · {{ row["api_provider"] or "API" }}</span>
+            {% elif row["api_base_url"] %}<span class="badge tone-warning">تنظیم ناقص</span>
+            {% else %}<span class="badge tone-neutral">تنظیم نشده</span>{% endif %}
+          </td>
+          <td><a class="btn btn--ghost btn--sm" href="{{ url_for('admin.product_edit', product_id=row['id']) }}">ویرایش</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="hint">هنوز محصولی ثبت نشده است.</p>
+  {% endif %}
+</section>
+
+<section class="card card--static">
+  <h2 class="card__title">امنیت حساب</h2>
+  <p class="hint">اگر فکر می‌کنید کسی به حساب دسترسی داشته، همه‌ی نشست‌ها را باطل کنید؛ دوباره باید وارد شوید.</p>
+  <form method="post" action="{{ url_for('admin.revoke_sessions') }}">
+    <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+    <button class="btn btn--glass btn--sm" type="submit">{{ icon("shield-check") }}خروج از همه‌ی دستگاه‌ها</button>
+  </form>
+</section>
+{% endblock %}

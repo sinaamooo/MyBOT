@@ -1,0 +1,25 @@
+{% extends "admin/base.html" %}
+{% block title %}ورود مدیر{% endblock %}
+{% block content %}
+<section class="card card--static auth">
+  <span class="icon-tile icon-tile--lg">{{ icon("shield-check") }}</span>
+  <h1 class="auth__title">ورود مدیر</h1>
+  <p class="hint">نام کاربری، رمز عبور و کد شش‌رقمی اپ Authenticator را وارد کنید.</p>
+  {% if error %}
+  <div class="alert tone-error" role="alert"><span class="alert__icon">{{ icon("triangle-alert") }}</span><p>{{ error }}</p></div>
+  {% endif %}
+  <form class="form" method="post" action="{{ url_for('admin.login') }}">
+    <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+    <label class="form-row"><span>نام کاربری</span>
+      <span class="field"><input name="username" autocomplete="username" maxlength="64" required dir="ltr"></span>
+    </label>
+    <label class="form-row"><span>رمز عبور</span>
+      <span class="field"><input name="password" type="password" autocomplete="current-password" maxlength="256" required dir="ltr"></span>
+    </label>
+    <label class="form-row"><span>کد تأیید دومرحله‌ای</span>
+      <span class="field"><input name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required dir="ltr"></span>
+    </label>
+    <button class="btn btn--primary btn--lg btn--block" type="submit">{{ icon("shield-check") }}ورود</button>
+  </form>
+</section>
+{% endblock %}

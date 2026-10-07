@@ -36,7 +36,13 @@ def _bundle(folder: Path, pattern: str) -> str:
     return "\n".join(p.read_text(encoding="utf-8") for p in sorted(folder.glob(pattern)))
 
 
-def _load_icons(folder: Path) -> dict[str, str]:
+def css_bundle(css_dir: Path, *extra: Path) -> bytes:
+    """All design-system CSS (plus optional extra files), minified."""
+    text = _bundle(css_dir, "*.css") + "".join("\n" + p.read_text(encoding="utf-8") for p in extra)
+    return _minify_css(text).encode()
+
+
+def load_icons(folder: Path) -> dict[str, str]:
     icons = {}
     for svg in sorted(folder.glob("*.svg")):
         body = _SVG_BODY.search(svg.read_text(encoding="utf-8"))
@@ -51,12 +57,12 @@ def build_assets(src: Path, out: Path) -> Assets:
     for file in (src / "img").iterdir():
         shutil.copy2(file, out / "assets" / file.name)
 
-    css = _minify_css(_bundle(src / "css", "*.css")).encode()
+    css = css_bundle(src / "css")
     js = ("(() => {\n'use strict';\n" + _bundle(src / "js", "*.js") + "\n})();\n").encode()
     return Assets(
         css=_write_hashed(out, "app", "css", css),
         js=_write_hashed(out, "app", "js", js),
-        icons=_load_icons(src / "icons"),
+        icons=load_icons(src / "icons"),
     )
 
 

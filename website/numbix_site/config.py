@@ -7,6 +7,10 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from markupsafe import Markup
+
+from .security import check_enamad_meta, clean_enamad_seal
+
 try:
     import tomllib
 except ModuleNotFoundError:  # Python < 3.11
@@ -14,6 +18,11 @@ except ModuleNotFoundError:  # Python < 3.11
 
 FA_DIGITS = str.maketrans("0123456789", "۰۱۲۳۴۵۶۷۸۹")
 EN_DIGITS = str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789")
+
+_DOMAIN = re.compile(r"(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}")
+_ADMIN_PATH = re.compile(r"/[a-z0-9][a-z0-9-]{1,40}")
+_WEBROOT = re.compile(r"/[A-Za-z0-9._/-]{1,200}")
+_EMAIL = re.compile(r"[^@\s<>\"'`]{1,64}@[a-z0-9.-]{1,253}\.[a-z]{2,63}", re.I)
 
 STATUS_TONES = {"ok", "warn", "err"}
 NOTICE_TONES = {"info", "success", "warning", "error"}
@@ -85,7 +94,10 @@ class Site:
     year: str
     legal_updated: str
     enamad_meta: str
-    enamad_seal: str
+    enamad_seal: Markup
+    webroot: str
+    admin_path: str
+    admin_port: int
     services: tuple[Service, ...]
     notices: tuple[Notice, ...]
     statuses: tuple[Status, ...]
@@ -115,7 +127,7 @@ class Site:
     @property
     def notices_signature(self) -> str:
         raw = "|".join(f"{n.title}{n.date}" for n in self.notices)
-        return hashlib.sha1(raw.encode()).hexdigest()[:8]
+        return hashlib.sha1(raw.encode(), usedforsecurity=False).hexdigest()[:8]
 
 
 class _Fields:
@@ -176,13 +188,25 @@ def _choice(value: object, allowed: set[str], default: str) -> str:
     return value if value in allowed else default
 
 
-def load_config(path: Path) -> Site:
+def _checked(value: str, pattern: re.Pattern, message: str) -> str:
+    if "{{" not in value and not pattern.fullmatch(value):
+        raise ValueError(message)
+    return value
+
+
+def load_config(path: Path, services: list[dict] | None = None) -> Site:
+    """Read ``site.toml``; ``services`` (e.g. from the admin database) replaces its [[services]]."""
     data = tomllib.loads(path.read_text(encoding="utf-8"))
     business = data.get("business", {})
     enamad = data.get("enamad", {})
+    server = data.get("server", {})
     fields = _Fields()
+    admin_port = int(server.get("admin_port", 8001))
+    if not 1024 <= admin_port <= 65535:
+        raise ValueError("server.admin_port باید بین ۱۰۲۴ و ۶۵۵۳۵ باشد")
 
-    domain = re.sub(r"^https?://|/+$", "", fields.required(business, "domain", "DOMAIN"))
+    domain = re.sub(r"^https?://|/+$", "", fields.required(business, "domain", "DOMAIN")).lower()
+    _checked(domain, _DOMAIN, "business.domain معتبر نیست (مثال: numbix.ir)")
     bot = re.sub(r"^(https?://)?(t\.me/)?@?", "", fields.required(business, "bot_username", "BOT_USERNAME"))
     mobile, mobile_tel = _phone(fields.required(business, "mobile", "MOBILE"))
     landline, landline_tel = _phone(str(business.get("landline", "")).strip())
@@ -198,16 +222,21 @@ def load_config(path: Path) -> Site:
         mobile_tel=mobile_tel,
         landline=landline,
         landline_tel=landline_tel,
-        email=to_en(fields.required(business, "email", "EMAIL")),
+        email=_checked(to_en(fields.required(business, "email", "EMAIL")), _EMAIL, "business.email معتبر نیست"),
         address=fields.required(business, "address", "ADDRESS"),
         postal_code=postal if _is_marker(postal) else to_fa(to_en(postal)),
         hours=str(business.get("hours", "")).strip() or "شنبه تا پنجشنبه، ساعت ۹ تا ۱۸",
         services_line=fields.required(business, "services_line", "SERVICES_LINE").rstrip("."),
         year=to_fa(business.get("year", "۱۴۰۵")),
         legal_updated=str(business.get("legal_updated", "۱۳ مهر ۱۴۰۵")).strip(),
-        enamad_meta=str(enamad.get("meta_code", "")).strip(),
-        enamad_seal=str(enamad.get("seal_html", "")).strip(),
-        services=_services(data.get("services", []), fields),
+        enamad_meta=check_enamad_meta(str(enamad.get("meta_code", "")).strip()),
+        enamad_seal=clean_enamad_seal(str(enamad.get("seal_html", ""))),
+        webroot=_checked(str(server.get("webroot") or f"/www/wwwroot/{domain}"), _WEBROOT, "server.webroot معتبر نیست"),
+        admin_path=_checked(
+            str(server.get("admin_path", "/admin")), _ADMIN_PATH, "server.admin_path معتبر نیست (مثال: /admin)"
+        ),
+        admin_port=admin_port,
+        services=_services(data.get("services", []) if services is None else services, fields),
         notices=tuple(
             Notice(
                 title=str(n.get("title", "")).strip(),

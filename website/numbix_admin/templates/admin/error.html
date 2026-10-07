@@ -1,0 +1,10 @@
+{% extends "admin/base.html" %}
+{% block title %}خطا {{ code }}{% endblock %}
+{% block content %}
+<section class="card card--static auth">
+  <span class="icon-tile icon-tile--lg hue-red">{{ icon("triangle-alert") }}</span>
+  <h1 class="auth__title">خطای {{ code }}</h1>
+  <p class="hint">{{ message }}</p>
+  <a class="btn btn--glass" href="{{ url_for('admin.dashboard') }}">بازگشت به پنل</a>
+</section>
+{% endblock %}

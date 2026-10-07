@@ -1,0 +1,97 @@
+{% extends "admin/base.html" %}
+{% set v = form.values %}
+{% macro error(name) %}{% if form.errors.get(name) %}<span class="error-text">{{ form.errors[name] }}</span>{% endif %}{% endmacro %}
+{% macro invalid(name) %}{{ " is-invalid" if form.errors.get(name) else "" }}{% endmacro %}
+{% block title %}{{ "ویرایش محصول" if product else "محصول جدید" }}{% endblock %}
+{% block content %}
+<header class="admin-head">
+  <div>
+    <h1>{{ "ویرایش «" ~ product["name"] ~ "»" if product else "محصول جدید" }}</h1>
+    <p class="hint">کلید API رمزگذاری‌شده ذخیره می‌شود و دیگر کامل نمایش داده نمی‌شود.</p>
+  </div>
+  <a class="btn btn--ghost" href="{{ url_for('admin.dashboard') }}">بازگشت</a>
+</header>
+
+{% if form.errors %}
+<div class="alert tone-error" role="alert"><span class="alert__icon">{{ icon("triangle-alert") }}</span><p>چند فیلد نیاز به اصلاح دارد.</p></div>
+{% endif %}
+
+<form class="form" method="post" autocomplete="off">
+  <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+
+  <section class="card card--static hue-purple">
+    <div class="card__head"><span class="icon-tile">{{ icon("package") }}</span><h2 class="card__title">اطلاعات محصول</h2></div>
+    <div class="form-grid">
+      <label class="form-row"><span>نام محصول</span>
+        <span class="field{{ invalid('name') }}"><input name="name" value="{{ v.get('name', '') }}" maxlength="80" required></span>{{ error("name") }}
+      </label>
+      <label class="form-row"><span>قیمت (تومان)</span>
+        <span class="field{{ invalid('price') }}"><input name="price" value="{{ v.get('price') if v.get('price') is not none else '' }}" inputmode="numeric" maxlength="15" required dir="ltr"></span>{{ error("price") }}
+      </label>
+      <label class="form-row"><span>دسته‌بندی</span>
+        <span class="field{{ invalid('category') }}"><input name="category" value="{{ v.get('category', '') }}" maxlength="40"></span>{{ error("category") }}
+      </label>
+      <label class="form-row"><span>آیکن</span>
+        <span class="field"><select name="icon">
+          {% for key, label in icons.items() %}<option value="{{ key }}"{% if v.get('icon') == key %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select></span>
+      </label>
+      <label class="form-row"><span>ترتیب نمایش</span>
+        <span class="field"><input name="position" value="{{ v.get('position', 0) }}" inputmode="numeric" maxlength="4" dir="ltr"></span>
+      </label>
+      <div class="form-row form-row--switch">
+        <label class="switch"><input class="switch__input" type="checkbox" name="available" value="1"{% if v.get('available') %} checked{% endif %}><span class="switch__track" aria-hidden="true"><span class="switch__thumb"></span></span><span class="switch__text">موجود است</span></label>
+      </div>
+      <label class="form-row form-row--wide"><span>توضیح کوتاه</span>
+        <span class="field field--area{{ invalid('description') }}"><textarea name="description" maxlength="300" rows="3">{{ v.get('description', '') }}</textarea></span>{{ error("description") }}
+      </label>
+    </div>
+  </section>
+
+  <section class="card card--static hue-blue">
+    <div class="card__head"><span class="icon-tile">{{ icon("activity") }}</span><h2 class="card__title">تنظیمات API</h2><span class="card__aside"><span class="badge tone-info">رمزگذاری‌شده</span></span></div>
+    <p class="hint">مشخصات API تأمین‌کننده‌ی این محصول. اتصال واقعی پس از دریافت مستندات API پیاده می‌شود؛ تا آن موقع این مقادیر فقط ذخیره می‌شوند.</p>
+    <div class="form-grid">
+      <label class="form-row"><span>نام سرویس‌دهنده</span>
+        <span class="field{{ invalid('api_provider') }}"><input name="api_provider" value="{{ v.get('api_provider', '') }}" maxlength="40" dir="ltr"></span>{{ error("api_provider") }}
+      </label>
+      <label class="form-row"><span>نشانی API (فقط https)</span>
+        <span class="field{{ invalid('api_base_url') }}"><input name="api_base_url" value="{{ v.get('api_base_url', '') }}" maxlength="300" placeholder="https://api.example.com/v1" dir="ltr"></span>{{ error("api_base_url") }}
+      </label>
+      <label class="form-row"><span>کد محصول نزد سرویس‌دهنده</span>
+        <span class="field{{ invalid('api_service') }}"><input name="api_service" value="{{ v.get('api_service', '') }}" maxlength="80" dir="ltr"></span>{{ error("api_service") }}
+      </label>
+      <label class="form-row"><span>کلید API {% if key_hint %}<small class="hint">(فعلی: <span dir="ltr">{{ key_hint }}</span>)</small>{% endif %}</span>
+        <span class="field{{ invalid('api_key') }}"><input name="api_key" type="password" maxlength="500" autocomplete="new-password" placeholder="{{ 'برای تغییر، کلید جدید را وارد کنید' if key_hint else 'کلید API' }}" dir="ltr"></span>{{ error("api_key") }}
+      </label>
+      <label class="form-row form-row--wide"><span>پارامترهای اضافه (JSON)</span>
+        <span class="field field--area{{ invalid('api_params') }}"><textarea name="api_params" rows="4" maxlength="4000" dir="ltr" spellcheck="false">{{ v.get('api_params', '{}') }}</textarea></span>{{ error("api_params") }}
+      </label>
+      <div class="form-row form-row--switch">
+        <label class="switch"><input class="switch__input" type="checkbox" name="api_enabled" value="1"{% if v.get('api_enabled') %} checked{% endif %}><span class="switch__track" aria-hidden="true"><span class="switch__thumb"></span></span><span class="switch__text">API فعال باشد</span></label>
+      </div>
+      {% if key_hint %}
+      <div class="form-row form-row--switch">
+        <label class="check"><input type="checkbox" name="api_key_clear" value="1">حذف کلید ذخیره‌شده</label>
+      </div>
+      {% endif %}
+    </div>
+  </section>
+
+  <div class="actions">
+    <button class="btn btn--primary btn--lg" type="submit">{{ icon("circle-check") }}ذخیره</button>
+    <a class="btn btn--ghost btn--lg" href="{{ url_for('admin.dashboard') }}">انصراف</a>
+  </div>
+</form>
+
+{% if product %}
+<section class="card card--static danger-zone hue-red">
+  <h2 class="card__title">حذف محصول</h2>
+  <form class="form" method="post" action="{{ url_for('admin.product_delete', product_id=product['id']) }}">
+    <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+    <label class="check"><input type="checkbox" name="confirm" value="1" required>مطمئنم؛ این محصول و تنظیمات API آن حذف شود.</label>
+    <div><button class="btn btn--danger btn--sm" type="submit">{{ icon("x") }}حذف محصول</button></div>
+  </form>
+</section>
+{% endif %}
+{% endblock %}

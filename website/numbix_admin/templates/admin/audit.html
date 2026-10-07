@@ -1,0 +1,37 @@
+{% extends "admin/base.html" %}
+{% set labels = {
+  "login": "ورود موفق", "login_failed": "ورود ناموفق", "login_blocked": "ورود مسدود (تلاش زیاد)",
+  "logout": "خروج", "sessions_revoked": "باطل‌شدن همه‌ی نشست‌ها",
+  "product_created": "ساخت محصول", "product_updated": "ویرایش محصول", "product_deleted": "حذف محصول",
+  "published": "انتشار سایت",
+} %}
+{% block title %}گزارش فعالیت{% endblock %}
+{% block content %}
+<header class="admin-head">
+  <div>
+    <h1>گزارش فعالیت</h1>
+    <p class="hint">۲۰۰ رویداد آخر: ورودها، تلاش‌های ناموفق و هر تغییر در محصولات.</p>
+  </div>
+</header>
+<section class="card card--static">
+  {% if rows %}
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>زمان (UTC)</th><th>IP</th><th>رویداد</th><th>جزئیات</th></tr></thead>
+      <tbody>
+        {% for row in rows %}
+        <tr class="{{ 'is-alert' if row['action'] in ('login_failed', 'login_blocked') else '' }}">
+          <td dir="ltr">{{ row["at"] }}</td>
+          <td dir="ltr">{{ row["ip"] }}</td>
+          <td>{{ labels.get(row["action"], row["action"]) }}</td>
+          <td class="wrap">{{ row["detail"] }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="hint">هنوز رویدادی ثبت نشده است.</p>
+  {% endif %}
+</section>
+{% endblock %}
