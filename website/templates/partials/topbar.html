@@ -39,21 +39,17 @@
     <div class="dropdown" data-dropdown>
       <button class="profile-btn" type="button" aria-label="حساب کاربری" aria-haspopup="true" aria-expanded="false" data-dropdown-trigger>
         <span class="avatar">{{ icon("user-round") }}</span>
-        <span class="profile-btn__text"><strong>مهمان</strong><small>وارد نشده‌اید</small></span>
+        <span class="profile-btn__text"><strong>مهمان</strong><small>حساب کاربری</small></span>
         {{ icon("chevron-down", "profile-btn__chevron") }}
       </button>
       <div class="dropdown__panel">
         <div class="profile-card">
           <span class="avatar avatar--lg">{{ icon("user-round") }}</span>
-          <span><strong>کاربر مهمان</strong><small>حساب شما همان حساب تلگرامتان است</small></span>
-        </div>
-        <div class="balance-row">
-          <span>{{ icon("wallet") }}موجودی کیف پول</span>
-          <strong>پس از ورود</strong>
+          <span><strong>کاربر مهمان</strong><small>به {{ site.brand_fa }} خوش آمدید</small></span>
         </div>
         <ul class="menu">
-          <li><button class="menu__item" type="button" data-modal-open="login-modal">{{ icon("log-in") }}ورود به حساب</button></li>
           <li><a class="menu__item" href="/panel/">{{ icon("layout-dashboard") }}پنل کاربری</a></li>
+          <li><a class="menu__item" href="/services/">{{ icon("shopping-bag") }}خدمات و قیمت‌ها</a></li>
           <li><a class="menu__item" href="/contact/">{{ icon("headphones") }}پشتیبانی</a></li>
         </ul>
         <div class="menu__sep"></div>
@@ -61,6 +57,6 @@
       </div>
     </div>
 
-    {{ ui.bot_btn("ورود به ربات", size="sm", cls="topbar__cta") }}
+    {{ ui.btn("خدمات و قیمت‌ها", "/services/", "primary", "shopping-bag", "sm", cls="topbar__cta") }}
   </div>
 </header>

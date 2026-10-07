@@ -386,14 +386,6 @@ NX.ui = (() => {
     new IntersectionObserver(([entry]) => bar.classList.toggle('is-scrolled', !entry.isIntersecting)).observe(sentinel);
   }
 
-  function initBotLinks() {
-    document.addEventListener('click', (event) => {
-      const link = event.target.closest('.btn[data-bot-link]');
-      if (!link) return;
-      link.classList.add('is-loading');
-      setTimeout(() => link.classList.remove('is-loading'), 1400);
-    });
-  }
 
   function initScrollTop() {
     NX.$$('[data-scroll-top]').forEach((button) => button.addEventListener('click', () => {
@@ -414,7 +406,6 @@ NX.ui = (() => {
     initPerfToggle();
     initNotices();
     initTopbar();
-    initBotLinks();
     initScrollTop();
     loader().then(initReveal);
   }

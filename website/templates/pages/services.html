@@ -23,7 +23,7 @@
     <span class="chip toolbar__count"><strong data-filter-count>{{ site.services|length|fa }}</strong>خدمت</span>
   </div>
 
-  <div class="services-grid" data-stagger>
+  <div class="services-grid" data-stagger data-hues>
     {% for service in site.services %}
     <article class="card service" data-reveal data-filter-item data-category="{{ service.category }}" data-filter-text="{{ service.name }} {{ service.category }} {{ service.description }}">
       <div class="service__top">
@@ -35,11 +35,6 @@
       {% if service.description %}<p class="service__desc">{{ service.description }}</p>{% endif %}
       <div class="service__foot">
         <p class="service__price"><strong>{{ service.price }}</strong>{% if service.price_value is not none %}<small>تومان</small>{% endif %}</p>
-        {% if service.available %}
-        {{ ui.bot_btn("سفارش", size="sm") }}
-        {% else %}
-        {{ ui.btn("ناموجود", variant="glass", size="sm", attrs={"disabled": true}) }}
-        {% endif %}
       </div>
     </article>
     {% endfor %}
@@ -50,15 +45,15 @@
 
 <div class="alert tone-info" data-reveal>
   <span class="alert__icon">{{ icon("info") }}</span>
-  <p>قیمت‌ها به تومان است و ممکن است با تغییر نرخ تأمین‌کننده‌ها به‌روز شود. قیمت نهایی هر سفارش پیش از پرداخت در ربات نمایش داده می‌شود و ملاک، همان قیمت است.</p>
+  <p>قیمت‌ها به تومان است و ممکن است با تغییر نرخ تأمین‌کننده‌ها به‌روز شود. قیمت نهایی هر سفارش پیش از پرداخت نمایش داده می‌شود و ملاک، همان قیمت است.</p>
 </div>
 
 <section class="section">
   {{ ui.section_head("نحوه‌ی خرید و تحویل", "", "مراحل", "list-checks") }}
   {{ ui.steps([
-    ("ورود به ربات", "ربات " ~ site.brand_fa ~ " را در تلگرام باز کنید و «شروع» را بزنید."),
-    ("انتخاب و پرداخت", "خدمت را انتخاب کنید، قیمت نهایی را ببینید و مبلغ را پرداخت کنید."),
-    ("تحویل در ربات", "سرویس معمولاً بلافاصله در همان گفت‌وگو تحویل داده می‌شود."),
+    ("انتخاب خدمت", "از فهرست بالا خدمت موردنیازتان و قیمت آن را ببینید."),
+    ("پرداخت", "قیمت نهایی را ببینید و مبلغ سفارش را پرداخت کنید؛ کد پیگیری برایتان ثبت می‌شود."),
+    ("تحویل", "سرویس معمولاً بلافاصله پس از پرداخت تحویل داده می‌شود."),
   ]) }}
 </section>
 
@@ -66,10 +61,10 @@
   {{ ui.section_head("پرسش‌های پرتکرار", "", "راهنما", "message-circle") }}
   <div class="faq-list" data-stagger>
     {% for question, answer in [
-      ("آیا برای خرید باید در سایت ثبت‌نام کنم؟", "خیر. ثبت سفارش، پرداخت و تحویل همگی از داخل ربات تلگرام انجام می‌شود و حساب کاربری شما همان حساب تلگرامتان است."),
+      ("آیا برای خرید باید در سایت ثبت‌نام کنم؟", "خیر. ثبت‌نام جداگانه لازم نیست؛ ثبت سفارش، پرداخت و تحویل به‌صورت آنلاین و با کد پیگیری انجام می‌شود."),
       ("تحویل سفارش چقدر طول می‌کشد؟", "بیشتر سفارش‌ها خودکار و بلافاصله پس از پرداخت تحویل می‌شوند. اگر تحویل به هر دلیلی انجام نشود، سفارش را از طریق پشتیبانی پیگیری می‌کنیم."),
       ("اگر سرویس تحویل‌شده کار نکند چه می‌شود؟", "طبق <a href=\"/terms/#refund\">شرایط بازگشت وجه</a>، سرویس جایگزین داده می‌شود یا مبلغ به شما بازگردانده می‌شود."),
-      ("چطور سفارشم را پیگیری کنم؟", "با کد پیگیری‌ای که پس از پرداخت در ربات دریافت می‌کنید، از طریق پشتیبانی ربات یا شماره‌ی تماس صفحه‌ی <a href=\"/contact/\">تماس با ما</a> پیگیری کنید."),
+      ("چطور سفارشم را پیگیری کنم؟", "با کد پیگیری‌ای که پس از پرداخت دریافت می‌کنید، از طریق تلفن یا ایمیل صفحه‌ی <a href=\"/contact/\">تماس با ما</a> پیگیری کنید."),
     ] %}
     <details class="card card--static faq" data-reveal data-accordion>
       <summary>{{ question }}{{ icon("chevron-down") }}</summary>

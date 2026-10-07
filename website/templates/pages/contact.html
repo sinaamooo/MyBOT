@@ -18,7 +18,7 @@
 {% block content %}
 {{ ui.page_hero(page, "برای پرسش درباره‌ی خدمات، پیگیری سفارش یا ثبت شکایت، از یکی از راه‌های زیر با ما تماس بگیرید.") }}
 
-<div class="contact-grid" data-stagger>
+<div class="contact-grid" data-stagger data-hues>
   {{ contact_card("smartphone", "تلفن همراه", site.mobile, site.mobile_tel,
        ui.btn("تماس", "tel:" ~ site.mobile_tel, "glass", "phone", "sm"), ltr=True) }}
   {% if site.landline %}
@@ -26,9 +26,7 @@
        ui.btn("تماس", "tel:" ~ site.landline_tel, "glass", "phone", "sm"), ltr=True) }}
   {% endif %}
   {{ contact_card("mail", "ایمیل", site.email, site.email,
-       ui.btn("ارسال ایمیل", "mailto:" ~ site.email, "glass", "mail", "sm"), ltr=True) }}
-  {{ contact_card("send", "ربات تلگرام", "@" ~ site.bot_username, "@" ~ site.bot_username,
-       ui.bot_btn("باز کردن", variant="glass", size="sm"), ltr=True) }}
+       ui.btn("ارسال ایمیل", "mailto:" ~ site.email, "glass", "mail", "sm"), wide=True, ltr=True) }}
   {{ contact_card("map-pin", "نشانی", site.address, site.address, wide=True) }}
   {{ contact_card("hash", "کد پستی", site.postal_code, site.postal_code) }}
   {{ contact_card("clock", "ساعات پاسخ‌گویی", site.hours, wide=True) }}

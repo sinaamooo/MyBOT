@@ -34,8 +34,8 @@ body {
   line-height: var(--lh-body);
   color: var(--ink-2);
   background:
-    radial-gradient(110% 70% at 85% -10%, #151b44 0%, transparent 60%),
-    radial-gradient(90% 60% at 0% 105%, #0a1d31 0%, transparent 55%),
+    radial-gradient(110% 70% at 85% -10%, #2a1260 0%, transparent 60%),
+    radial-gradient(90% 60% at 0% 105%, #0d1d4d 0%, transparent 55%),
     var(--space-950);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -54,20 +54,20 @@ h1, h2, h3, h4 {
 p { text-wrap: pretty; }
 
 a {
-  color: var(--cyan);
+  color: var(--accent);
   text-decoration: none;
   transition: color var(--t-1) var(--ease);
 }
-a:hover { color: #b3f8fc; }
+a:hover { color: #efe5ff; }
 
 button { font: inherit; color: inherit; }
 
 ul, ol { margin: 0; padding: 0; list-style: none; }
 
-::selection { background: rgb(var(--cyan-rgb) / .3); color: #fff; }
+::selection { background: rgb(var(--accent-rgb) / .3); color: #fff; }
 
 :focus-visible {
-  outline: 2px solid rgb(var(--cyan-rgb) / .85);
+  outline: 2px solid rgb(var(--accent-rgb) / .85);
   outline-offset: 3px;
 }
 
@@ -123,11 +123,20 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 .lead {
   max-width: 62ch;
   font-size: var(--fs-lg);
+  font-weight: 500;
   color: var(--ink-2);
+}
+
+/* Text that sits straight on the galaxy gets a soft shadow so it stays crisp */
+.hero__copy, .page-hero, .section-head, .lost {
+  text-shadow: 0 1px 2px rgb(6 4 26 / .55), 0 2px 22px rgb(6 4 26 / .7);
 }
 .text-grad {
   background: var(--brand-grad);
+  background-size: 220% 100%;
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+  text-shadow: none; /* a shadow would show through the clipped, transparent glyphs */
+  animation: shimmer 9s var(--ease-io) infinite alternate;
 }

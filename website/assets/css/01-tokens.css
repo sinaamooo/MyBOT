@@ -5,43 +5,51 @@
   color-scheme: dark;
 
   /* Space */
-  --space-950: #04050d;
-  --space-900: #070916;
-  --space-800: #0d1128;
+  --space-950: #06041a;
+  --space-900: #0a0722;
+  --space-800: #120c33;
 
   /* Ink */
-  --ink-1: #f3f5ff;
-  --ink-2: rgb(222 228 255 / .76);
-  --ink-3: rgb(206 214 250 / .56);
-  --ink-4: rgb(206 214 250 / .36);
+  --ink-1: #ffffff;
+  --ink-2: rgb(240 235 255 / .9);
+  --ink-3: rgb(228 220 255 / .72);
+  --ink-4: rgb(228 220 255 / .52);
 
-  /* Brand */
-  --cyan: #5be3ee;
-  --cyan-rgb: 91 227 238;
-  --violet: #a08fff;
-  --violet-rgb: 160 143 255;
-  --brand-grad: linear-gradient(120deg, #8ff6fb 0%, #7aa8ff 50%, #b292ff 100%);
+  /* Galaxy palette: purple leads, blue supports, green and red accent, white for light */
+  --purple-rgb: 176 132 255;
+  --blue-rgb: 92 160 255;
+  --green-rgb: 64 228 166;
+  --red-rgb: 255 92 138;
+  --white-rgb: 255 255 255;
+
+  --accent: #c7a6ff;
+  --accent-rgb: var(--purple-rgb);
+  --accent-2: #7fb4ff;
+  --accent-2-rgb: var(--blue-rgb);
+  --hue-rgb: var(--purple-rgb); /* per-card hue, cycled by [data-hues] */
+
+  --brand-grad: linear-gradient(110deg, #ffffff 0%, #d9c2ff 22%, #b084ff 45%, #6fa8ff 72%, #5ee6b0 100%);
+  --button-grad: linear-gradient(115deg, #a462ff 0%, #7c6bff 45%, #4f8dff 100%);
 
   /* Status — reserved for state, always paired with an icon or label */
-  --ok-rgb: 74 222 156;
-  --warn-rgb: 251 203 92;
-  --err-rgb: 255 111 134;
-  --info-rgb: 102 178 255;
-  --neutral-rgb: 206 214 250;
+  --ok-rgb: var(--green-rgb);
+  --warn-rgb: 255 196 87;
+  --err-rgb: var(--red-rgb);
+  --info-rgb: var(--blue-rgb);
+  --neutral-rgb: 222 214 255;
 
   /* Glass */
-  --glass-fill: linear-gradient(155deg, rgb(255 255 255 / .085) 0%, rgb(255 255 255 / .035) 42%, rgb(255 255 255 / .018) 100%);
-  --glass-tint: rgb(12 16 38 / .34);
-  --glass-strong: linear-gradient(160deg, rgb(34 40 80 / .86), rgb(13 17 40 / .93));
-  --glass-line: rgb(255 255 255 / .10);
-  --glass-line-strong: rgb(255 255 255 / .2);
-  --glass-blur: 18px;
-  --glass-sat: 150%;
-  --glass-highlight: inset 0 1px 0 rgb(255 255 255 / .10);
-  --glass-inner: inset 0 0 32px rgb(120 150 255 / .045);
-  --shadow-1: 0 1px 2px rgb(0 0 0 / .35), 0 10px 30px -14px rgb(0 0 0 / .65);
-  --shadow-2: 0 2px 6px rgb(0 0 0 / .35), 0 28px 60px -24px rgb(0 0 0 / .8);
-  --glow-1: 0 0 0 1px rgb(var(--cyan-rgb) / .08), 0 20px 50px -24px rgb(var(--cyan-rgb) / .35);
+  --glass-fill: linear-gradient(150deg, rgb(255 255 255 / .11) 0%, rgb(255 255 255 / .045) 40%, rgb(255 255 255 / .02) 100%);
+  --glass-tint: rgb(22 14 54 / .36);
+  --glass-strong: linear-gradient(160deg, rgb(44 30 96 / .88), rgb(16 11 44 / .94));
+  --glass-line: rgb(255 255 255 / .12);
+  --glass-line-strong: rgb(255 255 255 / .24);
+  --glass-blur: 20px;
+  --glass-sat: 160%;
+  --glass-highlight: inset 0 1px 0 rgb(255 255 255 / .14);
+  --glass-inner: inset 0 0 36px rgb(var(--purple-rgb) / .07);
+  --shadow-1: 0 1px 2px rgb(0 0 0 / .35), 0 12px 32px -14px rgb(4 2 20 / .8);
+  --shadow-2: 0 2px 6px rgb(0 0 0 / .35), 0 30px 64px -24px rgb(4 2 20 / .9);
 
   /* Radius */
   --r-xs: 8px;

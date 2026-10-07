@@ -1,27 +1,27 @@
 {% extends "base.html" %}
 {% import "macros/ui.html" as ui %}
 {% block content %}
-{{ ui.page_hero(page, "اطلاعات حساب شما داخل ربات تلگرام نگهداری می‌شود. خدمات، وضعیت سرویس‌ها و اعلان‌ها را همین‌جا ببینید و برای موجودی و سفارش‌ها وارد ربات شوید.") }}
+{{ ui.page_hero(page, "خلاصه‌ی خدمات، قیمت‌ها، وضعیت سرویس‌ها و اعلان‌های " ~ site.brand_fa ~ " در یک نگاه.") }}
 
 <div class="alert tone-info" data-reveal>
   <span class="alert__icon">{{ icon("info") }}</span>
-  <p><strong>شما به‌عنوان مهمان وارد شده‌اید.</strong> حساب {{ site.brand_fa }} همان حساب تلگرام شماست؛ موجودی و سفارش‌ها پس از ورود در ربات نمایش داده می‌شوند.</p>
-  {{ ui.btn("ورود به حساب", variant="glass", icon_name="log-in", size="sm", attrs={"data-modal-open": "login-modal"}) }}
+  <p><strong>شما در حالت مهمان هستید.</strong> موجودی و سفارش‌های هر کاربر فقط برای خود او و با کد پیگیری نمایش داده می‌شود؛ برای پیگیری سفارش با پشتیبانی تماس بگیرید.</p>
+  {{ ui.btn("پشتیبانی", "/contact/", "glass", "headphones", "sm") }}
 </div>
 
 <div class="bento bento--panel" data-stagger>
-  <section class="card col-4" data-reveal aria-labelledby="balance-title">
+  <section class="card col-4 hue-purple" data-reveal aria-labelledby="balance-title">
     <div class="card__head">
       {{ ui.icon_tile("wallet") }}
       <h2 class="card__title" id="balance-title">موجودی کیف پول</h2>
-      <span class="card__aside">{{ ui.badge("نیاز به ورود", "warning") }}</span>
+      <span class="card__aside">{{ ui.badge("مهمان") }}</span>
     </div>
     <p class="figure">—<small>تومان</small></p>
-    <p class="card__text">شارژ و برداشت از کیف پول داخل ربات انجام می‌شود.</p>
-    <div class="card__actions">{{ ui.bot_btn("شارژ در ربات", size="sm") }}</div>
+    <p class="card__text">موجودی کیف پول برای پرداخت سریع‌تر سفارش‌ها استفاده می‌شود.</p>
+    <div class="card__actions">{{ ui.btn("شرایط بازگشت وجه", "/terms/#refund", "glass", "rotate-ccw", "sm") }}</div>
   </section>
 
-  <section class="card col-4" data-reveal aria-labelledby="orders-title">
+  <section class="card col-4 hue-blue" data-reveal aria-labelledby="orders-title">
     <div class="card__head">
       {{ ui.icon_tile("receipt") }}
       <h2 class="card__title" id="orders-title">سفارش‌ها</h2>
@@ -31,11 +31,11 @@
       {{ ui.stat("در حال انجام", "—") }}
       {{ ui.stat("تکمیل‌شده", "—") }}
     </div>
-    <p class="card__text">وضعیت هر سفارش با کد پیگیری در ربات قابل مشاهده است.</p>
-    <div class="card__actions">{{ ui.bot_btn("پیگیری سفارش", variant="glass", size="sm") }}</div>
+    <p class="card__text">وضعیت هر سفارش با کد پیگیری از طریق پشتیبانی قابل پیگیری است.</p>
+    <div class="card__actions">{{ ui.btn("پیگیری سفارش", "/contact/", "glass", "headphones", "sm") }}</div>
   </section>
 
-  <section class="card col-4 md-12" data-reveal aria-labelledby="services-title">
+  <section class="card col-4 md-12 hue-green" data-reveal aria-labelledby="services-title">
     <div class="card__head">
       {{ ui.icon_tile("package") }}
       <h2 class="card__title" id="services-title">خدمات</h2>
@@ -49,7 +49,7 @@
     <div class="card__actions">{{ ui.btn("همه‌ی خدمات", "/services/", "glass", "arrow-left", "sm") }}</div>
   </section>
 
-  <section class="card col-8" data-reveal aria-labelledby="stats-title">
+  <section class="card col-8 hue-purple" data-reveal aria-labelledby="stats-title">
     <div class="card__head">
       {{ ui.icon_tile("chart-column") }}
       <h2 class="card__title" id="stats-title">مقایسه‌ی قیمت خدمات</h2>
@@ -75,7 +75,7 @@
     {% endif %}
   </section>
 
-  <section class="card col-4 md-12" data-reveal aria-labelledby="status-title">
+  <section class="card col-4 md-12 hue-green" data-reveal aria-labelledby="status-title">
     <div class="card__head">
       {{ ui.icon_tile("activity") }}
       <h2 class="card__title" id="status-title">وضعیت سرویس‌ها</h2>
@@ -86,7 +86,7 @@
     <p class="card__text">ساعات پاسخ‌گویی: {{ site.hours }}</p>
   </section>
 
-  <section class="card col-7" data-reveal aria-labelledby="activity-title">
+  <section class="card col-7 hue-blue" data-reveal aria-labelledby="activity-title">
     <div class="card__head">
       {{ ui.icon_tile("list-checks") }}
       <h2 class="card__title" id="activity-title">فعالیت‌های اخیر</h2>
@@ -98,15 +98,15 @@
         <button class="tab" type="button" role="tab" id="tab-payments" aria-controls="panel-payments" aria-selected="false" tabindex="-1">تراکنش‌ها</button>
       </div>
       <div class="tab-panel" role="tabpanel" id="panel-orders" aria-labelledby="tab-orders">
-        {{ ui.empty("orders", "هنوز سفارشی ثبت نشده", "سفارش‌های شما پس از ورود به ربات این‌جا و در تاریخچه‌ی ربات دیده می‌شوند.", ui.bot_btn("ثبت اولین سفارش", size="sm")) }}
+        {{ ui.empty("orders", "هنوز سفارشی ثبت نشده", "پس از ثبت سفارش، سابقه‌ی آن با کد پیگیری این‌جا نمایش داده می‌شود.", ui.btn("مشاهده‌ی خدمات", "/services/", "primary", "shopping-bag", "sm")) }}
       </div>
       <div class="tab-panel" role="tabpanel" id="panel-payments" aria-labelledby="tab-payments" hidden>
-        {{ ui.empty("payments", "تراکنشی وجود ندارد", "رسید هر پرداخت با کد پیگیری در ربات ثبت می‌شود.", ui.btn("شرایط بازگشت وجه", "/terms/#refund", "glass", "rotate-ccw", "sm")) }}
+        {{ ui.empty("payments", "تراکنشی وجود ندارد", "رسید هر پرداخت با کد پیگیری ثبت می‌شود.", ui.btn("شرایط بازگشت وجه", "/terms/#refund", "glass", "rotate-ccw", "sm")) }}
       </div>
     </div>
   </section>
 
-  <section class="card col-5" id="notices" data-reveal aria-labelledby="notices-title">
+  <section class="card col-5 hue-red" id="notices" data-reveal aria-labelledby="notices-title">
     <div class="card__head">
       {{ ui.icon_tile("bell") }}
       <h2 class="card__title" id="notices-title">اعلان‌ها</h2>

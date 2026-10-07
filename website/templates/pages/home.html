@@ -4,12 +4,12 @@
 {% block content %}
 <section class="hero">
   <div class="hero__copy" data-reveal>
-    <span class="eyebrow eyebrow--live"><span class="dot dot--pulse tone-ok"></span>ربات تلگرام {{ site.brand_fa }}{% if bot_status %} · {{ bot_status.value }}{% endif %}</span>
+    <span class="eyebrow eyebrow--live"><span class="dot dot--pulse tone-ok"></span>خدمات مجازی {{ site.brand_fa }}{% if bot_status %} · {{ bot_status.value }}{% endif %}</span>
     <h1 class="display">خدمات مجازی،<br><span class="text-grad">سریع، شفاف و امن</span></h1>
-    <p class="lead">{{ site.services_line }}. سفارش را در ربات تلگرام {{ site.brand_fa }} ثبت کنید، قیمت نهایی را پیش از پرداخت ببینید و سرویس را در همان گفت‌وگو تحویل بگیرید.</p>
+    <p class="lead">{{ site.services_line }}. قیمت نهایی را پیش از پرداخت ببینید، سفارش را با کد پیگیری ثبت کنید و سرویس را در کوتاه‌ترین زمان تحویل بگیرید.</p>
     <div class="actions">
-      {{ ui.bot_btn(size="lg") }}
-      {{ ui.btn("خدمات و قیمت‌ها", "/services/", "glass", "arrow-left", "lg") }}
+      {{ ui.btn("مشاهده‌ی خدمات و قیمت‌ها", "/services/", "primary", "shopping-bag", "lg") }}
+      {{ ui.btn("تماس با ما", "/contact/", "glass", "headphones", "lg") }}
     </div>
     <ul class="trust-row">
       <li>{{ icon("zap") }}تحویل خودکار</li>
@@ -20,8 +20,8 @@
 
   <div class="hero__visual" data-reveal>
     <div class="preview" data-live>
-      <span class="planet" aria-hidden="true"></span>
-      <div class="preview__panel" data-tilt>
+      <span class="aura" aria-hidden="true"></span>
+      <div class="preview__panel glow-ring" data-tilt>
         <div class="preview__top">
           {{ ui.logo("preview") }}
           <span class="preview__name"><strong>پنل {{ site.brand_fa }}</strong><small>خدمات پرفروش</small></span>
@@ -40,7 +40,7 @@
           </li>
           {% endfor %}
         </ul>
-        {{ ui.bot_btn("سفارش در ربات", cls="btn--block") }}
+        {{ ui.btn("همه‌ی خدمات", "/services/", "primary", "arrow-left", cls="btn--block") }}
       </div>
       <span class="float-chip float-chip--a">{{ icon("zap") }}تحویل آنی</span>
       <span class="float-chip float-chip--b">{{ icon("shield-check") }}بازگشت وجه</span>
@@ -48,7 +48,7 @@
   </div>
 </section>
 
-<section class="kpis" aria-label="نگاه کلی" data-stagger>
+<section class="kpis" aria-label="نگاه کلی" data-stagger data-hues>
   <div class="card kpi" data-reveal>{{ ui.stat("خدمات فعال", site.available_count|fa, "خدمت", "package") }}</div>
   <div class="card kpi" data-reveal>{{ ui.stat("شروع قیمت", site.min_price or "—", "تومان", "tag") }}</div>
   <div class="card kpi" data-reveal>{{ ui.stat("زمان تحویل", "آنی", "", "zap", "بیشتر سفارش‌ها خودکار") }}</div>
@@ -57,11 +57,11 @@
 
 <section class="section">
   {{ ui.section_head("تجربه‌ی خرید ساده، شفاف و قابل پیگیری", "تلاش ما این است که خرید خدمات مجازی بدون ابهام و با سابقه‌ی کامل انجام شود.", "چرا " ~ site.brand_fa) }}
-  <div class="bento" data-stagger>
+  <div class="bento" data-stagger data-hues>
     <article class="card feature feature--wide" data-reveal>
       {{ ui.icon_tile("zap", "lg") }}
       <h3 class="feature__title">تحویل سریع و خودکار</h3>
-      <p>بیشتر سفارش‌ها به‌صورت خودکار و بلافاصله پس از پرداخت در همان گفت‌وگوی ربات تحویل داده می‌شوند؛ بدون انتظار و بدون پیام‌های رفت‌وبرگشتی.</p>
+      <p>بیشتر سفارش‌ها به‌صورت خودکار و بلافاصله پس از پرداخت تحویل داده می‌شوند؛ بدون انتظار و بدون پیام‌های رفت‌وبرگشتی.</p>
       <div class="pipeline" aria-hidden="true">
         <span>{{ icon("shopping-bag") }}سفارش</span><i></i><span>{{ icon("wallet") }}پرداخت</span><i></i><span>{{ icon("circle-check") }}تحویل</span>
       </div>
@@ -79,7 +79,7 @@
     <article class="card feature feature--wide" data-reveal>
       {{ ui.icon_tile("headphones", "lg") }}
       <h3 class="feature__title">پشتیبانی واقعی</h3>
-      <p>در ساعات کاری از طریق ربات و تلفن پاسخ‌گوی سؤال‌ها و پیگیری سفارش‌های شما هستیم. هر سفارش کد پیگیری دارد تا در هر مرحله قابل پیگیری باشد.</p>
+      <p>در ساعات کاری از طریق تلفن و ایمیل پاسخ‌گوی سؤال‌ها و پیگیری سفارش‌های شما هستیم. هر سفارش کد پیگیری دارد تا در هر مرحله قابل پیگیری باشد.</p>
     </article>
   </div>
 </section>
@@ -89,7 +89,7 @@
     <div class="about-strip__copy">
       {{ ui.eyebrow("معرفی کسب‌وکار", "building-2") }}
       <h2 class="section-title">درباره‌ی {{ site.brand_fa }}</h2>
-      <p>{{ site.brand_fa }} ({{ site.brand_en }}) یک کسب‌وکار اینترنتی است که خدمات خود را از طریق ربات تلگرام به کاربران ارائه می‌دهد. این مجموعه زیر نظر {{ site.owner_name }} اداره می‌شود و تمام سفارش‌ها با ثبت سابقه و کد پیگیری انجام می‌شوند.</p>
+      <p>{{ site.brand_fa }} ({{ site.brand_en }}) یک کسب‌وکار اینترنتی است که خدمات مجازی را به‌صورت آنلاین به کاربران ارائه می‌دهد. این مجموعه زیر نظر {{ site.owner_name }} اداره می‌شود و تمام سفارش‌ها با ثبت سابقه و کد پیگیری انجام می‌شوند.</p>
       {{ ui.btn("بیشتر درباره‌ی ما", "/about/", "glass", "arrow-left") }}
     </div>
     <ul class="check-list">
@@ -102,23 +102,23 @@
 </section>
 
 <section class="section">
-  {{ ui.section_head("خرید در چهار مرحله", "از ورود به ربات تا تحویل سرویس، همه‌چیز در چند دقیقه.", "مراحل خرید", "list-checks") }}
+  {{ ui.section_head("خرید در چهار مرحله", "از انتخاب خدمت تا تحویل سرویس، همه‌چیز در چند دقیقه.", "مراحل خرید", "list-checks") }}
   {{ ui.steps([
-    ("ورود به ربات", "ربات " ~ site.brand_fa ~ " را در تلگرام باز کنید و دکمه‌ی «شروع» را بزنید."),
+    ("انتخاب از فهرست", "فهرست خدمات و قیمت‌ها را ببینید و خدمت موردنیازتان را پیدا کنید."),
     ("انتخاب خدمت", "خدمت موردنظر را انتخاب کنید؛ قیمت نهایی پیش از پرداخت نمایش داده می‌شود."),
-    ("پرداخت", "مبلغ سفارش را پرداخت کنید؛ رسید و کد پیگیری در ربات ثبت می‌شود."),
-    ("تحویل", "سرویس در همان گفت‌وگو تحویل داده می‌شود و سابقه‌ی آن در ربات باقی می‌ماند."),
+    ("پرداخت", "مبلغ سفارش را پرداخت کنید؛ رسید و کد پیگیری برایتان ثبت می‌شود."),
+    ("تحویل", "سرویس بلافاصله تحویل داده می‌شود و سابقه‌ی سفارش برای پیگیری باقی می‌ماند."),
   ]) }}
 </section>
 
 <section class="section">
-  <div class="cta" data-reveal>
+  <div class="cta glow-ring" data-reveal>
     <div>
       <h2 class="section-title">آماده‌ی شروع هستید؟</h2>
-      <p>برای دیدن فهرست کامل خدمات و ثبت سفارش وارد ربات شوید.</p>
+      <p>فهرست کامل خدمات و قیمت‌ها را ببینید یا برای راهنمایی با پشتیبانی تماس بگیرید.</p>
     </div>
     <div class="actions">
-      {{ ui.bot_btn(size="lg") }}
+      {{ ui.btn("مشاهده‌ی خدمات", "/services/", "primary", "shopping-bag", "lg") }}
       {{ ui.btn("تماس با ما", "/contact/", "glass", "headphones", "lg") }}
     </div>
   </div>

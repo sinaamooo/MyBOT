@@ -92,10 +92,6 @@ class Site:
     missing: tuple[str, ...]
 
     @property
-    def bot_url(self) -> str:
-        return f"https://t.me/{self.bot_username}"
-
-    @property
     def priced(self) -> tuple[Service, ...]:
         return tuple(s for s in self.services if s.price_value is not None)
 

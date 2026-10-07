@@ -21,14 +21,17 @@
 @keyframes toast-in { from { opacity: 0; transform: translateY(14px) scale(.96); filter: blur(4px); } }
 @keyframes toast-out { to { opacity: 0; transform: translateY(6px) scale(.96); } }
 @keyframes loader-failsafe { to { opacity: 0; visibility: hidden; } }
-@keyframes nebula-drift {
-  from { transform: translate3d(0, 0, 0) scale(1) rotate(0deg); }
-  to { transform: translate3d(-3%, 2%, 0) scale(1.08) rotate(3deg); }
+@keyframes nebula-breathe {
+  0% { transform: translate3d(0, 0, 0) scale(1.04) rotate(0deg); filter: hue-rotate(0deg) saturate(1); }
+  50% { filter: hue-rotate(-14deg) saturate(1.15); }
+  100% { transform: translate3d(-2.5%, 1.5%, 0) scale(1.12) rotate(2.5deg); filter: hue-rotate(10deg) saturate(1.05); }
 }
-@keyframes orb-float {
-  from { transform: translate3d(0, 0, 0); }
-  to { transform: translate3d(6vmax, 4vmax, 0); }
+@keyframes spiral-turn {
+  to { transform: perspective(1400px) rotateX(62deg) rotateZ(-360deg); }
 }
+@keyframes shimmer { to { background-position: 100% 0; } }
+@property --spin { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+@keyframes border-spin { to { --spin: 360deg; } }
 @keyframes page-out { to { opacity: 0; transform: translateY(-6px); filter: blur(4px); } }
 @keyframes page-in { from { opacity: 0; transform: translateY(12px); filter: blur(6px); } }
 
@@ -59,15 +62,16 @@ html.js [data-reveal].is-in { opacity: 1; transform: none; filter: none; }
 html:is([data-quality="medium"], [data-quality="low"]) .card {
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
-  --glass-tint: rgb(13 17 40 / .7);
+  --glass-tint: rgb(20 13 50 / .72);
 }
 html:is([data-quality="medium"], [data-quality="low"]) [data-reveal] { filter: none; }
 
 html[data-quality="low"] :is(
-  .galaxy__nebula, .galaxy__orb, .preview, .float-chip, .lost__planet,
-  .empty__orbit, .empty__stars circle, .pipeline i
+  .galaxy__nebula, .galaxy__spiral, .text-grad, .preview, .float-chip, .lost__planet,
+  .empty__orbit, .empty__stars circle, .pipeline i, .aura
 ),
-html[data-quality="low"] .dot--pulse::after { animation: none; }
+html[data-quality="low"] .dot--pulse::after,
+html[data-quality="low"] .glow-ring::before { animation: none; }
 
 html[data-perf="on"] :is(.glass, .card, .dropdown__panel, .toast, .float-chip, .preview__panel, .topbar),
 html[data-perf="on"] .topbar::before,
@@ -75,9 +79,9 @@ html[data-perf="on"] .modal::backdrop {
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
 }
-html[data-perf="on"] { --glass-strong: linear-gradient(160deg, #20264f, #0e1230); }
-html[data-perf="on"] :is(.glass, .card) { --glass-tint: rgb(12 16 38 / .9); }
-html[data-perf="on"] :is(.topbar, .mobile-nav) { --glass-tint: rgb(12 16 38 / .97); }
+html[data-perf="on"] { --glass-strong: linear-gradient(160deg, #2a1d5e, #120c33); }
+html[data-perf="on"] :is(.glass, .card) { --glass-tint: rgb(18 12 44 / .9); }
+html[data-perf="on"] :is(.topbar, .mobile-nav) { --glass-tint: rgb(18 12 44 / .97); }
 html[data-perf="on"] [data-reveal] { opacity: 1; transform: none; transition: none; }
 html[data-perf="on"] .card:hover { transform: none; }
 html[data-perf="on"] .btn:hover .btn__sheen { animation: none; }

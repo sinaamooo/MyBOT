@@ -17,12 +17,12 @@
   </nav>
 
   <div class="sidebar__foot">
-    <div class="bot-card">
-      <div class="bot-card__row">
-        {{ ui.icon_tile("send", "sm") }}
-        <span class="bot-card__text"><strong>ربات تلگرام</strong><span class="ltr">@{{ site.bot_username }}</span></span>
+    <div class="side-card">
+      <div class="side-card__row">
+        {{ ui.icon_tile("headphones", "sm") }}
+        <span class="side-card__text"><strong>پشتیبانی</strong><span>{{ site.hours }}</span></span>
       </div>
-      {{ ui.bot_btn("ورود به ربات", size="sm", cls="btn--block") }}
+      {{ ui.btn("تماس با ما", "/contact/", "primary", "phone", "sm", cls="btn--block") }}
     </div>
     {{ ui.perf_switch() }}
   </div>
