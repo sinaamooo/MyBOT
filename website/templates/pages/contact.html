@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% import "macros/ui.html" as ui %}
+
+{% macro contact_card(icon_name, label, value, copy_value="", action=None, wide=False, ltr=False) -%}
+<article class="card contact-card{{ ' contact-card--wide' if wide else '' }}" data-reveal>
+  {{ ui.icon_tile(icon_name, "lg") }}
+  <div class="contact-card__body">
+    <p class="contact-card__label">{{ label }}</p>
+    <p class="contact-card__value"{% if ltr %} dir="ltr"{% endif %}>{{ value }}</p>
+  </div>
+  <div class="contact-card__actions">
+    {% if copy_value %}{{ ui.copy_btn(copy_value, label) }}{% endif %}
+    {% if action %}{{ action }}{% endif %}
+  </div>
+</article>
+{%- endmacro %}
+
+{% block content %}
+{{ ui.page_hero(page, "برای پرسش درباره‌ی خدمات، پیگیری سفارش یا ثبت شکایت، از یکی از راه‌های زیر با ما تماس بگیرید.") }}
+
+<div class="contact-grid" data-stagger>
+  {{ contact_card("smartphone", "تلفن همراه", site.mobile, site.mobile_tel,
+       ui.btn("تماس", "tel:" ~ site.mobile_tel, "glass", "phone", "sm"), ltr=True) }}
+  {% if site.landline %}
+  {{ contact_card("phone", "تلفن ثابت", site.landline, site.landline_tel,
+       ui.btn("تماس", "tel:" ~ site.landline_tel, "glass", "phone", "sm"), ltr=True) }}
+  {% endif %}
+  {{ contact_card("mail", "ایمیل", site.email, site.email,
+       ui.btn("ارسال ایمیل", "mailto:" ~ site.email, "glass", "mail", "sm"), ltr=True) }}
+  {{ contact_card("send", "ربات تلگرام", "@" ~ site.bot_username, "@" ~ site.bot_username,
+       ui.bot_btn("باز کردن", variant="glass", size="sm"), ltr=True) }}
+  {{ contact_card("map-pin", "نشانی", site.address, site.address, wide=True) }}
+  {{ contact_card("hash", "کد پستی", site.postal_code, site.postal_code) }}
+  {{ contact_card("clock", "ساعات پاسخ‌گویی", site.hours, wide=True) }}
+  {{ contact_card("user-round", "مسئول کسب‌وکار", site.owner_name) }}
+</div>
+
+<div class="alert tone-info" data-reveal>
+  <span class="alert__icon">{{ icon("info") }}</span>
+  <p>نشانی بالا محل استقرار کسب‌وکار است و فروش خدمات به‌صورت کاملاً اینترنتی انجام می‌شود. برای مراجعه‌ی حضوری لطفاً پیش‌تر هماهنگ کنید.</p>
+</div>
+{% endblock %}

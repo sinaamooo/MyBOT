@@ -1,0 +1,111 @@
+/* ═══════════════ Design tokens ═══════════════
+   One source of truth for colour, glass, radius, spacing, type and motion. */
+
+:root {
+  color-scheme: dark;
+
+  /* Space */
+  --space-950: #04050d;
+  --space-900: #070916;
+  --space-800: #0d1128;
+
+  /* Ink */
+  --ink-1: #f3f5ff;
+  --ink-2: rgb(222 228 255 / .76);
+  --ink-3: rgb(206 214 250 / .56);
+  --ink-4: rgb(206 214 250 / .36);
+
+  /* Brand */
+  --cyan: #5be3ee;
+  --cyan-rgb: 91 227 238;
+  --violet: #a08fff;
+  --violet-rgb: 160 143 255;
+  --brand-grad: linear-gradient(120deg, #8ff6fb 0%, #7aa8ff 50%, #b292ff 100%);
+
+  /* Status — reserved for state, always paired with an icon or label */
+  --ok-rgb: 74 222 156;
+  --warn-rgb: 251 203 92;
+  --err-rgb: 255 111 134;
+  --info-rgb: 102 178 255;
+  --neutral-rgb: 206 214 250;
+
+  /* Glass */
+  --glass-fill: linear-gradient(155deg, rgb(255 255 255 / .085) 0%, rgb(255 255 255 / .035) 42%, rgb(255 255 255 / .018) 100%);
+  --glass-tint: rgb(12 16 38 / .34);
+  --glass-strong: linear-gradient(160deg, rgb(34 40 80 / .86), rgb(13 17 40 / .93));
+  --glass-line: rgb(255 255 255 / .10);
+  --glass-line-strong: rgb(255 255 255 / .2);
+  --glass-blur: 18px;
+  --glass-sat: 150%;
+  --glass-highlight: inset 0 1px 0 rgb(255 255 255 / .10);
+  --glass-inner: inset 0 0 32px rgb(120 150 255 / .045);
+  --shadow-1: 0 1px 2px rgb(0 0 0 / .35), 0 10px 30px -14px rgb(0 0 0 / .65);
+  --shadow-2: 0 2px 6px rgb(0 0 0 / .35), 0 28px 60px -24px rgb(0 0 0 / .8);
+  --glow-1: 0 0 0 1px rgb(var(--cyan-rgb) / .08), 0 20px 50px -24px rgb(var(--cyan-rgb) / .35);
+
+  /* Radius */
+  --r-xs: 8px;
+  --r-sm: 12px;
+  --r-md: 16px;
+  --r-lg: 22px;
+  --r-xl: 28px;
+  --r-pill: 999px;
+
+  /* Spacing (4px grid) */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-7: 32px;
+  --sp-8: 40px;
+  --sp-9: 56px;
+  --sp-10: 80px;
+
+  /* Type */
+  --font: "Vazirmatn", Tahoma, system-ui, sans-serif;
+  --fs-2xs: .75rem;
+  --fs-xs: .8125rem;
+  --fs-sm: .9rem;
+  --fs-md: 1rem;
+  --fs-lg: 1.125rem;
+  --fs-xl: 1.3rem;
+  --fs-2xl: clamp(1.45rem, 1.1rem + 1.2vw, 1.95rem);
+  --fs-3xl: clamp(1.9rem, 1.2rem + 2.6vw, 2.9rem);
+  --fs-4xl: clamp(2.2rem, 1.2rem + 3.8vw, 3.75rem);
+  --lh-tight: 1.4;
+  --lh-body: 1.9;
+
+  /* Motion */
+  --ease: cubic-bezier(.22, 1, .36, 1);
+  --ease-io: cubic-bezier(.65, 0, .35, 1);
+  --ease-spring: cubic-bezier(.34, 1.56, .64, 1);
+  --t-1: 140ms;
+  --t-2: 240ms;
+  --t-3: 420ms;
+  --t-4: 700ms;
+
+  /* Layout */
+  --gutter: 16px;
+  --sidebar-w: 264px;
+  --topbar-h: 64px;
+  --content-max: 1200px;
+
+  /* Layers */
+  --z-content: 1;
+  --z-nav: 40;
+  --z-dropdown: 60;
+  --z-toast: 80;
+  --z-loader: 100;
+}
+
+@media (min-width: 768px) {
+  :root { --gutter: 24px; }
+}
+@media (min-width: 1680px) {
+  :root { --content-max: 1360px; }
+}
+
+/* Adaptive glass: lighter effects on mid-range devices, none in performance mode */
+html:is([data-quality="medium"], [data-quality="low"]) { --glass-blur: 14px; }

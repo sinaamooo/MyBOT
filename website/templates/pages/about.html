@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% import "macros/ui.html" as ui %}
+{% block content %}
+{{ ui.page_hero(page, site.brand_fa ~ " (" ~ site.brand_en ~ ") یک کسب‌وکار اینترنتی است که خدمات مجازی را از طریق ربات تلگرام ارائه می‌دهد.") }}
+
+<div class="bento">
+  <article class="card card--static col-8 prose" data-reveal>
+    <h2>ما چه کاری انجام می‌دهیم؟</h2>
+    <p>{{ site.services_line }}. هدف ما این است که خرید این خدمات برای کاربران ساده، سریع و شفاف باشد؛ به همین دلیل کل فرایند، از انتخاب خدمت تا پرداخت و تحویل، در یک ربات تلگرام و بدون نیاز به ثبت‌نام جداگانه انجام می‌شود.</p>
+
+    <h2>تعهدات ما</h2>
+    <ul class="check-list">
+      <li>{{ icon("badge-check") }}<span>نمایش قیمت نهایی هر خدمت پیش از پرداخت، بدون هزینه‌ی پنهان</span></li>
+      <li>{{ icon("badge-check") }}<span>ثبت سابقه و کد پیگیری برای همه‌ی سفارش‌ها</span></li>
+      <li>{{ icon("badge-check") }}<span>بازگرداندن وجه سفارش‌های تحویل‌نشده یا معیوب طبق <a href="/terms/#refund">قوانین و مقررات</a></span></li>
+      <li>{{ icon("badge-check") }}<span>حفاظت از اطلاعات کاربران طبق <a href="/privacy/">سیاست حریم خصوصی</a></span></li>
+      <li>{{ icon("badge-check") }}<span>فعالیت در چارچوب قوانین جمهوری اسلامی ایران</span></li>
+    </ul>
+  </article>
+
+  <aside class="card col-4 md-12 owner" data-reveal aria-labelledby="owner-title">
+    <span class="avatar avatar--xl">{{ icon("user-round") }}</span>
+    <p class="owner__label">مسئول کسب‌وکار</p>
+    <h2 class="owner__name" id="owner-title">{{ site.owner_name }}</h2>
+    <p class="card__text">مسئولیت اداره‌ی این کسب‌وکار و پاسخ‌گویی به کاربران بر عهده‌ی {{ site.owner_name }} است. برای هرگونه سؤال، پیشنهاد یا شکایت با ما در ارتباط باشید.</p>
+    <ul class="contact-mini">
+      <li>{{ icon("phone") }}<a href="tel:{{ site.mobile_tel }}" dir="ltr">{{ site.mobile }}</a></li>
+      <li>{{ icon("map-pin") }}<span>{{ site.address }}</span></li>
+    </ul>
+    {{ ui.btn("همه‌ی راه‌های ارتباطی", "/contact/", "glass", "arrow-left", "sm", cls="btn--block") }}
+  </aside>
+</div>
+{% endblock %}

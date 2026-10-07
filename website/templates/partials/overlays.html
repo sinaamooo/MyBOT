@@ -1,0 +1,44 @@
+{% import "macros/ui.html" as ui %}
+<dialog class="modal" id="login-modal" aria-labelledby="login-title">
+  <div class="modal__box">
+    <button class="icon-btn icon-btn--sm modal__close" type="button" data-modal-close aria-label="بستن">{{ icon("x") }}</button>
+    {{ ui.icon_tile("log-in", "lg") }}
+    <h2 class="modal__title" id="login-title">ورود به حساب {{ site.brand_fa }}</h2>
+    <p class="modal__text">حساب کاربری شما همان حساب تلگرامتان است و ثبت‌نام جداگانه لازم نیست. موجودی، سفارش‌ها و تراکنش‌ها داخل ربات نمایش داده می‌شوند.</p>
+    <ol class="mini-steps">
+      <li>ربات {{ site.brand_fa }} را در تلگرام باز کنید.</li>
+      <li>دکمه‌ی «شروع» را بزنید.</li>
+      <li>خدمت موردنظر را انتخاب و سفارش را ثبت کنید.</li>
+    </ol>
+    <div class="modal__actions">
+      {{ ui.bot_btn(cls="btn--block") }}
+      {{ ui.btn("بعداً", variant="ghost", cls="btn--block", attrs={"data-modal-close": ""}) }}
+    </div>
+  </div>
+</dialog>
+
+<dialog class="modal modal--sheet" id="more-sheet" aria-label="صفحه‌های بیشتر">
+  <div class="modal__box">
+    <span class="sheet__handle" aria-hidden="true"></span>
+    <ul class="menu menu--sheet">
+      {% for slug in ["about", "terms", "privacy"] %}
+      {% set item = pages[slug] %}
+      <li><a class="menu__item"{% if item.slug == page.slug %} aria-current="page"{% endif %} href="{{ item.url }}">{{ icon(item.icon) }}{{ item.nav }}</a></li>
+      {% endfor %}
+      <li><a class="menu__item" href="{{ site.bot_url }}" target="_blank" rel="noopener">{{ icon("send") }}ربات تلگرام</a></li>
+      <li><button class="menu__item" type="button" data-modal-open="login-modal">{{ icon("log-in") }}ورود به حساب</button></li>
+    </ul>
+    <div class="menu__sep"></div>
+    {{ ui.perf_switch() }}
+  </div>
+</dialog>
+
+<div class="toasts" data-toasts aria-live="polite"></div>
+<template id="toast-template">
+  <div class="toast" role="status">
+    <span class="toast__icon">{{ icon("circle-check", "i--success") }}{{ icon("circle-x", "i--error") }}{{ icon("triangle-alert", "i--warning") }}{{ icon("info", "i--info") }}</span>
+    <span class="toast__body"><strong data-toast-title></strong><span data-toast-text></span></span>
+    <button class="icon-btn icon-btn--xs" type="button" data-toast-close aria-label="بستن">{{ icon("x") }}</button>
+    <span class="toast__progress"></span>
+  </div>
+</template>

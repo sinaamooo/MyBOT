@@ -1,0 +1,7 @@
+{% set more_pages = ["about", "terms", "privacy"] %}
+<nav class="mobile-nav glass" aria-label="ناوبری">
+  {% for item in mobile_nav %}
+  <a class="mobile-nav__item" href="{{ item.url }}"{% if item.slug == page.slug %} aria-current="page"{% endif %}>{{ icon(item.icon) }}<span>{{ item.label }}</span></a>
+  {% endfor %}
+  <button class="mobile-nav__item{{ ' is-active' if page.slug in more_pages else '' }}" type="button" data-modal-open="more-sheet">{{ icon("ellipsis") }}<span>بیشتر</span></button>
+</nav>

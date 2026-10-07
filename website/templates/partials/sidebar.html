@@ -1,0 +1,29 @@
+{% import "macros/ui.html" as ui %}
+<aside class="sidebar glass" aria-label="ناوبری اصلی">
+  <a class="brand" href="/" aria-label="{{ site.brand_fa }}، صفحه‌ی اصلی">
+    {{ ui.logo("side") }}
+    <span class="brand__text"><strong>{{ site.brand_fa }}</strong><small>{{ site.brand_en }} · Virtual Services</small></span>
+  </a>
+
+  <nav class="side-nav">
+    {% for label, items in nav_groups %}
+    <p class="side-nav__label">{{ label }}</p>
+    <ul class="side-nav__list">
+      {% for item in items %}
+      <li><a class="side-link" href="{{ item.url }}"{% if item.slug == page.slug %} aria-current="page"{% endif %}>{{ icon(item.icon) }}<span>{{ item.nav }}</span></a></li>
+      {% endfor %}
+    </ul>
+    {% endfor %}
+  </nav>
+
+  <div class="sidebar__foot">
+    <div class="bot-card">
+      <div class="bot-card__row">
+        {{ ui.icon_tile("send", "sm") }}
+        <span class="bot-card__text"><strong>ربات تلگرام</strong><span class="ltr">@{{ site.bot_username }}</span></span>
+      </div>
+      {{ ui.bot_btn("ورود به ربات", size="sm", cls="btn--block") }}
+    </div>
+    {{ ui.perf_switch() }}
+  </div>
+</aside>

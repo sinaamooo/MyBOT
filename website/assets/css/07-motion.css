@@ -1,0 +1,101 @@
+/* ═══════════════ Motion ═══════════════ */
+
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes ping { 0% { transform: scale(1); opacity: .7; } 80%, 100% { transform: scale(2.8); opacity: 0; } }
+@keyframes pulse-soft { 50% { opacity: .55; } }
+@keyframes twinkle { 50% { opacity: .25; } }
+@keyframes float-y { 50% { transform: translateY(-10px); } }
+@keyframes wiggle { 30% { transform: rotate(-10deg); } 60% { transform: rotate(8deg); } }
+@keyframes pop { from { transform: scale(.4); } }
+@keyframes sheen { from { transform: translateX(130%); } to { transform: translateX(-130%); } }
+@keyframes flow { to { background-position: -200% 0; } }
+@keyframes grow { from { transform: scaleX(0); } }
+@keyframes drain { to { transform: scaleX(0); } }
+@keyframes rise { from { opacity: 0; transform: translateY(8px); } }
+@keyframes fade-in { from { opacity: 0; } }
+@keyframes fade-out { to { opacity: 0; } }
+@keyframes modal-in { from { opacity: 0; transform: translateY(14px) scale(.95); filter: blur(6px); } }
+@keyframes modal-out { to { opacity: 0; transform: translateY(8px) scale(.97); filter: blur(4px); } }
+@keyframes sheet-in { from { transform: translateY(100%); } }
+@keyframes sheet-out { to { transform: translateY(100%); } }
+@keyframes toast-in { from { opacity: 0; transform: translateY(14px) scale(.96); filter: blur(4px); } }
+@keyframes toast-out { to { opacity: 0; transform: translateY(6px) scale(.96); } }
+@keyframes loader-failsafe { to { opacity: 0; visibility: hidden; } }
+@keyframes nebula-drift {
+  from { transform: translate3d(0, 0, 0) scale(1) rotate(0deg); }
+  to { transform: translate3d(-3%, 2%, 0) scale(1.08) rotate(3deg); }
+}
+@keyframes orb-float {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(6vmax, 4vmax, 0); }
+}
+@keyframes page-out { to { opacity: 0; transform: translateY(-6px); filter: blur(4px); } }
+@keyframes page-in { from { opacity: 0; transform: translateY(12px); filter: blur(6px); } }
+
+/* ── Scroll reveal ── */
+html.js [data-reveal] {
+  opacity: 0;
+  transform: translateY(18px);
+  filter: blur(6px);
+  transition:
+    opacity 700ms var(--ease) var(--rd, 0ms),
+    transform 800ms var(--ease) var(--rd, 0ms),
+    filter 700ms var(--ease) var(--rd, 0ms);
+}
+html.js [data-reveal].is-in { opacity: 1; transform: none; filter: none; }
+
+/* Animations are paused while their section is off screen */
+.is-paused, .is-paused * { animation-play-state: paused !important; }
+
+/* ── Page transitions (cross-document View Transitions) ── */
+@view-transition { navigation: auto; }
+::view-transition-old(root) { animation: page-out 200ms var(--ease) both; }
+::view-transition-new(root) { animation: page-in 420ms var(--ease) both; }
+
+/* ── Adaptive quality ──
+   medium: cards drop their blur.  low (weak device, reduced motion or
+   performance mode): ambient motion stops too.  Performance mode also removes
+   every blur and the scroll/hover motion. */
+html:is([data-quality="medium"], [data-quality="low"]) .card {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  --glass-tint: rgb(13 17 40 / .7);
+}
+html:is([data-quality="medium"], [data-quality="low"]) [data-reveal] { filter: none; }
+
+html[data-quality="low"] :is(
+  .galaxy__nebula, .galaxy__orb, .preview, .float-chip, .lost__planet,
+  .empty__orbit, .empty__stars circle, .pipeline i
+),
+html[data-quality="low"] .dot--pulse::after { animation: none; }
+
+html[data-perf="on"] :is(.glass, .card, .dropdown__panel, .toast, .float-chip, .preview__panel, .topbar),
+html[data-perf="on"] .topbar::before,
+html[data-perf="on"] .modal::backdrop {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+html[data-perf="on"] { --glass-strong: linear-gradient(160deg, #20264f, #0e1230); }
+html[data-perf="on"] :is(.glass, .card) { --glass-tint: rgb(12 16 38 / .9); }
+html[data-perf="on"] :is(.topbar, .mobile-nav) { --glass-tint: rgb(12 16 38 / .97); }
+html[data-perf="on"] [data-reveal] { opacity: 1; transform: none; transition: none; }
+html[data-perf="on"] .card:hover { transform: none; }
+html[data-perf="on"] .btn:hover .btn__sheen { animation: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+  .toast__progress { animation-duration: var(--toast-ms, 4200ms) !important; }
+  [data-reveal] { opacity: 1 !important; transform: none !important; filter: none !important; }
+  ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
+}
+
+@media print {
+  .galaxy, .loader, .sidebar, .topbar, .mobile-nav, .toasts { display: none !important; }
+  body { background: #fff; color: #000; }
+  [data-reveal] { opacity: 1 !important; transform: none !important; filter: none !important; }
+}

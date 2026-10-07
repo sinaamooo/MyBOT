@@ -1,0 +1,46 @@
+{% import "macros/ui.html" as ui %}
+<footer class="footer glass">
+  <div class="footer__grid">
+    <div class="footer__brand">
+      <a class="brand" href="/">
+        {{ ui.logo("footer") }}
+        <span class="brand__text"><strong>{{ site.brand_fa }}</strong><small>{{ site.brand_en }}</small></span>
+      </a>
+      <p>{{ site.services_line }}؛ ثبت سفارش، پرداخت و تحویل از طریق ربات تلگرام.</p>
+      {% if site.enamad_seal %}<div class="trust-seal">{{ site.enamad_seal|safe }}</div>{% endif %}
+    </div>
+
+    <nav class="footer__col" aria-label="دسترسی سریع">
+      <h2 class="footer__title">دسترسی سریع</h2>
+      <ul>
+        <li><a href="/services/">خدمات و قیمت‌ها</a></li>
+        <li><a href="/panel/">پنل کاربری</a></li>
+        <li><a href="/about/">درباره‌ی ما</a></li>
+        <li><a href="{{ site.bot_url }}" target="_blank" rel="noopener" data-bot-link>ربات تلگرام</a></li>
+      </ul>
+    </nav>
+
+    <nav class="footer__col" aria-label="اطلاعات حقوقی">
+      <h2 class="footer__title">اطلاعات حقوقی</h2>
+      <ul>
+        <li><a href="/terms/">قوانین و مقررات</a></li>
+        <li><a href="/terms/#refund">شرایط بازگشت وجه</a></li>
+        <li><a href="/privacy/">حریم خصوصی</a></li>
+      </ul>
+    </nav>
+
+    <div class="footer__col">
+      <h2 class="footer__title">ارتباط با ما</h2>
+      <ul class="footer__contact">
+        <li>{{ icon("phone") }}<a href="tel:{{ site.mobile_tel }}" dir="ltr">{{ site.mobile }}</a></li>
+        <li>{{ icon("mail") }}<a href="mailto:{{ site.email }}" dir="ltr">{{ site.email }}</a></li>
+        <li>{{ icon("map-pin") }}<span>{{ site.address }}</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="footer__bar">
+    <p>© {{ site.year }} {{ site.brand_fa }} ({{ site.brand_en }}). تمامی حقوق محفوظ است.</p>
+    <button class="link-btn" type="button" data-scroll-top>بازگشت به بالا{{ icon("arrow-up") }}</button>
+  </div>
+</footer>

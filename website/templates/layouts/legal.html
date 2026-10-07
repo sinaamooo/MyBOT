@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% import "macros/ui.html" as ui %}
+{% block content %}
+{{ ui.page_hero(page, page.description, "آخرین به‌روزرسانی: " ~ site.legal_updated) }}
+
+<div class="legal">
+  <nav class="legal__toc glass" aria-label="فهرست مطالب" data-toc data-reveal>
+    <p class="legal__toc-title">{{ icon("file-text") }}فهرست مطالب</p>
+    <ol>
+      {% for anchor, heading in page.sections %}
+      <li><a href="#{{ anchor }}"><span>{{ loop.index|fa }}</span>{{ heading }}</a></li>
+      {% endfor %}
+    </ol>
+  </nav>
+  <article class="card card--static legal__body prose" data-reveal>
+    {% block legal %}{% endblock %}
+  </article>
+</div>
+{% endblock %}

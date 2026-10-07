@@ -1,0 +1,12 @@
+{% import "macros/ui.html" as ui %}
+<div class="loader" aria-hidden="true">
+  <div class="loader__core">
+    <span class="loader__halo"></span>
+    <span class="loader__ring"></span>
+    <span class="loader__ring loader__ring--inner"></span>
+    <span class="loader__orbit"><span class="loader__particle"></span></span>
+    <span class="loader__orbit loader__orbit--slow"><span class="loader__particle loader__particle--violet"></span></span>
+    {{ ui.logo("loader") }}
+  </div>
+  <p class="loader__text">{{ site.brand_en }}</p>
+</div>

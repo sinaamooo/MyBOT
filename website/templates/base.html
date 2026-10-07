@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>{{ page.title if page.slug == "home" else page.title ~ " | " ~ site.brand_fa }}</title>
+  <meta name="description" content="{{ page.description }}">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#05060f">
+  {% if page.slug == "home" and site.enamad_meta %}
+  <meta name="enamad" content="{{ site.enamad_meta }}">
+  {% endif %}
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <link rel="preload" href="/assets/fonts/vazirmatn-variable.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="{{ assets.css }}">
+  <script>{% include "partials/boot.js" %}</script>
+  <script src="{{ assets.js }}" defer></script>
+</head>
+<body data-page="{{ page.slug }}">
+  <a class="skip-link" href="#main">پرش به محتوای اصلی</a>
+  {% include "partials/galaxy.html" %}
+  {% include "partials/loader.html" %}
+  {% include "partials/sidebar.html" %}
+  <div class="stage">
+    {% include "partials/topbar.html" %}
+    <main class="main" id="main" tabindex="-1">
+      {% block content %}{% endblock %}
+    </main>
+    {% include "partials/footer.html" %}
+  </div>
+  {% include "partials/mobile-nav.html" %}
+  {% include "partials/overlays.html" %}
+</body>
+</html>

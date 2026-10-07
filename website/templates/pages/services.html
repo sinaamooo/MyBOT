@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% import "macros/ui.html" as ui %}
+{% block content %}
+{{ ui.page_hero(page, site.services_line ~ ". فهرست زیر خدمات اصلی " ~ site.brand_fa ~ " و قیمت فعلی آن‌ها را نشان می‌دهد.") }}
+
+<div class="catalog" data-filter>
+  <div class="toolbar glass" data-reveal>
+    <label class="field">
+      {{ icon("search") }}
+      <span class="sr-only">جست‌وجوی خدمت</span>
+      <input type="search" placeholder="جست‌وجوی خدمت…" autocomplete="off" data-filter-input>
+      <button class="icon-btn icon-btn--xs field__clear" type="button" aria-label="پاک کردن جست‌وجو" data-filter-clear>{{ icon("x") }}</button>
+    </label>
+    {% if site.categories|length > 1 %}
+    <div class="tabs" role="tablist" aria-label="دسته‌بندی خدمات" data-tabs>
+      <span class="tabs__ink" aria-hidden="true"></span>
+      <button class="tab" type="button" role="tab" aria-selected="true" data-value="all">همه</button>
+      {% for category in site.categories %}
+      <button class="tab" type="button" role="tab" aria-selected="false" tabindex="-1" data-value="{{ category }}">{{ category }}</button>
+      {% endfor %}
+    </div>
+    {% endif %}
+    <span class="chip toolbar__count"><strong data-filter-count>{{ site.services|length|fa }}</strong>خدمت</span>
+  </div>
+
+  <div class="services-grid" data-stagger>
+    {% for service in site.services %}
+    <article class="card service" data-reveal data-filter-item data-category="{{ service.category }}" data-filter-text="{{ service.name }} {{ service.category }} {{ service.description }}">
+      <div class="service__top">
+        {{ ui.icon_tile(service.icon, "lg") }}
+        {{ ui.badge("موجود" if service.available else "ناموجود", "success" if service.available else "warning", dot=True) }}
+      </div>
+      <h2 class="service__name">{{ service.name }}</h2>
+      <p class="service__meta">{{ service.category }}</p>
+      {% if service.description %}<p class="service__desc">{{ service.description }}</p>{% endif %}
+      <div class="service__foot">
+        <p class="service__price"><strong>{{ service.price }}</strong>{% if service.price_value is not none %}<small>تومان</small>{% endif %}</p>
+        {% if service.available %}
+        {{ ui.bot_btn("سفارش", size="sm") }}
+        {% else %}
+        {{ ui.btn("ناموجود", variant="glass", size="sm", attrs={"disabled": true}) }}
+        {% endif %}
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+
+  {{ ui.empty("search", "خدمتی پیدا نشد", "عبارت دیگری را امتحان کنید یا همه‌ی خدمات را ببینید.", ui.btn("نمایش همه‌ی خدمات", variant="glass", icon_name="rotate-ccw", size="sm", attrs={"data-filter-reset": ""}), attrs={"data-filter-empty": "", "hidden": true}) }}
+</div>
+
+<div class="alert tone-info" data-reveal>
+  <span class="alert__icon">{{ icon("info") }}</span>
+  <p>قیمت‌ها به تومان است و ممکن است با تغییر نرخ تأمین‌کننده‌ها به‌روز شود. قیمت نهایی هر سفارش پیش از پرداخت در ربات نمایش داده می‌شود و ملاک، همان قیمت است.</p>
+</div>
+
+<section class="section">
+  {{ ui.section_head("نحوه‌ی خرید و تحویل", "", "مراحل", "list-checks") }}
+  {{ ui.steps([
+    ("ورود به ربات", "ربات " ~ site.brand_fa ~ " را در تلگرام باز کنید و «شروع» را بزنید."),
+    ("انتخاب و پرداخت", "خدمت را انتخاب کنید، قیمت نهایی را ببینید و مبلغ را پرداخت کنید."),
+    ("تحویل در ربات", "سرویس معمولاً بلافاصله در همان گفت‌وگو تحویل داده می‌شود."),
+  ]) }}
+</section>
+
+<section class="section">
+  {{ ui.section_head("پرسش‌های پرتکرار", "", "راهنما", "message-circle") }}
+  <div class="faq-list" data-stagger>
+    {% for question, answer in [
+      ("آیا برای خرید باید در سایت ثبت‌نام کنم؟", "خیر. ثبت سفارش، پرداخت و تحویل همگی از داخل ربات تلگرام انجام می‌شود و حساب کاربری شما همان حساب تلگرامتان است."),
+      ("تحویل سفارش چقدر طول می‌کشد؟", "بیشتر سفارش‌ها خودکار و بلافاصله پس از پرداخت تحویل می‌شوند. اگر تحویل به هر دلیلی انجام نشود، سفارش را از طریق پشتیبانی پیگیری می‌کنیم."),
+      ("اگر سرویس تحویل‌شده کار نکند چه می‌شود؟", "طبق <a href=\"/terms/#refund\">شرایط بازگشت وجه</a>، سرویس جایگزین داده می‌شود یا مبلغ به شما بازگردانده می‌شود."),
+      ("چطور سفارشم را پیگیری کنم؟", "با کد پیگیری‌ای که پس از پرداخت در ربات دریافت می‌کنید، از طریق پشتیبانی ربات یا شماره‌ی تماس صفحه‌ی <a href=\"/contact/\">تماس با ما</a> پیگیری کنید."),
+    ] %}
+    <details class="card card--static faq" data-reveal data-accordion>
+      <summary>{{ question }}{{ icon("chevron-down") }}</summary>
+      <div class="faq__body"><p>{{ answer|safe }}</p></div>
+    </details>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}
