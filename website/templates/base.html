@@ -3,7 +3,11 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  {% if page.slug == "home" and site.enamad_title %}
+  <title>{{ site.enamad_title }}</title>
+  {% else %}
   <title>{{ page.title if page.slug == "home" else page.title ~ " | " ~ site.brand_fa }}</title>
+  {% endif %}
   <meta name="description" content="{{ page.description }}">
   <meta http-equiv="Content-Security-Policy" content="{{ csp }}">
   <meta name="referrer" content="strict-origin-when-cross-origin">

@@ -37,9 +37,9 @@ def content_security_policy(script_hashes: list[str], *, header: bool = False) -
     return "; ".join(directives)
 
 
-def check_enamad_meta(code: str) -> str:
+def check_enamad_meta(code: str, field: str = "meta_code") -> str:
     if code and not _META_CODE.fullmatch(code):
-        raise ValueError("enamad.meta_code فقط می‌تواند حروف و اعداد انگلیسی، - و _ داشته باشد")
+        raise ValueError(f"enamad.{field} فقط می‌تواند حروف و اعداد انگلیسی، - و _ داشته باشد")
     return code
 
 

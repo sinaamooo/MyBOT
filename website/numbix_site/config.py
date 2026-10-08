@@ -95,6 +95,7 @@ class Site:
     year: str
     legal_updated: str
     enamad_meta: str
+    enamad_title: str
     enamad_seal: Markup
     webroot: str
     admin_path: str
@@ -232,6 +233,7 @@ def load_config(path: Path, services: list[dict] | None = None) -> Site:
         year=to_fa(business.get("year", "۱۴۰۵")),
         legal_updated=str(business.get("legal_updated", "۱۳ مهر ۱۴۰۵")).strip(),
         enamad_meta=check_enamad_meta(str(enamad.get("meta_code", "")).strip()),
+        enamad_title=check_enamad_meta(str(enamad.get("title_code", "")).strip(), "title_code"),
         enamad_seal=clean_enamad_seal(str(enamad.get("seal_html", ""))),
         webroot=_checked(str(server.get("webroot") or f"/www/wwwroot/{domain}"), _WEBROOT, "server.webroot معتبر نیست"),
         admin_path=_checked(

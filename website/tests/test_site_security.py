@@ -141,3 +141,12 @@ def test_optional_contact_fields_can_be_left_empty(site_root, tmp_path):
     contact = (report.out / "contact" / "index.html").read_text(encoding="utf-8")
     assert "@" not in terms.split("ربات تلگرام", 1)[1][:40]
     assert "کد پستی" not in contact
+
+
+def test_enamad_title_code_replaces_only_the_home_title(site_root, tmp_path):
+    write_config(site_root, {**FILLED, "title_code": "1255039"})
+    report = _build(site_root, tmp_path)
+    home = (report.out / "index.html").read_text(encoding="utf-8")
+    about = (report.out / "about" / "index.html").read_text(encoding="utf-8")
+    assert "<title>1255039</title>" in home
+    assert "1255039" not in about
