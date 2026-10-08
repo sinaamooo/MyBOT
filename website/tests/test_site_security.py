@@ -157,3 +157,11 @@ def test_enamad_title_code_rejects_markup(site_root, tmp_path):
     write_config(site_root, {**FILLED, "title_code": "</title><script>"})
     with pytest.raises(ValueError):
         _build(site_root, tmp_path)
+
+
+def test_enamad_code_gets_meta_tag_and_verification_file(site_root, tmp_path):
+    write_config(site_root, {**FILLED, "meta_code": "1255039"})
+    report = _build(site_root, tmp_path)
+    home = (report.out / "index.html").read_text(encoding="utf-8")
+    assert '<meta name="enamad" content="1255039" />' in home
+    assert (report.out / "1255039.txt").read_text(encoding="utf-8").strip() == "1255039"

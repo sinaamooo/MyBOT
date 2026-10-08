@@ -118,7 +118,10 @@ def build_site(root: Path, config: Path, out: Path, services: list[dict] | None 
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(html.replace(SPRITE_URL, sprite), encoding="utf-8")
         files.append(target)
-    for name, text in (("robots.txt", _robots(site)), ("sitemap.xml", _sitemap(site))):
+    extras = [("robots.txt", _robots(site)), ("sitemap.xml", _sitemap(site))]
+    if site.enamad_meta:  # Enamad's "upload a file" check: https://<domain>/<code>.txt (code is [A-Za-z0-9_-] only)
+        extras.append((f"{site.enamad_meta}.txt", site.enamad_meta + "\n"))
+    for name, text in extras:
         (out / name).write_text(text, encoding="utf-8")
         files.append(out / name)
     # Server config lives next to the site, never inside the public folder.
