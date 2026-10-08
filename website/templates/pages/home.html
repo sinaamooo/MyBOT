@@ -29,7 +29,7 @@
         </div>
         <div class="preview__stat">
           <span>شروع قیمت‌ها</span>
-          <strong>{{ site.min_price or "—" }}<small>تومان</small></strong>
+          <strong>{% if site.min_price %}{{ site.min_price }}<small>تومان</small>{% else %}قیمت روز{% endif %}</strong>
         </div>
         <ul class="preview__list">
           {% for service in site.services[:3] %}
@@ -50,7 +50,7 @@
 
 <section class="kpis" aria-label="نگاه کلی" data-stagger data-hues>
   <div class="card kpi" data-reveal>{{ ui.stat("خدمات فعال", site.available_count|fa, "خدمت", "package") }}</div>
-  <div class="card kpi" data-reveal>{{ ui.stat("شروع قیمت", site.min_price or "—", "تومان", "tag") }}</div>
+  <div class="card kpi" data-reveal>{{ ui.stat("شروع قیمت", site.min_price or "قیمت روز", "تومان" if site.min_price else "", "tag") }}</div>
   <div class="card kpi" data-reveal>{{ ui.stat("زمان تحویل", "آنی", "", "zap", "بیشتر سفارش‌ها خودکار") }}</div>
   <div class="card kpi" data-reveal>{{ ui.stat("پشتیبانی", "پاسخ‌گو", "", "headphones", site.hours) }}</div>
 </section>

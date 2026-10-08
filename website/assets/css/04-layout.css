@@ -222,6 +222,8 @@
 }
 .footer__brand { display: grid; gap: var(--sp-3); align-content: start; }
 .footer__brand p { font-size: var(--fs-sm); color: var(--ink-3); }
+.footer__brand .footer__slogan { display: flex; align-items: center; gap: var(--sp-2); font-weight: 700; color: var(--accent); }
+.footer__slogan .i { width: 16px; height: 16px; flex: none; }
 .footer__title { margin-bottom: var(--sp-3); font-size: var(--fs-sm); color: var(--ink-1); }
 .footer__col ul { display: grid; gap: var(--sp-2); }
 .footer__col a { color: var(--ink-3); font-size: var(--fs-sm); }

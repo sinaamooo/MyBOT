@@ -33,7 +33,8 @@ FILLED = {
 def write_config(root: Path, values: dict[str, str], extra: str = "") -> None:
     text = (ROOT / "site.toml").read_text(encoding="utf-8")
     for key, value in values.items():
-        text = re.sub(rf'^{key} = ""', lambda _m, k=key, v=value: f"{k} = {toml_str(v)}", text, count=1, flags=re.M)
+        line = f"{key} = {toml_str(value)}"
+        text = re.sub(rf'^{key} = "[^"\n]*"', lambda _m, line=line: line, text, count=1, flags=re.M)
     (root / "site.toml").write_text(text + extra, encoding="utf-8")
 
 

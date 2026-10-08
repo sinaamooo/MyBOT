@@ -7,6 +7,7 @@
         <span class="brand__text"><strong>{{ site.brand_fa }}</strong><small>{{ site.brand_en }}</small></span>
       </a>
       <p>{{ site.services_line }}؛ با قیمت شفاف، تحویل سریع و پشتیبانی پاسخ‌گو.</p>
+      {% if site.slogan %}<p class="footer__slogan">{{ icon("sparkles") }}{{ site.slogan }}</p>{% endif %}
       {% if site.enamad_seal %}<div class="trust-seal">{{ site.enamad_seal }}</div>{% endif %}
     </div>
 

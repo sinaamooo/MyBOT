@@ -3,7 +3,7 @@
 {% block legal %}
 <section class="legal__sec" id="general">
   {{ ui.legal_heading(page, "general") }}
-  <p>وب‌سایت <span dir="ltr">{{ site.domain }}</span> و ربات تلگرام <span dir="ltr">@{{ site.bot_username }}</span> متعلق به کسب‌وکار {{ site.brand_fa }} ({{ site.brand_en }}) به مسئولیت {{ site.owner_name }} است. ثبت سفارش و استفاده از خدمات {{ site.brand_fa }} به معنی آگاهی و پذیرش کامل این قوانین است. این قوانین تابع قوانین جاری جمهوری اسلامی ایران، از جمله قانون تجارت الکترونیکی و قانون حمایت از حقوق مصرف‌کنندگان است.</p>
+  <p>وب‌سایت <span dir="ltr">{{ site.domain }}</span> و ربات تلگرام {% if site.bot_username %}<span dir="ltr">@{{ site.bot_username }}</span>{% else %}{{ site.brand_fa }}{% endif %} متعلق به کسب‌وکار {{ site.brand_fa }} ({{ site.brand_en }}) به مسئولیت {{ site.owner_name }} است. ثبت سفارش و استفاده از خدمات {{ site.brand_fa }} به معنی آگاهی و پذیرش کامل این قوانین است. این قوانین تابع قوانین جاری جمهوری اسلامی ایران، از جمله قانون تجارت الکترونیکی و قانون حمایت از حقوق مصرف‌کنندگان است.</p>
 </section>
 
 <section class="legal__sec" id="definitions">

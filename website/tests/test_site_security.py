@@ -131,3 +131,13 @@ def test_public_pages_have_no_inline_event_handlers(site_root, tmp_path):
     report = _build(site_root, tmp_path)
     for page in report.out.rglob("*.html"):
         assert not re.search(r"\son[a-z]+=", page.read_text(encoding="utf-8")), page
+
+
+def test_optional_contact_fields_can_be_left_empty(site_root, tmp_path):
+    write_config(site_root, {**FILLED, "bot_username": "", "postal_code": ""})
+    report = _build(site_root, tmp_path)
+    assert report.missing == ()
+    terms = (report.out / "terms" / "index.html").read_text(encoding="utf-8")
+    contact = (report.out / "contact" / "index.html").read_text(encoding="utf-8")
+    assert "@" not in terms.split("ربات تلگرام", 1)[1][:40]
+    assert "کد پستی" not in contact

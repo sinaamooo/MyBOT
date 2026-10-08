@@ -28,7 +28,9 @@
   {{ contact_card("mail", "ایمیل", site.email, site.email,
        ui.btn("ارسال ایمیل", "mailto:" ~ site.email, "glass", "mail", "sm"), wide=True, ltr=True) }}
   {{ contact_card("map-pin", "نشانی", site.address, site.address, wide=True) }}
+  {% if site.postal_code %}
   {{ contact_card("hash", "کد پستی", site.postal_code, site.postal_code) }}
+  {% endif %}
   {{ contact_card("clock", "ساعات پاسخ‌گویی", site.hours, wide=True) }}
   {{ contact_card("user-round", "مسئول کسب‌وکار", site.owner_name) }}
 </div>

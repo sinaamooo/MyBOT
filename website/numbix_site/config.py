@@ -91,6 +91,7 @@ class Site:
     postal_code: str
     hours: str
     services_line: str
+    slogan: str
     year: str
     legal_updated: str
     enamad_meta: str
@@ -207,10 +208,10 @@ def load_config(path: Path, services: list[dict] | None = None) -> Site:
 
     domain = re.sub(r"^https?://|/+$", "", fields.required(business, "domain", "DOMAIN")).lower()
     _checked(domain, _DOMAIN, "business.domain معتبر نیست (مثال: numbix.ir)")
-    bot = re.sub(r"^(https?://)?(t\.me/)?@?", "", fields.required(business, "bot_username", "BOT_USERNAME"))
+    bot = re.sub(r"^(https?://)?(t\.me/)?@?", "", str(business.get("bot_username", "")).strip())
     mobile, mobile_tel = _phone(fields.required(business, "mobile", "MOBILE"))
     landline, landline_tel = _phone(str(business.get("landline", "")).strip())
-    postal = fields.required(business, "postal_code", "POSTAL_CODE")
+    postal = to_en(str(business.get("postal_code", "")).strip())
 
     return Site(
         brand_fa=str(business.get("brand_fa", "نامبیکس")).strip(),
@@ -224,9 +225,10 @@ def load_config(path: Path, services: list[dict] | None = None) -> Site:
         landline_tel=landline_tel,
         email=_checked(to_en(fields.required(business, "email", "EMAIL")), _EMAIL, "business.email معتبر نیست"),
         address=fields.required(business, "address", "ADDRESS"),
-        postal_code=postal if _is_marker(postal) else to_fa(to_en(postal)),
+        postal_code=to_fa(postal),
         hours=str(business.get("hours", "")).strip() or "شنبه تا پنجشنبه، ساعت ۹ تا ۱۸",
         services_line=fields.required(business, "services_line", "SERVICES_LINE").rstrip("."),
+        slogan=str(business.get("slogan", "")).strip(),
         year=to_fa(business.get("year", "۱۴۰۵")),
         legal_updated=str(business.get("legal_updated", "۱۳ مهر ۱۴۰۵")).strip(),
         enamad_meta=check_enamad_meta(str(enamad.get("meta_code", "")).strip()),
