@@ -12,6 +12,7 @@ from markupsafe import Markup, escape
 
 ENAMAD_HOST = "trustseal.enamad.ir"
 _META_CODE = re.compile(r"[A-Za-z0-9_-]{1,100}")
+_TITLE_CODE = re.compile(r"[A-Za-z0-9۰-۹_-]{1,100}")  # the title may also use Persian digits
 
 
 def script_hash(source: str) -> str:
@@ -37,9 +38,15 @@ def content_security_policy(script_hashes: list[str], *, header: bool = False) -
     return "; ".join(directives)
 
 
-def check_enamad_meta(code: str, field: str = "meta_code") -> str:
+def check_enamad_meta(code: str) -> str:
     if code and not _META_CODE.fullmatch(code):
-        raise ValueError(f"enamad.{field} فقط می‌تواند حروف و اعداد انگلیسی، - و _ داشته باشد")
+        raise ValueError("enamad.meta_code فقط می‌تواند حروف و اعداد انگلیسی، - و _ داشته باشد")
+    return code
+
+
+def check_enamad_title(code: str) -> str:
+    if code and not _TITLE_CODE.fullmatch(code):
+        raise ValueError("enamad.title_code فقط می‌تواند حروف انگلیسی، اعداد فارسی یا انگلیسی، - و _ داشته باشد")
     return code
 
 

@@ -9,7 +9,7 @@ from pathlib import Path
 
 from markupsafe import Markup
 
-from .security import check_enamad_meta, clean_enamad_seal
+from .security import check_enamad_meta, check_enamad_title, clean_enamad_seal
 
 try:
     import tomllib
@@ -233,7 +233,7 @@ def load_config(path: Path, services: list[dict] | None = None) -> Site:
         year=to_fa(business.get("year", "۱۴۰۵")),
         legal_updated=str(business.get("legal_updated", "۱۳ مهر ۱۴۰۵")).strip(),
         enamad_meta=check_enamad_meta(str(enamad.get("meta_code", "")).strip()),
-        enamad_title=check_enamad_meta(str(enamad.get("title_code", "")).strip(), "title_code"),
+        enamad_title=check_enamad_title(str(enamad.get("title_code", "")).strip()),
         enamad_seal=clean_enamad_seal(str(enamad.get("seal_html", ""))),
         webroot=_checked(str(server.get("webroot") or f"/www/wwwroot/{domain}"), _WEBROOT, "server.webroot معتبر نیست"),
         admin_path=_checked(
