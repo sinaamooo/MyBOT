@@ -17,7 +17,7 @@ const NX = {
 
   fa: (value) => String(value).replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[d]),
 
-  /** Change the device tier; CSS and the galaxy both follow `data-quality`. */
+  /** Change the device tier; CSS follows `data-quality`. */
   setQuality(tier) {
     if (NX.root.dataset.quality === tier) return;
     NX.root.dataset.quality = tier;

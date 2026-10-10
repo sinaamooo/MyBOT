@@ -11,8 +11,8 @@
   <meta name="description" content="{{ page.description }}">
   <meta http-equiv="Content-Security-Policy" content="{{ csp }}">
   <meta name="referrer" content="strict-origin-when-cross-origin">
-  <meta name="color-scheme" content="dark">
-  <meta name="theme-color" content="#0a0722">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#ffffff">
   {% if page.slug == "404" %}
   <meta name="robots" content="noindex">
   {% else %}
@@ -38,9 +38,6 @@
 </head>
 <body data-page="{{ page.slug }}">
   <a class="skip-link" href="#main">پرش به محتوای اصلی</a>
-  {% include "partials/galaxy.html" %}
-  {% include "partials/loader.html" %}
-  {% include "partials/sidebar.html" %}
   <div class="stage">
     {% include "partials/topbar.html" %}
     <main class="main" id="main" tabindex="-1">

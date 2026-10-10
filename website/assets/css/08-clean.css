@@ -1,0 +1,81 @@
+/* ═══════════════ Clean shop theme ═══════════════
+   Light, flat and quiet: no galaxy, no blur, one purple accent.
+   Loaded last so it overrides the earlier design tokens and surfaces. */
+
+:root {
+  color-scheme: light;
+
+  --space-950: #f5f6fa;
+  --space-900: #f7f8fc;
+  --space-800: #eef1f7;
+
+  --ink-1: #0f172a;
+  --ink-2: #1e293b;
+  --ink-3: #475569;
+  --ink-4: #64748b;
+
+  --purple-rgb: 91 63 209;
+  --blue-rgb: 37 99 235;
+  --green-rgb: 5 150 105;
+  --red-rgb: 220 38 38;
+  --white-rgb: 255 255 255;
+
+  --accent: #5b3fd1;
+  --accent-rgb: var(--purple-rgb);
+  --accent-2: #2563eb;
+  --accent-2-rgb: var(--blue-rgb);
+
+  --brand-grad: linear-gradient(110deg, #312e81 0%, #5b3fd1 60%, #2563eb 100%);
+  --button-grad: linear-gradient(115deg, #5b3fd1 0%, #4f46e5 60%, #2563eb 100%);
+
+  --warn-rgb: 217 119 6;
+  --neutral-rgb: 100 116 139;
+
+  /* Surfaces: solid white cards with a light border */
+  --glass-fill: linear-gradient(#ffffff, #ffffff);
+  --glass-tint: #ffffff;
+  --glass-strong: #ffffff;
+  --glass-line: #e4e8f1;
+  --glass-line-strong: #cfd6e4;
+  --glass-blur: 0px;
+  --glass-sat: 100%;
+  --glass-highlight: none;
+  --glass-inner: none;
+  --shadow-1: 0 1px 2px rgb(15 23 42 / .06);
+  --shadow-2: 0 10px 30px -16px rgb(15 23 42 / .18);
+  --r-lg: 16px;
+  --r-xl: 20px;
+}
+
+html { background: var(--space-950); }
+
+/* No decorative backgrounds, glows or animated planets */
+.galaxy, .aura, .float-chip, .lost__planet, .empty__orbit, .glow-ring::before, .glow-ring::after,
+.topbar::before, .empty__stars { display: none !important; }
+.glow-ring { border-color: var(--glass-line) !important; }
+
+/* Layout: topbar only, no sidebar offset */
+.stage { margin-inline-start: 0; padding-bottom: var(--sp-9); }
+.mobile-nav { display: flex; }
+@media (min-width: 1100px) {
+  .mobile-nav { display: none; }
+}
+
+.card { background: #ffffff; }
+.topbar { background: #ffffff; border: 1px solid var(--glass-line); box-shadow: var(--shadow-1); top: 0; margin-top: 0; }
+.topbar.is-scrolled { --glass-tint: #ffffff; box-shadow: var(--shadow-2); }
+
+.preview__panel { background: #ffffff; box-shadow: var(--shadow-2); }
+.legal__toc a:hover, .menu__item:hover, .menu__item:focus-visible, .side-link:hover { background: #f1effc; }
+.notice:hover, .bars__row:hover, .bars__row:focus-visible { background: #f5f3fd; }
+.bars__track { background: #eef1f7; }
+
+/* Buttons: solid, readable */
+.btn--glass, .btn--ghost { background: #ffffff; color: var(--ink-1); border: 1px solid var(--glass-line-strong); }
+.btn--glass:hover, .btn--ghost:hover { background: #f5f3fd; color: var(--ink-1); }
+
+body { background: var(--space-950); }
+
+/* Crisp type on white: no glow shadows behind headings */
+h1, h2, h3, .display, .section-title, .lead { text-shadow: none; }
+.eyebrow, .eyebrow--live { background: #eef0fb; color: var(--accent); border-color: transparent; text-shadow: none; }

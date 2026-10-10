@@ -16,5 +16,4 @@
   };
   root.dataset.quality = window.nxQuality();
 
-  try { if (!sessionStorage.getItem('nx-seen')) root.classList.add('is-loading'); } catch (e) {}
 })(document.documentElement);
