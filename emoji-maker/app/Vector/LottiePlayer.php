@@ -324,7 +324,7 @@ final class LottiePlayer
                 case 'st':
                     $c = $this->colorValue($it['c'] ?? null, $t);
                     $w = $this->value($it['w'] ?? null, $t, 1);
-                    $this->strokePaths($plain, $m, $w, $target, fn () => $c, $styleOpacity);
+                    $this->strokePaths($plain, $m, $w, $target, fn () => $c, $styleOpacity, $it);
                     break;
                 case 'gf':
                     $this->gradientFill($plain, $it, $t, $m, $styleOpacity, $target);
@@ -584,32 +584,30 @@ final class LottiePlayer
     }
 
     /**
-     * Strokes are built in the local coordinate system of the shape and then
-     * transformed (like After Effects / rlottie), so non-uniform scaling also
-     * scales the stroke non-uniformly.
+     * Stroke coverage exactly like rlottie: the path is transformed to device
+     * space and stroked with a uniform width scaled by the RMS of the matrix
+     * axes (sqrt((a^2+b^2+c^2+d^2)/2)); joins / caps / miter limit honoured.
      * @param list<Path> $paths
+     * @param array<string,mixed> $item stroke item (lj, lc, ml)
      */
-    private function strokeMask(array $paths, Matrix $m, float $width): ?Mask
+    private function strokeMask(array $paths, Matrix $m, float $width, array $item = []): ?Mask
     {
-        $sf = max(1e-6, $m->scaleFactor());
-        if ($width * $sf <= 0.05) {
+        $scale = sqrt(($m->a * $m->a + $m->b * $m->b + $m->c * $m->c + $m->d * $m->d) / 2);
+        $w = $width * $scale;
+        if ($w <= 0.05) {
             return null;
         }
+        $join = (int) ($item['lj'] ?? Stroke::JOIN_ROUND);
+        $cap = (int) ($item['lc'] ?? Stroke::CAP_ROUND);
+        $ml = (float) ($item['ml'] ?? 4.0);
         $polys = [];
         foreach ($paths as $p) {
-            foreach ($p->contours as $c) {
+            foreach ($p->transform($m)->contours as $c) {
                 $single = new Path();
                 $single->contours = [$c];
-                foreach ($single->flatten(0.25 / $sf) as $poly) {
-                    foreach (Stroke::polyline($poly, $width, $c['closed']) as $sp) {
-                        $n = intdiv(count($sp), 2);
-                        $tp = [];
-                        for ($k = 0; $k < $n; $k++) {
-                            [$x, $y] = $m->apply($sp[$k * 2], $sp[$k * 2 + 1]);
-                            $tp[] = $x;
-                            $tp[] = $y;
-                        }
-                        $polys[] = $tp;
+                foreach ($single->flatten(0.2) as $poly) {
+                    foreach (Stroke::polyline($poly, $w, $c['closed'], $join, $cap, $ml) as $sp) {
+                        $polys[] = $sp;
                     }
                 }
             }
@@ -618,9 +616,9 @@ final class LottiePlayer
     }
 
     /** @param list<Path> $paths */
-    private function strokePaths(array $paths, Matrix $m, float $width, \GdImage $target, callable $color, float $opacity): void
+    private function strokePaths(array $paths, Matrix $m, float $width, \GdImage $target, callable $color, float $opacity, array $item = []): void
     {
-        $mask = $this->strokeMask($paths, $m, $width);
+        $mask = $this->strokeMask($paths, $m, $width, $item);
         $mask?->paint($target, $color(), $opacity);
     }
 
@@ -643,7 +641,7 @@ final class LottiePlayer
     /** @param list<Path> $paths */
     private function gradientStroke(array $paths, array $it, float $t, Matrix $m, float $width, float $opacity, \GdImage $target): void
     {
-        $mask = $this->strokeMask($paths, $m, $width);
+        $mask = $this->strokeMask($paths, $m, $width, $it);
         if ($mask !== null) {
             $this->paintGradient($mask, $it, $t, $m, $opacity, $target);
         }
@@ -993,14 +991,18 @@ final class LottiePlayer
                 $dims = count($start);
                 $hasSpatial = isset($a['to'], $a['ti']) && $dims >= 2 && (abs((float) ($a['to'][0] ?? 0)) + abs((float) ($a['to'][1] ?? 0)) + abs((float) ($a['ti'][0] ?? 0)) + abs((float) ($a['ti'][1] ?? 0))) > 0.001;
                 if ($hasSpatial) {
+                    // motion along a bezier path: eased progress = share of the arc length
                     $e = self::ease($a, $p, 0);
-                    $mt = 1 - $e;
+                    $c = [
+                        [(float) $start[0], (float) $start[1]],
+                        [(float) $start[0] + (float) ($a['to'][0] ?? 0), (float) $start[1] + (float) ($a['to'][1] ?? 0)],
+                        [(float) $end[0] + (float) ($a['ti'][0] ?? 0), (float) $end[1] + (float) ($a['ti'][1] ?? 0)],
+                        [(float) $end[0], (float) $end[1]],
+                    ];
+                    $u = self::bezierParamAtLength($c, $e);
+                    $mt = 1 - $u;
                     for ($d = 0; $d < 2; $d++) {
-                        $p0 = (float) $start[$d];
-                        $p3 = (float) $end[$d];
-                        $p1 = $p0 + (float) ($a['to'][$d] ?? 0);
-                        $p2 = $p3 + (float) ($a['ti'][$d] ?? 0);
-                        $out[$d] = $mt * $mt * $mt * $p0 + 3 * $mt * $mt * $e * $p1 + 3 * $mt * $e * $e * $p2 + $e * $e * $e * $p3;
+                        $out[$d] = $mt * $mt * $mt * $c[0][$d] + 3 * $mt * $mt * $u * $c[1][$d] + 3 * $mt * $u * $u * $c[2][$d] + $u * $u * $u * $c[3][$d];
                     }
                     for ($d = 2; $d < $dims; $d++) {
                         $out[$d] = (float) $start[$d] + ((float) ($end[$d] ?? $start[$d]) - (float) $start[$d]) * $e;
@@ -1026,6 +1028,64 @@ final class LottiePlayer
         }
         $prev = $kfs[$n - 2] ?? $last;
         return $prev['e'] ?? self::kfStart($prev, null);
+    }
+
+    /** @var array<string,array{0:list<float>,1:float}> arc length tables */
+    private static array $arcCache = [];
+
+    /**
+     * Bezier parameter at a given fraction of the curve length.
+     * @param array{0:array{0:float,1:float},1:array{0:float,1:float},2:array{0:float,1:float},3:array{0:float,1:float}} $c
+     */
+    private static function bezierParamAtLength(array $c, float $fraction): float
+    {
+        if ($fraction <= 0) {
+            return 0.0;
+        }
+        if ($fraction >= 1) {
+            return 1.0;
+        }
+        $key = implode(',', array_map(static fn ($p) => round($p[0], 3) . ':' . round($p[1], 3), $c));
+        if (!isset(self::$arcCache[$key])) {
+            $n = 64;
+            $lens = [0.0];
+            $px = $c[0][0];
+            $py = $c[0][1];
+            $total = 0.0;
+            for ($k = 1; $k <= $n; $k++) {
+                $u = $k / $n;
+                $mt = 1 - $u;
+                $x = $mt * $mt * $mt * $c[0][0] + 3 * $mt * $mt * $u * $c[1][0] + 3 * $mt * $u * $u * $c[2][0] + $u * $u * $u * $c[3][0];
+                $y = $mt * $mt * $mt * $c[0][1] + 3 * $mt * $mt * $u * $c[1][1] + 3 * $mt * $u * $u * $c[2][1] + $u * $u * $u * $c[3][1];
+                $total += sqrt(($x - $px) ** 2 + ($y - $py) ** 2);
+                $lens[] = $total;
+                $px = $x;
+                $py = $y;
+            }
+            if (count(self::$arcCache) > 2000) {
+                self::$arcCache = [];
+            }
+            self::$arcCache[$key] = [$lens, $total];
+        }
+        [$lens, $total] = self::$arcCache[$key];
+        if ($total <= 1e-9) {
+            return $fraction;
+        }
+        $target = $fraction * $total;
+        $n = count($lens) - 1;
+        $lo = 0;
+        $hi = $n;
+        while ($hi - $lo > 1) {
+            $mid = ($lo + $hi) >> 1;
+            if ($lens[$mid] < $target) {
+                $lo = $mid;
+            } else {
+                $hi = $mid;
+            }
+        }
+        $seg = $lens[$hi] - $lens[$lo];
+        $f = $seg > 1e-12 ? ($target - $lens[$lo]) / $seg : 0.0;
+        return ($lo + $f) / $n;
     }
 
     private static function kfStart(array $kf, mixed $default): mixed
