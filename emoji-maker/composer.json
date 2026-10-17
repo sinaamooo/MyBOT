@@ -1,0 +1,43 @@
+{
+    "name": "emoji-maker/telegram-premium-emoji-maker",
+    "description": "Telegram premium animated custom emoji maker (WEBM / TGS / PNG) with bot, job queue and admin panel - pure PHP core.",
+    "type": "project",
+    "license": "proprietary",
+    "minimum-stability": "stable",
+    "require": {
+        "php": ">=8.1",
+        "ext-curl": "*",
+        "ext-gd": "*",
+        "ext-json": "*",
+        "ext-mbstring": "*",
+        "ext-pdo": "*",
+        "ext-pdo_mysql": "*",
+        "ext-zlib": "*"
+    },
+    "suggest": {
+        "ext-zip": "Required to deliver outputs as ZIP archives",
+        "ext-sodium": "Encrypts secrets stored in the database (falls back to OpenSSL)",
+        "ext-fileinfo": "Stronger MIME detection for uploaded images",
+        "ext-posix": "Better process control for the CLI worker",
+        "ext-pcntl": "Graceful shutdown of the daemon worker on SIGTERM"
+    },
+    "autoload": {
+        "psr-4": {
+            "EmojiMaker\\": "app/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "EmojiMaker\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": "php tests/run.php",
+        "lint": "php bin/lint.php",
+        "doctor": "php bin/doctor.php"
+    },
+    "config": {
+        "optimize-autoloader": true,
+        "sort-packages": true
+    }
+}
