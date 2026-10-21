@@ -57,13 +57,12 @@ final class MiscRepository
     /** Stores an incoming update; false when it was already received (duplicate delivery). */
     public function storeUpdate(int $updateId, ?int $telegramId, string $type, string $payload): bool
     {
-        return $this->db->insert('telegram_updates', [
-            'update_id' => $updateId,
-            'telegram_id' => $telegramId,
-            'type' => mb_substr($type, 0, 32),
-            'payload' => $payload,
-            'status' => 'received',
-        ], true) !== 0 || $this->db->value('SELECT ROW_COUNT()') > 0;
+        // update_id is not AUTO_INCREMENT, so lastInsertId() cannot tell; the
+        // affected row count of INSERT IGNORE is 1 for new and 0 for duplicates
+        return $this->db->query(
+            "INSERT IGNORE INTO telegram_updates (update_id, telegram_id, type, payload, status) VALUES (?, ?, ?, ?, 'received')",
+            [$updateId, $telegramId, mb_substr($type, 0, 32), $payload]
+        )->rowCount() === 1;
     }
 
     public function updateExists(int $updateId): bool

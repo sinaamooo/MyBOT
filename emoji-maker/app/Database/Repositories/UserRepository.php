@@ -121,8 +121,10 @@ final class UserRepository
         $where = ['1=1'];
         $params = [];
         if ($q !== '') {
-            $where[] = '(username LIKE :q OR first_name LIKE :q OR last_name LIKE :q OR telegram_id = :qid)';
-            $params['q'] = '%' . str_replace(['%', '_'], ['\\%', '\\_'], $q) . '%';
+            // native prepares do not allow re-using a named parameter
+            $where[] = '(username LIKE :q1 OR first_name LIKE :q2 OR last_name LIKE :q3 OR telegram_id = :qid)';
+            $like = '%' . str_replace(['%', '_'], ['\\%', '\\_'], $q) . '%';
+            $params['q1'] = $params['q2'] = $params['q3'] = $like;
             $params['qid'] = ctype_digit($q) ? (int) $q : -1;
         }
         if ($filter === 'blocked') {

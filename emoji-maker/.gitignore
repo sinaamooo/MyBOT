@@ -9,6 +9,7 @@
 /storage/locks/*
 /storage/sessions/*
 /storage/fonts/*
+/storage/templates/*
 /storage/installed.lock
 !/storage/**/.gitkeep
 !/storage/**/.htaccess

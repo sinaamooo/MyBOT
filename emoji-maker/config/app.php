@@ -123,5 +123,12 @@ return [
         'vectorize_max_colors' => 6,
         'support_contact' => '',
         'welcome_text' => '',
+        // animated templates
+        'templates_enabled' => true,
+        'templates_original_colors' => 'admin',   // who may keep a template's original brand colours: admin | all | none
+        'templates_demo_color' => '#8B5CF6',      // colour of the gallery previews (never the original brand colour)
+        'max_template_batch' => 50,               // templates in one pack generation
+        'publish_default_emoji' => '⭐',
+        'bot_admin_ids' => '',                    // extra bot admins (comma separated Telegram ids)
     ],
 ];

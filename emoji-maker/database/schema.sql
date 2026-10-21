@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS `projects` (
   `id`            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   `user_id`       BIGINT UNSIGNED NOT NULL,
   `title`         VARCHAR(128) NULL,
-  `input_type`    ENUM('image','text','combo') NOT NULL DEFAULT 'text',
+  `input_type`    ENUM('image','text','combo','template') NOT NULL DEFAULT 'text',
   `status`        ENUM('draft','previewing','previewed','queued','generating','completed','failed','archived') NOT NULL DEFAULT 'draft',
   `config`        LONGTEXT NULL COMMENT 'JSON design + animation + batch settings',
   `template_id`   INT UNSIGNED NULL,
@@ -358,6 +358,25 @@ CREATE TABLE IF NOT EXISTS `usage_counters` (
   `updated_at`  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`user_id`, `day`),
   CONSTRAINT `fk_usage_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Animated emoji templates (files in resources/templates or storage/templates);
+-- this table only holds admin overrides and usage statistics.
+CREATE TABLE IF NOT EXISTS `lottie_templates` (
+  `id`          INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `slug`        VARCHAR(64) NOT NULL,
+  `pack`        VARCHAR(48) NOT NULL,
+  `name_fa`     VARCHAR(96) NOT NULL,
+  `slots`       VARCHAR(32) NOT NULL DEFAULT 'main' COMMENT 'comma list of slot roles',
+  `status`      ENUM('auto','reviewed','disabled') NOT NULL DEFAULT 'auto',
+  `is_enabled`  TINYINT(1) NOT NULL DEFAULT 1,
+  `sort_order`  INT NOT NULL DEFAULT 100,
+  `uses`        INT UNSIGNED NOT NULL DEFAULT 0,
+  `created_at`  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at`  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_lottie_templates_slug` (`slug`),
+  KEY `idx_lottie_templates_pack` (`pack`, `is_enabled`, `sort_order`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 SET FOREIGN_KEY_CHECKS = 1;

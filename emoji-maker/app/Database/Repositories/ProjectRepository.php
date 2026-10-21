@@ -18,7 +18,7 @@ final class ProjectRepository
         return $this->db->insert('projects', [
             'user_id' => $userId,
             'title' => $title !== null ? mb_substr($title, 0, 128) : null,
-            'input_type' => in_array($inputType, ['image', 'text', 'combo'], true) ? $inputType : 'text',
+            'input_type' => in_array($inputType, ['image', 'text', 'combo', 'template'], true) ? $inputType : 'text',
             'status' => 'draft',
             'config' => json_encode($config, JSON_UNESCAPED_UNICODE),
         ]);
