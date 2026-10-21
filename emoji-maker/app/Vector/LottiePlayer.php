@@ -250,10 +250,11 @@ final class LottiePlayer
 
     /**
      * Renders a group's item list (Lottie stacking semantics: earlier items are on top;
-     * a style draws all paths listed before it, modifiers in between apply).
+     * a style draws all paths listed before it, as modified by every trim of the group).
      * @param list<array<string,mixed>> $items
+     * @param array{nodes:array<int,mixed>,all:list<\stdClass>}|null $geo geometry of $items (built when null)
      */
-    private function renderGroup(array $items, float $t, Matrix $matrix, float $opacity, \GdImage $target, bool $probe = false, ?array $inheritedTag = null): void
+    private function renderGroup(array $items, float $t, Matrix $matrix, float $opacity, \GdImage $target, bool $probe = false, ?string $inheritedTag = null, ?array $geo = null): void
     {
         $m = $matrix;
         $op = $opacity;
@@ -267,6 +268,7 @@ final class LottiePlayer
         if ($op <= 0.002 && !$probe) {
             return;
         }
+        $geo ??= $this->buildGeometry($items, $t, $probe, $inheritedTag);
         $n = count($items);
         // draw bottom-up
         for ($s = $n - 1; $s >= 0; $s--) {
@@ -280,7 +282,8 @@ final class LottiePlayer
             }
             $itemTag = $it['_emx'] ?? $inheritedTag;
             if ($ty === 'gr') {
-                $this->renderGroup((array) ($it['it'] ?? []), $t, $m, $op, $target, $probe, $it['_emx'] ?? $inheritedTag);
+                $sub = $geo['nodes'][$s] ?? null;
+                $this->renderGroup((array) ($it['it'] ?? []), $t, $m, $op, $target, $probe, $itemTag, is_array($sub) ? $sub['geo'] : null);
                 continue;
             }
             if ($ty === 'emx_img') {
@@ -293,15 +296,14 @@ final class LottiePlayer
             if (!in_array($ty, ['fl', 'st', 'gf', 'gs'], true)) {
                 continue;
             }
-            $paths = $this->collectPaths($items, $s, $t, Matrix::identity(), $probe);
+            $paths = $this->pathsBefore($geo, $s);
             if (!$paths) {
                 continue;
             }
             if ($probe) {
                 if ($this->probeTag !== null && ($itemTag === $this->probeTag || $this->anyTagged($items, $s))) {
                     foreach ($paths as $p) {
-                        $tagged = $p['tag'] ?? null;
-                        if ($tagged === $this->probeTag || $itemTag === $this->probeTag) {
+                        if (($p['tag'] ?? null) === $this->probeTag || $itemTag === $this->probeTag) {
                             $b = $p['path']->transform($m)->bounds();
                             if ($b) {
                                 $this->probeBounds = $this->probeBounds === null ? $b : [min($this->probeBounds[0], $b[0]), min($this->probeBounds[1], $b[1]), max($this->probeBounds[2], $b[2]), max($this->probeBounds[3], $b[3])];
@@ -348,16 +350,18 @@ final class LottiePlayer
     }
 
     /**
-     * Paths affecting the style at index $s: every geometry listed before it
-     * (including nested groups with their transforms), modified by trims that
-     * sit between the geometry and the style.
-     * @return list<array{path:Path,tag:?string}>
+     * Geometry of a group with its trims applied the way rlottie does: a trim
+     * modifies every path listed before it in its group (nested groups included),
+     * trims compound in list order, and every style drawing such a path sees the
+     * trimmed result even when the style is listed before the trim.
+     * Paths stay in their own group's coordinates; nested groups keep their matrix.
+     * @return array{nodes:array<int,mixed>,all:list<\stdClass>}
      */
-    private function collectPaths(array $items, int $s, float $t, Matrix $m, bool $probe, ?string $tag = null): array
+    private function buildGeometry(array $items, float $t, bool $probe, ?string $tag): array
     {
-        $out = [];
-        for ($i = 0; $i < $s; $i++) {
-            $it = $items[$i];
+        $nodes = [];
+        $all = [];
+        foreach ($items as $i => $it) {
             if (!empty($it['hd'])) {
                 continue;
             }
@@ -366,21 +370,7 @@ final class LottiePlayer
             }
             $ty = (string) ($it['ty'] ?? '');
             $itTag = $it['_emx'] ?? $tag;
-            $geo = null;
-            if ($ty === 'sh') {
-                $geo = $this->shapePath($it, $t);
-            } elseif ($ty === 'rc') {
-                $p = $this->vec($it['p'] ?? null, $t, [0, 0]);
-                $sz = $this->vec($it['s'] ?? null, $t, [0, 0]);
-                $r = $this->value($it['r'] ?? null, $t, 0);
-                $geo = Path::roundedRect($p[0] - $sz[0] / 2, $p[1] - $sz[1] / 2, $sz[0], $sz[1], $r);
-            } elseif ($ty === 'el') {
-                $p = $this->vec($it['p'] ?? null, $t, [0, 0]);
-                $sz = $this->vec($it['s'] ?? null, $t, [0, 0]);
-                $geo = Path::ellipse($p[0], $p[1], $sz[0] / 2, $sz[1] / 2);
-            } elseif ($ty === 'sr') {
-                $geo = $this->star($it, $t);
-            } elseif ($ty === 'gr') {
+            if ($ty === 'gr') {
                 $sub = (array) ($it['it'] ?? []);
                 $gm = Matrix::identity();
                 foreach ($sub as $si) {
@@ -389,34 +379,132 @@ final class LottiePlayer
                         break;
                     }
                 }
-                foreach ($this->collectPaths($sub, count($sub), $t, $gm, $probe, $itTag) as $p) {
-                    $out[] = ['path' => $p['path'], 'tag' => $p['tag'], 'index' => $i];
+                $g = $this->buildGeometry($sub, $t, $probe, $itTag);
+                $nodes[$i] = ['m' => $gm, 'geo' => $g];
+                foreach ($g['all'] as $ref) {
+                    $all[] = $ref;
                 }
                 continue;
             }
-            if ($geo !== null) {
-                $out[] = ['path' => $m->isIdentity() ? $geo : $geo->transform($m), 'tag' => $itTag, 'index' => $i];
+            if ($ty === 'tm') {
+                $this->applyTrim($all, $it, $t);
+                continue;
+            }
+            $path = match ($ty) {
+                'sh' => $this->shapePath($it, $t),
+                'rc' => $this->rectPath($it, $t),
+                'el' => $this->ellipsePath($it, $t),
+                'sr' => $this->star($it, $t),
+                default => null,
+            };
+            if ($path !== null) {
+                $ref = new \stdClass();
+                $ref->path = $path;
+                $ref->tag = $itTag;
+                $nodes[$i] = $ref;
+                $all[] = $ref;
             }
         }
-        // trims between geometry and the style
-        for ($i = 0; $i < $s; $i++) {
-            if (($items[$i]['ty'] ?? '') === 'tm' && empty($items[$i]['hd'])) {
-                foreach ($out as $k => $p) {
-                    if (($p['index'] ?? -1) < $i) {
-                        $out[$k]['path'] = $this->trim($p['path'], $items[$i], $t);
-                    }
-                }
+        return ['nodes' => $nodes, 'all' => $all];
+    }
+
+    /**
+     * Paths drawn by the style at index $s: geometry listed before it, nested
+     * groups mapped into this group's coordinates.
+     * @param array{nodes:array<int,mixed>,all:list<\stdClass>} $geo
+     * @return list<array{path:Path,tag:?string}>
+     */
+    private function pathsBefore(array $geo, int $s): array
+    {
+        $out = [];
+        foreach ($geo['nodes'] as $i => $node) {
+            if ($i >= $s) {
+                break;
             }
-        }
-        // nested group paths must also receive this level's transform
-        if (!$m->isIdentity()) {
-            foreach ($out as $k => $p) {
-                if (($items[$p['index']]['ty'] ?? '') === 'gr') {
-                    $out[$k]['path'] = $p['path']->transform($m);
-                }
+            if ($node instanceof \stdClass) {
+                $out[] = ['path' => $node->path, 'tag' => $node->tag];
+                continue;
+            }
+            $gm = $node['m'];
+            foreach ($this->pathsBefore($node['geo'], PHP_INT_MAX) as $p) {
+                $out[] = ['path' => $gm->isIdentity() ? $p['path'] : $p['path']->transform($gm), 'tag' => $p['tag']];
             }
         }
         return $out;
+    }
+
+    /** rlottie rectangle: starts at the top-right corner, clockwise unless d=3. */
+    private function rectPath(array $it, float $t): Path
+    {
+        $p = $this->vec($it['p'] ?? null, $t, [0, 0]);
+        $sz = $this->vec($it['s'] ?? null, $t, [0, 0]);
+        $r = $this->value($it['r'] ?? null, $t, 0);
+        $x = $p[0] - $sz[0] / 2;
+        $y = $p[1] - $sz[1] / 2;
+        $w = $sz[0];
+        $h = $sz[1];
+        $ccw = (int) ($it['d'] ?? 1) === 3;
+        $path = new Path();
+        $r = min($r, $w / 2, $h / 2);
+        if ($r <= 1e-6) {
+            $path->moveTo($x + $w, $y);
+            if ($ccw) {
+                $path->lineTo($x, $y)->lineTo($x, $y + $h)->lineTo($x + $w, $y + $h);
+            } else {
+                $path->lineTo($x + $w, $y + $h)->lineTo($x, $y + $h)->lineTo($x, $y);
+            }
+            $path->lineTo($x + $w, $y);
+            return $path->close();
+        }
+        $k = 0.5522847498 * $r;
+        $path->moveTo($x + $w, $y + $r);
+        if ($ccw) {
+            $path->cubicTo($x + $w, $y + $r - $k, $x + $w - $r + $k, $y, $x + $w - $r, $y)
+                ->lineTo($x + $r, $y)
+                ->cubicTo($x + $r - $k, $y, $x, $y + $r - $k, $x, $y + $r)
+                ->lineTo($x, $y + $h - $r)
+                ->cubicTo($x, $y + $h - $r + $k, $x + $r - $k, $y + $h, $x + $r, $y + $h)
+                ->lineTo($x + $w - $r, $y + $h)
+                ->cubicTo($x + $w - $r + $k, $y + $h, $x + $w, $y + $h - $r + $k, $x + $w, $y + $h - $r)
+                ->lineTo($x + $w, $y + $r);
+        } else {
+            $path->lineTo($x + $w, $y + $h - $r)
+                ->cubicTo($x + $w, $y + $h - $r + $k, $x + $w - $r + $k, $y + $h, $x + $w - $r, $y + $h)
+                ->lineTo($x + $r, $y + $h)
+                ->cubicTo($x + $r - $k, $y + $h, $x, $y + $h - $r + $k, $x, $y + $h - $r)
+                ->lineTo($x, $y + $r)
+                ->cubicTo($x, $y + $r - $k, $x + $r - $k, $y, $x + $r, $y)
+                ->lineTo($x + $w - $r, $y)
+                ->cubicTo($x + $w - $r + $k, $y, $x + $w, $y + $r - $k, $x + $w, $y + $r);
+        }
+        return $path->close();
+    }
+
+    /** rlottie ellipse: starts at 12 o'clock, clockwise unless d=3. */
+    private function ellipsePath(array $it, float $t): Path
+    {
+        $p = $this->vec($it['p'] ?? null, $t, [0, 0]);
+        $sz = $this->vec($it['s'] ?? null, $t, [0, 0]);
+        $cx = $p[0];
+        $cy = $p[1];
+        $rx = $sz[0] / 2;
+        $ry = $sz[1] / 2;
+        $kx = 0.5522847498 * $rx;
+        $ky = 0.5522847498 * $ry;
+        $path = new Path();
+        $path->moveTo($cx, $cy - $ry);
+        if ((int) ($it['d'] ?? 1) === 3) {
+            $path->cubicTo($cx - $kx, $cy - $ry, $cx - $rx, $cy - $ky, $cx - $rx, $cy)
+                ->cubicTo($cx - $rx, $cy + $ky, $cx - $kx, $cy + $ry, $cx, $cy + $ry)
+                ->cubicTo($cx + $kx, $cy + $ry, $cx + $rx, $cy + $ky, $cx + $rx, $cy)
+                ->cubicTo($cx + $rx, $cy - $ky, $cx + $kx, $cy - $ry, $cx, $cy - $ry);
+        } else {
+            $path->cubicTo($cx + $kx, $cy - $ry, $cx + $rx, $cy - $ky, $cx + $rx, $cy)
+                ->cubicTo($cx + $rx, $cy + $ky, $cx + $kx, $cy + $ry, $cx, $cy + $ry)
+                ->cubicTo($cx - $kx, $cy + $ry, $cx - $rx, $cy + $ky, $cx - $rx, $cy)
+                ->cubicTo($cx - $rx, $cy - $ky, $cx - $kx, $cy - $ry, $cx, $cy - $ry);
+        }
+        return $path->close();
     }
 
     private function shapePath(array $it, float $t): ?Path
@@ -482,85 +570,294 @@ final class LottiePlayer
             $a = $rot + 2 * M_PI * $k / $count;
             $pts[] = [$c[0] + $r * cos($a), $c[1] + $r * sin($a)];
         }
+        if ((int) ($it['d'] ?? 1) === 3) {
+            $pts = array_merge([$pts[0]], array_reverse(array_slice($pts, 1)));
+        }
         return Path::polygon($pts);
     }
 
-    private function trim(Path $path, array $tm, float $t): Path
+    /**
+     * Trim path modifier (rlottie semantics). m=1 (simultaneously) trims each
+     * path on its own; m=2 (individually) spreads one window over the paths in order.
+     * @param list<\stdClass> $refs
+     */
+    private function applyTrim(array $refs, array $tm, float $t): void
+    {
+        if (!$refs) {
+            return;
+        }
+        $seg = $this->trimSegment($tm, $t);
+        if ($seg === null) {
+            return;
+        }
+        if ($seg === []) {
+            foreach ($refs as $ref) {
+                $ref->path = new Path();
+            }
+            return;
+        }
+        [$start, $end] = $seg;
+        if ((int) ($tm['m'] ?? 1) !== 2) {
+            foreach ($refs as $ref) {
+                $ref->path = self::trimPath($ref->path, $start, $end);
+            }
+            return;
+        }
+        if ($start >= $end) {
+            return; // rlottie leaves wrapped windows untouched in this mode
+        }
+        $lens = [];
+        $total = 0.0;
+        foreach ($refs as $k => $ref) {
+            $lens[$k] = self::pathLength($ref->path);
+            $total += $lens[$k];
+        }
+        $from = $total * $start;
+        $to = $total * $end;
+        $cur = 0.0;
+        foreach ($refs as $k => $ref) {
+            $len = $lens[$k];
+            if ($cur > $to || ($cur < $from && $cur + $len < $from)) {
+                $ref->path = new Path();
+            } elseif (!($from <= $cur && $to >= $cur + $len) && $len > 0) {
+                $ls = ($from > $cur ? $from - $cur : 0) / $len;
+                $le = ($cur + $len < $to ? $len : $to - $cur) / $len;
+                $ref->path = self::trimPath($ref->path, $ls, $le);
+            }
+            $cur += $len;
+        }
+    }
+
+    /**
+     * Trim window as rlottie computes it: null = untouched, [] = empty,
+     * [start,end] fractions where start > end means the window wraps.
+     * @return array{0:float,1:float}|array{}|null
+     */
+    private function trimSegment(array $tm, float $t): ?array
     {
         $s = $this->value($tm['s'] ?? null, $t, 0) / 100;
         $e = $this->value($tm['e'] ?? null, $t, 100) / 100;
-        $o = $this->value($tm['o'] ?? null, $t, 0) / 360;
-        if ($s > $e) {
-            [$s, $e] = [$e, $s];
+        $o = fmod($this->value($tm['o'] ?? null, $t, 0), 360.0) / 360;
+        $diff = abs($s - $e);
+        if ($diff < 1e-5) {
+            return [];
         }
-        if ($e - $s >= 0.9999) {
-            return $path;
-        }
-        if ($e - $s <= 0.0001) {
-            return new Path();
+        if (abs($diff - 1) < 1e-5) {
+            return null;
         }
         $s += $o;
         $e += $o;
-        $polys = $path->flatten(0.3);
-        $lens = [];
-        $total = 0.0;
-        foreach ($polys as $pi => $poly) {
-            $n = intdiv(count($poly), 2);
-            $l = 0.0;
-            for ($k = 1; $k < $n; $k++) {
-                $l += hypot($poly[$k * 2] - $poly[$k * 2 - 2], $poly[$k * 2 + 1] - $poly[$k * 2 - 1]);
+        $noloop = static fn (float $a, float $b): array => [min($a, $b), max($a, $b)];
+        $loop = static fn (float $a, float $b): array => [max($a, $b), min($a, $b)];
+        if ($o > 0) {
+            if ($s <= 1 && $e <= 1) {
+                return $noloop($s, $e);
             }
-            $lens[$pi] = $l;
-            $total += $l;
+            if ($s > 1 && $e > 1) {
+                return $noloop($s - 1, $e - 1);
+            }
+            return $s > 1 ? $loop($s - 1, $e) : $loop($s, $e - 1);
         }
-        if ($total <= 0) {
+        if ($s >= 0 && $e >= 0) {
+            return $noloop($s, $e);
+        }
+        if ($s < 0 && $e < 0) {
+            return $noloop(1 + $s, 1 + $e);
+        }
+        return $s < 0 ? $loop(1 + $s, $e) : $loop($s, 1 + $e);
+    }
+
+    /**
+     * rlottie VPathMesure::trim: the window is measured against the length of the
+     * whole path but (dasher semantics) restarts at every contour. Curves are cut
+     * exactly, so the result stays smooth at any scale.
+     */
+    private static function trimPath(Path $path, float $start, float $end): Path
+    {
+        if (abs($start - $end) < 1e-6) {
+            return new Path();
+        }
+        if ((abs($start) < 1e-6 && abs($end - 1) < 1e-6) || (abs($start - 1) < 1e-6 && abs($end) < 1e-6)) {
             return $path;
         }
+        $contours = [];
+        $total = 0.0;
+        foreach ($path->contours as $c) {
+            $m = self::measureContour($c);
+            $contours[] = $m;
+            $total += $m['length'];
+        }
+        if ($total <= 0) {
+            return new Path();
+        }
+        $windows = $start < $end
+            ? [[$total * $start, $total * $end]]
+            : [[0.0, $total * $end], [$total * $start, $total]];
         $out = new Path();
-        $ranges = [];
-        $a = fmod($s, 1.0);
-        if ($a < 0) {
-            $a += 1;
-        }
-        $b = $a + ($e - $s);
-        $ranges[] = [$a, min(1.0, $b)];
-        if ($b > 1.0) {
-            $ranges[] = [0.0, $b - 1.0];
-        }
-        foreach ($ranges as [$ra, $rb]) {
-            $from = $ra * $total;
-            $to = $rb * $total;
-            $acc = 0.0;
-            foreach ($polys as $pi => $poly) {
-                $n = intdiv(count($poly), 2);
-                $started = false;
-                for ($k = 1; $k < $n; $k++) {
-                    $x0 = $poly[$k * 2 - 2];
-                    $y0 = $poly[$k * 2 - 1];
-                    $x1 = $poly[$k * 2];
-                    $y1 = $poly[$k * 2 + 1];
-                    $l = hypot($x1 - $x0, $y1 - $y0);
-                    $segA = $acc;
-                    $segB = $acc + $l;
-                    $acc = $segB;
-                    if ($segB < $from || $segA > $to || $l <= 0) {
-                        continue;
-                    }
-                    $ta = max(0.0, ($from - $segA) / $l);
-                    $tb = min(1.0, ($to - $segA) / $l);
-                    $ax = $x0 + ($x1 - $x0) * $ta;
-                    $ay = $y0 + ($y1 - $y0) * $ta;
-                    $bx = $x0 + ($x1 - $x0) * $tb;
-                    $by = $y0 + ($y1 - $y0) * $tb;
-                    if (!$started) {
-                        $out->moveTo($ax, $ay);
-                        $started = true;
-                    }
-                    $out->lineTo($bx, $by);
-                }
+        foreach ($contours as $m) {
+            foreach ($windows as [$a, $b]) {
+                self::appendRange($out, $m, $a, min($b, $m['length']));
             }
         }
         return $out;
+    }
+
+    private static function pathLength(Path $path): float
+    {
+        $len = 0.0;
+        foreach ($path->contours as $c) {
+            $len += self::measureContour($c)['length'];
+        }
+        return $len;
+    }
+
+    /**
+     * Splits a contour into cubic segments with arc-length tables.
+     * A closed contour includes its closing edge.
+     * @param array{x:float,y:float,segs:list<array<int,float|int>>,closed:bool} $c
+     * @return array{segs:list<array{p:list<float>,len:float,tab:list<float>}>,length:float}
+     */
+    private static function measureContour(array $c): array
+    {
+        $px = (float) $c['x'];
+        $py = (float) $c['y'];
+        $cubics = [];
+        foreach ($c['segs'] as $s) {
+            if ($s[0] === Path::LINE) {
+                $cubics[] = [$px, $py, $px + ($s[1] - $px) / 3, $py + ($s[2] - $py) / 3, $px + 2 * ($s[1] - $px) / 3, $py + 2 * ($s[2] - $py) / 3, (float) $s[1], (float) $s[2], 1];
+                [$px, $py] = [(float) $s[1], (float) $s[2]];
+            } elseif ($s[0] === Path::QUAD) {
+                $cubics[] = [$px, $py, $px + 2 * ($s[1] - $px) / 3, $py + 2 * ($s[2] - $py) / 3, $s[3] + 2 * ($s[1] - $s[3]) / 3, $s[4] + 2 * ($s[2] - $s[4]) / 3, (float) $s[3], (float) $s[4], 0];
+                [$px, $py] = [(float) $s[3], (float) $s[4]];
+            } else {
+                $cubics[] = [$px, $py, (float) $s[1], (float) $s[2], (float) $s[3], (float) $s[4], (float) $s[5], (float) $s[6], 0];
+                [$px, $py] = [(float) $s[5], (float) $s[6]];
+            }
+        }
+        if ($c['closed'] && (abs($px - $c['x']) > 1e-6 || abs($py - $c['y']) > 1e-6)) {
+            $x = (float) $c['x'];
+            $y = (float) $c['y'];
+            $cubics[] = [$px, $py, $px + ($x - $px) / 3, $py + ($y - $py) / 3, $px + 2 * ($x - $px) / 3, $py + 2 * ($y - $py) / 3, $x, $y, 1];
+        }
+        $segs = [];
+        $total = 0.0;
+        foreach ($cubics as $q) {
+            $tab = [0.0];
+            if ($q[8] === 1) {
+                $l = hypot($q[6] - $q[0], $q[7] - $q[1]);
+                $tab = [0.0, $l];
+            } else {
+                $poly = hypot($q[2] - $q[0], $q[3] - $q[1]) + hypot($q[4] - $q[2], $q[5] - $q[3]) + hypot($q[6] - $q[4], $q[7] - $q[5]);
+                $n = (int) max(4, min(64, ceil($poly / 2)));
+                $l = 0.0;
+                $lx = $q[0];
+                $ly = $q[1];
+                for ($k = 1; $k <= $n; $k++) {
+                    [$x, $y] = self::cubicPoint($q, $k / $n);
+                    $l += hypot($x - $lx, $y - $ly);
+                    $tab[] = $l;
+                    $lx = $x;
+                    $ly = $y;
+                }
+            }
+            $segs[] = ['p' => array_slice($q, 0, 8), 'len' => $l, 'tab' => $tab];
+            $total += $l;
+        }
+        return ['segs' => $segs, 'length' => $total];
+    }
+
+    /** @param array<int,float> $q */
+    private static function cubicPoint(array $q, float $t): array
+    {
+        $mt = 1 - $t;
+        $a = $mt * $mt * $mt;
+        $b = 3 * $mt * $mt * $t;
+        $c = 3 * $mt * $t * $t;
+        $d = $t * $t * $t;
+        return [$a * $q[0] + $b * $q[2] + $c * $q[4] + $d * $q[6], $a * $q[1] + $b * $q[3] + $c * $q[5] + $d * $q[7]];
+    }
+
+    /** Curve parameter at a given arc length inside a measured segment. */
+    private static function paramAt(array $seg, float $len): float
+    {
+        $tab = $seg['tab'];
+        $n = count($tab) - 1;
+        if ($len <= 0 || $seg['len'] <= 0) {
+            return 0.0;
+        }
+        if ($len >= $seg['len']) {
+            return 1.0;
+        }
+        $lo = 0;
+        $hi = $n;
+        while ($hi - $lo > 1) {
+            $mid = ($lo + $hi) >> 1;
+            if ($tab[$mid] < $len) {
+                $lo = $mid;
+            } else {
+                $hi = $mid;
+            }
+        }
+        $span = $tab[$hi] - $tab[$lo];
+        $f = $span > 0 ? ($len - $tab[$lo]) / $span : 0.0;
+        return ($lo + $f) / $n;
+    }
+
+    /**
+     * Sub-curve of a cubic between parameters t0 < t1 (de Casteljau).
+     * @param list<float> $p
+     * @return list<float>
+     */
+    private static function subCubic(array $p, float $t0, float $t1): array
+    {
+        $split = static function (array $q, float $t): array {
+            $x01 = $q[0] + ($q[2] - $q[0]) * $t;
+            $y01 = $q[1] + ($q[3] - $q[1]) * $t;
+            $x12 = $q[2] + ($q[4] - $q[2]) * $t;
+            $y12 = $q[3] + ($q[5] - $q[3]) * $t;
+            $x23 = $q[4] + ($q[6] - $q[4]) * $t;
+            $y23 = $q[5] + ($q[7] - $q[5]) * $t;
+            $xa = $x01 + ($x12 - $x01) * $t;
+            $ya = $y01 + ($y12 - $y01) * $t;
+            $xb = $x12 + ($x23 - $x12) * $t;
+            $yb = $y12 + ($y23 - $y12) * $t;
+            $xm = $xa + ($xb - $xa) * $t;
+            $ym = $ya + ($yb - $ya) * $t;
+            return [[$q[0], $q[1], $x01, $y01, $xa, $ya, $xm, $ym], [$xm, $ym, $xb, $yb, $x23, $y23, $q[6], $q[7]]];
+        };
+        if ($t1 < 1.0) {
+            $p = $split($p, $t1)[0];
+        }
+        if ($t0 > 0.0 && $t1 > 0) {
+            $p = $split($p, $t0 / $t1)[1];
+        }
+        return $p;
+    }
+
+    /** Appends the part of a measured contour between arc lengths $a and $b. */
+    private static function appendRange(Path $out, array $m, float $a, float $b): void
+    {
+        if ($b - $a <= 1e-6 || $a >= $m['length']) {
+            return;
+        }
+        $acc = 0.0;
+        $started = false;
+        foreach ($m['segs'] as $seg) {
+            $s0 = $acc;
+            $s1 = $acc + $seg['len'];
+            $acc = $s1;
+            if ($s1 <= $a || $s0 >= $b || $seg['len'] <= 0) {
+                continue;
+            }
+            $t0 = $a > $s0 ? self::paramAt($seg, $a - $s0) : 0.0;
+            $t1 = $b < $s1 ? self::paramAt($seg, $b - $s0) : 1.0;
+            $q = ($t0 > 0 || $t1 < 1) ? self::subCubic($seg['p'], $t0, $t1) : $seg['p'];
+            if (!$started) {
+                $out->moveTo($q[0], $q[1]);
+                $started = true;
+            }
+            $out->cubicTo($q[2], $q[3], $q[4], $q[5], $q[6], $q[7]);
+        }
     }
 
     // ------------------------------------------------------------------
@@ -585,21 +882,22 @@ final class LottiePlayer
 
     /**
      * Stroke coverage exactly like rlottie: the path is transformed to device
-     * space and stroked with a uniform width scaled by the RMS of the matrix
-     * axes (sqrt((a^2+b^2+c^2+d^2)/2)); joins / caps / miter limit honoured.
+     * space and stroked with a uniform width scaled like rlottie's VMatrix::scale()
+     * (length of the mapped (sqrt2, sqrt2) vector / 2); joins / caps / miter limit honoured.
      * @param list<Path> $paths
      * @param array<string,mixed> $item stroke item (lj, lc, ml)
      */
     private function strokeMask(array $paths, Matrix $m, float $width, array $item = []): ?Mask
     {
-        $scale = sqrt(($m->a * $m->a + $m->b * $m->b + $m->c * $m->c + $m->d * $m->d) / 2);
+        $scale = sqrt((($m->a + $m->c) ** 2 + ($m->b + $m->d) ** 2) / 2);
         $w = $width * $scale;
         if ($w <= 0.05) {
             return null;
         }
         $join = (int) ($item['lj'] ?? Stroke::JOIN_ROUND);
         $cap = (int) ($item['lc'] ?? Stroke::CAP_ROUND);
-        $ml = (float) ($item['ml'] ?? 4.0);
+        // rlottie defaults a missing miter limit to 0 and FreeType clamps it to 1
+        $ml = max(1.0, (float) ($item['ml'] ?? 0.0));
         $polys = [];
         foreach ($paths as $p) {
             foreach ($p->transform($m)->contours as $c) {
@@ -660,60 +958,150 @@ final class LottiePlayer
         if (!$stops) {
             return;
         }
-        [$sx, $sy] = $m->apply(...$this->vec($it['s'] ?? null, $t, [0, 0]));
-        [$ex, $ey] = $m->apply(...$this->vec($it['e'] ?? null, $t, [0, 0]));
+        // like rlottie, the gradient lives in the shape's local space: every pixel
+        // centre is mapped back through the inverse matrix, so non-uniform scale,
+        // rotation and skew stretch the gradient together with the shape
+        $det = $m->a * $m->d - $m->b * $m->c;
+        if (abs($det) < 1e-12) {
+            return;
+        }
+        $inv = $m->invert();
+        [$sx, $sy] = $this->vec($it['s'] ?? null, $t, [0, 0]);
+        [$ex, $ey] = $this->vec($it['e'] ?? null, $t, [0, 0]);
         $radial = (int) ($it['t'] ?? 1) === 2;
         $dx = $ex - $sx;
         $dy = $ey - $sy;
-        $len2 = max(1e-9, $dx * $dx + $dy * $dy);
-        $len = sqrt($len2);
-        // premultiplied lookup table (rlottie interpolates premultiplied colours)
-        $lut = [];
-        for ($k = 0; $k <= 128; $k++) {
-            $lut[$k] = self::samplePremultiplied($stops, $k / 128);
+        $len2 = $dx * $dx + $dy * $dy;
+        $lut = self::gradientTable($stops);
+        $last = count($lut) - 1;
+        if ($radial) {
+            $r = sqrt($len2);
+            $progress = $this->value($it['h'] ?? null, $t, 0) / 100;
+            if (abs($progress - 1.0) < 1e-6) {
+                $progress = 0.99;
+            }
+            $angle = deg2rad(rad2deg(atan2($dy, $dx)) + $this->value($it['a'] ?? null, $t, 0));
+            $fx = $sx + cos($angle) * $progress * $r;
+            $fy = $sy + sin($angle) * $progress * $r;
+            $gdx = $sx - $fx;
+            $gdy = $sy - $fy;
+            $ga = $r * $r - $gdx * $gdx - $gdy * $gdy;
+            if (abs($ga) < 1e-9) {
+                return;
+            }
+            $inv2a = 1 / (2 * $ga);
+        } elseif ($len2 < 1e-12) {
+            return;
         }
         imagealphablending($target, true);
         $w = $mask->width;
         for ($y = $b[1]; $y <= $b[3]; $y++) {
             $row = $y * $w;
+            $py = $y + 0.5;
             for ($x = $b[0]; $x <= $b[2]; $x++) {
                 $cov = $mask->data[$row + $x];
                 if ($cov <= 0.002) {
                     continue;
                 }
                 $px = $x + 0.5;
-                $py = $y + 0.5;
-                $pos = $radial ? hypot($px - $sx, $py - $sy) / $len : (($px - $sx) * $dx + ($py - $sy) * $dy) / $len2;
-                $pos = $pos < 0 ? 0 : ($pos > 1 ? 1 : $pos);
-                [$pr, $pg, $pb, $pa] = $lut[(int) round($pos * 128)];
-                $a = $pa * $cov * $opacity;
-                if ($a <= 0.002) {
+                $lx = $inv->a * $px + $inv->c * $py + $inv->e;
+                $ly = $inv->b * $px + $inv->d * $py + $inv->f;
+                if ($radial) {
+                    $rx = $lx - $fx;
+                    $ry = $ly - $fy;
+                    $bb = 2 * ($rx * $gdx + $ry * $gdy);
+                    $dd = $bb * $bb + 4 * $ga * ($rx * $rx + $ry * $ry);
+                    if ($dd < 0) {
+                        continue;
+                    }
+                    $pos = (sqrt($dd) - $bb) * $inv2a;
+                } else {
+                    $pos = (($lx - $sx) * $dx + ($ly - $sy) * $dy) / $len2;
+                }
+                $idx = (int) ($pos * $last + 0.5);
+                [$pr, $pg, $pb, $pa] = $lut[$idx < 0 ? 0 : ($idx > $last ? $last : $idx)];
+                $al = $pa * $cov * $opacity;
+                if ($al <= 0.002) {
                     continue;
                 }
-                $r = $pa > 1e-6 ? (int) min(255, round($pr / $pa)) : 0;
-                $g = $pa > 1e-6 ? (int) min(255, round($pg / $pa)) : 0;
-                $bl = $pa > 1e-6 ? (int) min(255, round($pb / $pa)) : 0;
-                $alpha = 127 - (int) round($a * 127);
-                imagesetpixel($target, $x, $y, ($alpha << 24) | ($r << 16) | ($g << 8) | $bl);
+                $rr = (int) min(255, round($pr / $pa));
+                $gg = (int) min(255, round($pg / $pa));
+                $bl = (int) min(255, round($pb / $pa));
+                $alpha = 127 - (int) round($al * 127);
+                imagesetpixel($target, $x, $y, ($alpha << 24) | ($rr << 16) | ($gg << 8) | $bl);
             }
         }
+    }
+
+    /**
+     * 1024-entry premultiplied colour table built the way rlottie's
+     * generateGradientColorTable does (pad spread, 8-bit premultiplied stops,
+     * integer interpolate_pixel blending).
+     * @param list<array{0:float,1:float,2:float,3:float,4:float}> $stops
+     * @return list<array{0:float,1:float,2:float,3:float}> premultiplied r,g,b (0-255) and alpha (0-1)
+     */
+    private static function gradientTable(array $stops): array
+    {
+        $size = 1024;
+        $pm = static function (array $s): array {
+            $alpha = (int) (255 * max(0.0, min(1.0, $s[4])));
+            $ch = static fn (float $v): int => (int) (255 * max(0.0, min(1.0, $v)));
+            return [intdiv($ch($s[1]) * $alpha, 255), intdiv($ch($s[2]) * $alpha, 255), intdiv($ch($s[3]) * $alpha, 255), $alpha];
+        };
+        $ints = [];
+        $incr = 1.0 / $size;
+        $fpos = 1.5 * $incr;
+        $cur = $pm($stops[0]);
+        $ints[] = $cur;
+        while ($fpos <= $stops[0][0] && count($ints) < $size) {
+            $ints[] = $cur;
+            $fpos += $incr;
+        }
+        $n = count($stops);
+        for ($i = 0; $i < $n - 1; $i++) {
+            $span = $stops[$i + 1][0] - $stops[$i][0];
+            $delta = abs($span) > 1e-12 ? 1 / $span : 0.0;
+            $next = $pm($stops[$i + 1]);
+            while ($fpos < $stops[$i + 1][0] && count($ints) < $size) {
+                $dist = (int) (255 * ($fpos - $stops[$i][0]) * $delta);
+                $idist = 255 - $dist;
+                $ints[] = [
+                    ($cur[0] * $idist + $next[0] * $dist) >> 8,
+                    ($cur[1] * $idist + $next[1] * $dist) >> 8,
+                    ($cur[2] * $idist + $next[2] * $dist) >> 8,
+                    ($cur[3] * $idist + $next[3] * $dist) >> 8,
+                ];
+                $fpos += $incr;
+            }
+            $cur = $next;
+        }
+        while (count($ints) < $size) {
+            $ints[] = $cur;
+        }
+        $ints[$size - 1] = $cur;
+        return array_map(static fn (array $c): array => [(float) $c[0], (float) $c[1], (float) $c[2], $c[3] / 255], $ints);
     }
 
     /**
      * Gradient stops exactly like rlottie (Telegram's renderer): one stop per
      * colour stop; its opacity is interpolated from the opacity stops that
      * bracket it, the first opacity is used before the first opacity stop and
-     * 0 after the last one.
+     * 0 after the last one (or when there is a single opacity stop).
      * @param list<float> $raw
      * @return list<array{0:float,1:float,2:float,3:float,4:float}> pos, r, g, b, alpha
      */
     public static function gradientStops(array $raw, int $count): array
     {
         $stops = [];
+        if ($count < 0 || $count * 4 > count($raw)) {
+            $count = intdiv(count($raw), 4); // legacy bodymovin
+        }
         $op = array_slice($raw, $count * 4);
         $opStops = [];
-        for ($k = 0; $k + 1 < count($op); $k += 2) {
-            $opStops[] = [(float) $op[$k], (float) $op[$k + 1]];
+        if (count($op) % 2 === 0) {
+            for ($k = 0; $k + 1 < count($op); $k += 2) {
+                $opStops[] = [(float) $op[$k], (float) $op[$k + 1]];
+            }
         }
         for ($k = 0; $k < $count; $k++) {
             if (!isset($raw[$k * 4 + 3])) {
@@ -722,16 +1110,15 @@ final class LottiePlayer
             $pos = (float) $raw[$k * 4];
             $alpha = 1.0;
             if ($opStops) {
+                // rlottie getOpacityAtPosition: first bracketing pair, clamped progress, 0 past the end
                 $alpha = 0.0;
-                foreach ($opStops as $j => $os) {
-                    if ($os[0] >= $pos) {
-                        if ($j === 0) {
-                            $alpha = $os[1];
-                        } else {
-                            $prev = $opStops[$j - 1];
-                            $span = $os[0] - $prev[0];
-                            $alpha = $span > 1e-9 ? $prev[1] + ($pos - $prev[0]) / $span * ($os[1] - $prev[1]) : $os[1];
-                        }
+                for ($j = 1, $n = count($opStops); $j < $n; $j++) {
+                    if ($opStops[$j][0] >= $pos) {
+                        $prev = $opStops[$j - 1];
+                        $span = $opStops[$j][0] - $prev[0];
+                        $p = $span > 1e-9 ? ($pos - $prev[0]) / $span : 1.0;
+                        $p = $p < 0 ? 0.0 : ($p > 1 ? 1.0 : $p);
+                        $alpha = $prev[1] + $p * ($opStops[$j][1] - $prev[1]);
                         break;
                     }
                 }
@@ -740,26 +1127,6 @@ final class LottiePlayer
         }
         usort($stops, static fn ($a, $b) => $a[0] <=> $b[0]);
         return $stops;
-    }
-
-    /** @return array{0:float,1:float,2:float,3:float} premultiplied r,g,b (0..255*a) and alpha */
-    private static function samplePremultiplied(array $stops, float $pos): array
-    {
-        $n = count($stops);
-        $pm = static fn (array $s) => [$s[1] * 255 * $s[4], $s[2] * 255 * $s[4], $s[3] * 255 * $s[4], $s[4]];
-        if ($pos <= $stops[0][0]) {
-            return $pm($stops[0]);
-        }
-        for ($k = 1; $k < $n; $k++) {
-            if ($pos <= $stops[$k][0]) {
-                $a = $pm($stops[$k - 1]);
-                $b = $pm($stops[$k]);
-                $span = $stops[$k][0] - $stops[$k - 1][0];
-                $f = $span > 1e-9 ? ($pos - $stops[$k - 1][0]) / $span : 1.0;
-                return [$a[0] + ($b[0] - $a[0]) * $f, $a[1] + ($b[1] - $a[1]) * $f, $a[2] + ($b[2] - $a[2]) * $f, $a[3] + ($b[3] - $a[3]) * $f];
-            }
-        }
-        return $pm($stops[$n - 1]);
     }
 
     private function drawImage(array $it, Matrix $m, float $opacity, \GdImage $target): void
