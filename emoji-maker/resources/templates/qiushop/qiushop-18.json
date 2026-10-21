@@ -1,0 +1,32 @@
+{
+    "slug": "qiushop-18",
+    "pack": "qiushop",
+    "name": "کیوشاپ 18",
+    "source": "qiushop-18.tgs",
+    "status": "disabled",
+    "category": "",
+    "sort": 180,
+    "remove": [],
+    "slots": [],
+    "recolor": {
+        "enabled": true,
+        "primary": null,
+        "tolerance": 35.0,
+        "protect": []
+    },
+    "meta": {
+        "fr": 60,
+        "ip": 0,
+        "op": 180,
+        "w": 512,
+        "h": 512,
+        "imported_from": "CAACAgQAAxUAAWrTAaiGlxlk-PtyfiMAAR7lXMrDOwACZSAAArLsaVPs3kPwCkYjaT0E.json",
+        "detector": {
+            "seed_paths": 0,
+            "member_paths": 0,
+            "notes": [
+                "no logo artwork found"
+            ]
+        }
+    }
+}

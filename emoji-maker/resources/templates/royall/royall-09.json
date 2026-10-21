@@ -1,0 +1,83 @@
+{
+    "slug": "royall-09",
+    "pack": "royall",
+    "name": "مارکت رویال 9",
+    "source": "royall-09.tgs",
+    "status": "auto",
+    "category": "",
+    "sort": 90,
+    "remove": [
+        "layers/11/shapes/9/it/0/it/1",
+        "assets/0/layers/0"
+    ],
+    "slots": [
+        {
+            "role": "main",
+            "host": "assets/0/layers/0",
+            "index": 0,
+            "box": [
+                0.28,
+                0.0,
+                258.13,
+                74.29
+            ],
+            "accepts": [
+                "logo",
+                "text"
+            ],
+            "color": "#FFD05C",
+            "pad": 0.92,
+            "also": [
+                {
+                    "host": "layers/11/shapes/9/it/0",
+                    "index": 1,
+                    "box": [
+                        84.87,
+                        1.94,
+                        96.55,
+                        2.11
+                    ]
+                }
+            ]
+        },
+        {
+            "role": "caption",
+            "host": "assets/0/layers/0",
+            "index": 0,
+            "box": [
+                1.95,
+                78.54,
+                261.23,
+                97.97
+            ],
+            "accepts": [
+                "text"
+            ],
+            "color": "#FFFFFF",
+            "pad": 0.95,
+            "also": []
+        }
+    ],
+    "recolor": {
+        "enabled": true,
+        "primary": null,
+        "tolerance": 35.0,
+        "protect": []
+    },
+    "meta": {
+        "fr": 60,
+        "ip": 0,
+        "op": 180,
+        "w": 512,
+        "h": 512,
+        "still": 108.0,
+        "imported_from": "CAACAgQAAxUAAWrTAAHcSf1W61JWoTC4oDdIkvEW7AACATEAAvKZKFJpaxVgqcTuTD0E.json",
+        "detector": {
+            "seed_paths": 23,
+            "member_paths": 44,
+            "notes": [
+                "copy of main slot in layers/11/shapes/9/it/0 (overlap 0.00)"
+            ]
+        }
+    }
+}

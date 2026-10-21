@@ -1,0 +1,52 @@
+{
+    "slug": "tofan-28",
+    "pack": "tofan",
+    "name": "طوفان ترید 28",
+    "source": "tofan-28.tgs",
+    "status": "auto",
+    "category": "",
+    "sort": 280,
+    "remove": [
+        "layers/0/shapes/5/it/0/it/0/it/0/it/4"
+    ],
+    "slots": [
+        {
+            "role": "main",
+            "host": "layers/0/shapes/5/it/0/it/0/it/0/it/4",
+            "index": 0,
+            "box": [
+                -327.69,
+                -246.36,
+                -212.82,
+                -56.25
+            ],
+            "accepts": [
+                "logo",
+                "text"
+            ],
+            "color": "#141414",
+            "pad": 0.92,
+            "also": []
+        }
+    ],
+    "recolor": {
+        "enabled": true,
+        "primary": null,
+        "tolerance": 35.0,
+        "protect": []
+    },
+    "meta": {
+        "fr": 60,
+        "ip": 0,
+        "op": 180,
+        "w": 512,
+        "h": 512,
+        "still": 171.0,
+        "imported_from": "CAACAgQAAxUAAWrS_wABrLlzm_yrMR0tZHq1NaFKgQACuBgAAjAPSFM-iSr4wOlakT0E.json",
+        "detector": {
+            "seed_paths": 17,
+            "member_paths": 2,
+            "notes": []
+        }
+    }
+}

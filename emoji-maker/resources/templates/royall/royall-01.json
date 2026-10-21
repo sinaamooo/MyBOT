@@ -1,0 +1,117 @@
+{
+    "slug": "royall-01",
+    "pack": "royall",
+    "name": "مارکت رویال 1",
+    "source": "royall-01.tgs",
+    "status": "auto",
+    "category": "",
+    "sort": 10,
+    "remove": [
+        "layers/3/shapes/0/it/6/it/0",
+        "layers/3/shapes/2/it/6/it/0",
+        "layers/3/shapes/2/it/6/it/1",
+        "layers/3/shapes/2/it/7/it/1",
+        "layers/4/shapes/0/it/0",
+        "layers/4/shapes/2/it/0",
+        "layers/4/shapes/2/it/1",
+        "layers/4/shapes/3/it/0",
+        "layers/4/shapes/3/it/1",
+        "layers/4/shapes/4/it/0",
+        "layers/4/shapes/4/it/1",
+        "layers/4/shapes/5/it/0",
+        "layers/4/shapes/5/it/1",
+        "layers/5",
+        "layers/7/shapes/2",
+        "layers/7/shapes/7",
+        "layers/7/shapes/8",
+        "layers/7/shapes/9",
+        "layers/7/shapes/12",
+        "layers/7/shapes/14"
+    ],
+    "slots": [
+        {
+            "role": "main",
+            "host": "layers/5",
+            "index": 0,
+            "box": [
+                83.7,
+                63.35,
+                428.41,
+                192.67
+            ],
+            "accepts": [
+                "logo",
+                "text"
+            ],
+            "color": "#FFFFFF",
+            "pad": 0.92,
+            "also": [
+                {
+                    "host": "layers/3",
+                    "index": 0,
+                    "box": [
+                        79.18,
+                        30.75,
+                        438.03,
+                        70.28
+                    ]
+                },
+                {
+                    "host": "layers/4",
+                    "index": 0,
+                    "box": [
+                        124.0,
+                        47.19,
+                        420.81,
+                        104.81
+                    ]
+                },
+                {
+                    "host": "layers/4",
+                    "index": 0,
+                    "box": [
+                        190.0,
+                        150.0,
+                        466.0,
+                        158.0
+                    ]
+                },
+                {
+                    "host": "layers/7",
+                    "index": 2,
+                    "box": [
+                        60.05,
+                        94.46,
+                        314.36,
+                        189.06
+                    ]
+                }
+            ]
+        }
+    ],
+    "recolor": {
+        "enabled": true,
+        "primary": null,
+        "tolerance": 35.0,
+        "protect": []
+    },
+    "meta": {
+        "fr": 60,
+        "ip": 0,
+        "op": 180,
+        "w": 512,
+        "h": 512,
+        "still": 85.0,
+        "imported_from": "CAACAgQAAxUAAWrTAAHc6NNp37f-oMqJ2a0OFhdFYAACEiEAAhC7kFJZbRRjIj9cNj0E.json",
+        "detector": {
+            "seed_paths": 23,
+            "member_paths": 68,
+            "notes": [
+                "copy of main slot in layers/3 (overlap 0.00)",
+                "copy of main slot in layers/4 (overlap 1.00)",
+                "copy of main slot in layers/4 (overlap 0.85)",
+                "copy of main slot in layers/7 (overlap 0.82)"
+            ]
+        }
+    }
+}

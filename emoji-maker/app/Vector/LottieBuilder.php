@@ -28,6 +28,14 @@ final class LottieBuilder
         $this->tolerance = $t;
     }
 
+    /** Decimal places used for path coordinates (more for small, scaled up hosts). */
+    private int $precision = 1;
+
+    public function setPrecision(int $decimals): void
+    {
+        $this->precision = max(0, min(4, $decimals));
+    }
+
     private static function r(float $v, int $dec = 1): float
     {
         $r = round($v, $dec);
@@ -63,11 +71,11 @@ final class LottieBuilder
                 $py = $s[6];
             }
             foreach ($vertices as $k => [$x, $y]) {
-                $v[] = [self::r($x), self::r($y)];
+                $v[] = [self::r($x, $this->precision), self::r($y, $this->precision)];
                 $o = $outs[$k] ?? [0.0, 0.0];
                 $i = $ins[$k] ?? [0.0, 0.0];
-                $out[] = [self::r($o[0]), self::r($o[1])];
-                $in[] = [self::r($i[0]), self::r($i[1])];
+                $out[] = [self::r($o[0], $this->precision), self::r($o[1], $this->precision)];
+                $in[] = [self::r($i[0], $this->precision), self::r($i[1], $this->precision)];
             }
             if (count($v) < 2) {
                 continue;

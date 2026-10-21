@@ -1,0 +1,85 @@
+{
+    "slug": "tofan-19",
+    "pack": "tofan",
+    "name": "طوفان ترید 19",
+    "source": "tofan-19.tgs",
+    "status": "auto",
+    "category": "",
+    "sort": 190,
+    "remove": [
+        "layers/3/shapes/3",
+        "layers/3/shapes/4",
+        "layers/3/shapes/5",
+        "layers/3/shapes/6",
+        "layers/3/shapes/7",
+        "layers/5"
+    ],
+    "slots": [
+        {
+            "role": "main",
+            "host": "layers/5",
+            "index": 0,
+            "box": [
+                79.42,
+                374.03,
+                315.48,
+                658.36
+            ],
+            "accepts": [
+                "logo",
+                "text"
+            ],
+            "color": "#0255FE",
+            "pad": 0.92,
+            "also": []
+        },
+        {
+            "role": "caption",
+            "host": "layers/3",
+            "index": 3,
+            "box": [
+                104.89,
+                192.46,
+                375.2,
+                266.02
+            ],
+            "accepts": [
+                "text"
+            ],
+            "color": "#FFFFFF",
+            "pad": 0.95,
+            "also": [
+                {
+                    "host": "layers/5",
+                    "index": 0,
+                    "box": [
+                        148.76,
+                        683.77,
+                        284.35,
+                        701.35
+                    ]
+                }
+            ]
+        }
+    ],
+    "recolor": {
+        "enabled": true,
+        "primary": null,
+        "tolerance": 35.0,
+        "protect": []
+    },
+    "meta": {
+        "fr": 60,
+        "ip": 0,
+        "op": 180,
+        "w": 512,
+        "h": 512,
+        "still": 163.0,
+        "imported_from": "CAACAgQAAxUAAWrS_wABTxfPw5Zex3nggLYuCPGkLAACXRUAAlSwQVMBiGl2B0vBij0E.json",
+        "detector": {
+            "seed_paths": 17,
+            "member_paths": 12,
+            "notes": []
+        }
+    }
+}

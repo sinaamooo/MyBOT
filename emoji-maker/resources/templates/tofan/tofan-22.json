@@ -1,0 +1,69 @@
+{
+    "slug": "tofan-22",
+    "pack": "tofan",
+    "name": "طوفان ترید 22",
+    "source": "tofan-22.tgs",
+    "status": "auto",
+    "category": "",
+    "sort": 220,
+    "remove": [
+        "layers/0/shapes/0/it/0/it/0"
+    ],
+    "slots": [
+        {
+            "role": "main",
+            "host": "layers/0/shapes/0/it/0/it/0",
+            "index": 0,
+            "box": [
+                -70.8,
+                -201.0,
+                165.26,
+                83.33
+            ],
+            "accepts": [
+                "logo",
+                "text"
+            ],
+            "color": "#141414",
+            "pad": 0.92,
+            "also": []
+        },
+        {
+            "role": "caption",
+            "host": "layers/0/shapes/0/it/0/it/0",
+            "index": 0,
+            "box": [
+                -1.46,
+                108.75,
+                134.14,
+                126.32
+            ],
+            "accepts": [
+                "text"
+            ],
+            "color": "#141414",
+            "pad": 0.95,
+            "also": []
+        }
+    ],
+    "recolor": {
+        "enabled": true,
+        "primary": null,
+        "tolerance": 35.0,
+        "protect": []
+    },
+    "meta": {
+        "fr": 60,
+        "ip": 0,
+        "op": 180,
+        "w": 512,
+        "h": 512,
+        "still": 0.0,
+        "imported_from": "CAACAgQAAxUAAWrS_wABZLvleP6hLrAElWACWMPgigACBxUAAvHFQVMUXkcewNP2Iz0E.json",
+        "detector": {
+            "seed_paths": 17,
+            "member_paths": 2,
+            "notes": []
+        }
+    }
+}

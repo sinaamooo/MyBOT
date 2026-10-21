@@ -1,0 +1,32 @@
+{
+    "slug": "qiushop-23",
+    "pack": "qiushop",
+    "name": "کیوشاپ 23",
+    "source": "qiushop-23.tgs",
+    "status": "disabled",
+    "category": "",
+    "sort": 230,
+    "remove": [],
+    "slots": [],
+    "recolor": {
+        "enabled": true,
+        "primary": null,
+        "tolerance": 35.0,
+        "protect": []
+    },
+    "meta": {
+        "fr": 60,
+        "ip": 0,
+        "op": 180,
+        "w": 512,
+        "h": 512,
+        "imported_from": "CAACAgQAAxUAAWrTAairAAGN4fFQ_mqn7PdmSGEH3AACUhsAAmxEaVM795M1afFx-D0E.json",
+        "detector": {
+            "seed_paths": 0,
+            "member_paths": 0,
+            "notes": [
+                "no logo artwork found"
+            ]
+        }
+    }
+}

@@ -1,0 +1,89 @@
+{
+    "slug": "tofan-39",
+    "pack": "tofan",
+    "name": "طوفان ترید 39",
+    "source": "tofan-39.tgs",
+    "status": "auto",
+    "category": "",
+    "sort": 390,
+    "remove": [
+        "layers/3",
+        "layers/12/shapes/4",
+        "layers/15"
+    ],
+    "slots": [
+        {
+            "role": "main",
+            "host": "layers/15",
+            "index": 0,
+            "box": [
+                -50.04,
+                37.09,
+                -9.01,
+                84.66
+            ],
+            "accepts": [
+                "logo",
+                "text"
+            ],
+            "color": "#141414",
+            "pad": 0.92,
+            "also": [
+                {
+                    "host": "layers/3",
+                    "index": 0,
+                    "box": [
+                        79.42,
+                        374.03,
+                        315.48,
+                        658.36
+                    ]
+                },
+                {
+                    "host": "layers/3",
+                    "index": 0,
+                    "box": [
+                        148.76,
+                        683.77,
+                        284.35,
+                        701.35
+                    ]
+                },
+                {
+                    "host": "layers/12/shapes/4",
+                    "index": 0,
+                    "box": [
+                        -105.85,
+                        110.68,
+                        -43.06,
+                        141.66
+                    ]
+                }
+            ]
+        }
+    ],
+    "recolor": {
+        "enabled": true,
+        "primary": null,
+        "tolerance": 35.0,
+        "protect": []
+    },
+    "meta": {
+        "fr": 60,
+        "ip": 0,
+        "op": 180,
+        "w": 512,
+        "h": 512,
+        "still": 46.0,
+        "imported_from": "CAACAgQAAxUAAWrS_yPNdg8Vx7s9dizH_BTOmMRpAAKlFgACcZRZU6usy5AcdyQCPQQ.json",
+        "detector": {
+            "seed_paths": 34,
+            "member_paths": 12,
+            "notes": [
+                "copy of main slot in layers/3 (overlap 0.77)",
+                "copy of main slot in layers/3 (overlap 0.89)",
+                "copy of main slot in layers/12/shapes/4 (overlap 0.71)"
+            ]
+        }
+    }
+}

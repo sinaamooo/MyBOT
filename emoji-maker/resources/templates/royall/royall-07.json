@@ -1,0 +1,69 @@
+{
+    "slug": "royall-07",
+    "pack": "royall",
+    "name": "مارکت رویال 7",
+    "source": "royall-07.tgs",
+    "status": "auto",
+    "category": "",
+    "sort": 70,
+    "remove": [
+        "assets/2/layers/0"
+    ],
+    "slots": [
+        {
+            "role": "main",
+            "host": "assets/2/layers/0",
+            "index": 0,
+            "box": [
+                0.28,
+                0.0,
+                258.13,
+                74.29
+            ],
+            "accepts": [
+                "logo",
+                "text"
+            ],
+            "color": "#FFD05C",
+            "pad": 0.92,
+            "also": []
+        },
+        {
+            "role": "caption",
+            "host": "assets/2/layers/0",
+            "index": 0,
+            "box": [
+                1.95,
+                78.54,
+                261.23,
+                97.97
+            ],
+            "accepts": [
+                "text"
+            ],
+            "color": "#FFFFFF",
+            "pad": 0.95,
+            "also": []
+        }
+    ],
+    "recolor": {
+        "enabled": true,
+        "primary": null,
+        "tolerance": 35.0,
+        "protect": []
+    },
+    "meta": {
+        "fr": 60,
+        "ip": 0,
+        "op": 180,
+        "w": 512,
+        "h": 512,
+        "still": 46.0,
+        "imported_from": "CAACAgQAAxUAAWrTAAHcItlerP1lnwJIiM0WAdbAcQACoSIAAk7IKVJLGrxYMmQ3eD0E.json",
+        "detector": {
+            "seed_paths": 23,
+            "member_paths": 17,
+            "notes": []
+        }
+    }
+}

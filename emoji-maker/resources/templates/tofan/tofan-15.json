@@ -1,0 +1,52 @@
+{
+    "slug": "tofan-15",
+    "pack": "tofan",
+    "name": "طوفان ترید 15",
+    "source": "tofan-15.tgs",
+    "status": "auto",
+    "category": "",
+    "sort": 150,
+    "remove": [
+        "layers/1/shapes/0/it/0"
+    ],
+    "slots": [
+        {
+            "role": "main",
+            "host": "layers/1/shapes/0/it/0",
+            "index": 0,
+            "box": [
+                1.43,
+                -17.34,
+                117.89,
+                119.33
+            ],
+            "accepts": [
+                "logo",
+                "text"
+            ],
+            "color": "#141414",
+            "pad": 0.92,
+            "also": []
+        }
+    ],
+    "recolor": {
+        "enabled": true,
+        "primary": null,
+        "tolerance": 35.0,
+        "protect": []
+    },
+    "meta": {
+        "fr": 60,
+        "ip": 0,
+        "op": 180,
+        "w": 512,
+        "h": 512,
+        "still": 85.0,
+        "imported_from": "CAACAgQAAxUAAWrS_wABRuLZJ48OLHJlEAPbzBHREQACdRcAAtzfUFOJ1HK-DKAguT0E.json",
+        "detector": {
+            "seed_paths": 17,
+            "member_paths": 6,
+            "notes": []
+        }
+    }
+}

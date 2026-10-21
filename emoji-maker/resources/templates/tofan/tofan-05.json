@@ -1,0 +1,69 @@
+{
+    "slug": "tofan-05",
+    "pack": "tofan",
+    "name": "طوفان ترید 5",
+    "source": "tofan-05.tgs",
+    "status": "auto",
+    "category": "",
+    "sort": 50,
+    "remove": [
+        "layers/0"
+    ],
+    "slots": [
+        {
+            "role": "main",
+            "host": "layers/0",
+            "index": 0,
+            "box": [
+                79.42,
+                374.03,
+                315.48,
+                658.36
+            ],
+            "accepts": [
+                "logo",
+                "text"
+            ],
+            "color": "#0255FE",
+            "pad": 0.92,
+            "also": []
+        },
+        {
+            "role": "caption",
+            "host": "layers/0",
+            "index": 0,
+            "box": [
+                148.76,
+                683.77,
+                284.35,
+                701.35
+            ],
+            "accepts": [
+                "text"
+            ],
+            "color": "#141414",
+            "pad": 0.95,
+            "also": []
+        }
+    ],
+    "recolor": {
+        "enabled": true,
+        "primary": null,
+        "tolerance": 35.0,
+        "protect": []
+    },
+    "meta": {
+        "fr": 60,
+        "ip": 0,
+        "op": 180,
+        "w": 512,
+        "h": 512,
+        "still": 46.0,
+        "imported_from": "CAACAgQAAxUAAWrS_wAB3r_htvCNNiarTD7TFBKoyAACGRYAArqxQVP4AAEHmQZ6oOI9BA.json",
+        "detector": {
+            "seed_paths": 17,
+            "member_paths": 2,
+            "notes": []
+        }
+    }
+}

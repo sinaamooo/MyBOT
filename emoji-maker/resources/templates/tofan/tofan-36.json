@@ -1,0 +1,52 @@
+{
+    "slug": "tofan-36",
+    "pack": "tofan",
+    "name": "طوفان ترید 36",
+    "source": "tofan-36.tgs",
+    "status": "auto",
+    "category": "",
+    "sort": 360,
+    "remove": [
+        "layers/3"
+    ],
+    "slots": [
+        {
+            "role": "main",
+            "host": "layers/3",
+            "index": 0,
+            "box": [
+                79.42,
+                374.03,
+                315.48,
+                658.36
+            ],
+            "accepts": [
+                "logo",
+                "text"
+            ],
+            "color": "#0255FE",
+            "pad": 0.92,
+            "also": []
+        }
+    ],
+    "recolor": {
+        "enabled": true,
+        "primary": null,
+        "tolerance": 35.0,
+        "protect": []
+    },
+    "meta": {
+        "fr": 60,
+        "ip": 0,
+        "op": 180,
+        "w": 512,
+        "h": 512,
+        "still": 46.0,
+        "imported_from": "CAACAgQAAxUAAWrS_yOEwLtIaRjpHedKRdBiVGerAAIaFQACzNVYUylWK_hmqOT1PQQ.json",
+        "detector": {
+            "seed_paths": 6,
+            "member_paths": 5,
+            "notes": []
+        }
+    }
+}

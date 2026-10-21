@@ -1,0 +1,94 @@
+{
+    "slug": "tofan-26",
+    "pack": "tofan",
+    "name": "طوفان ترید 26",
+    "source": "tofan-26.tgs",
+    "status": "auto",
+    "category": "",
+    "sort": 260,
+    "remove": [
+        "assets/2/layers/0",
+        "assets/2/layers/1"
+    ],
+    "slots": [
+        {
+            "role": "main",
+            "host": "assets/2/layers/1",
+            "index": 0,
+            "box": [
+                79.42,
+                374.03,
+                315.48,
+                658.36
+            ],
+            "accepts": [
+                "logo",
+                "text"
+            ],
+            "color": "#0255FE",
+            "pad": 0.92,
+            "also": [
+                {
+                    "host": "assets/2/layers/0",
+                    "index": 0,
+                    "box": [
+                        79.42,
+                        374.03,
+                        315.48,
+                        658.36
+                    ]
+                }
+            ]
+        },
+        {
+            "role": "caption",
+            "host": "assets/2/layers/0",
+            "index": 0,
+            "box": [
+                148.76,
+                683.77,
+                284.35,
+                701.35
+            ],
+            "accepts": [
+                "text"
+            ],
+            "color": "#141414",
+            "pad": 0.95,
+            "also": [
+                {
+                    "host": "assets/2/layers/1",
+                    "index": 0,
+                    "box": [
+                        148.76,
+                        683.77,
+                        284.35,
+                        701.35
+                    ]
+                }
+            ]
+        }
+    ],
+    "recolor": {
+        "enabled": true,
+        "primary": null,
+        "tolerance": 35.0,
+        "protect": []
+    },
+    "meta": {
+        "fr": 60,
+        "ip": 0,
+        "op": 180,
+        "w": 512,
+        "h": 512,
+        "still": 0.0,
+        "imported_from": "CAACAgQAAxUAAWrS_wABj6GowHTqLHUZm7Bsd9WuCAACaBYAArwRQVPLltcjmEIRoT0E.json",
+        "detector": {
+            "seed_paths": 34,
+            "member_paths": 4,
+            "notes": [
+                "copy of main slot in assets/2/layers/0 (overlap 1.00)"
+            ]
+        }
+    }
+}

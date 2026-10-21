@@ -17,9 +17,24 @@ final class TgsValidator
     private const FORBIDDEN_SHAPES = ['sr' => 'Star Shape', 'mm' => 'Merge Paths', 'rp' => 'Repeater', 'gs' => 'Gradient Stroke'];
     private const FORBIDDEN_LAYERS = [1 => 'Solid', 2 => 'Image', 5 => 'Text'];
 
-    /** @param array<string,mixed> $limits telegram_formats.animated */
-    public function __construct(private array $limits)
+    /**
+     * @param array<string,mixed> $limits telegram_formats.animated
+     * @param bool $strictFeatures false for animations built from original
+     *        Telegram emoji (templates): features those originals already use
+     *        and Telegram accepts (gradient strokes, merge paths, masks, ...)
+     *        are reported as warnings instead of errors
+     */
+    public function __construct(private array $limits, private bool $strictFeatures = true)
     {
+    }
+
+    private function feature(ValidationReport $r, string $message): void
+    {
+        if ($this->strictFeatures) {
+            $r->error($message);
+        } else {
+            $r->warning($message . ' (در فایل اصلی قالب هم وجود دارد و تلگرام آن را پذیرفته است)');
+        }
     }
 
     public function validate(string $file): ValidationReport
@@ -67,7 +82,8 @@ final class TgsValidator
         }
         $fr = (float) ($doc['fr'] ?? 0);
         if (abs($fr - (float) $this->limits['fps']) > 0.01) {
-            $r->error(sprintf('نرخ فریم باید %d باشد (فعلی: %s).', (int) $this->limits['fps'], $doc['fr'] ?? '?'));
+            $msg = sprintf('نرخ فریم باید %d باشد (فعلی: %s).', (int) $this->limits['fps'], $doc['fr'] ?? '?');
+            $fr > 0 ? $this->feature($r, $msg) : $r->error($msg);
         }
         $ip = (float) ($doc['ip'] ?? 0);
         $op = (float) ($doc['op'] ?? 0);
@@ -84,7 +100,7 @@ final class TgsValidator
         }
         foreach ((array) ($doc['assets'] ?? []) as $asset) {
             if (isset($asset['p']) || isset($asset['u'])) {
-                $r->error('استفاده از تصویر (Image asset) در TGS مجاز نیست.');
+                $this->feature($r, 'استفاده از تصویر (Image asset) در TGS مجاز نیست.');
             }
             foreach ((array) ($asset['layers'] ?? []) as $layer) {
                 $this->checkLayer($layer, $r);
@@ -98,6 +114,7 @@ final class TgsValidator
             $this->checkLayer($layer, $r);
         }
         $r->errors = array_values(array_unique($r->errors));
+        $r->warnings = array_values(array_unique($r->warnings));
     }
 
     /** @param array<string,mixed> $layer */
@@ -105,28 +122,28 @@ final class TgsValidator
     {
         $ty = (int) ($layer['ty'] ?? -1);
         if (isset(self::FORBIDDEN_LAYERS[$ty])) {
-            $r->error('لایه‌ی ' . self::FORBIDDEN_LAYERS[$ty] . ' در TGS مجاز نیست.');
+            $this->feature($r, 'لایه‌ی ' . self::FORBIDDEN_LAYERS[$ty] . ' در TGS مجاز نیست.');
         }
         if ((int) ($layer['ddd'] ?? 0) !== 0) {
             $r->error('لایه‌های سه‌بعدی (3D) مجاز نیستند.');
         }
         if (!empty($layer['ef'])) {
-            $r->error('افکت لایه (Layer Effects) مجاز نیست.');
+            $this->feature($r, 'افکت لایه (Layer Effects) مجاز نیست.');
         }
         if (!empty($layer['hasMask']) || !empty($layer['masksProperties'])) {
-            $r->error('ماسک (Masks) مجاز نیست.');
+            $this->feature($r, 'ماسک (Masks) مجاز نیست.');
         }
         if (isset($layer['tm'])) {
-            $r->error('Time Remapping مجاز نیست.');
+            $this->feature($r, 'Time Remapping مجاز نیست.');
         }
         if ((int) ($layer['ao'] ?? 0) !== 0) {
-            $r->error('Auto-Orient مجاز نیست.');
+            $this->feature($r, 'Auto-Orient مجاز نیست.');
         }
         if (isset($layer['sr']) && abs((float) $layer['sr'] - 1.0) > 1e-6) {
-            $r->error('Time Stretching مجاز نیست.');
+            $this->feature($r, 'Time Stretching مجاز نیست.');
         }
         if ($this->hasExpression($layer)) {
-            $r->error('Expressions مجاز نیست.');
+            $this->feature($r, 'Expressions مجاز نیست.');
         }
         foreach ((array) ($layer['shapes'] ?? []) as $shape) {
             $this->checkShape($shape, $r);
@@ -138,7 +155,7 @@ final class TgsValidator
     {
         $ty = (string) ($shape['ty'] ?? '');
         if (isset(self::FORBIDDEN_SHAPES[$ty])) {
-            $r->error(self::FORBIDDEN_SHAPES[$ty] . ' در TGS مجاز نیست.');
+            $this->feature($r, self::FORBIDDEN_SHAPES[$ty] . ' در TGS مجاز نیست.');
         }
         foreach ((array) ($shape['it'] ?? []) as $child) {
             if (is_array($child)) {

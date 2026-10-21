@@ -1,0 +1,52 @@
+{
+    "slug": "tofan-24",
+    "pack": "tofan",
+    "name": "طوفان ترید 24",
+    "source": "tofan-24.tgs",
+    "status": "auto",
+    "category": "",
+    "sort": 240,
+    "remove": [
+        "layers/0/shapes/0/it/0"
+    ],
+    "slots": [
+        {
+            "role": "main",
+            "host": "layers/0/shapes/0/it/0",
+            "index": 0,
+            "box": [
+                -3.99,
+                -36.48,
+                122.39,
+                123.72
+            ],
+            "accepts": [
+                "logo",
+                "text"
+            ],
+            "color": "#141414",
+            "pad": 0.92,
+            "also": []
+        }
+    ],
+    "recolor": {
+        "enabled": true,
+        "primary": null,
+        "tolerance": 35.0,
+        "protect": []
+    },
+    "meta": {
+        "fr": 60,
+        "ip": 0,
+        "op": 180,
+        "w": 512,
+        "h": 512,
+        "still": 171.0,
+        "imported_from": "CAACAgQAAxUAAWrS_wABbtjFhuXjMBXS4qXns96UWAAC1xUAAgLQUFO31wbXx5fRFz0E.json",
+        "detector": {
+            "seed_paths": 17,
+            "member_paths": 2,
+            "notes": []
+        }
+    }
+}

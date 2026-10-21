@@ -1,0 +1,52 @@
+{
+    "slug": "tofan-09",
+    "pack": "tofan",
+    "name": "طوفان ترید 9",
+    "source": "tofan-09.tgs",
+    "status": "auto",
+    "category": "",
+    "sort": 90,
+    "remove": [
+        "layers/2/shapes/0"
+    ],
+    "slots": [
+        {
+            "role": "main",
+            "host": "layers/2/shapes/0",
+            "index": 0,
+            "box": [
+                4.7,
+                -16.32,
+                110.78,
+                119.87
+            ],
+            "accepts": [
+                "logo",
+                "text"
+            ],
+            "color": "#141414",
+            "pad": 0.92,
+            "also": []
+        }
+    ],
+    "recolor": {
+        "enabled": true,
+        "primary": null,
+        "tolerance": 35.0,
+        "protect": []
+    },
+    "meta": {
+        "fr": 60,
+        "ip": 0,
+        "op": 180,
+        "w": 512,
+        "h": 512,
+        "still": 23.0,
+        "imported_from": "CAACAgQAAxUAAWrS_wABHXw6QCUwASTQuIwZPfciXQACMRoAAqcZSVNvlLr4Cuic_T0E.json",
+        "detector": {
+            "seed_paths": 17,
+            "member_paths": 6,
+            "notes": []
+        }
+    }
+}

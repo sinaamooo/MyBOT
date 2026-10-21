@@ -1,0 +1,52 @@
+{
+    "slug": "tofan-34",
+    "pack": "tofan",
+    "name": "طوفان ترید 34",
+    "source": "tofan-34.tgs",
+    "status": "auto",
+    "category": "",
+    "sort": 340,
+    "remove": [
+        "layers/2"
+    ],
+    "slots": [
+        {
+            "role": "main",
+            "host": "layers/2",
+            "index": 0,
+            "box": [
+                79.42,
+                374.03,
+                315.48,
+                658.36
+            ],
+            "accepts": [
+                "logo",
+                "text"
+            ],
+            "color": "#0255FE",
+            "pad": 0.92,
+            "also": []
+        }
+    ],
+    "recolor": {
+        "enabled": true,
+        "primary": null,
+        "tolerance": 35.0,
+        "protect": []
+    },
+    "meta": {
+        "fr": 60,
+        "ip": 0,
+        "op": 157,
+        "w": 512,
+        "h": 512,
+        "still": 94.0,
+        "imported_from": "CAACAgQAAxUAAWrS_yN7izJLxzefinwlZwzEtSAkAAILGgACEtBYUyNpT66D9G9wPQQ.json",
+        "detector": {
+            "seed_paths": 6,
+            "member_paths": 6,
+            "notes": []
+        }
+    }
+}

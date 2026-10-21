@@ -1,0 +1,32 @@
+{
+    "slug": "qiushop-07",
+    "pack": "qiushop",
+    "name": "کیوشاپ 7",
+    "source": "qiushop-07.tgs",
+    "status": "disabled",
+    "category": "",
+    "sort": 70,
+    "remove": [],
+    "slots": [],
+    "recolor": {
+        "enabled": true,
+        "primary": null,
+        "tolerance": 35.0,
+        "protect": []
+    },
+    "meta": {
+        "fr": 60,
+        "ip": 0,
+        "op": 180,
+        "w": 512,
+        "h": 512,
+        "imported_from": "CAACAgQAAxUAAWrTAaglU-zJvQbmEMDLyoWSfiRZAALRHQAC_yNpU44Kd4Nw9gMIPQQ.json",
+        "detector": {
+            "seed_paths": 0,
+            "member_paths": 0,
+            "notes": [
+                "no logo artwork found"
+            ]
+        }
+    }
+}

@@ -1,0 +1,52 @@
+{
+    "slug": "qiushop-26",
+    "pack": "qiushop",
+    "name": "کیوشاپ 26",
+    "source": "qiushop-26.tgs",
+    "status": "auto",
+    "category": "",
+    "sort": 260,
+    "remove": [
+        "layers/85"
+    ],
+    "slots": [
+        {
+            "role": "main",
+            "host": "layers/85",
+            "index": 0,
+            "box": [
+                -39.89,
+                -28.53,
+                40.41,
+                30.15
+            ],
+            "accepts": [
+                "logo",
+                "text"
+            ],
+            "color": "#FFFFFF",
+            "pad": 0.92,
+            "also": []
+        }
+    ],
+    "recolor": {
+        "enabled": true,
+        "primary": null,
+        "tolerance": 35.0,
+        "protect": []
+    },
+    "meta": {
+        "fr": 60,
+        "ip": 0,
+        "op": 180,
+        "w": 512,
+        "h": 512,
+        "still": 0.0,
+        "imported_from": "CAACAgQAAxUAAWrTAaj5lYIAAYpMUvuF5h7_tqvengAC7B4AAnViiFNQtqZR3s7vCT0E.json",
+        "detector": {
+            "seed_paths": 4,
+            "member_paths": 2,
+            "notes": []
+        }
+    }
+}

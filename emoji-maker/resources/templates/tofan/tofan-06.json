@@ -1,0 +1,65 @@
+{
+    "slug": "tofan-06",
+    "pack": "tofan",
+    "name": "طوفان ترید 6",
+    "source": "tofan-06.tgs",
+    "status": "auto",
+    "category": "",
+    "sort": 60,
+    "remove": [
+        "layers/0/shapes/4/it/0/it/1/it/0/it/1"
+    ],
+    "slots": [
+        {
+            "role": "main",
+            "host": "layers/0/shapes/4/it/0/it/1/it/0/it/1",
+            "index": 0,
+            "box": [
+                -159.86,
+                -437.19,
+                76.2,
+                -152.86
+            ],
+            "accepts": [
+                "logo",
+                "text"
+            ],
+            "color": "#141414",
+            "pad": 0.92,
+            "also": [
+                {
+                    "host": "layers/0/shapes/4/it/0/it/1/it/0/it/1",
+                    "index": 0,
+                    "box": [
+                        -90.51,
+                        -127.45,
+                        45.08,
+                        -109.87
+                    ]
+                }
+            ]
+        }
+    ],
+    "recolor": {
+        "enabled": true,
+        "primary": null,
+        "tolerance": 35.0,
+        "protect": []
+    },
+    "meta": {
+        "fr": 60,
+        "ip": 0,
+        "op": 50,
+        "w": 512,
+        "h": 512,
+        "still": 34.0,
+        "imported_from": "CAACAgQAAxUAAWrS_wAB7CzzDhqbqVHoKarzCq8uAAN2GAACNmZYUx51DkazfOxKPQQ.json",
+        "detector": {
+            "seed_paths": 17,
+            "member_paths": 2,
+            "notes": [
+                "copy of main slot in layers/0/shapes/4/it/0/it/1/it/0/it/1 (overlap 0.11)"
+            ]
+        }
+    }
+}

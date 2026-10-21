@@ -1,0 +1,52 @@
+{
+    "slug": "qiushop-05",
+    "pack": "qiushop",
+    "name": "کیوشاپ 5",
+    "source": "qiushop-05.tgs",
+    "status": "auto",
+    "category": "",
+    "sort": 50,
+    "remove": [
+        "assets/0/layers/0"
+    ],
+    "slots": [
+        {
+            "role": "main",
+            "host": "assets/0/layers/0",
+            "index": 0,
+            "box": [
+                -165.43,
+                292.67,
+                89.36,
+                478.92
+            ],
+            "accepts": [
+                "logo",
+                "text"
+            ],
+            "color": "#FFFFFF",
+            "pad": 0.92,
+            "also": []
+        }
+    ],
+    "recolor": {
+        "enabled": true,
+        "primary": null,
+        "tolerance": 35.0,
+        "protect": []
+    },
+    "meta": {
+        "fr": 60,
+        "ip": 0,
+        "op": 137,
+        "w": 512,
+        "h": 512,
+        "still": 106.0,
+        "imported_from": "CAACAgQAAxUAAWrTAaggQN7v45YfUyprhE01bDrNAAJNHwACQFmJUxe9rWpKoL_ePQQ.json",
+        "detector": {
+            "seed_paths": 4,
+            "member_paths": 0,
+            "notes": []
+        }
+    }
+}

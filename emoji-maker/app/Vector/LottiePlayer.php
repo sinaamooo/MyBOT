@@ -33,6 +33,10 @@ final class LottiePlayer
     private Rasterizer $ras;
     /** @var array<string,\GdImage> */
     private array $images = [];
+    /** @var array<string,array{w:int,h:int,px:list<array{0:float,1:float,2:float,3:float}>}> */
+    private array $imageCache = [];
+    /** @var array<string,array<string,mixed>> image assets by id */
+    private array $imageAssets = [];
     /** @var array<string,Path> */
     private array $staticPathCache = [];
     private float $scale = 1.0;
@@ -43,6 +47,8 @@ final class LottiePlayer
     /** collected world bounds of tagged items (for slot detection) */
     private ?array $probeBounds = null;
     private ?string $probeTag = null;
+    /** tag inherited from a tagged layer while probing */
+    private ?string $layerTag = null;
 
     /** @param array<string,mixed> $doc decoded Lottie JSON */
     public function __construct(array $doc)
@@ -51,6 +57,8 @@ final class LottiePlayer
         foreach ((array) ($doc['assets'] ?? []) as $a) {
             if (isset($a['id'], $a['layers'])) {
                 $this->assets[(string) $a['id']] = $a['layers'];
+            } elseif (isset($a['id'], $a['p'])) {
+                $this->imageAssets[(string) $a['id']] = $a;
             }
         }
         $this->ras = new Rasterizer(4);
@@ -77,6 +85,11 @@ final class LottiePlayer
     public function addImage(string $ref, \GdImage $img): void
     {
         $this->images[$ref] = $img;
+        foreach (array_keys($this->imageCache) as $k) {
+            if (str_starts_with($k, $ref . '@')) {
+                unset($this->imageCache[$k]);
+            }
+        }
     }
 
     /** Items for which $filter returns true are not drawn. */
@@ -120,6 +133,49 @@ final class LottiePlayer
         return $this->probeBounds;
     }
 
+    /**
+     * Tight bounds of the geometry inside $items (nested groups with their
+     * transforms, trims applied) at time $t, mapped through $m. Stroke widths
+     * are not included.
+     * @param list<array<string,mixed>> $items
+     * @return array{0:float,1:float,2:float,3:float}|null
+     */
+    public function itemsBounds(array $items, float $t, ?Matrix $m = null): ?array
+    {
+        $geo = $this->buildGeometry($items, $t, true, null);
+        $box = null;
+        foreach ($this->pathsBefore($geo, PHP_INT_MAX) as $p) {
+            $path = $m !== null && !$m->isIdentity() ? $p['path']->transform($m) : $p['path'];
+            foreach ($path->flatten(0.5) as $poly) {
+                $n = count($poly);
+                for ($i = 0; $i < $n; $i += 2) {
+                    $x = $poly[$i];
+                    $y = $poly[$i + 1];
+                    if ($box === null) {
+                        $box = [$x, $y, $x, $y];
+                        continue;
+                    }
+                    if ($x < $box[0]) { $box[0] = $x; }
+                    if ($y < $box[1]) { $box[1] = $y; }
+                    if ($x > $box[2]) { $box[2] = $x; }
+                    if ($y > $box[3]) { $box[3] = $y; }
+                }
+            }
+        }
+        return $box;
+    }
+
+    /** Matrix of a group's "tr" item at time $t (identity when absent). */
+    public function groupMatrix(array $group, float $t): Matrix
+    {
+        foreach ((array) ($group['it'] ?? []) as $it) {
+            if (is_array($it) && ($it['ty'] ?? '') === 'tr') {
+                return $this->transformMatrix($it, $t);
+            }
+        }
+        return Matrix::identity();
+    }
+
     // ------------------------------------------------------------------
     // Layers
     // ------------------------------------------------------------------
@@ -136,8 +192,8 @@ final class LottiePlayer
         $n = count($layers);
         for ($i = $n - 1; $i >= 0; $i--) {
             $layer = $layers[$i];
-            if (!empty($layer['td']) && (int) ($layers[$i + 1]['tt'] ?? 0) > 0) {
-                continue; // matte source, consumed by the layer below it
+            if (!$probe && !empty($layer['td']) && (int) ($layers[$i + 1]['tt'] ?? 0) > 0) {
+                continue; // matte source, consumed by the layer below it (probing measures it too)
             }
             if (!$this->layerVisible($layer, $t) || (int) ($layer['hd'] ?? 0) === 1 || !empty($layer['hd'])) {
                 continue;
@@ -158,7 +214,13 @@ final class LottiePlayer
             }
             $hasMasks = !empty($layer['masksProperties']) && !empty($layer['hasMask']);
             if ($probe) {
+                // a tagged layer tags everything it draws (precomp children included)
+                $prevTag = $this->layerTag;
+                if (isset($layer['_emx'])) {
+                    $this->layerTag = (string) $layer['_emx'];
+                }
                 $this->drawLayerContent($layer, $t, $matrix, $target, 1.0, true);
+                $this->layerTag = $prevTag;
                 continue;
             }
             if ($matte === null && !$hasMasks) {
@@ -208,7 +270,7 @@ final class LottiePlayer
     {
         $ty = (int) ($layer['ty'] ?? -1);
         if ($ty === 4) {
-            $this->renderGroup((array) ($layer['shapes'] ?? []), $t, $matrix, $opacity, $target, $probe);
+            $this->renderGroup((array) ($layer['shapes'] ?? []), $t, $matrix, $opacity, $target, $probe, $probe ? $this->layerTag : null);
         } elseif ($ty === 0) {
             $refId = (string) ($layer['refId'] ?? '');
             if (!isset($this->assets[$refId])) {
@@ -236,6 +298,28 @@ final class LottiePlayer
             }
             imagealphablending($target, true);
             imagecopy($target, $c, 0, 0, 0, 0, $this->outW, $this->outH);
+        } elseif ($ty === 2 && !$probe) {
+            // embedded raster image asset (data URI)
+            $refId = (string) ($layer['refId'] ?? '');
+            $ref = 'asset:' . $refId;
+            if (!isset($this->images[$ref])) {
+                $asset = $this->imageAssets[$refId] ?? null;
+                $img = null;
+                if ($asset !== null && preg_match('~^data:image/(png|jpe?g|webp);base64,~', (string) ($asset['p'] ?? ''), $mm)) {
+                    $bin = base64_decode(substr((string) $asset['p'], strlen($mm[0])), true);
+                    $img = $bin !== false && strlen($bin) < 8 * 1024 * 1024 ? @imagecreatefromstring($bin) : false;
+                }
+                if (!$img instanceof \GdImage) {
+                    return;
+                }
+                imagealphablending($img, false);
+                imagesavealpha($img, true);
+                $this->images[$ref] = $img;
+            }
+            $asset = $this->imageAssets[$refId];
+            $w = (float) ($asset['w'] ?? imagesx($this->images[$ref]));
+            $h = (float) ($asset['h'] ?? imagesy($this->images[$ref]));
+            $this->drawImage(['ref' => $ref, 'rect' => [0, 0, $w, $h]], $matrix, $opacity, $target);
         } elseif ($ty === 1 && !$probe) {
             $w = (float) ($layer['sw'] ?? 0);
             $h = (float) ($layer['sh'] ?? 0);
@@ -1129,46 +1213,128 @@ final class LottiePlayer
         return $stops;
     }
 
+    /**
+     * Draws a raster image item ({"ty":"emx_img","ref":..,"rect":[x0,y0,x1,y1]})
+     * through the full affine matrix with sub-pixel accuracy: every covered
+     * pixel centre is mapped back into the image and sampled bilinearly
+     * (premultiplied), so moving / rotating / skewed slots stay smooth and
+     * never jitter by whole pixels.
+     */
     private function drawImage(array $it, Matrix $m, float $opacity, \GdImage $target): void
     {
-        $img = $this->images[(string) ($it['ref'] ?? '')] ?? null;
+        $ref = (string) ($it['ref'] ?? '');
+        $img = $this->images[$ref] ?? null;
         $rect = $it['rect'] ?? null;
-        if (!$img || !is_array($rect)) {
+        if (!$img || !is_array($rect) || count($rect) !== 4 || $opacity <= 0.002) {
             return;
         }
-        // the slot transform is a general affine map: use 4-corner bounds for
-        // placement with rotation support through imagerotate
-        $cx = ($rect[0] + $rect[2]) / 2;
-        $cy = ($rect[1] + $rect[3]) / 2;
-        [$ox, $oy] = $m->apply($cx, $cy);
-        $svd = \EmojiMaker\Rendering\Transform::svd(new Matrix($m->a, $m->b, $m->c, $m->d, 0, 0));
-        $sx = abs($svd['s1']);
-        $sy = abs($svd['s2']);
-        $rot = $svd['phi'] + $svd['theta'];
-        $w = max(1, (int) round(($rect[2] - $rect[0]) * $sx));
-        $h = max(1, (int) round(($rect[3] - $rect[1]) * $sy));
-        if ($w < 2 || $h < 2) {
+        [$rx0, $ry0, $rx1, $ry1] = array_map('floatval', array_values($rect));
+        $rw = $rx1 - $rx0;
+        $rh = $ry1 - $ry0;
+        $det = $m->a * $m->d - $m->b * $m->c;
+        if ($rw <= 0 || $rh <= 0 || abs($det) < 1e-12) {
             return;
         }
-        $scaled = ImageProcessor::canvas($w, $h);
-        imagecopyresampled($scaled, $img, 0, 0, 0, 0, $w, $h, imagesx($img), imagesy($img));
-        if ($m->a * $m->d - $m->b * $m->c < 0) {
-            imageflip($scaled, IMG_FLIP_HORIZONTAL);
+        // destination bounds
+        $xs = [];
+        $ys = [];
+        foreach ([[$rx0, $ry0], [$rx1, $ry0], [$rx1, $ry1], [$rx0, $ry1]] as [$x, $y]) {
+            [$dx, $dy] = $m->apply($x, $y);
+            $xs[] = $dx;
+            $ys[] = $dy;
         }
-        if (abs(fmod($rot, 360.0)) > 0.1) {
-            imagesetinterpolation($scaled, IMG_BILINEAR_FIXED);
-            $r = imagerotate($scaled, -$rot, imagecolorallocatealpha($scaled, 0, 0, 0, 127));
-            if ($r instanceof \GdImage) {
-                imagealphablending($r, false);
-                imagesavealpha($r, true);
-                $scaled = $r;
+        $bx0 = max(0, (int) floor(min($xs)));
+        $by0 = max(0, (int) floor(min($ys)));
+        $bx1 = min($this->outW - 1, (int) ceil(max($xs)));
+        $by1 = min($this->outH - 1, (int) ceil(max($ys)));
+        if ($bx1 < $bx0 || $by1 < $by0) {
+            return;
+        }
+        // pick a pre-filtered source close to the on-screen size (avoids aliasing)
+        $sx = sqrt($m->a * $m->a + $m->b * $m->b) * $rw;
+        $sy = sqrt($m->c * $m->c + $m->d * $m->d) * $rh;
+        $src = $this->imageLevel($ref, $img, (int) ceil(max($sx, $sy) * 2));
+        $iw = $src['w'];
+        $ih = $src['h'];
+        $px = $src['px'];
+        $inv = $m->invert();
+        $ka = $iw / $rw;
+        $kb = $ih / $rh;
+        imagealphablending($target, true);
+        for ($y = $by0; $y <= $by1; $y++) {
+            $cy = $y + 0.5;
+            for ($x = $bx0; $x <= $bx1; $x++) {
+                $cx = $x + 0.5;
+                $lx = $inv->a * $cx + $inv->c * $cy + $inv->e;
+                $ly = $inv->b * $cx + $inv->d * $cy + $inv->f;
+                $u = ($lx - $rx0) * $ka - 0.5;
+                $v = ($ly - $ry0) * $kb - 0.5;
+                if ($u < -1 || $v < -1 || $u > $iw || $v > $ih) {
+                    continue;
+                }
+                $x0 = (int) floor($u);
+                $y0 = (int) floor($v);
+                $fx = $u - $x0;
+                $fy = $v - $y0;
+                $acc = [0.0, 0.0, 0.0, 0.0];
+                foreach ([[$x0, $y0, (1 - $fx) * (1 - $fy)], [$x0 + 1, $y0, $fx * (1 - $fy)], [$x0, $y0 + 1, (1 - $fx) * $fy], [$x0 + 1, $y0 + 1, $fx * $fy]] as [$sxp, $syp, $w]) {
+                    if ($w <= 0 || $sxp < 0 || $syp < 0 || $sxp >= $iw || $syp >= $ih) {
+                        continue;
+                    }
+                    $p = $px[$syp * $iw + $sxp];
+                    $acc[0] += $p[0] * $w;
+                    $acc[1] += $p[1] * $w;
+                    $acc[2] += $p[2] * $w;
+                    $acc[3] += $p[3] * $w;
+                }
+                $a = $acc[3] * $opacity;
+                if ($a <= 0.002) {
+                    continue;
+                }
+                $r = (int) min(255, round($acc[0] / $acc[3]));
+                $g = (int) min(255, round($acc[1] / $acc[3]));
+                $b = (int) min(255, round($acc[2] / $acc[3]));
+                $alpha = 127 - (int) round(min(1.0, $a) * 127);
+                imagesetpixel($target, $x, $y, ($alpha << 24) | ($r << 16) | ($g << 8) | $b);
             }
         }
-        if ($opacity < 0.999) {
-            self::scaleAlpha($scaled, $opacity);
+    }
+
+    /**
+     * Premultiplied pixel cache of an image downscaled to about $side pixels.
+     * @return array{w:int,h:int,px:list<array{0:float,1:float,2:float,3:float}>}
+     */
+    private function imageLevel(string $ref, \GdImage $img, int $side): array
+    {
+        $w0 = imagesx($img);
+        $h0 = imagesy($img);
+        $scale = min(1.0, max(8, $side) / max($w0, $h0));
+        // quantise the level so animation frames share the cache
+        $scale = $scale >= 1.0 ? 1.0 : 2 ** (ceil(log($scale, 2) * 4) / 4);
+        $key = $ref . '@' . $scale;
+        if (isset($this->imageCache[$key])) {
+            return $this->imageCache[$key];
         }
-        imagealphablending($target, true);
-        imagecopy($target, $scaled, (int) round($ox - imagesx($scaled) / 2), (int) round($oy - imagesy($scaled) / 2), 0, 0, imagesx($scaled), imagesy($scaled));
+        $w = max(1, (int) round($w0 * $scale));
+        $h = max(1, (int) round($h0 * $scale));
+        if ($w !== $w0 || $h !== $h0) {
+            $lvl = ImageProcessor::canvas($w, $h);
+            imagecopyresampled($lvl, $img, 0, 0, 0, 0, $w, $h, $w0, $h0);
+        } else {
+            $lvl = $img;
+        }
+        $px = [];
+        for ($y = 0; $y < $h; $y++) {
+            for ($x = 0; $x < $w; $x++) {
+                $c = imagecolorat($lvl, $x, $y);
+                $a = (127 - (($c >> 24) & 0x7F)) / 127;
+                $px[] = [(($c >> 16) & 0xFF) * $a, (($c >> 8) & 0xFF) * $a, ($c & 0xFF) * $a, $a];
+            }
+        }
+        if (count($this->imageCache) > 16) {
+            $this->imageCache = [];
+        }
+        return $this->imageCache[$key] = ['w' => $w, 'h' => $h, 'px' => $px];
     }
 
     private function applyMasks(\GdImage $layerCanvas, array $layer, float $t, Matrix $m): void

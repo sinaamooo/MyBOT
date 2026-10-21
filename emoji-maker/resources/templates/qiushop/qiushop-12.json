@@ -1,0 +1,32 @@
+{
+    "slug": "qiushop-12",
+    "pack": "qiushop",
+    "name": "کیوشاپ 12",
+    "source": "qiushop-12.tgs",
+    "status": "disabled",
+    "category": "",
+    "sort": 120,
+    "remove": [],
+    "slots": [],
+    "recolor": {
+        "enabled": true,
+        "primary": null,
+        "tolerance": 35.0,
+        "protect": []
+    },
+    "meta": {
+        "fr": 60,
+        "ip": 0,
+        "op": 120,
+        "w": 512,
+        "h": 512,
+        "imported_from": "CAACAgQAAxUAAWrTAahudp93BNcQS490NN9crYgFAAJQHAACP_pgUzCUFXMvvlZpPQQ.json",
+        "detector": {
+            "seed_paths": 0,
+            "member_paths": 0,
+            "notes": [
+                "no logo artwork found"
+            ]
+        }
+    }
+}

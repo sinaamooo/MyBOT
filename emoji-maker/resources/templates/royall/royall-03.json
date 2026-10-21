@@ -1,0 +1,82 @@
+{
+    "slug": "royall-03",
+    "pack": "royall",
+    "name": "مارکت رویال 3",
+    "source": "royall-03.tgs",
+    "status": "auto",
+    "category": "",
+    "sort": 30,
+    "remove": [
+        "assets/0/layers/7/shapes/0/it/7",
+        "assets/0/layers/7/shapes/0/it/8",
+        "assets/0/layers/7/shapes/0/it/9/it/1",
+        "assets/0/layers/7/shapes/0/it/11",
+        "assets/0/layers/7/shapes/0/it/13/it/1",
+        "assets/0/layers/7/shapes/0/it/14",
+        "assets/0/layers/7/shapes/0/it/15",
+        "assets/0/layers/7/shapes/0/it/16",
+        "assets/0/layers/7/shapes/0/it/17",
+        "assets/0/layers/7/shapes/0/it/18",
+        "assets/0/layers/7/shapes/0/it/19",
+        "assets/0/layers/7/shapes/0/it/20",
+        "assets/0/layers/7/shapes/0/it/21",
+        "assets/0/layers/7/shapes/0/it/22/it/0",
+        "assets/0/layers/7/shapes/0/it/22/it/1",
+        "assets/0/layers/7/shapes/0/it/22/it/3",
+        "assets/0/layers/7/shapes/0/it/23/it/0",
+        "assets/0/layers/7/shapes/0/it/23/it/2"
+    ],
+    "slots": [
+        {
+            "role": "main",
+            "host": "assets/0/layers/7/shapes/0",
+            "index": 7,
+            "box": [
+                0.28,
+                5.03,
+                258.13,
+                74.29
+            ],
+            "accepts": [
+                "logo",
+                "text"
+            ],
+            "color": "#FFD05C",
+            "pad": 0.92,
+            "also": [
+                {
+                    "host": "assets/0/layers/7/shapes/0",
+                    "index": 7,
+                    "box": [
+                        60.66,
+                        79.52,
+                        217.0,
+                        97.97
+                    ]
+                }
+            ]
+        }
+    ],
+    "recolor": {
+        "enabled": true,
+        "primary": null,
+        "tolerance": 35.0,
+        "protect": []
+    },
+    "meta": {
+        "fr": 60,
+        "ip": 0,
+        "op": 180,
+        "w": 512,
+        "h": 512,
+        "still": 23.0,
+        "imported_from": "CAACAgQAAxUAAWrTAAHc53pPeeb38K54r-GjwJ3H5QACUiUAAuCSKFLH3RZmhq2P6D0E.json",
+        "detector": {
+            "seed_paths": 17,
+            "member_paths": 17,
+            "notes": [
+                "copy of main slot in assets/0/layers/7/shapes/0 (overlap 0.34)"
+            ]
+        }
+    }
+}

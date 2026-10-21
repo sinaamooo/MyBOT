@@ -1,0 +1,66 @@
+{
+    "slug": "qiushop-08",
+    "pack": "qiushop",
+    "name": "کیوشاپ 8",
+    "source": "qiushop-08.tgs",
+    "status": "auto",
+    "category": "",
+    "sort": 80,
+    "remove": [
+        "layers/4",
+        "layers/10"
+    ],
+    "slots": [
+        {
+            "role": "main",
+            "host": "layers/4",
+            "index": 0,
+            "box": [
+                -29.73,
+                -43.64,
+                97.88,
+                45.03
+            ],
+            "accepts": [
+                "logo",
+                "text"
+            ],
+            "color": "#FFFFFF",
+            "pad": 0.92,
+            "also": [
+                {
+                    "host": "layers/10",
+                    "index": 0,
+                    "box": [
+                        -16.48,
+                        -9.58,
+                        16.48,
+                        9.58
+                    ]
+                }
+            ]
+        }
+    ],
+    "recolor": {
+        "enabled": true,
+        "primary": null,
+        "tolerance": 35.0,
+        "protect": []
+    },
+    "meta": {
+        "fr": 60,
+        "ip": 0,
+        "op": 180,
+        "w": 512,
+        "h": 512,
+        "still": 31.0,
+        "imported_from": "CAACAgQAAxUAAWrTAagnqFxhPp48luSR8caXnbIzAALpHQACHoKRU92psz4ceDHiPQQ.json",
+        "detector": {
+            "seed_paths": 4,
+            "member_paths": 1,
+            "notes": [
+                "copy of main slot in layers/10 (overlap 0.00)"
+            ]
+        }
+    }
+}

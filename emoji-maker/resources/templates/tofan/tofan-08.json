@@ -1,0 +1,53 @@
+{
+    "slug": "tofan-08",
+    "pack": "tofan",
+    "name": "طوفان ترید 8",
+    "source": "tofan-08.tgs",
+    "status": "auto",
+    "category": "",
+    "sort": 80,
+    "remove": [
+        "layers/0/shapes/1/it/0/it/2",
+        "layers/0/shapes/1/it/1"
+    ],
+    "slots": [
+        {
+            "role": "main",
+            "host": "layers/0/shapes/1",
+            "index": 0,
+            "box": [
+                94.53,
+                71.17,
+                409.18,
+                432.88
+            ],
+            "accepts": [
+                "logo",
+                "text"
+            ],
+            "color": "#141414",
+            "pad": 0.92,
+            "also": []
+        }
+    ],
+    "recolor": {
+        "enabled": true,
+        "primary": null,
+        "tolerance": 35.0,
+        "protect": []
+    },
+    "meta": {
+        "fr": 60,
+        "ip": 0,
+        "op": 180,
+        "w": 512,
+        "h": 512,
+        "still": 163.0,
+        "imported_from": "CAACAgQAAxUAAWrS_wABAXe0-NhmeUOuf_hbAAFXbx8AAmIWAALZLFFTi4YCN_kmRfk9BA.json",
+        "detector": {
+            "seed_paths": 17,
+            "member_paths": 2,
+            "notes": []
+        }
+    }
+}

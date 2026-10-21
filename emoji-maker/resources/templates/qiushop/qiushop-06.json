@@ -1,0 +1,66 @@
+{
+    "slug": "qiushop-06",
+    "pack": "qiushop",
+    "name": "کیوشاپ 6",
+    "source": "qiushop-06.tgs",
+    "status": "auto",
+    "category": "",
+    "sort": 60,
+    "remove": [
+        "layers/9/shapes/0/it/1",
+        "layers/26/shapes/0/it/0"
+    ],
+    "slots": [
+        {
+            "role": "main",
+            "host": "layers/26/shapes/0/it/0",
+            "index": 0,
+            "box": [
+                -50.31,
+                -36.68,
+                49.71,
+                36.43
+            ],
+            "accepts": [
+                "logo",
+                "text"
+            ],
+            "color": "#FFFFFF",
+            "pad": 0.92,
+            "also": [
+                {
+                    "host": "layers/9/shapes/0",
+                    "index": 1,
+                    "box": [
+                        -148.7,
+                        -212.7,
+                        -148.7,
+                        -152.0
+                    ]
+                }
+            ]
+        }
+    ],
+    "recolor": {
+        "enabled": true,
+        "primary": null,
+        "tolerance": 35.0,
+        "protect": []
+    },
+    "meta": {
+        "fr": 60,
+        "ip": 0,
+        "op": 180,
+        "w": 512,
+        "h": 512,
+        "still": 31.0,
+        "imported_from": "CAACAgQAAxUAAWrTAagjKxmff3sdzo_w4lVwR9q_AAJtIAACpj-IU9GOdiIU2y7TPQQ.json",
+        "detector": {
+            "seed_paths": 4,
+            "member_paths": 22,
+            "notes": [
+                "copy of main slot in layers/9/shapes/0 (overlap 0.00)"
+            ]
+        }
+    }
+}
