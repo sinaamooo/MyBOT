@@ -65,6 +65,6 @@
             "member_paths": 2,
             "notes": []
         },
-        "review": "Waving flag on a pole with wind streaks. Logo + 'TOFAN TRADE' live only in precomp layer assets/1/layers/0, cleared and hosting main + caption; all 12 frames clean, flag/pole/streaks intact, content follows the wave. The precomp layer is scaled 139.7x123.2 in the original, so content is ~13% wider like the original logo was. Blue border/pole recolour cleanly; nothing needs protect."
+        "review": "Waving flag on a pole with wind streaks. Logo + 'TOFAN TRADE' live only in precomp layer assets/1/layers/0, cleared and hosting main + caption; all 12 frames clean, flag/pole/streaks intact, content follows the wave. The host layer itself is scaled 139.7x123.2 in the original, so content is ~13% wider like the original logo was. Blue border/pole recolour cleanly; nothing needs protect."
     }
 }

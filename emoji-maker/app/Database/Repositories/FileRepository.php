@@ -12,12 +12,17 @@ final class FileRepository
     {
     }
 
-    /** @param array<string,mixed> $data */
+    /**
+     * Inserts or replaces the row of one output; banner tiles / grid pages of
+     * the same item are told apart by "tile".
+     * @param array<string,mixed> $data
+     */
     public function create(array $data): int
     {
+        $data['tile'] = (int) ($data['tile'] ?? 0);
         $existing = $this->db->fetch(
-            'SELECT id FROM generated_files WHERE job_id = ? AND item_index = ? AND kind = ? AND format = ?',
-            [$data['job_id'], $data['item_index'], $data['kind'], $data['format']]
+            'SELECT id FROM generated_files WHERE job_id = ? AND item_index = ? AND kind = ? AND format = ? AND tile = ?',
+            [$data['job_id'], $data['item_index'], $data['kind'], $data['format'], $data['tile']]
         );
         if ($existing) {
             $this->db->update('generated_files', $data + ['deleted_at' => null], ['id' => (int) $existing['id']]);
@@ -44,7 +49,7 @@ final class FileRepository
         if ($selectedOnly) {
             $sql .= ' AND is_selected = 1';
         }
-        return $this->db->fetchAll($sql . ' ORDER BY item_index ASC, id ASC', $params);
+        return $this->db->fetchAll($sql . ' ORDER BY item_index ASC, tile ASC, id ASC', $params);
     }
 
     public function maxItemIndex(int $jobId): int

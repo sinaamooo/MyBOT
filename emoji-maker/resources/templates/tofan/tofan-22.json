@@ -3,7 +3,7 @@
     "pack": "tofan",
     "name": "طوفان ترید 22",
     "source": "tofan-22.tgs",
-    "status": "auto",
+    "status": "reviewed",
     "category": "",
     "sort": 220,
     "remove": [
@@ -15,10 +15,10 @@
             "host": "layers/0/shapes/0/it/0/it/0",
             "index": 0,
             "box": [
-                -70.8,
-                -201.0,
-                165.26,
-                83.33
+                -80.0,
+                -205.0,
+                175.0,
+                85.0
             ],
             "accepts": [
                 "logo",
@@ -33,9 +33,9 @@
             "host": "layers/0/shapes/0/it/0/it/0",
             "index": 0,
             "box": [
-                -1.46,
+                -20.3,
                 108.75,
-                134.14,
+                115.3,
                 126.32
             ],
             "accepts": [
@@ -64,6 +64,7 @@
             "seed_paths": 17,
             "member_paths": 2,
             "notes": []
-        }
+        },
+        "review": "Thick app tile that flips around its vertical axis twice with blue/black sparkles. Logo + 'TOFAN TRADE' group layers/0/shapes/0/it/0/it/0 removed and hosts main + caption, so content flips with the tile (mirrored on the back side exactly like the original logo); 12 frames clean, tile/edge/sparkles intact. Main box widened and caption re-centred on the tile face (was ~5% right). Blue border + blue sparkles recolour (red/green checked); nothing to protect. TGS warning is the gradient stroke already in the original."
     }
 }

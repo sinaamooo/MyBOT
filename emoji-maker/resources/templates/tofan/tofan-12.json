@@ -3,7 +3,7 @@
     "pack": "tofan",
     "name": "طوفان ترید 12",
     "source": "tofan-12.tgs",
-    "status": "auto",
+    "status": "reviewed",
     "category": "",
     "sort": 120,
     "remove": [
@@ -65,6 +65,7 @@
             "seed_paths": 17,
             "member_paths": 2,
             "notes": []
-        }
+        },
+        "review": "Rounded app tile that flips in 3D, then pulses. Logo + 'TOFAN TRADE' in precomp layer assets/1/layers/0 (cleared, hosts main + caption) plus a white brand-text layer assets/0/layers/1 removed; checked 24 frames incl. the flip: tile, dark side and swooshes intact, content follows the flip/rotation. Half blue gradient border recolours cleanly (red/green); nothing needs protect."
     }
 }

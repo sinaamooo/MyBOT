@@ -3,7 +3,7 @@
     "pack": "tofan",
     "name": "طوفان ترید 17",
     "source": "tofan-17.tgs",
-    "status": "auto",
+    "status": "reviewed",
     "category": "",
     "sort": 170,
     "remove": [
@@ -15,10 +15,10 @@
             "host": "layers/5/shapes/0/it/1",
             "index": 0,
             "box": [
-                -159.86,
-                -437.19,
-                76.2,
-                -152.86
+                -144,
+                -437,
+                92,
+                -153
             ],
             "accepts": [
                 "logo",
@@ -33,10 +33,10 @@
             "host": "layers/5/shapes/0/it/1",
             "index": 0,
             "box": [
-                -90.51,
-                -127.45,
-                45.08,
-                -109.87
+                -93,
+                -128,
+                42,
+                -109
             ],
             "accepts": [
                 "text"
@@ -48,9 +48,13 @@
     ],
     "recolor": {
         "enabled": true,
-        "primary": null,
+        "primary": "#0255FE",
         "tolerance": 35.0,
-        "protect": []
+        "protect": [
+            "layers/0",
+            "layers/2",
+            "layers/7/shapes/4"
+        ]
     },
     "meta": {
         "fr": 60,
@@ -64,6 +68,7 @@
             "seed_paths": 17,
             "member_paths": 7,
             "notes": []
-        }
+        },
+        "review": "Round badge wearing a cowboy hat, pointing blue hand at f95-f125. Logo + 'TOFAN TRADE' group layers/5/shapes/0/it/1 removed (clean in all frames; hat, hand, badge intact). Main box nudged right to the badge centre, caption centred where 'TOFAN TRADE' was. Blue #0255FE (ring + hand) recolours; brown hat protected (layers/0, layers/2 and the brim outline layers/7/shapes/4) so it stays brown even in 'all' mode."
     }
 }

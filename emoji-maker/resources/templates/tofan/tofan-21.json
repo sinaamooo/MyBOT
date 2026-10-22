@@ -3,7 +3,7 @@
     "pack": "tofan",
     "name": "طوفان ترید 21",
     "source": "tofan-21.tgs",
-    "status": "auto",
+    "status": "reviewed",
     "category": "",
     "sort": 210,
     "remove": [
@@ -15,10 +15,10 @@
             "host": "layers/0/shapes/0/it/0/it/0/it/0",
             "index": 0,
             "box": [
-                -159.86,
-                -437.19,
-                76.2,
-                -152.86
+                -165.0,
+                -440.0,
+                95.0,
+                -150.0
             ],
             "accepts": [
                 "logo",
@@ -33,10 +33,10 @@
             "host": "layers/0/shapes/0/it/0/it/0/it/0",
             "index": 0,
             "box": [
-                -90.51,
-                -127.45,
-                45.08,
-                -109.87
+                -103.0,
+                -128.0,
+                33.0,
+                -110.0
             ],
             "accepts": [
                 "text"
@@ -64,6 +64,7 @@
             "seed_paths": 17,
             "member_paths": 1,
             "notes": []
-        }
+        },
+        "review": "Beating heart (pulses through the loop). Logo + 'TOFAN TRADE' group layers/0/.../it/0/it/0/it/0 removed and hosts main + caption, so content pulses with the heart; all frames clean, heart and its half black / half blue outline intact. Main box enlarged and both boxes centred on the heart axis (computed from the group transforms; logo/caption were ~5-9 units off). Blue outline recolours (red/green checked); nothing to protect. TGS warning is the gradient stroke already in the original."
     }
 }

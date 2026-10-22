@@ -3,7 +3,7 @@
     "pack": "tofan",
     "name": "طوفان ترید 20",
     "source": "tofan-20.tgs",
-    "status": "auto",
+    "status": "reviewed",
     "category": "",
     "sort": 200,
     "remove": [
@@ -15,10 +15,10 @@
             "host": "layers/0/shapes/0/it/0/it/0/it/0/it/2",
             "index": 0,
             "box": [
-                -159.86,
-                -437.19,
-                76.2,
-                -152.86
+                -165.0,
+                -440.0,
+                91.0,
+                -150.0
             ],
             "accepts": [
                 "logo",
@@ -33,10 +33,10 @@
             "host": "layers/0/shapes/0/it/0/it/0/it/0/it/2",
             "index": 0,
             "box": [
-                -90.51,
-                -127.45,
-                45.08,
-                -109.87
+                -105.0,
+                -128.0,
+                31.0,
+                -110.0
             ],
             "accepts": [
                 "text"
@@ -64,6 +64,7 @@
             "seed_paths": 17,
             "member_paths": 1,
             "notes": []
-        }
+        },
+        "review": "Padlock whose shackle pops open and the body tilts (f48-f100). Logo + 'TOFAN TRADE' group layers/0/.../it/0/it/2 removed and hosts main + caption, so content follows the tilt/bounce; 12 frames clean, body/shackle intact. Main box enlarged and both boxes re-centred on the lock body (computed from the group transforms). Blue border + shackle recolour (red/green checked); nothing to protect. TGS warning is the gradient stroke already in the original."
     }
 }

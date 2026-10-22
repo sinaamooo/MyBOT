@@ -3,7 +3,7 @@
     "pack": "tofan",
     "name": "طوفان ترید 15",
     "source": "tofan-15.tgs",
-    "status": "auto",
+    "status": "reviewed",
     "category": "",
     "sort": 150,
     "remove": [
@@ -15,10 +15,10 @@
             "host": "layers/1/shapes/0/it/0",
             "index": 0,
             "box": [
-                1.43,
-                -17.34,
-                117.89,
-                119.33
+                26,
+                4,
+                120,
+                100
             ],
             "accepts": [
                 "logo",
@@ -27,11 +27,28 @@
             "color": "#141414",
             "pad": 0.92,
             "also": []
+        },
+        {
+            "role": "caption",
+            "host": "layers/1/shapes/0/it/0",
+            "index": 0,
+            "box": [
+                27,
+                110,
+                99,
+                121
+            ],
+            "accepts": [
+                "text"
+            ],
+            "color": "#141414",
+            "pad": 0.95,
+            "also": []
         }
     ],
     "recolor": {
         "enabled": true,
-        "primary": null,
+        "primary": "#0255FE",
         "tolerance": 35.0,
         "protect": []
     },
@@ -47,6 +64,7 @@
             "seed_paths": 17,
             "member_paths": 6,
             "notes": []
-        }
+        },
+        "review": "Saluting hand over a round badge. Logo + 'TOFAN TRADE' group layers/1/shapes/0/it/0 removed (clean in all frames; hand, ring, shadow intact). Main box moved right/down onto the free part of the badge so the buyer's logo is not cut by the saluting fingers or the canvas edge; added a caption slot where 'TOFAN TRADE' was. Blue #0255FE recolours hand + ring cleanly; nothing to protect."
     }
 }

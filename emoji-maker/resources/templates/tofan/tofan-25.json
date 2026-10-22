@@ -3,7 +3,7 @@
     "pack": "tofan",
     "name": "طوفان ترید 25",
     "source": "tofan-25.tgs",
-    "status": "auto",
+    "status": "reviewed",
     "category": "",
     "sort": 250,
     "remove": [
@@ -16,9 +16,9 @@
             "host": "assets/2/layers/0",
             "index": 0,
             "box": [
-                79.42,
+                86.7,
                 374.03,
-                315.48,
+                322.8,
                 658.36
             ],
             "accepts": [
@@ -32,9 +32,9 @@
                     "host": "assets/1/layers/0",
                     "index": 0,
                     "box": [
-                        79.42,
+                        86.7,
                         374.03,
-                        315.48,
+                        322.8,
                         658.36
                     ]
                 }
@@ -45,10 +45,10 @@
             "host": "assets/1/layers/0",
             "index": 0,
             "box": [
-                148.76,
-                683.77,
-                284.35,
-                701.35
+                124.7,
+                681.0,
+                284.7,
+                705.0
             ],
             "accepts": [
                 "text"
@@ -60,17 +60,17 @@
                     "host": "assets/2/layers/0",
                     "index": 0,
                     "box": [
-                        148.76,
-                        683.77,
-                        284.35,
-                        701.35
+                        124.7,
+                        681.0,
+                        284.7,
+                        705.0
                     ]
                 }
             ]
         }
     ],
     "recolor": {
-        "enabled": true,
+        "enabled": false,
         "primary": null,
         "tolerance": 35.0,
         "protect": []
@@ -89,6 +89,7 @@
             "notes": [
                 "copy of main slot in assets/1/layers/0 (overlap 0.99)"
             ]
-        }
+        },
+        "review": "Flipping white coin; the tornado logo + 'TOFAN TRADE' sit on both faces (front precomp layer assets/2/layers/0, back assets/1/layers/0, never visible at the same time), both cleared; main + caption slots live on the front face with an 'also' copy on the back face, so content flips with the coin on both sides. 12 frames clean. Boxes re-centred on the coin (logo/text were 7-12 units right of the circle centre) and caption slightly enlarged. Only the near-white coin is left, so recolour (even 'all') changes nothing and is disabled like tofan-05."
     }
 }

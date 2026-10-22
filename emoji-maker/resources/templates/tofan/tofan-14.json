@@ -3,7 +3,7 @@
     "pack": "tofan",
     "name": "طوفان ترید 14",
     "source": "tofan-14.tgs",
-    "status": "auto",
+    "status": "reviewed",
     "category": "",
     "sort": 140,
     "remove": [
@@ -15,10 +15,10 @@
             "host": "layers/0/shapes/9/it/0/it/2",
             "index": 0,
             "box": [
-                -159.86,
-                -437.19,
-                76.2,
-                -152.86
+                -193,
+                -427,
+                140,
+                -160
             ],
             "accepts": [
                 "logo",
@@ -33,10 +33,10 @@
             "host": "layers/0/shapes/9/it/0/it/2",
             "index": 0,
             "box": [
-                -90.51,
-                -127.45,
-                45.08,
-                -109.87
+                -95,
+                -128,
+                42,
+                -109
             ],
             "accepts": [
                 "text"
@@ -48,7 +48,7 @@
     ],
     "recolor": {
         "enabled": true,
-        "primary": null,
+        "primary": "#0255FE",
         "tolerance": 35.0,
         "protect": []
     },
@@ -64,6 +64,7 @@
             "seed_paths": 17,
             "member_paths": 1,
             "notes": []
-        }
+        },
+        "review": "Blue cartoon hands holding a white board that folds at f105-f125. Logo + 'TOFAN TRADE' group layers/0/shapes/9/it/0/it/2 removed (clean in all frames, board/hands/edge stripe intact). Main box re-centred on the board (was ~15 units left) and enlarged, caption centred where 'TOFAN TRADE' was; content folds with the board like the logo did. Blue #0255FE recolours hands + board edge cleanly; nothing to protect."
     }
 }

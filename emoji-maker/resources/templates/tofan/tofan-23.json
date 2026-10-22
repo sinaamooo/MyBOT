@@ -3,7 +3,7 @@
     "pack": "tofan",
     "name": "طوفان ترید 23",
     "source": "tofan-23.tgs",
-    "status": "auto",
+    "status": "reviewed",
     "category": "",
     "sort": 230,
     "remove": [
@@ -15,10 +15,10 @@
             "host": "assets/1/layers/0",
             "index": 0,
             "box": [
-                79.42,
-                374.03,
-                315.48,
-                658.36
+                76.0,
+                374.0,
+                328.0,
+                660.0
             ],
             "accepts": [
                 "logo",
@@ -33,9 +33,9 @@
             "host": "assets/1/layers/0",
             "index": 0,
             "box": [
-                148.76,
+                134.3,
                 683.77,
-                284.35,
+                269.9,
                 701.35
             ],
             "accepts": [
@@ -64,6 +64,7 @@
             "seed_paths": 17,
             "member_paths": 2,
             "notes": []
-        }
+        },
+        "review": "Wobbling, crumpling shield with sweeping fold highlights. Logo + 'TOFAN TRADE' are the whole precomp layer assets/1/layers/0, cleared; it hosts main + caption so content follows the wobble. 12 frames clean, shield, half black / half blue border and fold sweeps intact. Main box widened and both boxes centred on the shield (logo was ~5 units left, caption ~14 right). Blue border recolours (red/green checked); nothing to protect."
     }
 }

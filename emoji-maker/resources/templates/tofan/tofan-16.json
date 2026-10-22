@@ -3,7 +3,7 @@
     "pack": "tofan",
     "name": "طوفان ترید 16",
     "source": "tofan-16.tgs",
-    "status": "auto",
+    "status": "reviewed",
     "category": "",
     "sort": 160,
     "remove": [
@@ -13,13 +13,13 @@
     "slots": [
         {
             "role": "main",
-            "host": "layers/0",
+            "host": "layers/0/shapes/3/it/0/it/0",
             "index": 0,
             "box": [
-                248.62,
-                206.29,
-                718.07,
-                800.58
+                0,
+                -14,
+                128,
+                110
             ],
             "accepts": [
                 "logo",
@@ -27,7 +27,46 @@
             ],
             "color": "#141414",
             "pad": 0.92,
-            "also": []
+            "also": [
+                {
+                    "host": "layers/0/shapes/0/it/0/it/1",
+                    "index": 0,
+                    "box": [
+                        0,
+                        -14,
+                        128,
+                        110
+                    ]
+                }
+            ]
+        },
+        {
+            "role": "caption",
+            "host": "layers/0/shapes/3/it/0/it/0",
+            "index": 0,
+            "box": [
+                28,
+                129,
+                100,
+                140
+            ],
+            "accepts": [
+                "text"
+            ],
+            "color": "#141414",
+            "pad": 0.95,
+            "also": [
+                {
+                    "host": "layers/0/shapes/0/it/0/it/1",
+                    "index": 0,
+                    "box": [
+                        28,
+                        129,
+                        100,
+                        140
+                    ]
+                }
+            ]
         }
     ],
     "recolor": {
@@ -48,6 +87,7 @@
             "seed_paths": 34,
             "member_paths": 2,
             "notes": []
-        }
+        },
+        "review": "Spinning poker-chip coin; the logo + 'TOFAN TRADE' is on both faces (front layers/0/shapes/3/it/0/it/0, back layers/0/shapes/0/it/0/it/1), both removed. The detector hosted the slot on the whole layer so content did not flip with the coin; main + caption slots now live in the front-face logo group with an 'also' copy in the back-face group (identical host mapping), so the content squashes/flips with the coin on both sides. Blue dashes recolour (red/green checked); nothing to protect."
     }
 }

@@ -3,7 +3,7 @@
     "pack": "tofan",
     "name": "طوفان ترید 24",
     "source": "tofan-24.tgs",
-    "status": "auto",
+    "status": "reviewed",
     "category": "",
     "sort": 240,
     "remove": [
@@ -15,10 +15,10 @@
             "host": "layers/0/shapes/0/it/0",
             "index": 0,
             "box": [
-                -3.99,
-                -36.48,
-                122.39,
-                123.72
+                -2.0,
+                -38.0,
+                131.0,
+                104.0
             ],
             "accepts": [
                 "logo",
@@ -26,6 +26,23 @@
             ],
             "color": "#141414",
             "pad": 0.92,
+            "also": []
+        },
+        {
+            "role": "caption",
+            "host": "layers/0/shapes/0/it/0",
+            "index": 0,
+            "box": [
+                24.0,
+                114.0,
+                105.0,
+                124.0
+            ],
+            "accepts": [
+                "text"
+            ],
+            "color": "#141414",
+            "pad": 0.95,
             "also": []
         }
     ],
@@ -47,6 +64,7 @@
             "seed_paths": 17,
             "member_paths": 2,
             "notes": []
-        }
+        },
+        "review": "Round badge that swings/squashes (~30-40 deg tilt) with blue speed arcs. Tilted logo + rotated 'TOFAN TRADE' group layers/0/shapes/0/it/0 removed (12 frames clean; disc, black/white/blue rings and arcs intact) and hosts the slots, so content keeps the original tilt and swing. Main box centred on the disc, and a caption slot added where the separate brand line was (lower-left, rotated like the original). Blue rings/arcs recolour (red/green checked); nothing to protect."
     }
 }

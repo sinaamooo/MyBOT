@@ -3,15 +3,10 @@
     "pack": "tofan",
     "name": "طوفان ترید 19",
     "source": "tofan-19.tgs",
-    "status": "auto",
+    "status": "reviewed",
     "category": "",
     "sort": 190,
     "remove": [
-        "layers/3/shapes/3",
-        "layers/3/shapes/4",
-        "layers/3/shapes/5",
-        "layers/3/shapes/6",
-        "layers/3/shapes/7",
         "layers/5"
     ],
     "slots": [
@@ -20,10 +15,10 @@
             "host": "layers/5",
             "index": 0,
             "box": [
-                79.42,
-                374.03,
-                315.48,
-                658.36
+                86.0,
+                380.0,
+                347.0,
+                660.0
             ],
             "accepts": [
                 "logo",
@@ -35,31 +30,20 @@
         },
         {
             "role": "caption",
-            "host": "layers/3",
-            "index": 3,
+            "host": "layers/5",
+            "index": 0,
             "box": [
-                104.89,
-                192.46,
-                375.2,
-                266.02
+                140.0,
+                681.0,
+                293.0,
+                703.0
             ],
             "accepts": [
                 "text"
             ],
-            "color": "#FFFFFF",
+            "color": "#141414",
             "pad": 0.95,
-            "also": [
-                {
-                    "host": "layers/5",
-                    "index": 0,
-                    "box": [
-                        148.76,
-                        683.77,
-                        284.35,
-                        701.35
-                    ]
-                }
-            ]
+            "also": []
         }
     ],
     "recolor": {
@@ -80,6 +64,7 @@
             "seed_paths": 17,
             "member_paths": 12,
             "notes": []
-        }
+        },
+        "review": "Wobbling white shield with paper-fold sweeps. Logo + 'TOFAN TRADE' are the whole layer layers/5, now cleared; it hosts main (centred on the shield, was ~20 units left) and caption where the brand line was. The detector had removed the white highlights of fold sweep layers/3 and put the caption copy there (white BRAND over the sweep at f153); restored those and dropped the copy. 12 frames clean; blue border recolours (red/green checked), nothing to protect."
     }
 }
