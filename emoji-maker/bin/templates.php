@@ -16,7 +16,7 @@ declare(strict_types=1);
  *   php bin/templates.php box <slug> --host=path --paths=p1,p2      slot box of elements in host coordinates
  *   php bin/templates.php check [--pack=slug] [--tgs]              spec checks (+ TGS size/validation with sample content)
  *   php bin/templates.php sheet --out=file.png [--pack=slug] [--mode=original|removed|sample] [--size=150]
- *   php bin/templates.php previews [--pack=slug] [--slug=slug]     gallery previews (thumb + animation)
+ *   php bin/templates.php previews [--pack=slug] [--slug=slug] [--color=#hex]   gallery previews (thumb + animation, demo colour)
  *   php bin/templates.php palette <slug>                           main colour + colours (recolour review)
  */
 
@@ -166,7 +166,13 @@ try {
                 }
                 $dir = $spec->dir . '/previews';
                 @mkdir($dir, 0750, true);
-                $res = $renderer->render($spec, ['text' => 'LOGO', 'caption' => 'BRAND'], 'png', sys_get_temp_dir() . '/tplprev_' . getmypid(), ['preview' => true, 'name' => $spec->slug, 'preview_size' => 256]);
+                // gallery previews never show the original brand colour: they use the demo colour
+                $demo = is_string($opts['color'] ?? null) ? (string) $opts['color'] : (string) ($config['defaults']['templates_demo_color'] ?? '#8B5CF6');
+                $content = ['text' => 'LOGO', 'caption' => 'BRAND', 'color' => '#FFFFFF', 'outline' => '#111111', 'outline_width' => 0.06];
+                if ($spec->recolor['enabled']) {
+                    $content += ['recolor' => $demo, 'recolor_mode' => 'main'];
+                }
+                $res = $renderer->render($spec, $content, 'png', sys_get_temp_dir() . '/tplprev_' . getmypid(), ['preview' => true, 'name' => $spec->slug, 'preview_size' => 256]);
                 copy($res['thumb'], $dir . '/' . $spec->slug . '_thumb.png');
                 if (!empty($res['preview'])) {
                     $ext = pathinfo($res['preview'], PATHINFO_EXTENSION);
