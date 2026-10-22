@@ -192,7 +192,7 @@ final class TemplateRenderer
 
     /**
      * @param array<string,mixed> $content
-     * @param array{preview?:bool,grid_dir?:string|null,grid_fps?:int,name?:string,preview_size?:int} $opts
+     * @param array{preview?:bool|'thumb',grid_dir?:string|null,grid_fps?:int,name?:string,preview_size?:int} $opts
      * @return array<string,mixed>
      */
     public function render(TemplateSpec $spec, array $content, string $format, string $workDir, array $opts = []): array
@@ -216,6 +216,7 @@ final class TemplateRenderer
             $player = $this->player($composed);
             if ($format === 'webm') {
                 $result['tiles'][] = $this->renderWebm($player, $workDir, $name);
+                $framesDir = $workDir . '/frames_' . $name;
             } else {
                 $result['tiles'][] = $this->renderPng($spec, $player, $workDir . '/' . $name . '.png');
             }
@@ -231,10 +232,15 @@ final class TemplateRenderer
             $previewDoc = $format === 'tgs' ? $this->compose($spec, $content, 'webm') : $composed;
             $player = $this->player($previewDoc);
             if ($opts['preview'] ?? true) {
-                $result += $this->preview($spec, $player, $workDir, $name, (int) ($opts['preview_size'] ?? $this->options['preview_size'] ?? 256));
+                // 'thumb' = only the still (batch generation: the grid shows the motion)
+                $result += $this->preview($spec, $player, $workDir, $name, (int) ($opts['preview_size'] ?? $this->options['preview_size'] ?? 256), ($opts['preview'] ?? true) === 'thumb');
             }
             if (!empty($opts['grid_dir'])) {
-                $this->gridFrames($player, (string) $opts['grid_dir'], (int) ($opts['grid_fps'] ?? 15));
+                $gridDir = (string) $opts['grid_dir'];
+                $gridFps = (int) ($opts['grid_fps'] ?? 15);
+                if (!isset($framesDir) || !$this->gridFromFrames($player, $framesDir, $gridDir, $gridFps)) {
+                    $this->gridFrames($player, $gridDir, $gridFps);
+                }
             }
         }
         return $result;
@@ -351,12 +357,15 @@ final class TemplateRenderer
     }
 
     /** @return array{preview:?string,preview_format:?string,thumb:string} */
-    private function preview(TemplateSpec $spec, LottiePlayer $player, string $workDir, string $name, int $size): array
+    private function preview(TemplateSpec $spec, LottiePlayer $player, string $workDir, string $name, int $size, bool $thumbOnly = false): array
     {
         $size -= $size % 2;
         $bg = Color::hexToRgb((string) ($this->options['preview_bg'] ?? '#1C2733'));
         $thumb = $workDir . '/' . $name . '_thumb.png';
         imagepng($player->render(self::stillFrame($spec, $player), $size, $size, $bg), $thumb, 6);
+        if ($thumbOnly) {
+            return ['preview' => null, 'preview_format' => null, 'thumb' => $thumb];
+        }
         $encoder = new PreviewEncoder($this->tools, $this->tools->runner());
         $fps = 30;
         $times = self::frameTimes($player, $fps, 3.0);
@@ -384,6 +393,39 @@ final class TemplateRenderer
         $out = $workDir . '/' . $name . '_preview.gif';
         $encoder->gif($frames, $gifFps, $out);
         return ['preview' => $out, 'preview_format' => 'gif', 'thumb' => $thumb];
+    }
+
+    /**
+     * Grid frames from the frames the WEBM was encoded from (same times when
+     * the WEBM rate is a multiple of the grid rate): composited on the
+     * preview background instead of rendering every frame again.
+     */
+    private function gridFromFrames(LottiePlayer $player, string $framesDir, string $dir, int $gridFps): bool
+    {
+        $fr = (int) round($player->fps());
+        $webmFps = max(1, min(min(30, (int) $this->formats['video']['max_fps']), $fr));
+        $gridFps = max(1, min($gridFps, $fr));
+        if ($webmFps % $gridFps !== 0) {
+            return false;
+        }
+        $ratio = intdiv($webmFps, $gridFps);
+        $count = count(self::frameTimes($player, $gridFps, 3.0));
+        $bg = Color::hexToRgb((string) ($this->options['preview_bg'] ?? '#1C2733'));
+        @mkdir($dir, 0750, true);
+        for ($k = 0; $k < $count; $k++) {
+            $src = @imagecreatefrompng(sprintf('%s/f%04d.png', $framesDir, $k * $ratio));
+            if ($src === false) {
+                return false;
+            }
+            $canvas = imagecreatetruecolor(100, 100);
+            imagefill($canvas, 0, 0, imagecolorallocate($canvas, $bg[0], $bg[1], $bg[2]));
+            imagealphablending($canvas, true);
+            imagecopyresampled($canvas, $src, 0, 0, 0, 0, 100, 100, imagesx($src), imagesy($src));
+            imagejpeg($canvas, sprintf('%s/g%03d.jpg', $dir, $k), 82);
+            imagedestroy($src);
+            imagedestroy($canvas);
+        }
+        return true;
     }
 
     /** 100 px JPEG frames for animated batch grids (GridComposer). */

@@ -89,7 +89,7 @@ final class GenerateHandler implements JobHandler
             $itemDir = $ctx->workDir() . '/i' . $i;
             try {
                 $result = self::renderItem($app, $kind, $item, $format, $itemDir, [
-                    'preview' => true,
+                    'preview' => 'thumb',
                     'grid_dir' => $gridDir,
                     'grid_fps' => self::GRID_FPS,
                     'name' => 'item' . ($i + 1),

@@ -137,7 +137,8 @@ final class EmojiRenderer
         }
 
         if ($opts['preview'] ?? true) {
-            $result += $this->preview($renderer, $frames, $fps, $workDir, $name);
+            // 'thumb' = only the still (batch generation: the grid shows the motion)
+            $result += $this->preview($renderer, $frames, $fps, $workDir, $name, ($opts['preview'] ?? true) === 'thumb');
         }
         if (!empty($opts['grid_dir'])) {
             $this->gridFrames($renderer, $frames, $fps, (string) $opts['grid_dir'], (int) ($opts['grid_fps'] ?? 15), $tiles);
@@ -184,7 +185,7 @@ final class EmojiRenderer
     }
 
     /** @return array{preview:?string,preview_format:?string,thumb:string} */
-    private function preview(RasterRenderer $renderer, int $frames, int $fps, string $workDir, string $name): array
+    private function preview(RasterRenderer $renderer, int $frames, int $fps, string $workDir, string $name, bool $thumbOnly = false): array
     {
         $size = (int) ($this->options['preview_size'] ?? 256);
         $bg = Color::hexToRgb((string) ($this->options['preview_bg'] ?? '#1C2733'));
@@ -194,7 +195,7 @@ final class EmojiRenderer
         $thumbImg = $renderer->renderFrame(0, max(1, $frames), $h, $bg);
         $thumb = $workDir . '/' . $name . '_thumb.png';
         imagepng($thumbImg, $thumb, 6);
-        if ($frames <= 1) {
+        if ($frames <= 1 || $thumbOnly) {
             return ['preview' => null, 'preview_format' => null, 'thumb' => $thumb];
         }
         $previewFps = min($fps, 30);
