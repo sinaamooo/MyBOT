@@ -76,11 +76,29 @@ final class TemplateRenderer
         $warnings = [];
         $recolor = $content['recolor'] ?? null;
         $mode = (string) ($content['recolor_mode'] ?? 'main');
+        $slotColor = static fn (?string $hex): ?string => $hex;
         if ($mode === 'gray' || (is_string($recolor) && Color::isHex($recolor))) {
-            if (!$spec->recolor['enabled']) {
-                $warnings[] = 'رنگ این قالب حساس است و تغییر نمی‌کند.';
-            } else {
-                $doc = (new TemplateRecolor())->apply($doc, is_string($recolor) ? $recolor : '#808080', $mode, $spec->recolor);
+            $target = is_string($recolor) && Color::isHex($recolor) ? strtoupper($recolor) : '#808080';
+            $rc = new TemplateRecolor();
+            $original = $doc;
+            $enabled = $spec->recolor['enabled'];
+            // Default text colours come from the original brand artwork. Once the
+            // buyer picks a colour, a colourful default never keeps the original
+            // brand hue: it follows the recolouring, or becomes the buyer's colour.
+            $slotColor = static function (?string $hex) use ($rc, $original, $target, $mode, $spec, $enabled): ?string {
+                $rgb = TemplateRecolor::hexToRgb($hex);
+                if ($hex === null || $rgb === null || TemplateRecolor::toOklch($rgb)[1] < 0.05) {
+                    return $hex; // black / white / gray captions stay as designed
+                }
+                if ($mode === 'gray') {
+                    [$L] = TemplateRecolor::toOklch($rgb);
+                    return TemplateRecolor::toHex(TemplateRecolor::fromOklch($L, 0.0, 0.0));
+                }
+                $mapped = $enabled ? $rc->mapHex($original, $hex, $target, $mode, $spec->recolor) : $hex;
+                return strtoupper($mapped) === strtoupper($hex) ? $target : $mapped;
+            };
+            if ($enabled) {
+                $doc = $rc->apply($doc, $target, $mode, $spec->recolor);
             }
         }
         $assign = $this->assign($spec, $content);
@@ -109,8 +127,8 @@ final class TemplateRenderer
                 } else {
                     $text = $what === 'caption' ? (string) $content['caption'] : (string) $content['text'];
                     $color = $role === 'caption'
-                        ? ($content['caption_color'] ?? $slot['color'] ?? $content['color'] ?? '#FFFFFF')
-                        : ($content['color'] ?? $slot['color'] ?? '#FFFFFF');
+                        ? ($content['caption_color'] ?? $slotColor($slot['color']) ?? $content['color'] ?? '#FFFFFF')
+                        : ($content['color'] ?? $slotColor($slot['color']) ?? '#FFFFFF');
                     $res = $builder->text($role, $text, $t['box'], [
                         'font' => $content['font'] ?? null,
                         'color' => $color,

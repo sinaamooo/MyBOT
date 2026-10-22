@@ -106,8 +106,26 @@ final class TemplateRecolor
      */
     public function apply(array $doc, string $targetHex, string $mode, array $policy): array
     {
+        $map = $this->mapper($doc, $targetHex, $mode, $policy);
+        return $map === null ? $doc : $this->walk($doc, '', fn (array $rgb, float $weight): array => $map($rgb));
+    }
+
+    /** Recolours one "#RRGGBB" the same way apply() recolours the artwork. */
+    public function mapHex(array $doc, string $hex, string $targetHex, string $mode, array $policy): string
+    {
+        $rgb = self::hexToRgb($hex);
+        $map = $rgb !== null ? $this->mapper($doc, $targetHex, $mode, $policy) : null;
+        return $map === null || $rgb === null ? $hex : self::toHex($map($rgb));
+    }
+
+    /**
+     * The colour mapping for a document (null = nothing to change).
+     * @return (callable(array{0:float,1:float,2:float}):array{0:float,1:float,2:float})|null
+     */
+    private function mapper(array $doc, string $targetHex, string $mode, array $policy): ?callable
+    {
         if (!$policy['enabled'] || !in_array($mode, self::MODES, true)) {
-            return $doc;
+            return null;
         }
         $target = self::hexToRgb($targetHex);
         if ($target === null && $mode !== 'gray') {
@@ -120,7 +138,7 @@ final class TemplateRecolor
             $primary = $p !== null ? [$p['L'], $p['C'], $p['h']] : null;
         }
         if ($primary === null && $mode === 'main') {
-            return $doc; // nothing colourful to move
+            return null; // nothing colourful to move
         }
         [$L0, $C0, $h0] = $primary ?? [0.6, 0.12, 0.0];
         [$Lt, $Ct, $ht] = $target !== null ? self::toOklch($target) : [0.6, 0.0, $h0];
@@ -162,7 +180,7 @@ final class TemplateRecolor
             $L2 = max(0.0, min(1.0, $L2));
             return self::fromOklch($L2, $C2, $h2);
         };
-        return $this->walk($doc, '', fn (array $rgb, float $weight): array => $map($rgb));
+        return $map;
     }
 
     // ------------------------------------------------------------------
