@@ -3,7 +3,7 @@
     "pack": "tofan",
     "name": "طوفان ترید 6",
     "source": "tofan-06.tgs",
-    "status": "auto",
+    "status": "reviewed",
     "category": "",
     "sort": 60,
     "remove": [
@@ -15,36 +15,58 @@
             "host": "layers/0/shapes/4/it/0/it/1/it/0/it/1",
             "index": 0,
             "box": [
-                -159.86,
-                -437.19,
-                76.2,
-                -152.86
+                -170.0,
+                -440.0,
+                122.0,
+                -150.0
             ],
             "accepts": [
                 "logo",
                 "text"
             ],
-            "color": "#141414",
+            "color": "#0255FE",
             "pad": 0.92,
-            "also": [
-                {
-                    "host": "layers/0/shapes/4/it/0/it/1/it/0/it/1",
-                    "index": 0,
-                    "box": [
-                        -90.51,
-                        -127.45,
-                        45.08,
-                        -109.87
-                    ]
-                }
-            ]
+            "also": []
+        },
+        {
+            "role": "caption",
+            "host": "layers/0/shapes/4/it/0/it/1/it/0/it/1",
+            "index": 0,
+            "box": [
+                -90.51,
+                -127.45,
+                45.08,
+                -109.87
+            ],
+            "accepts": [
+                "text"
+            ],
+            "color": "#141414",
+            "pad": 0.95,
+            "also": []
         }
     ],
     "recolor": {
         "enabled": true,
-        "primary": null,
+        "primary": "#0255FE",
         "tolerance": 35.0,
-        "protect": []
+        "protect": [
+            "layers/0/shapes/0",
+            "layers/0/shapes/1",
+            "layers/0/shapes/2",
+            "layers/0/shapes/3",
+            "layers/0/shapes/4/it/0/it/0",
+            "layers/0/shapes/4/it/0/it/2",
+            "layers/0/shapes/4/it/0/it/3",
+            "layers/0/shapes/4/it/0/it/4",
+            "layers/0/shapes/4/it/0/it/5",
+            "layers/0/shapes/4/it/0/it/6",
+            "layers/0/shapes/4/it/0/it/7",
+            "layers/0/shapes/5",
+            "layers/0/shapes/6",
+            "layers/1",
+            "layers/2"
+        ]
     },
     "meta": {
         "fr": 60,
@@ -60,6 +82,7 @@
             "notes": [
                 "copy of main slot in layers/0/shapes/4/it/0/it/1/it/0/it/1 (overlap 0.11)"
             ]
-        }
+        },
+        "review": "Heart-bodied knight marching with a waving flag. Logo + 'TOFAN TRADE' group on the flag (layers/0/shapes/4/it/0/it/1/it/0/it/1) is removed and hosts the slots, so content follows the flag's sway. The detector's 'also' copy was the brand-name line and drew a tiny second logo, so it became a real caption slot. The main box is widened and centred over the caption so content fills the flag like the logo did. Primary is the flag-edge blue #0255FE; the knight (armour, light-blue plume, red heart, legs) is protected so only the flag edge recolours."
     }
 }

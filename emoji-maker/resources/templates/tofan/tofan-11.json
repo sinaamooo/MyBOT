@@ -3,7 +3,7 @@
     "pack": "tofan",
     "name": "طوفان ترید 11",
     "source": "tofan-11.tgs",
-    "status": "auto",
+    "status": "reviewed",
     "category": "",
     "sort": 110,
     "remove": [
@@ -64,6 +64,7 @@
             "seed_paths": 17,
             "member_paths": 2,
             "notes": []
-        }
+        },
+        "review": "Waving flag on a pole with wind streaks. Logo + 'TOFAN TRADE' live only in precomp layer assets/1/layers/0, cleared and hosting main + caption; all 12 frames clean, flag/pole/streaks intact, content follows the wave. The precomp layer is scaled 139.7x123.2 in the original, so content is ~13% wider like the original logo was. Blue border/pole recolour cleanly; nothing needs protect."
     }
 }

@@ -3,7 +3,7 @@
     "pack": "tofan",
     "name": "طوفان ترید 9",
     "source": "tofan-09.tgs",
-    "status": "auto",
+    "status": "reviewed",
     "category": "",
     "sort": 90,
     "remove": [
@@ -15,10 +15,10 @@
             "host": "layers/2/shapes/0",
             "index": 0,
             "box": [
-                7.8,
-                3.2,
-                119.8,
-                115.2
+                10.0,
+                -10.0,
+                118.0,
+                98.0
             ],
             "accepts": [
                 "logo",
@@ -26,6 +26,23 @@
             ],
             "color": "#141414",
             "pad": 0.92,
+            "also": []
+        },
+        {
+            "role": "caption",
+            "host": "layers/2/shapes/0",
+            "index": 0,
+            "box": [
+                30.0,
+                110.5,
+                98.0,
+                120.0
+            ],
+            "accepts": [
+                "text"
+            ],
+            "color": "#141414",
+            "pad": 0.95,
             "also": []
         }
     ],
@@ -47,6 +64,7 @@
             "seed_paths": 17,
             "member_paths": 6,
             "notes": []
-        }
+        },
+        "review": "Round badge with two rock-on hands (circle bounces/sways, hands cover it in places). Logo + 'TOFAN TRADE' group layers/2/shapes/0 removed; badge, rings and hands intact in all frames. Main slot moved up onto the logo area and a caption slot added where the brand line was (kept inside the original line so it is not cut at the canvas bottom). Blue hands/ring recolour cleanly; nothing needs protect."
     }
 }

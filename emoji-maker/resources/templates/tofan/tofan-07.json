@@ -3,7 +3,7 @@
     "pack": "tofan",
     "name": "طوفان ترید 7",
     "source": "tofan-07.tgs",
-    "status": "auto",
+    "status": "reviewed",
     "category": "",
     "sort": 70,
     "remove": [
@@ -64,6 +64,7 @@
             "seed_paths": 17,
             "member_paths": 2,
             "notes": []
-        }
+        },
+        "review": "Waving banner with wind streaks. Logo + 'TOFAN TRADE' live only in precomp layer assets/1/layers/0, which is cleared and hosts main + caption slots; all 12 frames clean, streaks/badge intact, content follows the wave. Blue border recolours cleanly (red/green checked); nothing needs protect."
     }
 }

@@ -3,7 +3,7 @@
     "pack": "tofan",
     "name": "طوفان ترید 10",
     "source": "tofan-10.tgs",
-    "status": "auto",
+    "status": "reviewed",
     "category": "",
     "sort": 100,
     "remove": [
@@ -15,10 +15,10 @@
             "host": "layers/0/shapes/0/it/0",
             "index": 0,
             "box": [
-                -28.0,
-                -164.2,
-                647.0,
-                426.8
+                45.0,
+                -185.0,
+                575.0,
+                345.0
             ],
             "accepts": [
                 "logo",
@@ -26,6 +26,23 @@
             ],
             "color": "#141414",
             "pad": 0.92,
+            "also": []
+        },
+        {
+            "role": "caption",
+            "host": "layers/0/shapes/0/it/0",
+            "index": 0,
+            "box": [
+                150.0,
+                390.0,
+                470.0,
+                438.0
+            ],
+            "accepts": [
+                "text"
+            ],
+            "color": "#141414",
+            "pad": 0.95,
             "also": []
         }
     ],
@@ -50,6 +67,7 @@
             "seed_paths": 17,
             "member_paths": 2,
             "notes": []
-        }
+        },
+        "review": "Blue meme frog holding a round sign (15-frame bob loop). Logo + 'TOFAN TRADE' group layers/0/shapes/0/it/0 removed; sign disc, half blue ring and frog intact. Main box centred on the sign and a caption slot added where the brand line was. Ring recolours (red/green checked); the frog (layers/1, layers/2) stays protected so it keeps its colours."
     }
 }

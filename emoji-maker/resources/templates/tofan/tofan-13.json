@@ -3,14 +3,52 @@
     "pack": "tofan",
     "name": "طوفان ترید 13",
     "source": "tofan-13.tgs",
-    "status": "disabled",
+    "status": "reviewed",
     "category": "",
     "sort": 130,
-    "remove": [],
-    "slots": [],
+    "remove": [
+        "assets/1/layers/0"
+    ],
+    "slots": [
+        {
+            "role": "main",
+            "host": "assets/1/layers/0",
+            "index": 0,
+            "box": [
+                96,
+                262,
+                436,
+                622
+            ],
+            "accepts": [
+                "logo",
+                "text"
+            ],
+            "color": "#F7E00E",
+            "pad": 0.92,
+            "also": []
+        },
+        {
+            "role": "caption",
+            "host": "assets/1/layers/0",
+            "index": 0,
+            "box": [
+                200,
+                655,
+                340,
+                686
+            ],
+            "accepts": [
+                "text"
+            ],
+            "color": "#F7E00E",
+            "pad": 0.95,
+            "also": []
+        }
+    ],
     "recolor": {
         "enabled": true,
-        "primary": null,
+        "primary": "#F7E00E",
         "tolerance": 35.0,
         "protect": []
     },
@@ -27,6 +65,8 @@
             "notes": [
                 "no logo artwork found"
             ]
-        }
+        },
+        "still": 153,
+        "review": "Yellow 'VIP' shield (was disabled: detector missed the logo inside precomp comp_1). The whole tornado logo + 'TOFAN VIP' line is the single shape layer assets/1/layers/0 (132 groups), now cleared; it hosts the main slot (centred on the shield, box widened) and a caption slot exactly where 'TOFAN VIP' was, so both follow the precomp's wobble/scale. Shield, stroke and page-curl sweeps untouched. Primary = shield yellow #F7E00E, recolours cleanly (red/green checked); nothing to protect."
     }
 }

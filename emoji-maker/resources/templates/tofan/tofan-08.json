@@ -3,7 +3,7 @@
     "pack": "tofan",
     "name": "طوفان ترید 8",
     "source": "tofan-08.tgs",
-    "status": "auto",
+    "status": "reviewed",
     "category": "",
     "sort": 80,
     "remove": [
@@ -16,17 +16,34 @@
             "host": "layers/0/shapes/1",
             "index": 0,
             "box": [
-                102.64,
-                102.38,
-                409.18,
-                408.92
+                116.0,
+                72.0,
+                396.0,
+                340.0
             ],
             "accepts": [
                 "logo",
                 "text"
             ],
             "color": "#141414",
-            "pad": 0.96,
+            "pad": 0.92,
+            "also": []
+        },
+        {
+            "role": "caption",
+            "host": "layers/0/shapes/1",
+            "index": 0,
+            "box": [
+                174.0,
+                352.0,
+                338.0,
+                390.0
+            ],
+            "accepts": [
+                "text"
+            ],
+            "color": "#141414",
+            "pad": 0.95,
             "also": []
         }
     ],
@@ -48,6 +65,7 @@
             "seed_paths": 17,
             "member_paths": 2,
             "notes": []
-        }
+        },
+        "review": "Flexing arm with the logo on the biceps (fades out while the arm flexes, back at f64). Logo + rotated 'TOFAN TRADE' group and its invisible white backing disc removed; main + new caption slot (the brand line was a separate line under the logo) hosted in layers/0/shapes/1 so content follows the fade, tilt and flex squash, boxes enlarged/centred on the biceps. Blue outlines recolour cleanly; nothing needs protect."
     }
 }
