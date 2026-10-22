@@ -3,11 +3,13 @@
     "pack": "tofan",
     "name": "طوفان ترید 2",
     "source": "tofan-02.tgs",
-    "status": "auto",
+    "status": "reviewed",
     "category": "",
     "sort": 20,
     "remove": [
         "layers/2",
+        "layers/3",
+        "layers/4",
         "layers/6"
     ],
     "slots": [
@@ -16,9 +18,9 @@
             "host": "layers/6",
             "index": 0,
             "box": [
-                121.47,
+                122.5,
                 246.23,
-                357.53,
+                372.5,
                 530.56
             ],
             "accepts": [
@@ -27,27 +29,16 @@
             ],
             "color": "#0255FE",
             "pad": 0.92,
-            "also": [
-                {
-                    "host": "layers/2",
-                    "index": 0,
-                    "box": [
-                        121.47,
-                        246.23,
-                        357.53,
-                        530.56
-                    ]
-                }
-            ]
+            "also": []
         },
         {
             "role": "caption",
             "host": "layers/6",
             "index": 0,
             "box": [
-                190.82,
+                179.7,
                 555.98,
-                326.41,
+                315.3,
                 573.55
             ],
             "accepts": [
@@ -78,6 +69,7 @@
             "notes": [
                 "copy of main slot in layers/2 (overlap 1.00, matte)"
             ]
-        }
+        },
+        "review": "Circle badge on spiky blue/black ring. Logo + 'TOFAN TRADE' in layers/6, cleared; main + caption slots there, boxes centred on the circle. The matte copy (layers/2 logo outline) and its two diagonal sweep layers layers/3, layers/4 drew a dark band over the buyer's content, so I removed the copy and both sweep layers. Blue recolours; nothing needs protect."
     }
 }

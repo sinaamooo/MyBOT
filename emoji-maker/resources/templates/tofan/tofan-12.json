@@ -7,7 +7,8 @@
     "category": "",
     "sort": 120,
     "remove": [
-        "assets/1/layers/0"
+        "assets/1/layers/0",
+        "assets/0/layers/1"
     ],
     "slots": [
         {
@@ -15,9 +16,9 @@
             "host": "assets/1/layers/0",
             "index": 0,
             "box": [
-                79.42,
+                81.5,
                 374.03,
-                315.48,
+                317.5,
                 658.36
             ],
             "accepts": [
@@ -33,9 +34,9 @@
             "host": "assets/1/layers/0",
             "index": 0,
             "box": [
-                148.76,
+                131.7,
                 683.77,
-                284.35,
+                267.3,
                 701.35
             ],
             "accepts": [
@@ -48,7 +49,7 @@
     ],
     "recolor": {
         "enabled": true,
-        "primary": null,
+        "primary": "#0255FE",
         "tolerance": 35.0,
         "protect": []
     },

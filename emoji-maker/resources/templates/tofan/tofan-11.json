@@ -15,9 +15,9 @@
             "host": "assets/1/layers/0",
             "index": 0,
             "box": [
-                79.42,
+                88.9,
                 374.03,
-                315.48,
+                325.0,
                 658.36
             ],
             "accepts": [
@@ -33,9 +33,9 @@
             "host": "assets/1/layers/0",
             "index": 0,
             "box": [
-                148.76,
+                139.2,
                 683.77,
-                284.35,
+                274.8,
                 701.35
             ],
             "accepts": [
@@ -48,7 +48,7 @@
     ],
     "recolor": {
         "enabled": true,
-        "primary": null,
+        "primary": "#0255FE",
         "tolerance": 35.0,
         "protect": []
     },

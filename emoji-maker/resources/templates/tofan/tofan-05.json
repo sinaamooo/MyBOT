@@ -3,7 +3,7 @@
     "pack": "tofan",
     "name": "طوفان ترید 5",
     "source": "tofan-05.tgs",
-    "status": "auto",
+    "status": "reviewed",
     "category": "",
     "sort": 50,
     "remove": [
@@ -47,7 +47,7 @@
         }
     ],
     "recolor": {
-        "enabled": true,
+        "enabled": false,
         "primary": null,
         "tolerance": 35.0,
         "protect": []
@@ -64,6 +64,7 @@
             "seed_paths": 17,
             "member_paths": 2,
             "notes": []
-        }
+        },
+        "review": "Bouncing white app tile. Logo + 'TOFAN TRADE' fill layers/0 (parented to the tile), which is cleared and hosts main + caption, so content follows the bounce. Remove/slots were already right. Nothing colourful is left once the logo is gone (plain white tile, a recolour strip changes nothing), so recolour is disabled instead of offering a no-op."
     }
 }

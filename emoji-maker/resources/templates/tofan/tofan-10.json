@@ -15,10 +15,10 @@
             "host": "layers/0/shapes/0/it/0",
             "index": 0,
             "box": [
-                3.27,
-                -215.35,
-                561.5,
-                433.93
+                -28.0,
+                -164.2,
+                647.0,
+                426.8
             ],
             "accepts": [
                 "logo",
@@ -31,9 +31,12 @@
     ],
     "recolor": {
         "enabled": true,
-        "primary": null,
+        "primary": "#0255FE",
         "tolerance": 35.0,
-        "protect": []
+        "protect": [
+            "layers/1",
+            "layers/2"
+        ]
     },
     "meta": {
         "fr": 60,

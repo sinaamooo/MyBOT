@@ -3,14 +3,52 @@
     "pack": "tofan",
     "name": "طوفان ترید 4",
     "source": "tofan-04.tgs",
-    "status": "disabled",
+    "status": "reviewed",
     "category": "",
     "sort": 40,
-    "remove": [],
-    "slots": [],
+    "remove": [
+        "assets/1/layers/0"
+    ],
+    "slots": [
+        {
+            "role": "main",
+            "host": "assets/1/layers/0",
+            "index": 0,
+            "box": [
+                79.0,
+                256.83,
+                450.0,
+                627.1
+            ],
+            "accepts": [
+                "logo",
+                "text"
+            ],
+            "color": "#F7E00E",
+            "pad": 0.92,
+            "also": []
+        },
+        {
+            "role": "caption",
+            "host": "assets/1/layers/0",
+            "index": 0,
+            "box": [
+                211.62,
+                659.52,
+                329.26,
+                680.88
+            ],
+            "accepts": [
+                "text"
+            ],
+            "color": "#F7E00E",
+            "pad": 0.95,
+            "also": []
+        }
+    ],
     "recolor": {
         "enabled": true,
-        "primary": null,
+        "primary": "#F7E00E",
         "tolerance": 35.0,
         "protect": []
     },
@@ -27,6 +65,8 @@
             "notes": [
                 "no logo artwork found"
             ]
-        }
+        },
+        "still": 90,
+        "review": "Was disabled because the detector missed the hatched yellow logo: 132 tiny yellow shapes plus the 'TOFAN VIP' line, all in the nested precomp layer assets/1/layers/0. I removed that whole layer and hand-built main + caption slots there, so content follows the precomp's rotation. The black shield, yellow border and fold highlights are kept. Primary is the yellow #F7E00E, the border recolours, and nothing needs protect."
     }
 }

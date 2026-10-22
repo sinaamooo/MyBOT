@@ -15,10 +15,10 @@
             "host": "layers/2/shapes/0",
             "index": 0,
             "box": [
-                4.7,
-                -16.32,
-                110.78,
-                119.87
+                7.8,
+                3.2,
+                119.8,
+                115.2
             ],
             "accepts": [
                 "logo",
@@ -31,7 +31,7 @@
     ],
     "recolor": {
         "enabled": true,
-        "primary": null,
+        "primary": "#0255FE",
         "tolerance": 35.0,
         "protect": []
     },

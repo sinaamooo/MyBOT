@@ -3,7 +3,7 @@
     "pack": "tofan",
     "name": "طوفان ترید 3",
     "source": "tofan-03.tgs",
-    "status": "auto",
+    "status": "reviewed",
     "category": "",
     "sort": 30,
     "remove": [
@@ -15,9 +15,9 @@
             "host": "layers/0/shapes/4/it/0/it/1",
             "index": 0,
             "box": [
-                -159.86,
+                -144.86,
                 -437.19,
-                76.2,
+                91.2,
                 -152.86
             ],
             "accepts": [
@@ -48,7 +48,7 @@
     ],
     "recolor": {
         "enabled": true,
-        "primary": null,
+        "primary": "#0255FE",
         "tolerance": 35.0,
         "protect": []
     },
@@ -64,6 +64,7 @@
             "seed_paths": 17,
             "member_paths": 2,
             "notes": []
-        }
+        },
+        "review": "Wobbling shield. Logo + 'TOFAN TRADE' group layers/0/shapes/4/it/0/it/1 removed, and the fold highlights are kept. Main slot box nudged right so content sits on the shield centre; caption is where the brand line was. Auto primary (#057EFD, taken from the light wrinkle blue) gave a muddy red, so primary is set to the border blue #0255FE, which now recolours cleanly."
     }
 }

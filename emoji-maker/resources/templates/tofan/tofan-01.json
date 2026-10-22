@@ -3,61 +3,30 @@
     "pack": "tofan",
     "name": "طوفان ترید 1",
     "source": "tofan-01.tgs",
-    "status": "auto",
+    "status": "reviewed",
     "category": "",
     "sort": 10,
     "remove": [
-        "layers/2/shapes/3",
-        "layers/2/shapes/4",
-        "layers/2/shapes/5",
-        "layers/2/shapes/6",
-        "layers/2/shapes/7",
-        "layers/3/shapes/3",
-        "layers/3/shapes/4",
-        "layers/3/shapes/5",
-        "layers/3/shapes/6",
-        "layers/3/shapes/7",
         "assets/0/layers/0"
     ],
     "slots": [
         {
             "role": "main",
-            "host": "layers/3",
-            "index": 3,
+            "host": "assets/0/layers/0",
+            "index": 0,
             "box": [
-                104.89,
-                192.46,
-                375.2,
-                266.02
+                79.42,
+                374.03,
+                315.48,
+                658.36
             ],
             "accepts": [
                 "logo",
                 "text"
             ],
-            "color": "#FFFFFF",
+            "color": "#0255FE",
             "pad": 0.92,
-            "also": [
-                {
-                    "host": "layers/2",
-                    "index": 3,
-                    "box": [
-                        104.89,
-                        192.46,
-                        375.2,
-                        266.02
-                    ]
-                },
-                {
-                    "host": "assets/0/layers/0",
-                    "index": 0,
-                    "box": [
-                        79.42,
-                        374.03,
-                        315.48,
-                        658.36
-                    ]
-                }
-            ]
+            "also": []
         },
         {
             "role": "caption",
@@ -98,6 +67,7 @@
                 "copy of main slot in layers/2 (overlap 0.92)",
                 "copy of main slot in assets/0/layers/0 (overlap 0.89)"
             ]
-        }
+        },
+        "review": "Waving banner. Logo + 'TOFAN TRADE' live only in precomp layer assets/0/layers/0, which is now cleared and hosts main + caption slots. The detector's 'also' copies in layers/2 and layers/3 were 5%-opacity fold highlights (not logo) that doubled the content, so I dropped them and kept those highlights. Blue #0A57FA recolours cleanly; nothing needs protect."
     }
 }

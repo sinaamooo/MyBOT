@@ -16,23 +16,23 @@
             "host": "layers/0/shapes/1",
             "index": 0,
             "box": [
-                94.53,
-                71.17,
+                102.64,
+                102.38,
                 409.18,
-                432.88
+                408.92
             ],
             "accepts": [
                 "logo",
                 "text"
             ],
             "color": "#141414",
-            "pad": 0.92,
+            "pad": 0.96,
             "also": []
         }
     ],
     "recolor": {
         "enabled": true,
-        "primary": null,
+        "primary": "#0255FE",
         "tolerance": 35.0,
         "protect": []
     },
