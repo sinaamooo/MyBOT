@@ -120,6 +120,7 @@ return [
         'default_credits' => 0,
         'allow_tgs' => true,
         'allow_publish' => true,
+        'max_projects_per_user' => 200,
         'vectorize_max_colors' => 6,
         'support_contact' => '',
         'welcome_text' => '',

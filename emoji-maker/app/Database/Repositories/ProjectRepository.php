@@ -96,6 +96,25 @@ final class ProjectRepository
         return $this->create($userId, (string) $p['input_type'], self::config($p), $p['title'] ? $p['title'] . ' (کپی)' : null);
     }
 
+    /**
+     * Keeps a user below $keep projects by archiving the oldest drafts that
+     * never produced an output (makes room for one new project).
+     */
+    public function pruneDrafts(int $userId, int $keep): int
+    {
+        $total = (int) $this->db->value('SELECT COUNT(*) FROM projects WHERE user_id = ? AND deleted_at IS NULL', [$userId]);
+        $excess = $total - max(1, $keep) + 1;
+        if ($excess <= 0) {
+            return 0;
+        }
+        return $this->db->query(
+            "UPDATE projects SET deleted_at = NOW(), status = 'archived'
+             WHERE user_id = ? AND deleted_at IS NULL AND outputs_count = 0 AND status IN ('draft','previewed','failed')
+             ORDER BY updated_at ASC, id ASC LIMIT ?",
+            [$userId, $excess]
+        )->rowCount();
+    }
+
     public function countAll(): int
     {
         return (int) $this->db->value('SELECT COUNT(*) FROM projects WHERE deleted_at IS NULL');

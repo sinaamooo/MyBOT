@@ -240,7 +240,8 @@ final class PublishHandler implements JobHandler
     public static function emojiList(string $emoji, string $default): array
     {
         $parts = preg_split('/[\s,،]+/u', trim($emoji), -1, PREG_SPLIT_NO_EMPTY) ?: [];
-        $parts = array_values(array_filter($parts, static fn ($e) => strlen($e) <= 32 && !preg_match('/[a-zA-Z0-9<>]/', $e)));
+        // letters and markup never; digits, # and * only as keycaps (1️⃣)
+        $parts = array_values(array_filter($parts, static fn ($e) => strlen($e) <= 32 && !preg_match('/[a-zA-Z<>]|[0-9#*](?!\x{FE0F}?\x{20E3})/u', $e)));
         if (!$parts) {
             $parts = [trim($default) !== '' ? trim($default) : '⭐'];
         }
@@ -281,7 +282,9 @@ final class PublishHandler implements JobHandler
         }
         $lines = [$existing ? '🎉 ایموجی‌ها به پک شما اضافه شدند!' : '🎉 پک ایموجی شما منتشر شد!'];
         $lines[] = '«' . ($existing ? (string) $set['title'] : $title) . '»';
-        $lines[] = OutputSender::fa($added) . ' ایموجی اضافه شد.';
+        $lines[] = $added > 0 || !$existing
+            ? OutputSender::fa($added) . ' ایموجی اضافه شد.'
+            : 'ایموجی‌های انتخاب‌شده از قبل در این پک بودند؛ چیزی اضافه نشد.';
         if ($failed) {
             $nums = array_map(static fn ($f) => OutputSender::fa((int) $f['number']), array_slice($failed, 0, 10));
             $lines[] = '⚠️ ' . OutputSender::fa(count($failed)) . ' مورد را تلگرام نپذیرفت (شماره‌ی ' . implode('، ', $nums) . ').';
