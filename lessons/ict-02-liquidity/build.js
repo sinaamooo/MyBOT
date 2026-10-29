@@ -1,65 +1,18 @@
 'use strict';
 // Builds the "ICT Lesson 2 — Liquidity" PDF.
 // Usage: node build.js [out.pdf] [--png <dir>]
-const fs = require('fs');
-const os = require('os');
 const path = require('path');
-const { pathToFileURL } = require('url');
-const { chromium } = require('playwright');
+const { BG, WARN, fa, mix, acc, ICON, layout, coverCss, cliArgs, render } = require('../common/doc');
 const F = require('./figures');
-const { mix } = require('./charts');
 
-const FONT_DIR = path.join(__dirname, 'fonts');
-const TOTAL = 6;
-const fa = (n) => String(n).replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[d]);
-const fontUrl = (f) => pathToFileURL(path.join(FONT_DIR, f)).href;
-
-// Solid colours only (no alpha, gradients or shadows) so phone PDF viewers render fast and sharp.
-const BG = '#070B12';
-const CARD = '#101826';
-const WARN = '#FF6B81';
-const acc = (c, base = CARD) =>
-  `--acc:${c};--acc-bg:${mix(c, 0.1, base)};--acc-note:${mix(c, 0.09, base)};--acc-line:${mix(c, 0.45, base)};--acc-ring:${mix(c, 0.25, base)};--acc-dim:${mix(c, 0.3, base)}`;
-
-const ICON = {
-  info: '<svg viewBox="0 0 24 24" width="16" height="16"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/><rect x="11" y="10" width="2" height="7" rx="1" fill="currentColor"/><circle cx="12" cy="7" r="1.3" fill="currentColor"/></svg>',
-  warn: '<svg viewBox="0 0 24 24" width="16" height="16"><path d="M12 3 L22 20 H2 Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><rect x="11" y="9" width="2" height="6" rx="1" fill="currentColor"/><circle cx="12" cy="17.2" r="1.2" fill="currentColor"/></svg>',
-  ex: '<svg viewBox="0 0 24 24" width="16" height="16"><path d="M4 18 L9 11 L13 14 L20 5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="20" cy="5" r="2" fill="currentColor"/></svg>',
-  up: '<svg viewBox="0 0 12 12" width="9" height="9"><path d="M6 1 L11 10 H1 Z" fill="currentColor"/></svg>',
-  arrow: '<svg viewBox="0 0 24 24" width="22" height="22"><path d="M20 12 H5 M11 6 L5 12 L11 18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-  down: '<svg viewBox="0 0 12 12" width="9" height="9"><path d="M6 11 L11 2 H1 Z" fill="currentColor"/></svg>',
-};
-
-const header = () => `
-<header class="ph">
-  <div class="ph-r"><span class="ict">ICT</span><span>درس دوم</span><i></i><span class="ph-t">نقدینگی</span></div>
-  <div class="ph-l">LIQUIDITY · LESSON 02</div>
-</header>`;
-
-const footer = (n) => `
-<footer class="pf">
-  <span>سری آموزشی ICT · محتوای آموزشی است و توصیه معاملاتی محسوب نمی‌شود</span>
-  <span class="pn">${fa(n)} / ${fa(TOTAL)}</span>
-</footer>`;
-
-function card({ num, title, en, abbr, color, loc, locIcon, body, fig, note, noteType = 'info', noteTitle }) {
-  return `
-<section class="card" style="${acc(color)}">
-  <div class="card-h">
-    <div class="num">${fa(num)}</div>
-    <div class="ttl">
-      <h2>${title}</h2>
-      <div class="en"><b>${abbr}</b>${en ? `<span>${en}</span>` : ''}</div>
-    </div>
-    <div class="loc">${locIcon ? ICON[locIcon] : ''}${loc}</div>
-  </div>
-  ${body.map((p) => `<p>${p}</p>`).join('')}
-  <div class="fig">${fig}</div>
-  <div class="note" style="${acc(noteType === 'warn' ? WARN : color)}"><span class="ni">${ICON[noteType]}</span><div>${noteTitle ? `<b>${noteTitle}</b> ` : ''}${note}</div></div>
-</section>`;
-}
-
-const page = (n, inner, cls = '') => `<div class="page ${cls}">${n > 1 ? header() : ''}${inner}${footer(n)}</div>`;
+const { page, card } = layout({
+  badge: 'ICT',
+  kicker: 'درس دوم',
+  topic: 'نقدینگی',
+  en: 'LIQUIDITY · LESSON 02',
+  footer: 'سری آموزشی ICT · محتوای آموزشی است و توصیه معاملاتی محسوب نمی‌شود',
+  total: 6,
+});
 
 const toc = [
   ['BSL', 'نقدینگی سمت خرید', 2, '#FFB020'],
@@ -218,87 +171,12 @@ const p6 = page(6, `
 `);
 
 const css = `
-@font-face { font-family: Vazirmatn; font-weight: 400; src: url(${fontUrl('Vazirmatn-Regular.ttf')}); }
-@font-face { font-family: Vazirmatn; font-weight: 500 600; src: url(${fontUrl('Vazirmatn-Medium.ttf')}); }
-@font-face { font-family: Vazirmatn; font-weight: 700 800; src: url(${fontUrl('Vazirmatn-Bold.ttf')}); }
-@font-face { font-family: Vazirmatn; font-weight: 900; src: url(${fontUrl('Vazirmatn-Black.ttf')}); }
-@page { size: A4; margin: 0; }
-:root {
-  --bg: ${BG}; --card: ${CARD}; --line: ${mix('#94A3B8', 0.15, CARD)}; --line-bg: ${mix('#94A3B8', 0.15, BG)};
-  --text: #E8ECF4; --soft: #C3CCDA; --muted: #8592A8; --gold: #FFB020;
-  --chip-bg: ${mix('#ffffff', 0.04, BG)}; --row-bg: ${mix('#ffffff', 0.04, CARD)}; --head-bg: ${mix('#ffffff', 0.05, BG)};
-}
-* { box-sizing: border-box; }
-html, body { margin: 0; padding: 0; background: var(--bg); }
-body { font-family: Vazirmatn, sans-serif; color: var(--text); -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-.page {
-  width: 210mm; height: 297mm; position: relative; overflow: hidden; direction: rtl; background: var(--bg);
-  padding: 11mm 11mm 15mm; break-after: page; display: flex; flex-direction: column; gap: 4.2mm;
-}
-.page:last-child { break-after: auto; }
-.ict { display: inline-block; font-weight: 900; font-size: 8.5pt; letter-spacing: .08em; color: #0B111C; background: var(--gold); padding: .5mm 2.2mm; border-radius: 1.4mm; direction: ltr; }
-.ph { display: flex; justify-content: space-between; align-items: center; padding-bottom: 2.6mm; border-bottom: 1px solid var(--line-bg); position: relative; }
-.ph::after { content: ''; position: absolute; right: 0; bottom: -1px; width: 32mm; height: 2px; background: var(--gold); }
-.ph-r { display: flex; align-items: center; gap: 2.4mm; font-size: 9.5pt; color: var(--soft); font-weight: 600; }
-.ph-r i { width: 1.2mm; height: 1.2mm; border-radius: 50%; background: var(--muted); }
-.ph-t { color: var(--text); font-weight: 800; }
-.ph-l { direction: ltr; font-size: 7.5pt; letter-spacing: .22em; color: var(--muted); font-weight: 700; }
-.pf { position: absolute; left: 11mm; right: 11mm; bottom: 6.5mm; display: flex; justify-content: space-between; align-items: center; font-size: 7.4pt; color: var(--muted); }
-.pn { font-weight: 800; color: var(--soft); background: var(--chip-bg); border: 1px solid var(--line-bg); border-radius: 10mm; padding: .4mm 3mm; }
-
-/* cards */
-.card {
-  flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; gap: 2.4mm; position: relative;
-  background: var(--card); border: 1px solid var(--line); border-top: 2px solid var(--acc-dim); border-radius: 4.5mm; padding: 4.2mm 5mm 4.4mm;
-}
-.card::before { content: ''; position: absolute; top: -2px; right: 8mm; width: 40mm; height: 2px; background: var(--acc); }
-.card-h { display: flex; align-items: center; gap: 3.4mm; }
-.num { width: 10.5mm; height: 10.5mm; border-radius: 3mm; display: grid; place-items: center; font-weight: 900; font-size: 16pt; color: #0B111C; background: var(--acc); outline: 1.1mm solid var(--acc-ring); flex: none; }
-.ttl { flex: 1; }
-.ttl h2 { margin: 0; font-size: 15pt; font-weight: 900; line-height: 1.25; }
-.en { display: flex; gap: 2mm; align-items: center; direction: ltr; justify-content: flex-end; font-size: 8pt; color: var(--muted); font-weight: 600; letter-spacing: .03em; }
-.en b { color: var(--acc); font-weight: 900; letter-spacing: .06em; }
-.loc { display: flex; align-items: center; gap: 1.6mm; font-size: 8.4pt; font-weight: 700; color: var(--acc); border: 1px solid var(--acc-line); background: var(--acc-bg); padding: 1mm 3mm; border-radius: 10mm; white-space: nowrap; }
-.card p { margin: 0; font-size: 10pt; line-height: 1.95; color: var(--soft); text-align: justify; }
-.card p b, .sum-box b { color: var(--text); font-weight: 800; }
-.fig { border-radius: 3mm; border: 1px solid var(--line); line-height: 0; background: #0B111C; overflow: hidden; }
-.card .fig { flex: 1 1 auto; min-height: 0; display: flex; }
-.card .fig svg { width: 100%; height: 100%; }
-.fig svg { display: block; width: 100%; height: auto; }
-.note { display: flex; gap: 2.4mm; align-items: flex-start; font-size: 9pt; line-height: 1.8; color: var(--soft); padding: 2.2mm 3.2mm; border-radius: 2.4mm; background: var(--acc-note); border-right: 3px solid var(--acc); }
-.note .ni { color: var(--acc); flex: none; margin-top: .9mm; }
-.note b { color: var(--acc); font-weight: 800; }
-
-/* cover */
-.cover { gap: 5.5mm; }
-.cv-top { display: flex; justify-content: space-between; align-items: center; }
-.hash { font-weight: 800; font-size: 10pt; color: var(--gold); border: 1px solid ${mix('#FFB020', 0.45, BG)}; background: ${mix('#FFB020', 0.08, BG)}; border-radius: 10mm; padding: 1mm 4mm; }
-.cv-series { direction: ltr; font-size: 8pt; letter-spacing: .25em; color: var(--muted); font-weight: 700; }
-.cv-title { padding-right: 5mm; border-right: 3px solid var(--gold); }
-.cv-kicker { font-size: 13pt; font-weight: 800; color: var(--soft); display: flex; align-items: center; gap: 2.5mm; }
-.cv-title h1 { margin: 0; font-size: 56pt; font-weight: 900; line-height: 1.25; letter-spacing: -.01em; color: #FFC54D; }
-.cv-en { direction: ltr; text-align: right; font-size: 15pt; letter-spacing: .5em; font-weight: 900; color: #4A5468; margin-top: -2mm; }
-.cv-sub { margin-top: 2.5mm; font-size: 10.5pt; color: var(--soft); font-weight: 500; }
-.hero { border-radius: 4mm; border-color: ${mix('#FFB020', 0.3, BG)}; }
-.toc-h { font-weight: 900; font-size: 11pt; color: var(--soft); margin-bottom: -2.5mm; display: flex; align-items: center; gap: 2.4mm; }
-.toc-h::before { content: ''; width: 1.2mm; height: 4.5mm; border-radius: 1mm; background: var(--gold); }
-.intro { background: var(--card); border: 1px solid var(--line); border-radius: 4mm; padding: 4mm 5mm; }
-.intro-h { font-weight: 900; font-size: 11pt; color: var(--gold); margin-bottom: 1mm; display: flex; align-items: center; gap: 2mm; }
-.intro-h::before { content: ''; width: 2mm; height: 2mm; border-radius: 50%; background: var(--gold); outline: 1mm solid ${mix('#FFB020', 0.25, CARD)}; }
-.intro p { margin: 0; font-size: 10.3pt; line-height: 2; color: var(--soft); text-align: justify; }
-.toc { display: grid; grid-template-columns: repeat(4, 1fr); gap: 2.6mm; }
-.toc-i { display: flex; align-items: center; gap: 2.4mm; padding: 3.4mm 3mm; border-radius: 3mm; background: var(--chip-bg); border: 1px solid var(--line-bg); border-top: 2px solid var(--acc); }
-.toc-n { width: 6.5mm; height: 6.5mm; border-radius: 2mm; display: grid; place-items: center; font-weight: 900; font-size: 9.5pt; color: #0B111C; background: var(--acc); flex: none; }
-.toc-i div { flex: 1; display: flex; flex-direction: column; line-height: 1.5; min-width: 0; }
-.toc-i b { font-size: 9pt; color: var(--acc); font-weight: 900; direction: ltr; text-align: right; }
-.toc-i div span { font-size: 8pt; color: var(--soft); white-space: nowrap; }
-.toc-p { font-size: 7.5pt; color: var(--muted); align-self: flex-end; white-space: nowrap; }
-
 /* summary */
 .sum-h { display: flex; align-items: baseline; gap: 3mm; margin: 0 0 -2mm; }
 .sum-h h2 { margin: 0; font-size: 26pt; font-weight: 900; color: var(--gold); line-height: 1.3; }
 .sum-h span { direction: ltr; font-size: 9pt; letter-spacing: .4em; color: var(--muted); font-weight: 800; }
 .sum-box { border: 1px solid ${mix('#FFB020', 0.35, BG)}; background: ${mix('#FFB020', 0.07, BG)}; border-right: 3px solid var(--gold); border-radius: 3.5mm; padding: 3.4mm 5mm; }
+.sum-box b { color: var(--text); font-weight: 800; }
 .sum-box p { margin: 0; font-size: 11pt; line-height: 1.95; color: var(--soft); }
 .steps { display: flex; align-items: stretch; gap: 2mm; }
 .step { flex: 1; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 1.3mm; padding: 3.6mm 2.5mm 3.2mm; border-radius: 3.5mm; background: var(--acc-note); border: 1px solid var(--acc-line); }
@@ -306,8 +184,6 @@ body { font-family: Vazirmatn, sans-serif; color: var(--text); -webkit-print-col
 .step b { font-size: 10.6pt; font-weight: 900; }
 .step small { font-size: 7.8pt; color: var(--muted); line-height: 1.6; }
 .arr { align-self: center; color: var(--muted); line-height: 0; }
-.sec { margin: 1mm 0 0; font-size: 12pt; font-weight: 900; display: flex; align-items: center; gap: 2.4mm; }
-.sec::before { content: ''; width: 1.2mm; height: 5mm; border-radius: 1mm; background: var(--gold); }
 .vs { display: flex; gap: 3mm; align-items: stretch; }
 .vs-c { flex: 1; border-radius: 3.5mm; border: 1px solid var(--line-bg); background: var(--card); padding: 3mm; display: flex; flex-direction: column; gap: 2.2mm; border-top: 2.5px solid var(--acc); }
 .vs-h { display: flex; justify-content: space-between; align-items: baseline; }
@@ -318,7 +194,6 @@ body { font-family: Vazirmatn, sans-serif; color: var(--text); -webkit-print-col
 .vs li span { color: var(--muted); white-space: nowrap; }
 .vs li b { color: var(--text); font-weight: 700; text-align: left; }
 .vs-mid { align-self: center; font-weight: 900; font-size: 11pt; color: var(--muted); direction: ltr; letter-spacing: .1em; }
-.note.wide { font-size: 9.2pt; }
 .gl { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 8.8pt; border: 1px solid var(--line-bg); border-radius: 3mm; }
 .gl th { text-align: right; font-weight: 800; color: var(--muted); font-size: 8pt; background: var(--head-bg); padding: 1.8mm 3mm; }
 .gl th:first-child { border-top-right-radius: 3mm; }
@@ -326,60 +201,14 @@ body { font-family: Vazirmatn, sans-serif; color: var(--text); -webkit-print-col
 .gl td { padding: 1.35mm 3mm; border-top: 1px solid var(--line-bg); color: var(--soft); }
 .gl td b { color: var(--gold); font-weight: 900; direction: ltr; display: inline-block; }
 .gl .lt { direction: ltr; text-align: right; font-size: 8.2pt; color: var(--muted); }
-.disc { margin: 0; font-size: 7.6pt; color: var(--muted); line-height: 1.8; text-align: center; }
 `;
 
-const html = `<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><title>ICT درس دوم — نقدینگی</title><style>${css}</style></head>
-<body>${cover}${p2}${p3}${p4}${p5}${p6}</body></html>`;
-
-async function main() {
-  const args = process.argv.slice(2);
-  const pngIdx = args.indexOf('--png');
-  const pngDir = pngIdx >= 0 ? args[pngIdx + 1] : null;
-  const out = path.resolve(args.find((a, i) => !a.startsWith('--') && (pngIdx < 0 || i !== pngIdx + 1)) || path.join(__dirname, 'ICT-Lesson-02-Liquidity.pdf'));
-
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ict-'));
-  const htmlPath = path.join(tmp, 'lesson.html');
-  fs.writeFileSync(htmlPath, html);
-
-  const browser = await chromium.launch();
-  const page = await browser.newPage({ viewport: { width: 794, height: 1123 }, deviceScaleFactor: 2 });
-  await page.goto(pathToFileURL(htmlPath).href);
-  await page.evaluate(async () => {
-    await document.fonts.ready;
-    // size pill backgrounds to their text
-    document.querySelectorAll('g.pill').forEach((g) => {
-      const t = g.querySelector('text');
-      const r = g.querySelector('rect');
-      const b = t.getBBox();
-      const px = +g.dataset.px;
-      const py = +g.dataset.py;
-      const h = b.height + py * 2;
-      r.setAttribute('x', b.x - px);
-      r.setAttribute('y', b.y - py);
-      r.setAttribute('width', b.width + px * 2);
-      r.setAttribute('height', h);
-      r.setAttribute('rx', h / 2);
-    });
-  });
-  const overflow = await page.evaluate(() => [...document.querySelectorAll('.page')].map((p, i) => {
-    const pr = p.getBoundingClientRect();
-    const bottom = Math.max(...[...p.children].filter((c) => !c.matches('.pf')).map((c) => c.getBoundingClientRect().bottom));
-    return { page: i + 1, spare: Math.round(pr.bottom - bottom) };
-  }));
-  console.log('space left above footer (px):', JSON.stringify(overflow));
-  const fonts = await page.evaluate(() => [...document.fonts].filter((f) => f.status === 'loaded').map((f) => f.weight));
-  console.log('loaded font weights:', fonts.join(', '));
-
-  if (pngDir) {
-    fs.mkdirSync(pngDir, { recursive: true });
-    const pages = await page.$$('.page');
-    for (let i = 0; i < pages.length; i++) await pages[i].screenshot({ path: path.join(pngDir, `page-${i + 1}.png`) });
-  }
-  await page.pdf({ path: out, preferCSSPageSize: true, printBackground: true, tagged: false, outline: false });
-  await browser.close();
-  fs.rmSync(tmp, { recursive: true, force: true });
-  console.log('wrote', out);
-}
-
-main().catch((e) => { console.error(e); process.exit(1); });
+render({
+  title: 'ICT درس دوم — نقدینگی',
+  css: coverCss + css,
+  body: cover + p2 + p3 + p4 + p5 + p6,
+  ...cliArgs(path.join(__dirname, 'ICT-Lesson-02-Liquidity.pdf')),
+}).catch((e) => {
+  console.error(e);
+  process.exit(1);
+});

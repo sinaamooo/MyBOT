@@ -9,9 +9,8 @@ node build.js            # خروجی: ICT-Lesson-02-Liquidity.pdf
 node build.js out.pdf --png previews/   # همراه با پیش‌نمایش PNG هر صفحه
 ```
 
-- `charts.js` — موتور رسم نمودار کندلی (SVG)
 - `figures.js` — داده و برچسب‌های هر نمودار
 - `build.js` — متن، صفحه‌آرایی و خروجی PDF
-- `fonts/` — فونت Vazirmatn (مجوز OFL)
+- موتور نمودار، قالب صفحه و فونت‌ها در پوشه مشترک `../common/` هستند
 
 نمودارها نمایشی‌اند و از داده واقعی بازار ساخته نشده‌اند.

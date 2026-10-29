@@ -1,6 +1,6 @@
 'use strict';
 // One function per illustration. Candle paths are hand-shaped so each concept reads clearly.
-const { COLORS: K, makeCandles, chart } = require('./charts');
+const { COLORS: K, makeCandles, chart } = require('../common/charts');
 
 function hero() {
   const candles = makeCandles({
