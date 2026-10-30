@@ -4,7 +4,7 @@ final class Txs
 {
     const OK = '✅ موفق';
     const FAIL = '❌ ناموفق';
-    const PENDING = '⏳ در انتظار تایید';
+    const PENDING = '🔍 در انتظار تایید';
 
     private static function res(string $network, string $status, string $hash, string $explorer, array $x = []): array
     {
@@ -205,7 +205,7 @@ final class Txs
         $cost = $info['cost'] ?? [];
         $fee = self::g(($cost['fee'] ?? 0) / 1e6) . ' TRX';
         if (!empty($cost['energy_usage_total'])) {
-            $fee .= ' • ⚡️ ' . number_format($cost['energy_usage_total']) . ' Energy';
+            $fee .= ' • 🔥 ' . number_format($cost['energy_usage_total']) . ' Energy';
         }
         return self::res('TRON', $status, $h, "https://tronscan.org/#/transaction/$h", ['amount' => $amount, 'symbol' => $symbol, 'sender' => $sender,
             'receiver' => $receiver, 'fee' => $fee, 'block' => $info['block'] ?? null, 'confirmations' => $info['confirmations'] ?? null,

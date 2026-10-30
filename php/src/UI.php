@@ -97,28 +97,70 @@ final class UI
         return mb_substr($t, 0, 200);
     }
 
-    public static function emojiMap(string $text): string
+    private static ?array $rx = null;
+
+    public static function emojiTable(): array
     {
-        $map = Settings::get('emoji_map') ?: [];
-        if (!$map || $text === '') {
-            return $text;
+        if (self::$rx !== null) {
+            return self::$rx;
         }
+        $map = Settings::get('emoji_map') ?: [];
+        $bad = array_flip((array)(Settings::get('emoji_invalid') ?: []));
         $keys = array_keys($map);
         usort($keys, fn($a, $b) => mb_strlen($b) <=> mb_strlen($a));
         $lookup = [];
         $parts = [];
         foreach ($keys as $k) {
             $bare = str_replace("\u{FE0F}", '', (string)$k);
-            if ($bare === '') {
+            $id = (string)$map[$k];
+            if ($bare === '' || $id === '' || isset($bad[$id])) {
                 continue;
             }
-            $lookup[$bare] = $map[$k];
+            $lookup[$bare] = $id;
             $parts[] = implode('', array_map(fn($c) => preg_quote($c, '/') . "\u{FE0F}?", mb_str_split($bare)));
         }
-        if (!$parts) {
+        return self::$rx = [$parts ? '/' . implode('|', $parts) . '/u' : null, $lookup];
+    }
+
+    public static function validateEmoji(): ?array
+    {
+        $ids = array_values(array_unique(array_map('strval', Settings::get('emoji_map') ?: [])));
+        $valid = [];
+        foreach (array_chunk($ids, 200) as $chunk) {
+            $r = TG::api('getCustomEmojiStickers', ['custom_emoji_ids' => $chunk]);
+            if ($r === null) {
+                return null;
+            }
+            foreach ($r as $st) {
+                $valid[(string)($st['custom_emoji_id'] ?? '')] = true;
+            }
+        }
+        $bad = array_values(array_filter($ids, fn($id) => !isset($valid[$id])));
+        Settings::set('emoji_invalid', $bad);
+        DB::kvSet('emoji_checked_at', time());
+        return [count($ids) - count($bad), count($bad)];
+    }
+
+    public static function resetEmoji(): void
+    {
+        self::$rx = null;
+    }
+
+    public static function emojiId(string $emoji): ?string
+    {
+        [, $lookup] = self::emojiTable();
+        return $lookup[str_replace("\u{FE0F}", '', $emoji)] ?? null;
+    }
+
+    public static function emojiMap(string $text): string
+    {
+        if ($text === '') {
             return $text;
         }
-        $rx = '/' . implode('|', $parts) . '/u';
+        [$rx, $lookup] = self::emojiTable();
+        if (!$rx) {
+            return $text;
+        }
         $chunks = preg_split('/(<[^>]+>)/u', $text, -1, PREG_SPLIT_DELIM_CAPTURE);
         $skip = 0;
         $out = '';
@@ -140,6 +182,19 @@ final class UI
             }, $c);
         }
         return $out;
+    }
+
+    public static function iconize(array $b): array
+    {
+        if (!empty($b['icon_custom_emoji_id']) || !isset($b['text'])) {
+            return $b;
+        }
+        [$lead, $rest] = self::splitLeadingEmoji((string)$b['text']);
+        if ($lead !== '' && ($id = self::emojiId($lead))) {
+            $b['text'] = $rest;
+            $b['icon_custom_emoji_id'] = $id;
+        }
+        return $b;
     }
 
     public static function stripPremium(string $text): string
@@ -174,8 +229,7 @@ final class UI
         $emoji = $conf['emoji_id'] ?? null;
         [$lead, $rest] = self::splitLeadingEmoji($text);
         if (!$emoji && $lead !== '') {
-            $map = Settings::get('emoji_map') ?: [];
-            $emoji = $map[$lead] ?? $map[str_replace("\u{FE0F}", '', $lead)] ?? null;
+            $emoji = self::emojiId($lead);
         }
         if ($emoji && $lead !== '') {
             $text = $rest;

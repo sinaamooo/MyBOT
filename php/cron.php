@@ -21,6 +21,14 @@ try {
 } catch (Throwable $e) {
     error_log('cron: ' . $e->getMessage());
 }
+try {
+    Market::refresh([], true, true);
+} catch (Throwable $e) {
+    error_log('cron market: ' . $e->getMessage());
+}
+if (time() - (int)DB::kvGet('emoji_checked_at', 0) > 86400) {
+    UI::validateEmoji();
+}
 if (time() - (int)DB::kvGet('last_cleanup', 0) > 6 * 3600) {
     DB::cleanup();
     DB::kvSet('last_cleanup', time());

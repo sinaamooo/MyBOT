@@ -233,7 +233,7 @@ final class Whales
         foreach ($fresh as $a) {
             $n = min(10, max(1, (int)($a['usd'] / max(self::minUsd(), 1))));
             $text = UI::t('whale_alert', [
-                'bar' => str_repeat('🐋', min($n, 5)), 'amount' => Fmt::num($a['amount']), 'symbol' => $a['sym'], 'usd' => Fmt::int($a['usd']),
+                'bar' => str_repeat('💸', min($n, 5)), 'amount' => Fmt::num($a['amount']), 'symbol' => $a['sym'], 'usd' => Fmt::int($a['usd']),
                 'toman' => $rate ? Fmt::toman($a['usd'] * $rate) : null, 'network' => $a['net'], 'sender' => self::label($a['from']),
                 'receiver' => self::label($a['to']), 'link' => UI::attr($a['link']), 'time' => Fmt::now(),
             ]);

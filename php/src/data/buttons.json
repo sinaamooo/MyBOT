@@ -1,6 +1,6 @@
 {
  "btn_add_group": {
-  "text": "➕ افزودن به گروه",
+  "text": "👥 افزودن به گروه",
   "style": "primary",
   "desc": "دکمه افزودن به گروه"
  },
@@ -20,7 +20,7 @@
   "desc": "دکمه بررسی عضویت"
  },
  "btn_help": {
-  "text": "📚 راهنما",
+  "text": "🗄 راهنما",
   "style": null,
   "desc": "دکمه راهنما"
  },
@@ -80,7 +80,7 @@
   "desc": "دکمه کپی آیدی"
  },
  "btn_unmute": {
-  "text": "🔊 رفع سکوت",
+  "text": "📢 رفع سکوت",
   "style": "success",
   "desc": "دکمه رفع سکوت (ادمین)"
  },
@@ -100,37 +100,37 @@
   "desc": "دکمه ولت مقصد زیر هش"
  },
  "btn_trc20_history": {
-  "text": "📜 تراکنش‌های TRC20",
+  "text": "📋 تراکنش‌های TRC20",
   "style": null,
   "desc": "دکمه تاریخچه TRC20"
  },
  "btn_tokens_file": {
-  "text": "📄 دریافت کل موجودی‌های ولت",
+  "text": "📋 دریافت کل موجودی‌های ولت",
   "style": null,
   "desc": "دکمه فایل توکن‌ها"
  },
  "btn_prev": {
-  "text": "◀️ قبلی",
+  "text": "قبلی",
   "style": null,
   "desc": "دکمه صفحه قبل"
  },
  "btn_next": {
-  "text": "بعدی ▶️",
+  "text": "بعدی",
   "style": null,
   "desc": "دکمه صفحه بعد"
  },
  "btn_insta_story": {
-  "text": "🎥 دانلود استوری 📸",
+  "text": "▶️ دانلود استوری",
   "style": "primary",
   "desc": "دکمه استوری اینستاگرام"
  },
  "btn_insta_highlight": {
-  "text": "💫 دانلود هایلایت",
+  "text": "🌟 دانلود هایلایت",
   "style": "primary",
   "desc": "دکمه هایلایت اینستاگرام"
  },
  "btn_gift_open": {
-  "text": "🎁 مشاهده گیفت",
+  "text": "👑 مشاهده گیفت",
   "style": "primary",
   "desc": "دکمه مشاهده گیفت"
  }

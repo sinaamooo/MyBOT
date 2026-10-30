@@ -398,6 +398,9 @@ final class Settings
     public static function set(string $k, $v): void
     {
         DB::kvSet($k, $v);
+        if (in_array($k, ['emoji_map', 'emoji_invalid'], true)) {
+            UI::resetEmoji();
+        }
     }
 
     public static function on(?int $chatId, string $k): bool

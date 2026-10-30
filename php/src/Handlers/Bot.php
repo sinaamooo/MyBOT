@@ -547,7 +547,7 @@ final class Groups
         if ($row) {
             $rows[] = $row;
         }
-        $rows[] = [UI::raw('✖️ بستن', 'gs:close')];
+        $rows[] = [UI::raw('⛔️ بستن', 'gs:close')];
         return UI::kb($rows);
     }
 

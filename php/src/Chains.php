@@ -372,7 +372,7 @@ final class Wallets
             $code = $r[2] ?? '0x';
             $out[] = self::result($c['name'], $c['symbol'], Chain::hexInt($r[0]) / 1e18, $c['explorer'] . '/address/' . $address, [
                 'tokens' => $tokens, 'txs' => (int)Chain::hexInt($r[1]),
-                'status' => !in_array($code, ['0x', '0x0', null], true) ? '📜 قرارداد هوشمند' : null,
+                'status' => !in_array($code, ['0x', '0x0', null], true) ? '📋 قرارداد هوشمند' : null,
             ]);
         }
         return $out;
@@ -390,7 +390,7 @@ final class Wallets
         $pend = ($ms['funded_txo_sum'] ?? 0) - ($ms['spent_txo_sum'] ?? 0);
         return self::result($name, $sym, $sat / 1e8, "$explorer/address/$address", [
             'txs' => ($cs['tx_count'] ?? 0) + ($ms['tx_count'] ?? 0),
-            'status' => $pend ? '⏳ در انتظار: ' . sprintf('%+g', $pend / 1e8) . " $sym" : null,
+            'status' => $pend ? '🔍 در انتظار: ' . sprintf('%+g', $pend / 1e8) . " $sym" : null,
         ]);
     }
 
@@ -530,7 +530,7 @@ final class Wallets
                 }
             }
         } elseif (is_array($grid) && !empty($grid['success'])) {
-            $status = '⚪️ اکانت فعال نشده';
+            $status = '⛔️ اکانت فعال نشده';
         }
         if (is_array($scan) && $scan) {
             $txs = $scan['totalTransactionCount'] ?? $scan['transactions'] ?? null;
@@ -560,7 +560,7 @@ final class Wallets
                 }
             }
             if (($scan['activated'] ?? null) === false) {
-                $status = '⚪️ اکانت فعال نشده';
+                $status = '⛔️ اکانت فعال نشده';
             }
         }
         foreach ($all['token'] ?? [] as $it) {
@@ -594,13 +594,13 @@ final class Wallets
         $status = null;
         if (is_array($res['acc']) && isset($res['acc']['balance'])) {
             $bal = $res['acc']['balance'] / 1e9;
-            $status = ['active' => '🟢 فعال', 'uninit' => '⚪️ فعال نشده', 'frozen' => '🧊 فریز'][$res['acc']['status'] ?? ''] ?? null;
+            $status = ['active' => '🟢 فعال', 'uninit' => '⛔️ فعال نشده', 'frozen' => '💠 فریز'][$res['acc']['status'] ?? ''] ?? null;
             if (!empty($res['acc']['name'])) {
                 $status = trim(($status ?? '') . ' • ' . $res['acc']['name'], ' •');
             }
         } elseif (!empty($res['tc']['ok'])) {
             $bal = ($res['tc']['result']['balance'] ?? 0) / 1e9;
-            $status = ['active' => '🟢 فعال', 'uninitialized' => '⚪️ فعال نشده', 'frozen' => '🧊 فریز'][$res['tc']['result']['state'] ?? ''] ?? null;
+            $status = ['active' => '🟢 فعال', 'uninitialized' => '⛔️ فعال نشده', 'frozen' => '💠 فریز'][$res['tc']['result']['state'] ?? ''] ?? null;
         }
         if ($bal === null) {
             return [];

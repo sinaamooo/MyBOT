@@ -63,3 +63,5 @@ $group = [
     ['command' => 'arz', 'description' => 'نرخ ارز بازار آزاد'], ['command' => 'settings', 'description' => 'تنظیمات گروه (ادمین)'], ['command' => 'help', 'description' => 'راهنما'],
 ];
 echo 'commands: ' . (TG::api('setMyCommands', ['commands' => $private, 'scope' => ['type' => 'all_private_chats']]) && TG::api('setMyCommands', ['commands' => $group, 'scope' => ['type' => 'all_group_chats']]) ? 'OK' : 'FAILED') . "\n";
+$e = UI::validateEmoji();
+echo 'premium emoji: ' . ($e ? $e[0] . ' ok, ' . $e[1] . ' invalid' : 'check failed') . "\n";

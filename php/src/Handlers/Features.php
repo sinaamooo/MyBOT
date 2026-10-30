@@ -167,7 +167,7 @@ final class GiftsH
         }
         $cap = function (int $n) use ($links, $t, $count, $unique, $now, $tonUsd, $tonToman, $plLine, $change) {
             $shown = array_slice($links, 0, $n);
-            $extra = count($links) > $n ? "\n➕ " . (count($links) - $n) . ' لینک دیگر' : '';
+            $extra = count($links) > $n ? "\n👥 " . (count($links) - $n) . ' لینک دیگر' : '';
             return UI::t('gift_user_caption', ['name' => UI::esc($t['name']), 'count' => Fmt::int($count), 'unique_count' => Fmt::int($unique),
                 'total_ton' => Fmt::num($now), 'total_usd' => $tonUsd ? Fmt::usd($now * $tonUsd) : '—', 'total_toman' => $tonToman ? Fmt::toman($now * $tonToman) : '—',
                 'pl_line' => $plLine, 'change_line' => $change, 'links' => $shown ? implode("\n", array_map(fn($l) => "🔗 $l", $shown)) . $extra : null]);
@@ -435,26 +435,31 @@ final class Extras
 
     public static function arz(array $m, string $args = ''): void
     {
-        $rates = Tgju::rates();
-        $usdt = Prices::usdtToman();
-        $cross = Prices::fiatRates();
         $lines = [];
+        $market = false;
         foreach (self::ARZ as $code) {
             $f = Currencies::fiat($code);
-            $ct = ($usdt && !empty($cross[$code])) ? $usdt / $cross[$code] : null;
-            $v = $rates ? Tgju::toman($code, $ct) : null;
-            $chg = $v !== null ? ($rates[$code]['change'] ?? null) : null;
-            $v ??= $ct;
-            if (!$v) {
+            $px = Market::fiatToman($code);
+            if (!$px) {
+                $rates = Tgju::rates();
+                $usdt = Prices::usdtToman();
+                $cross = Prices::fiatRates();
+                $ct = ($usdt && !empty($cross[$code])) ? $usdt / $cross[$code] : null;
+                $v = $rates ? Tgju::toman($code, $ct) : null;
+                $px = ($v ?? $ct) ? ['toman' => $v ?? $ct, 'change' => null, 'source' => $v ? 'market' : 'cross'] : null;
+            }
+            if (!$px) {
                 continue;
             }
-            $lines[] = UI::fill(UI::template('arz_line'), ['flag' => Currencies::flag($f['cc']), 'name' => $f['fa'], 'toman' => Fmt::toman($v), 'change' => $chg ? UI::esc($chg) : '']);
+            $market = $market || $px['source'] === 'market';
+            $lines[] = UI::fill(UI::template('arz_line'), ['flag' => Currencies::flag($f['cc']), 'name' => $f['fa'], 'toman' => Fmt::toman($px['toman']),
+                'change' => $px['change'] !== null ? Fmt::badge($px['change']) : '']);
         }
         if (!$lines) {
             Bot::send($m, UI::t('price_unavailable'));
             return;
         }
-        Bot::send($m, UI::t('arz_board', ['lines' => implode("\n", $lines), 'source' => $rates ? 'tgju.org' : 'نرخ جهانی × تتر', 'time' => Fmt::now()]));
+        Bot::send($m, UI::t('arz_board', ['lines' => implode("\n", $lines), 'source' => $market ? 'tgju.org' : 'نرخ جهانی × تتر', 'time' => Fmt::now()]));
     }
 
     private static function err(int $code): string
@@ -704,7 +709,19 @@ final class TextRouter
             ($s = Parse::amount($t)) ? Tools::answerAmount($m, $s[0], $s[1], !$priv) : Tools::answerAmount($m, 1, $t, !$priv);
             return;
         }
-        if ($conv && Currencies::knownCrypto($text)) {
+        if ($conv && Currencies::word($text, 'market')) {
+            Tools::market($m);
+            return;
+        }
+        if ($conv && Currencies::word($text, 'premium')) {
+            Tools::premium($m);
+            return;
+        }
+        if ($conv && Currencies::word($text, 'stars')) {
+            Tools::starsBoard($m);
+            return;
+        }
+        if ($conv && (Currencies::knownCrypto($text) || Currencies::bareAsset($text))) {
             Tools::answerAmount($m, 1, $text, true);
             return;
         }

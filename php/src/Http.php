@@ -123,6 +123,7 @@ final class TG
 {
     public static $fake = null;
     public static ?string $lastError = null;
+    private static $ch = null;
     const SKIP = ['not modified', 'not found', 'rights', 'replied message', 'too long', "can't be edited", 'chat_write_forbidden', 'blocked', 'kicked'];
 
     private static function hasPremium(array $p): bool
@@ -181,8 +182,18 @@ final class TG
                 $fields[$k] = (string)$v;
             }
         }
-        $ch = curl_init('https://api.telegram.org/bot' . Config::get('BOT_TOKEN') . '/' . $method);
-        $opts = [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 60, CURLOPT_CONNECTTIMEOUT => 10, CURLOPT_POST => true, CURLOPT_POSTFIELDS => $fields];
+        if (self::$ch === null) {
+            self::$ch = curl_init();
+        } else {
+            curl_reset(self::$ch);
+        }
+        $ch = self::$ch;
+        $opts = [CURLOPT_URL => 'https://api.telegram.org/bot' . Config::get('BOT_TOKEN') . '/' . $method, CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => $files ? 60 : 25, CURLOPT_CONNECTTIMEOUT => 8, CURLOPT_POST => true, CURLOPT_POSTFIELDS => $fields,
+            CURLOPT_TCP_KEEPALIVE => 1, CURLOPT_HTTPHEADER => ['Expect:']];
+        if (defined('CURL_HTTP_VERSION_2TLS')) {
+            $opts[CURLOPT_HTTP_VERSION] = CURL_HTTP_VERSION_2TLS;
+        }
         $proxy = Config::get('TELEGRAM_PROXY') ?: Config::get('PROXY');
         if ($proxy !== '') {
             $opts[CURLOPT_PROXY] = str_starts_with($proxy, 'socks5://') ? 'socks5h://' . substr($proxy, 9) : $proxy;
@@ -190,10 +201,9 @@ final class TG
         curl_setopt_array($ch, $opts);
         $body = curl_exec($ch);
         if ($body === false) {
-            usleep(300000);
+            usleep(200000);
             $body = curl_exec($ch);
         }
-        curl_close($ch);
         foreach ($files as $f) {
             @unlink($f);
         }
@@ -208,6 +218,22 @@ final class TG
         }
         if (in_array($method, ['sendMessage', 'editMessageText'], true) && !isset($p['link_preview_options'])) {
             $p['link_preview_options'] = ['is_disabled' => true];
+        }
+        if (($p['parse_mode'] ?? '') === 'HTML') {
+            foreach (['text', 'caption'] as $k) {
+                if (isset($p[$k]) && is_string($p[$k])) {
+                    $p[$k] = UI::emojiMap($p[$k]);
+                }
+            }
+        }
+        if (isset($p['reply_markup']['inline_keyboard'])) {
+            foreach ($p['reply_markup']['inline_keyboard'] as &$row) {
+                foreach ($row as &$b) {
+                    $b = UI::iconize($b);
+                }
+                unset($b);
+            }
+            unset($row);
         }
         $r = self::raw($method, $p);
         if (empty($r['ok'])) {

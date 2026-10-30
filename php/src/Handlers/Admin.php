@@ -58,35 +58,58 @@ final class Entities
 final class Admin
 {
     const PAGE = 8;
-    const STYLES = ['primary' => '🔵 آبی', 'success' => '🟢 سبز', 'danger' => '🔴 قرمز', 'none' => '⚪️ پیش‌فرض'];
+    const STYLES = ['primary' => 'آبی', 'success' => 'سبز', 'danger' => 'قرمز', 'none' => 'پیش‌فرض'];
+    const SECTIONS = [
+        'main' => ['🏠', 'عمومی', ['start_private', 'help', 'bot_added', 'bot_promoted', 'error', 'loading', 'bot_off', 'banned', 'not_your_button', 'expired', 'admin_message']],
+        'price' => ['💱', 'قیمت و تبدیل', ['conv_crypto', 'conv_toman', 'conv_fiat', 'conv_gold', 'conv_stars', 'market', 'market_line', 'arz_board', 'arz_line', 'premium_prices', 'premium_line', 'stars_prices', 'stars_line', 'currency_not_found', 'price_unavailable']],
+        'wallet' => ['👛', 'ولت و هش', ['wallet_checking', 'wallet_header', 'wallet_chain', 'wallet_footer', 'wallet_not_found', 'tx_checking', 'tx_result', 'tx_not_found', 'tron_transfers', 'tron_transfer_item', 'tron_transfers_empty', 'tron_tokens_file', 'whale_alert']],
+        'gift' => ['👑', 'گیفت', ['gift_link', 'gift_user_caption', 'gift_profit', 'gift_loss', 'gift_since_last', 'gift_user_none', 'gift_user_unknown', 'gift_not_found']],
+        'guard' => ['🛡', 'گروه و امنیت', ['force_join_private', 'force_join_group', 'force_join_ok', 'force_join_not_yet', 'self_warn', 'self_muted', 'tabchi_muted', 'unmuted', 'group_settings', 'only_group_admins']],
+        'scam' => ['🚨', 'کلاهبرداری', ['scam_keyword_warn', 'scam_known', 'scam_usage', 'scam_go_private', 'scam_ask_evidence', 'scam_evidence_saved', 'scam_need_evidence', 'scam_submitted', 'scam_cancelled', 'scam_admin', 'scam_approved_user', 'scam_rejected_user', 'scam_broadcast', 'scam_check_clean', 'scam_check_found']],
+        'tools' => ['🧩', 'ابزارها', ['uid', 'account', 'emoji_item', 'emoji_none', 'calc_result', 'translate_choose', 'translate_result', 'translate_not_yours', 'translate_used', 'translate_need_reply', 'translate_failed']],
+        'bank' => ['💳', 'بانک و شماره', ['card_result', 'iban_result', 'phone_result', 'phone_invalid', 'phone_failed']],
+        'insta' => ['🎞', 'اینستاگرام', ['insta_loading', 'insta_count', 'insta_media_caption', 'insta_not_found', 'insta_private', 'insta_no_story', 'insta_no_highlight', 'insta_no_key', 'insta_highlights', 'insta_info']],
+    ];
     const NUMBERS = [
         'usdt_toman_manual' => 'نرخ دستی تتر (تومان، 0 = خودکار)', 'star_usd' => 'قیمت هر استار (دلار)',
         'whale_min_usd' => 'حداقل مبلغ هشدار جابجایی ($)', 'whale_btc_min' => 'حداقل BTC برای هشدار',
         'self_mute_minutes' => 'مدت سکوت سلف (دقیقه، 0 = دائمی)', 'tabchi_mute_minutes' => 'مدت سکوت تبچی (دقیقه، 0 = دائمی)',
     ];
     const STRINGS = ['channel_url' => 'لینک کانال ربات', 'channel_title' => 'نام کانال ربات'];
-    const HOME = '🛠 <b>پنل مدیریت ربات</b>';
+    const HOME = '⚙️ <b>پنل مدیریت ربات</b>';
 
     private static function toggles(): array
     {
         return Settings::groupFeatures() + ['force_join_private' => 'عضویت اجباری پیوی', 'auto_ban_scammers' => 'بن خودکار کلاهبردار', 'fa_digits' => 'اعداد فارسی'];
     }
 
-    private static function back(): array
+    private static function back(string $to = 'adm:home'): array
     {
-        return [UI::raw('🔙 بازگشت', 'adm:home')];
+        return [UI::raw('🏠 بازگشت', $to)];
+    }
+
+    private static function grid(array $buttons, int $cols = 2): array
+    {
+        return array_chunk($buttons, $cols);
+    }
+
+    private static function short(string $desc): string
+    {
+        $d = trim(explode('(', $desc)[0]);
+        $d = preg_replace('/^دکمه\s+/u', '', $d);
+        return mb_strlen($d) > 28 ? mb_substr($d, 0, 27) . '…' : $d;
     }
 
     public static function homeKb(): array
     {
         $on = (bool)Settings::get('bot_enabled');
         return UI::kb([
-            [UI::raw('📝 متن‌ها', 'adm:texts:0', 'primary'), UI::raw('🔘 دکمه‌ها', 'adm:btns', 'primary')],
-            [UI::raw('😎 ایموجی پریمیوم', 'adm:emo'), UI::raw('📢 عضویت اجباری', 'adm:fj')],
-            [UI::raw('⚙️ تنظیمات', 'adm:set'), UI::raw('🚨 گزارش‌ها', 'adm:scams')],
-            [UI::raw('📊 آمار', 'adm:stats'), UI::raw('📣 ارسال همگانی', 'adm:bcmenu')],
-            [UI::raw('🚫 مسدود / آزاد', 'adm:ban'), UI::raw('📨 پیام به کاربر', 'adm:pm')],
-            [UI::raw($on ? '🟢 ربات روشن' : '🔴 ربات خاموش', 'adm:power', $on ? 'success' : 'danger')],
+            [UI::raw('📋 متن‌ها', 'adm:texts', 'primary'), UI::raw('🔲 دکمه‌ها', 'adm:btns', 'primary')],
+            [UI::raw('⚙️ تنظیمات', 'adm:set:1'), UI::raw('🔒 عضویت اجباری', 'adm:fj')],
+            [UI::raw('🚨 گزارش‌ها', 'adm:scams'), UI::raw('📊 آمار', 'adm:stats')],
+            [UI::raw('📢 ارسال همگانی', 'adm:bcmenu'), UI::raw('📨 پیام به کاربر', 'adm:pm')],
+            [UI::raw('⛔️ مسدود / آزاد', 'adm:ban')],
+            [UI::raw($on ? '🟢 ربات روشن است' : '🔴 ربات خاموش است', 'adm:power', $on ? 'success' : 'danger')],
         ]);
     }
 
@@ -100,7 +123,7 @@ final class Admin
     {
         State::set($cq['from']['id'], ['mode' => 'admin', 'action' => $action] + $extra);
         TG::answer($cq['id']);
-        TG::send($cq['message']['chat']['id'], $prompt . "\n\n❌ لغو: /cancel");
+        TG::send($cq['message']['chat']['id'], $prompt . "\n\n⛔️ لغو: /cancel");
     }
 
     private static function placeholders(string $desc): string
@@ -130,55 +153,64 @@ final class Admin
                 self::editOrSend($cq, self::HOME, self::homeKb());
                 return;
             case 'texts':
-                $page = (int)($p[1] ?? 0);
-                $keys = array_keys(Config::data('texts'));
-                $rows = [];
-                foreach (array_slice($keys, $page * self::PAGE, self::PAGE) as $k) {
-                    $rows[] = [UI::raw((DB::textOverride($k) !== null ? '✏️ ' : '') . mb_substr(trim(explode('(', Config::data('texts')[$k]['desc'])[0]), 0, 40), "adm:text:$k")];
-                }
-                $nav = [];
-                if ($page > 0) {
-                    $nav[] = UI::raw('⬅️ قبلی', 'adm:texts:' . ($page - 1));
-                }
-                if (($page + 1) * self::PAGE < count($keys)) {
-                    $nav[] = UI::raw('بعدی ➡️', 'adm:texts:' . ($page + 1));
-                }
-                $rows[] = $nav;
-                $rows[] = self::back();
+                $sec = $p[1] ?? '';
                 TG::answer($cq['id']);
-                self::editOrSend($cq, '📝 <b>ویرایش متن‌ها</b> (صفحه ' . ($page + 1) . ")\n✏️ = ویرایش شده", UI::kb($rows));
+                if (!isset(self::SECTIONS[$sec])) {
+                    $btns = [];
+                    foreach (self::SECTIONS as $k => [$icon, $title, $keys]) {
+                        $btns[] = UI::raw("$icon $title", "adm:texts:$k");
+                    }
+                    $rows = self::grid($btns);
+                    $rows[] = self::back();
+                    self::editOrSend($cq, "📋 <b>متن‌های ربات</b>\nبخش موردنظر را انتخاب کنید:", UI::kb($rows));
+                    return;
+                }
+                [$icon, $title, $keys] = self::SECTIONS[$sec];
+                $all = Config::data('texts');
+                $btns = [];
+                foreach ($keys as $k) {
+                    if (isset($all[$k])) {
+                        $btns[] = UI::raw((DB::textOverride($k) !== null ? '✅ ' : '') . self::short($all[$k]['desc']), "adm:text:$k:$sec");
+                    }
+                }
+                $rows = self::grid($btns);
+                $rows[] = self::back('adm:texts');
+                self::editOrSend($cq, "$icon <b>متن‌های $title</b>\n✅ = ویرایش شده", UI::kb($rows));
                 return;
             case 'text':
                 $k = $p[1] ?? '';
+                $sec = $p[2] ?? '';
                 $t = Config::data('texts')[$k] ?? null;
+                TG::answer($cq['id']);
                 if (!$t) {
-                    TG::answer($cq['id']);
                     return;
                 }
-                TG::answer($cq['id']);
-                TG::send($chat, "🔑 <code>$k</code>\n📄 " . UI::esc(trim(explode('(', $t['desc'])[0])) . "\n🧩 متغیرها: " . self::placeholders($t['desc']) . "\n\n⬇️ متن فعلی:");
-                $kb = UI::kb([[UI::raw('✏️ ویرایش', "adm:tedit:$k", 'primary'), UI::raw('♻️ پیش‌فرض', "adm:treset:$k", 'danger')], [UI::raw('🔙 بازگشت', 'adm:texts:0')]]);
-                if (TG::send($chat, UI::emojiMap(UI::template($k)), $kb) === null) {
-                    TG::send($chat, '<pre>' . UI::esc(UI::template($k)) . '</pre>', $kb);
+                $kb = UI::kb([[UI::raw('📋 ویرایش', "adm:tedit:$k", 'primary'), UI::raw('⛔️ پیش‌فرض', "adm:treset:$k", 'danger')], self::back($sec !== '' ? "adm:texts:$sec" : 'adm:texts')]);
+                $head = '🔑 <b>' . UI::esc(self::short($t['desc'])) . "</b>\n🧩 متغیرها: " . self::placeholders($t['desc']);
+                $body = UI::template($k);
+                if (TG::edit($chat, $cq['message']['message_id'], $head . "\n\n" . $body, $kb) === null
+                    && TG::send($chat, $head . "\n\n" . $body, $kb) === null) {
+                    TG::send($chat, $head . "\n\n<pre>" . UI::esc($body) . '</pre>', $kb);
                 }
                 return;
             case 'tedit':
                 $k = $p[1] ?? '';
-                self::wait($cq, 'text', "✏️ متن جدید <code>$k</code>\n🧩 " . self::placeholders(Config::data('texts')[$k]['desc'] ?? ''), ['key' => $k]);
+                self::wait($cq, 'text', "📋 متن جدید <code>$k</code>\n🧩 " . self::placeholders(Config::data('texts')[$k]['desc'] ?? ''), ['key' => $k]);
                 return;
             case 'treset':
                 DB::resetText($p[1] ?? '');
-                TG::answer($cq['id'], '♻️ به پیش‌فرض برگشت', true);
+                TG::answer($cq['id'], 'به پیش‌فرض برگشت', true);
                 return;
             case 'btns':
                 $conf = Settings::get('buttons') ?: [];
-                $rows = [];
+                $btns = [];
                 foreach (Config::data('buttons') as $k => $b) {
-                    $rows[] = [UI::raw((isset($conf[$k]) ? '✏️ ' : '') . mb_substr($b['desc'], 0, 40), "adm:btn:$k")];
+                    $btns[] = UI::raw((isset($conf[$k]) ? '✅ ' : '') . self::short($b['desc']), "adm:btn:$k");
                 }
+                $rows = self::grid($btns);
                 $rows[] = self::back();
                 TG::answer($cq['id']);
-                self::editOrSend($cq, "🔘 <b>دکمه‌های شیشه‌ای</b>\nدکمه موردنظر را انتخاب کنید:", UI::kb($rows));
+                self::editOrSend($cq, "🔲 <b>دکمه‌های شیشه‌ای</b>\n✅ = ویرایش شده", UI::kb($rows));
                 return;
             case 'btn':
                 TG::answer($cq['id']);
@@ -193,33 +225,11 @@ final class Admin
                 $conf = Settings::get('buttons') ?: [];
                 unset($conf[$p[1]]);
                 Settings::set('buttons', $conf);
-                TG::answer($cq['id'], '♻️');
+                TG::answer($cq['id'], '⛔️');
                 self::buttonView($chat, $p[1], $cq);
                 return;
             case 'btext':
-                self::wait($cq, 'btn_text', '✏️ متن جدید دکمه را بفرستید (متن ساده).', ['key' => $p[1]]);
-                return;
-            case 'bemoji':
-                self::wait($cq, 'btn_emoji', "😎 یک ایموجی پریمیوم بفرستید (یا آیدی عددی آن را).\nبرای حذف: <code>-</code>", ['key' => $p[1]]);
-                return;
-            case 'emo':
-                $lines = [];
-                foreach (array_slice(Settings::get('emoji_map') ?: [], 0, 40, true) as $k => $v) {
-                    $lines[] = "$k ← <tg-emoji emoji-id=\"$v\">$k</tg-emoji> <code>$v</code>";
-                }
-                TG::answer($cq['id']);
-                self::editOrSend($cq, "😎 <b>ایموجی‌های پریمیوم</b>\n\n" . ($lines ? implode("\n", $lines) : '— خالی —'),
-                    UI::kb([[UI::raw('➕ افزودن', 'adm:emoadd', 'success'), UI::raw('➖ حذف', 'adm:emodel', 'danger')], [UI::raw('🗑 حذف همه', 'adm:emoclear'), ...self::back()]]));
-                return;
-            case 'emoadd':
-                self::wait($cq, 'emo_add', '➕ ایموجی پریمیوم را بفرستید.');
-                return;
-            case 'emodel':
-                self::wait($cq, 'emo_del', '➖ ایموجی(های) معمولی یا پریمیومی که می‌خواهید حذف شوند را بفرستید.');
-                return;
-            case 'emoclear':
-                Settings::set('emoji_map', []);
-                TG::answer($cq['id'], '🗑', true);
+                self::wait($cq, 'btn_text', '📋 متن جدید دکمه را بفرستید (متن ساده).', ['key' => $p[1]]);
                 return;
             case 'fj':
                 TG::answer($cq['id']);
@@ -237,28 +247,28 @@ final class Admin
                 return;
             case 'set':
                 TG::answer($cq['id']);
-                self::settingsView($chat, $cq);
+                self::settingsView($chat, $cq, (int)($p[1] ?? 1));
                 return;
             case 'tog':
                 Settings::set($p[1], !Settings::get($p[1]));
-                TG::answer($cq['id'], '✅');
-                ($p[2] ?? '') === 'fj' ? self::fjView($chat, $cq) : self::settingsView($chat, $cq);
+                TG::answer($cq['id'], Settings::get($p[1]) ? 'روشن شد' : 'خاموش شد');
+                ($p[2] ?? '') === 'fj' ? self::fjView($chat, $cq) : self::settingsView($chat, $cq, 1);
                 return;
             case 'val':
                 $k = $p[1];
                 if ($k === 'scam_extra_keywords') {
                     $cur = implode("\n", Settings::get($k) ?: []) ?: '—';
-                    self::wait($cq, 'value', "📝 هر کلمه/عبارت در یک خط بفرستید (برای پاک کردن: <code>-</code>)\nفعلی:\n" . UI::esc($cur), ['key' => $k]);
+                    self::wait($cq, 'value', "📋 هر کلمه/عبارت در یک خط بفرستید (برای پاک کردن: <code>-</code>)\nفعلی:\n" . UI::esc($cur), ['key' => $k]);
                 } else {
                     $label = self::NUMBERS[$k] ?? self::STRINGS[$k] ?? $k;
-                    self::wait($cq, 'value', "✏️ مقدار جدید «{$label}» را بفرستید.\nفعلی: <code>" . UI::esc(json_encode(Settings::get($k), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) . '</code>', ['key' => $k]);
+                    self::wait($cq, 'value', "📋 مقدار جدید «{$label}» را بفرستید.\nفعلی: <code>" . UI::esc(json_encode(Settings::get($k), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) . '</code>', ['key' => $k]);
                 }
                 return;
             case 'scams':
                 $pend = DB::listScams('pending', 15);
                 $appr = DB::listScams('approved', 15);
                 $fmt = fn($r) => '#' . $r['id'] . ' — ' . UI::esc($r['target_username'] ?: (string)$r['target_id']);
-                $lines = array_merge(['🚨 <b>گزارش‌های در انتظار</b>'], $pend ? array_map($fmt, $pend) : ['—'], ['', '⛔️ <b>کلاهبرداران تایید شده</b>'], $appr ? array_map($fmt, $appr) : ['—'], ['', 'ℹ️ لغو تایید: <code>/unscam ID</code>']);
+                $lines = array_merge(['🚨 <b>گزارش‌های در انتظار</b>'], $pend ? array_map($fmt, $pend) : ['—'], ['', '⛔️ <b>کلاهبرداران تایید شده</b>'], $appr ? array_map($fmt, $appr) : ['—'], ['', '💬 لغو تایید: <code>/unscam ID</code>']);
                 $rows = array_map(fn($r) => [UI::raw('✅ #' . $r['id'], 'scamadm:approve:' . $r['id'], 'success'), UI::raw('❌ #' . $r['id'], 'scamadm:reject:' . $r['id'], 'danger')], array_slice($pend, 0, 8));
                 $rows[] = self::back();
                 TG::answer($cq['id']);
@@ -273,12 +283,12 @@ final class Admin
                 return;
             case 'bcmenu':
                 TG::answer($cq['id']);
-                self::editOrSend($cq, "📣 <b>ارسال همگانی</b>\nمقصد را انتخاب کنید:", UI::kb([
+                self::editOrSend($cq, "📢 <b>ارسال همگانی</b>\nمقصد را انتخاب کنید:", UI::kb([
                     [UI::raw('👤 کاربران', 'adm:bc:users'), UI::raw('👥 گروه‌ها', 'adm:bc:groups'), UI::raw('🌐 همه', 'adm:bc:all')],
                     [UI::raw('📩 فوروارد به کاربران', 'adm:bc:fusers'), UI::raw('📩 فوروارد به گروه‌ها', 'adm:bc:fgroups')], self::back()]));
                 return;
             case 'bc':
-                self::wait($cq, 'broadcast', '📣 پیام موردنظر را بفرستید (هر نوع پیامی).', ['target' => $p[1] ?? 'users']);
+                self::wait($cq, 'broadcast', '📢 پیام موردنظر را بفرستید (هر نوع پیامی).', ['target' => $p[1] ?? 'users']);
                 return;
             case 'power':
                 Settings::set('bot_enabled', !Settings::get('bot_enabled'));
@@ -286,7 +296,7 @@ final class Admin
                 TG::api('editMessageReplyMarkup', ['chat_id' => $chat, 'message_id' => $cq['message']['message_id'], 'reply_markup' => self::homeKb()]);
                 return;
             case 'ban':
-                self::wait($cq, 'ban', '🚫 آیدی عددی کاربر را بفرستید (مسدود ↔ آزاد).');
+                self::wait($cq, 'ban', '⛔️ آیدی عددی کاربر را بفرستید (مسدود ↔ آزاد).');
                 return;
             case 'pm':
                 self::wait($cq, 'pm', "📨 به این شکل بفرستید:\n<code>آیدی عددی</code>\n<code>متن پیام</code>");
@@ -318,14 +328,14 @@ final class Admin
         }
         $conf = (Settings::get('buttons') ?: [])[$key] ?? [];
         $style = array_key_exists('style', $conf) ? $conf['style'] : $def['style'];
-        $text = '🔘 <b>' . UI::esc($def['desc']) . "</b>\n📝 متن: <code>" . UI::esc(($conf['text'] ?? '') ?: $def['text']) . "</code>\n😎 ایموجی پریمیوم: <code>"
-            . ($conf['emoji_id'] ?? '—') . "</code>\n🎨 رنگ: " . (self::STYLES[$style ?: 'none'] ?? $style) . "\n\n⬇️ پیش‌نمایش:";
+        $text = '🔲 <b>' . UI::esc(self::short($def['desc'])) . "</b>\n📋 متن: <code>" . UI::esc(($conf['text'] ?? '') ?: $def['text']) . "</code>\n🧩 رنگ: "
+            . (self::STYLES[$style ?: 'none'] ?? $style) . "\n\n⬇️ پیش‌نمایش:";
         $styles = [];
         foreach (self::STYLES as $s => $l) {
-            $styles[] = UI::raw($l, "adm:bstyle:$key:$s");
+            $styles[] = UI::raw(($s === ($style ?: 'none') ? '✅ ' : '') . $l, "adm:bstyle:$key:$s", $s === 'none' ? null : $s);
         }
-        $kb = UI::kb([[UI::button($key, ['cb' => 'noop'], ['title' => 'نمونه'])], [UI::raw('✏️ متن', "adm:btext:$key"), UI::raw('😎 ایموجی', "adm:bemoji:$key")],
-            $styles, [UI::raw('♻️ پیش‌فرض', "adm:breset:$key", 'danger'), UI::raw('🔙 بازگشت', 'adm:btns')]]);
+        $kb = UI::kb([[UI::button($key, ['cb' => 'noop'], ['title' => 'نمونه'])], [UI::raw('📋 ویرایش متن', "adm:btext:$key", 'primary')],
+            $styles, [UI::raw('⛔️ پیش‌فرض', "adm:breset:$key", 'danger'), UI::raw('🏠 بازگشت', 'adm:btns')]]);
         $cq ? self::editOrSend($cq, $text, $kb) : TG::send($chat, $text, $kb);
     }
 
@@ -339,32 +349,32 @@ final class Admin
         $rows = array_map(fn($i) => [UI::raw('❌ حذف ' . ($i + 1), "adm:fjdel:$i")], array_keys($ch));
         $rows[] = [UI::raw((Settings::get('force_join_groups') ? '✅' : '❌') . ' در گروه‌ها', 'adm:tog:force_join_groups:fj'),
             UI::raw((Settings::get('force_join_private') ? '✅' : '❌') . ' در پیوی', 'adm:tog:force_join_private:fj')];
-        $rows[] = [UI::raw('➕ افزودن کانال', 'adm:fjadd', 'success'), ...self::back()];
+        $rows[] = [UI::raw('👥 افزودن کانال', 'adm:fjadd', 'success'), ...self::back()];
         $text = "📢 <b>عضویت اجباری</b>\n\n" . ($lines ? implode("\n", $lines) : '— کانالی ثبت نشده —');
         $cq ? self::editOrSend($cq, $text, UI::kb($rows)) : TG::send($chat, $text, UI::kb($rows));
     }
 
-    private static function settingsView(int|string $chat, ?array $cq = null): void
+    private static function settingsView(int|string $chat, ?array $cq = null, int $page = 1): void
     {
-        $rows = [];
-        $row = [];
-        foreach (self::toggles() as $k => $l) {
-            $row[] = UI::raw((Settings::get($k) ? '✅ ' : '❌ ') . $l, "adm:tog:$k:set");
-            if (count($row) === 2) {
-                $rows[] = $row;
-                $row = [];
+        if ($page === 2) {
+            $rows = [];
+            foreach (self::NUMBERS + self::STRINGS as $k => $l) {
+                $v = Settings::get($k);
+                $rows[] = [UI::raw("$l: " . (($v === null || $v === '') ? '—' : (is_scalar($v) ? $v : json_encode($v))), "adm:val:$k")];
             }
+            $rows[] = [UI::raw('کلمات اضافه ضدکلاهبرداری', 'adm:val:scam_extra_keywords')];
+            $rows[] = [UI::raw('⬆️ صفحه ۱: قابلیت‌ها', 'adm:set:1'), ...self::back()];
+            $text = "⚙️ <b>تنظیمات کلی</b> · صفحه ۲ از ۲\nروی هر مقدار بزنید تا عوضش کنید.";
+        } else {
+            $btns = [];
+            foreach (self::toggles() as $k => $l) {
+                $btns[] = UI::raw((Settings::get($k) ? '🟢 ' : '🔴 ') . $l, "adm:tog:$k:set", Settings::get($k) ? 'success' : null);
+            }
+            $rows = self::grid($btns);
+            $rows[] = [UI::raw('⬇️ صفحه ۲: مقادیر', 'adm:set:2'), ...self::back()];
+            $text = "⚙️ <b>تنظیمات کلی</b> · صفحه ۱ از ۲\nروی هر قابلیت بزنید تا روشن/خاموش شود.";
         }
-        if ($row) {
-            $rows[] = $row;
-        }
-        foreach (self::NUMBERS + self::STRINGS as $k => $l) {
-            $v = Settings::get($k);
-            $rows[] = [UI::raw("✏️ $l: " . (($v === null || $v === '') ? '—' : (is_scalar($v) ? $v : json_encode($v))), "adm:val:$k")];
-        }
-        $rows[] = [UI::raw('📝 کلمات اضافه ضدکلاهبرداری', 'adm:val:scam_extra_keywords')];
-        $rows[] = self::back();
-        $cq ? self::editOrSend($cq, '⚙️ <b>تنظیمات کلی</b>', UI::kb($rows)) : TG::send($chat, '⚙️ <b>تنظیمات کلی</b>', UI::kb($rows));
+        $cq ? self::editOrSend($cq, $text, UI::kb($rows)) : TG::send($chat, $text, UI::kb($rows));
     }
 
     private static function messageHtml(array $m): string
@@ -430,40 +440,6 @@ final class Admin
                 TG::send($chat, '✅ ذخیره شد.');
                 self::buttonView($chat, $key);
                 return;
-            case 'emo_add':
-            case 'emo_del':
-                $map = Settings::get('emoji_map') ?: [];
-                $raw = $m['text'] ?? $m['caption'] ?? '';
-                $u16 = mb_convert_encoding($raw, 'UTF-16LE', 'UTF-8');
-                $count = 0;
-                foreach ($m['entities'] ?? $m['caption_entities'] ?? [] as $e) {
-                    if ($e['type'] !== 'custom_emoji') {
-                        continue;
-                    }
-                    $ch = str_replace("\u{FE0F}", '', mb_convert_encoding(substr($u16, $e['offset'] * 2, $e['length'] * 2), 'UTF-8', 'UTF-16LE'));
-                    if ($st['action'] === 'emo_add') {
-                        $map[$ch] = $e['custom_emoji_id'];
-                    } else {
-                        unset($map[$ch]);
-                    }
-                    $count++;
-                }
-                if ($st['action'] === 'emo_del' && !$count) {
-                    foreach (array_keys($map) as $ch) {
-                        if (str_contains(str_replace("\u{FE0F}", '', $raw), (string)$ch)) {
-                            unset($map[$ch]);
-                            $count++;
-                        }
-                    }
-                }
-                if (!$count) {
-                    TG::send($chat, '⚠️ ایموجی پیدا نشد.');
-                    return;
-                }
-                Settings::set('emoji_map', $map);
-                State::clear($uid);
-                TG::send($chat, "✅ $count ایموجی " . ($st['action'] === 'emo_add' ? 'اضافه' : 'حذف') . ' شد.', self::homeKb());
-                return;
             case 'fj_add':
                 self::addChannel($m);
                 return;
@@ -500,7 +476,7 @@ final class Admin
                 if (in_array($target, ['groups', 'all'], true)) {
                     $ids = array_merge($ids, array_map(fn($g) => (int)$g['id'], DB::activeGroups()));
                 }
-                $report = TG::send($chat, '⏳ در حال ارسال...');
+                $report = TG::send($chat, '🔍 در حال ارسال...');
                 $ok = $fail = 0;
                 foreach ($ids as $id) {
                     $r = TG::api($fwd ? 'forwardMessage' : 'copyMessage', ['chat_id' => $id, 'from_chat_id' => $chat, 'message_id' => $m['message_id']]);
@@ -520,7 +496,7 @@ final class Admin
                 $ban = !DB::isBanned($id);
                 DB::setBanned($id, $ban);
                 State::clear($uid);
-                TG::send($chat, ($ban ? '🚫 کاربر مسدود شد' : '✅ کاربر آزاد شد') . ": <code>$id</code>", self::homeKb());
+                TG::send($chat, ($ban ? '⛔️ کاربر مسدود شد' : '✅ کاربر آزاد شد') . ": <code>$id</code>", self::homeKb());
                 return;
             case 'pm':
                 [$first, $rest] = array_pad(explode("\n", $text, 2), 2, '');

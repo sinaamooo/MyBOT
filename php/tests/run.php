@@ -10,6 +10,7 @@ Config::set('DB_PATH', $dbFile);
 Config::set('CARDINFO_API_URL', 'http://cardinfo.test/api/');
 Config::set('PHONE_CHECK_API_URL', 'https://phone.test/check.php');
 DB::connect();
+Market::reset([]);
 
 $GLOBALS['calls'] = [];
 $GLOBALS['mid'] = 100;
@@ -35,6 +36,10 @@ TG::$fake = function (string $method, array $p) {
             }
             return ['ok' => true, 'result' => $msg($p['chat_id'], $p['text'])];
         case 'sendPhoto':
+            if ($GLOBALS['reject_premium'] && str_contains((string)($p['caption'] ?? ''), '<tg-emoji')) {
+                return ['ok' => false, 'description' => 'Bad Request: DOCUMENT_INVALID'];
+            }
+            return ['ok' => true, 'result' => $msg($p['chat_id'], null, $p['caption'] ?? null) + ['photo' => [['file_id' => 'AgACAgQAAxkBAAIBfakefileid' . $GLOBALS['mid']]]]];
         case 'sendVideo':
         case 'sendDocument':
             return ['ok' => true, 'result' => $msg($p['chat_id'], null, $p['caption'] ?? null)];
@@ -228,7 +233,7 @@ check(str_contains(last_text(), '500,000') && str_contains(last_text(), '<code>5
 reset_calls();
 feed(msg('500 درهم'));
 $ph = sent(['sendPhoto']);
-check($ph && str_contains($ph[0][1]['caption'], 'درهم امارات') && str_starts_with($ph[0][1]['photo']['__bytes'], "\x89PNG"), 'fiat card');
+check($ph && str_contains($ph[0][1]['caption'], 'درهم امارات') && str_starts_with($ph[0][1]['photo']['__bytes'], "\xFF\xD8"), 'fiat card');
 
 reset_calls();
 feed(msg('1000 استارز'));
@@ -263,16 +268,16 @@ check(!sent(['editMessageText']), 'translate once');
 
 reset_calls();
 feed(msg('/emoji 😎', 5, 5, null, [['type' => 'custom_emoji', 'offset' => 7, 'length' => 2, 'custom_emoji_id' => '5368324170671202286']]));
-check(str_contains(last_text(), '5368324170671202286') && str_contains(last_text(), 'tg-emoji'), 'emoji cmd');
+check(last_text() === '<code>5368324170671202286</code>', 'emoji cmd');
 
-Settings::set('emoji_map', ['💎' => '111']);
+Settings::set('emoji_map', ['🪙' => '111']);
 $GLOBALS['reject_premium'] = true;
 reset_calls();
 feed(msg('10 تتر'));
-$sm = sent(['sendMessage']);
-check(count($sm) === 2 && str_contains($sm[0][1]['text'], '<tg-emoji') && !str_contains($sm[1][1]['text'], '<tg-emoji'), 'premium fallback');
+$sm = sent(['sendPhoto']);
+check(count($sm) === 2 && str_contains($sm[0][1]['caption'], '<tg-emoji') && !str_contains($sm[1][1]['caption'], '<tg-emoji'), 'premium fallback');
 $GLOBALS['reject_premium'] = false;
-Settings::set('emoji_map', []);
+Settings::set('emoji_map', Settings::defaults()['emoji_map']);
 
 Settings::set('force_channels', [['id' => NON_MEMBER, 'title' => 'Main', 'url' => 'https://t.me/main']]);
 reset_calls();
@@ -323,22 +328,18 @@ reset_calls();
 feed(msg('/panel', 5, 5));
 check(!str_contains((string)last_text(), 'پنل مدیریت'), 'non admin panel');
 
-foreach (['home', 'texts:0', 'texts:1', 'text:conv_crypto', 'btns', 'btn:btn_channel', 'bstyle:btn_channel:danger', 'emo', 'fj', 'set', 'tog:anti_self:set', 'scams', 'stats', 'bcmenu'] as $d) {
+foreach (['home', 'texts:0', 'texts:1', 'text:conv_crypto', 'btns', 'btn:btn_channel', 'bstyle:btn_channel:danger', 'fj', 'set:1', 'set:2', 'texts:price', 'text:conv_crypto:price', 'tog:anti_self:set', 'scams', 'stats', 'bcmenu'] as $d) {
     reset_calls();
     cb("adm:$d", 999, 999);
     check($GLOBALS['calls'] && !array_filter($GLOBALS['calls'], fn($c) => ($c[1]['text'] ?? '') === '⛔️'), "admin nav $d");
 }
 check((Settings::get('buttons')['btn_channel']['style'] ?? '') === 'danger' && Settings::get('anti_self') === false, 'admin toggles');
 Settings::set('anti_self', true);
-cb('adm:emoadd', 999, 999);
-feed(msg('💎', 999, 999, null, [['type' => 'custom_emoji', 'offset' => 0, 'length' => 2, 'custom_emoji_id' => '555']]));
-check(Settings::get('emoji_map') === ['💎' => '555'], 'admin emoji map');
-cb('adm:bemoji:btn_add_group', 999, 999);
-feed(msg('😎', 999, 999, null, [['type' => 'custom_emoji', 'offset' => 0, 'length' => 2, 'custom_emoji_id' => '777']]));
 reset_calls();
 feed(msg('/start', 6, 6));
 $add = array_values(array_filter(buttons(sent(['sendMessage'])[0]), fn($b) => str_contains($b['url'] ?? '', 'startgroup')))[0];
-check(($add['icon_custom_emoji_id'] ?? '') === '777', 'button premium emoji');
+check(($add['icon_custom_emoji_id'] ?? '') === '5256143829672672750' && !str_contains($add['text'], '👥'), 'button premium emoji');
+check(str_contains(sent(['sendMessage'])[0][1]['text'], '<tg-emoji emoji-id="5260399854500191689">'), 'text premium emoji');
 cb('adm:val:usdt_toman_manual', 999, 999);
 feed(msg('۱۰۵۰۰۰', 999, 999));
 check(Settings::get('usdt_toman_manual') === 105000, 'admin numeric setting');

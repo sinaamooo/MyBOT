@@ -4,6 +4,7 @@ final class Currencies
 {
     private static ?array $fiatIdx = null;
     private static ?array $cryptoIdx = null;
+    private static ?array $goldIdx = null;
 
     public static function normalize(string $t): string
     {
@@ -20,6 +21,12 @@ final class Currencies
         }
         self::$fiatIdx = [];
         self::$cryptoIdx = [];
+        self::$goldIdx = [];
+        foreach (Config::data('units')['gold'] ?? [] as $code => $words) {
+            foreach ($words as $w) {
+                self::$goldIdx[self::normalize($w)] = $code;
+            }
+        }
         foreach (Config::data('fiat') as $code => $f) {
             foreach (array_merge([$code, $f['fa'], $f['en']], $f['aliases']) as $a) {
                 $n = self::normalize($a);
@@ -61,6 +68,9 @@ final class Currencies
         if (in_array($u, $units['stars'], true)) {
             return ['stars', 'STARS'];
         }
+        if (isset(self::$goldIdx[$u])) {
+            return ['gold', self::$goldIdx[$u]];
+        }
         if (in_array(strtoupper($u), $units['crypto_priority'], true)) {
             return ['crypto', strtoupper($u)];
         }
@@ -75,6 +85,32 @@ final class Currencies
         }
         if (preg_match('/^[a-z0-9]{2,12}$/', $u) && !ctype_digit($u)) {
             return ['crypto_guess', strtoupper($u)];
+        }
+        return null;
+    }
+
+    public static function word(string $text, string $group): bool
+    {
+        $u = self::normalize($text);
+        foreach (Config::data('units')['words'][$group] ?? [] as $w) {
+            if (self::normalize($w) === $u) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public static function bareAsset(string $text): ?array
+    {
+        self::build();
+        $u = self::normalize($text);
+        foreach (Config::data('units')['bare_gold'] ?? [] as $w) {
+            if (self::normalize($w) === $u) {
+                return ['gold', self::$goldIdx[$u] ?? 'GOLD18'];
+            }
+        }
+        if (isset(self::$fiatIdx[$u]) && !isset(self::$cryptoIdx[$u]) && mb_strlen($u) > 2 && !preg_match('/^[a-z]{3}$/', $u)) {
+            return ['fiat', self::$fiatIdx[$u]];
         }
         return null;
     }
@@ -129,6 +165,10 @@ final class Prices
         $sym = strtoupper(trim($symbol));
         if (in_array($sym, self::STABLES, true)) {
             return ['symbol' => $sym, 'price' => 1.0, 'change' => 0.0, 'sources' => ['peg']];
+        }
+        $m = Market::coin($sym);
+        if ($m) {
+            return ['symbol' => $sym, 'price' => $m['price'], 'change' => $m['change'], 'name' => $m['name'], 'sources' => ['market']];
         }
         return Cache::remember('q:' . $sym, 45, fn() => self::fetchQuote($sym));
     }
@@ -217,6 +257,9 @@ final class Prices
         if ($manual) {
             return (float)$manual;
         }
+        if ($v = Market::usdtToman()) {
+            return $v;
+        }
         return Cache::remember('usdt_toman', 60, function () {
             $res = Http::multiJson([
                 'nobitex' => ['url' => 'https://api.nobitex.ir/market/stats', 'params' => ['srcCurrency' => 'usdt', 'dstCurrency' => 'rls'], 'timeout' => 7],
@@ -265,6 +308,9 @@ final class Prices
 
     public static function fiatRates(): array
     {
+        if ($fx = Market::fx()) {
+            return $fx;
+        }
         return Cache::remember('fiat_rates', 1800, function () {
             $rates = [];
             $res = Http::multiJson([
@@ -381,145 +427,5 @@ final class Tgju
             }
         }
         return $v;
-    }
-}
-
-final class Convert
-{
-    public static function run(float $amount, string $kind, string $code): ?array
-    {
-        if ($amount <= 0 || $amount > 1e18) {
-            return null;
-        }
-        return match ($kind) {
-            'crypto', 'crypto_guess' => self::crypto($amount, $code),
-            'toman' => self::toman($amount),
-            'rial' => self::toman($amount / 10),
-            'stars' => self::stars($amount),
-            'fiat' => self::fiat($amount, $code),
-            default => null,
-        };
-    }
-
-    private static function crypto(float $amount, string $sym): ?array
-    {
-        $q = Prices::quote($sym);
-        if (!$q) {
-            return null;
-        }
-        $s = Prices::snapshot();
-        $S = strtoupper($sym);
-        $usd = $amount * $q['price'];
-        $toman = $s['toman'] ? $usd * $s['toman'] : null;
-        $stable = in_array($S, Prices::STABLES, true);
-        return ['text' => UI::t('conv_crypto', [
-            'amount' => Fmt::num($amount),
-            'symbol' => $S,
-            'name' => Currencies::cryptoName($S),
-            'toman' => $toman !== null ? Fmt::toman($toman) : null,
-            'usd' => Fmt::usd($usd),
-            'usdt' => $stable ? null : Fmt::num($usd),
-            'ton' => $s['ton'] && $S !== 'TON' ? Fmt::num($usd / $s['ton']) : null,
-            'trx' => $s['trx'] && $S !== 'TRX' ? Fmt::num($usd / $s['trx']) : null,
-            'stars' => Fmt::int($usd / Prices::starUsd()),
-            'price_usd' => Fmt::usd($q['price']),
-            'price_toman' => $s['toman'] ? Fmt::toman($q['price'] * $s['toman']) : null,
-            'change' => $stable ? null : Fmt::badge($q['change']),
-            'time' => Fmt::now(),
-        ]), 'photo' => null];
-    }
-
-    private static function toman(float $t): array
-    {
-        $s = Prices::snapshot();
-        if (!$s['toman']) {
-            return ['text' => UI::t('price_unavailable'), 'photo' => null];
-        }
-        $usd = $t / $s['toman'];
-        return ['text' => UI::t('conv_toman', [
-            'amount' => Fmt::toman($t),
-            'usdt' => Fmt::num($usd),
-            'ton' => $s['ton'] ? Fmt::num($usd / $s['ton']) : null,
-            'trx' => $s['trx'] ? Fmt::num($usd / $s['trx']) : null,
-            'usd' => Fmt::usd($usd),
-            'stars' => Fmt::int($usd / Prices::starUsd()),
-            'rial' => Fmt::toman($t * 10),
-            'usdt_rate' => Fmt::toman($s['toman']),
-            'time' => Fmt::now(),
-        ]), 'photo' => null];
-    }
-
-    private static function stars(float $amount): array
-    {
-        $s = Prices::snapshot();
-        $usd = $amount * Prices::starUsd();
-        return ['text' => UI::t('conv_stars', [
-            'amount' => Fmt::int($amount),
-            'toman' => $s['toman'] ? Fmt::toman($usd * $s['toman']) : null,
-            'usd' => Fmt::usd($usd),
-            'ton' => $s['ton'] ? Fmt::num($usd / $s['ton']) : null,
-            'trx' => $s['trx'] ? Fmt::num($usd / $s['trx']) : null,
-            'star_usd' => Fmt::num(Prices::starUsd()),
-            'time' => Fmt::now(),
-        ]), 'photo' => null];
-    }
-
-    private static function fiat(float $amount, string $code): ?array
-    {
-        $code = strtoupper($code);
-        $rates = Prices::fiatRates();
-        if (empty($rates[$code])) {
-            return null;
-        }
-        $s = Prices::snapshot();
-        $f = Currencies::fiat($code) ?? ['fa' => $code, 'en' => $code, 'cc' => null];
-        $usd = $amount / $rates[$code];
-        $toman = $s['toman'] ? $usd * $s['toman'] : null;
-        $market = Tgju::toman($code, $toman ? $toman / $amount : null);
-        if ($market) {
-            $toman = $market * $amount;
-        }
-        $eur = !empty($rates['EUR']) ? $usd * $rates['EUR'] : null;
-        $ton = $s['ton'] ? $usd / $s['ton'] : null;
-        $trx = $s['trx'] ? $usd / $s['trx'] : null;
-        $unit = $toman ? $toman / $amount : null;
-        $rows = [];
-        if ($toman !== null) {
-            $rows[] = ['تومان', Fmt::toman($toman), 'IRT'];
-        }
-        if ($code !== 'USD') {
-            $rows[] = ['دلار', Fmt::usd($usd), 'USD'];
-        } elseif (!empty($rates['AED'])) {
-            $rows[] = ['درهم', Fmt::num($usd * $rates['AED']), 'AED'];
-        }
-        if ($code !== 'EUR' && $eur !== null) {
-            $rows[] = ['یورو', Fmt::num($eur), 'EUR'];
-        } elseif (!empty($rates['GBP'])) {
-            $rows[] = ['پوند', Fmt::num($usd * $rates['GBP']), 'GBP'];
-        }
-        $rows[] = ['تتر', Fmt::num($usd), 'USDT'];
-        if ($ton !== null) {
-            $rows[] = ['تون', Fmt::num($ton), 'TON'];
-        }
-        if ($trx !== null) {
-            $rows[] = ['ترون', Fmt::num($trx), 'TRX'];
-        }
-        $unitLine = $unit ? 'هر ۱ ' . $f['fa'] . ' = ' . Fmt::toman($unit) . ' تومان' : "1 $code = " . Fmt::usd(1 / $rates[$code]) . ' $';
-        $photo = Cards::fiat($code, $f['fa'], $f['en'], $f['cc'], Fmt::num($amount), $rows, $unitLine, TG::username());
-        $caption = UI::t('conv_fiat', [
-            'flag' => Currencies::flag($f['cc']),
-            'amount' => Fmt::num($amount),
-            'name' => $f['fa'],
-            'code' => $code,
-            'toman' => $toman !== null ? Fmt::toman($toman) : null,
-            'usd' => $code !== 'USD' ? Fmt::usd($usd) : null,
-            'eur' => $eur !== null && $code !== 'EUR' ? Fmt::num($eur) : null,
-            'usdt' => Fmt::num($usd),
-            'ton' => $ton !== null ? Fmt::num($ton) : null,
-            'trx' => $trx !== null ? Fmt::num($trx) : null,
-            'unit_toman' => $unit ? Fmt::toman($unit) : null,
-            'time' => Fmt::now(),
-        ]);
-        return ['text' => $caption, 'photo' => $photo];
     }
 }

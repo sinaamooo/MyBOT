@@ -2,7 +2,7 @@
 
 final class Tools
 {
-    const MARKET = [['💵', 'USDT'], ['🟠', 'BTC'], ['🔷', 'ETH'], ['💎', 'TON'], ['🔺', 'TRX'], ['🟡', 'BNB'], ['🟣', 'SOL'], ['🐶', 'DOGE'], ['🟨', 'NOT']];
+    const MARKET = [['💰', 'BTC'], ['💎', 'ETH'], ['💠', 'TON'], ['🔴', 'TRX'], ['🪙', 'BNB'], ['🌟', 'SOL'], ['🐸', 'DOGE'], ['🔲', 'NOT']];
 
     public static function market(array $m): void
     {
@@ -37,8 +37,40 @@ final class Tools
             }
             return false;
         }
-        Bot::send($m, $a['text'], false, $a['photo']);
+        self::sendPriced($m, $a);
         return true;
+    }
+
+    public static function sendPriced(array $m, array $a): void
+    {
+        $photo = null;
+        $fk = !empty($a['key']) ? 'fid:' . md5($a['key']) : null;
+        if ($fk && ($fid = Cache::get($fk))) {
+            $photo = $fid;
+        } elseif (!empty($a['card'])) {
+            try {
+                $photo = ($a['card'])();
+            } catch (Throwable $e) {
+                error_log('card: ' . $e->getMessage());
+            }
+        }
+        $sent = Bot::send($m, $a['text'], false, $photo ?: null);
+        if ($fk && !empty($sent['photo']) && !isset($fid)) {
+            $big = end($sent['photo']);
+            if (!empty($big['file_id'])) {
+                Cache::set($fk, $big['file_id'], 3 * 86400);
+            }
+        }
+    }
+
+    public static function premium(array $m): void
+    {
+        Bot::send($m, Convert::premiumText() ?? UI::t('price_unavailable'));
+    }
+
+    public static function starsBoard(array $m): void
+    {
+        Bot::send($m, Convert::starsText() ?? UI::t('price_unavailable'));
     }
 
     public static function price(array $m, string $args): void
@@ -270,20 +302,11 @@ final class Tools
             Bot::send($m, UI::t('emoji_none'));
             return;
         }
-        $packs = [];
-        foreach (TG::api('getCustomEmojiStickers', ['custom_emoji_ids' => array_map('strval', array_keys($items))]) ?? [] as $st) {
-            if (!empty($st['custom_emoji_id']) && !empty($st['set_name'])) {
-                $packs[$st['custom_emoji_id']] = $st['set_name'];
-            }
-        }
-        $parts = [UI::t('emoji_header', ['count' => count($items)])];
+        $parts = [];
         foreach ($items as $id => $char) {
-            $pack = $packs[$id] ?? null;
-            $parts[] = UI::t('emoji_item', ['emoji' => '<tg-emoji emoji-id="' . $id . '">' . UI::esc($char) . '</tg-emoji>', 'id' => $id,
-                'pack' => $pack ? '<a href="https://t.me/addemoji/' . UI::attr($pack) . '">' . UI::esc($pack) . '</a>' : null,
-                'html' => UI::esc('<tg-emoji emoji-id="' . $id . '">' . $char . '</tg-emoji>')]);
+            $parts[] = UI::t('emoji_item', ['emoji' => '<tg-emoji emoji-id="' . $id . '">' . UI::esc($char) . '</tg-emoji>', 'id' => $id]);
         }
-        Bot::send($m, mb_substr(implode("\n", $parts), 0, 4000), UI::kb([[UI::button('btn_copy_id', ['copy' => implode(',', array_keys($items))])]]));
+        Bot::send($m, mb_substr(implode("\n", $parts), 0, 4000));
     }
 
     public static function account(array $m, string $args = ''): void
