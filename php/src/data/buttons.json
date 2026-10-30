@@ -26,27 +26,27 @@
  },
  "lang_fa": {
   "text": "🇮🇷 فارسی",
-  "style": null,
+  "style": "primary",
   "desc": "زبان فارسی"
  },
  "lang_en": {
   "text": "🇬🇧 انگلیسی",
-  "style": null,
+  "style": "primary",
   "desc": "زبان انگلیسی"
  },
  "lang_ru": {
   "text": "🇷🇺 روسی",
-  "style": null,
+  "style": "primary",
   "desc": "زبان روسی"
  },
  "lang_zh": {
   "text": "🇨🇳 چینی",
-  "style": null,
+  "style": "success",
   "desc": "زبان چینی"
  },
  "lang_ar": {
   "text": "🇸🇦 عربی",
-  "style": null,
+  "style": "success",
   "desc": "زبان عربی"
  },
  "btn_scam_private": {

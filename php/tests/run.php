@@ -276,6 +276,9 @@ $src = msg('Hello world', -100, 8);
 feed(msg('ترجمه', -100, 7, $src));
 $prompt = sent(['sendMessage'])[0];
 check(array_map('count', $prompt[1]['reply_markup']['inline_keyboard']) === [3, 2], 'translate 3+2');
+$tk = $prompt[1]['reply_markup']['inline_keyboard'];
+check(array_column($tk[0], 'style') === ['primary', 'primary', 'primary'] && array_column($tk[1], 'style') === ['success', 'success']
+    && $tk[0][0]['icon_custom_emoji_id'] === '5433882955204279044' && $tk[1][1]['icon_custom_emoji_id'] === '5433820583689205435' && $tk[0][0]['text'] === 'فارسی', 'translate colors and flags');
 $pmid = $GLOBALS['mid'] - 0;
 $row = DB::one('SELECT message_id FROM translations ORDER BY created_at DESC LIMIT 1');
 reset_calls();
