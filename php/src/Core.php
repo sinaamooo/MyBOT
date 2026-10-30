@@ -116,6 +116,11 @@ SQL);
             self::$kv[$row['k']] = json_decode($row['v'], true);
         }
         self::$texts = null;
+        if ((int)(self::$kv['schema_v'] ?? 0) < 2) {
+            self::$pdo->prepare('DELETE FROM kv WHERE k = ?')->execute(['emoji_map']);
+            unset(self::$kv['emoji_map']);
+            self::kvSet('schema_v', 2);
+        }
     }
 
     public static function pdo(): PDO

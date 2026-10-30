@@ -154,7 +154,7 @@ final class GiftsH
                     $now += $val;
                     $then += $val;
                 }
-                $tiles[] = ['title' => $info['full_name'] ?? ('Gift ⭐️' . ($g['star_count'] ?? 0)), 'subtitle' => ($g['star_count'] ?? 0) . ' Stars' . (!empty($g['total_count']) ? ' • Limited' : ''), 'value' => $val, 'name' => null];
+                $tiles[] = ['title' => $info['full_name'] ?? 'Star Gift', 'subtitle' => ($g['star_count'] ?? 0) . ' Stars' . (!empty($g['total_count']) ? ' • Limited' : ''), 'value' => $val, 'name' => null];
             }
         }
         usort($tiles, fn($a, $b) => ($b['value'] ?? 0) <=> ($a['value'] ?? 0));
@@ -167,7 +167,8 @@ final class GiftsH
         $last = DB::lastGiftSnapshot((int)$t['id']);
         DB::addGiftSnapshot((int)$t['id'], $now);
         $plShow = ($pl !== null && abs($pl) > 0.0001) ? $pl : null;
-        $png = Cards::gift($t['name'], $t['username'], $tiles, $now, $tonUsd ? $now * $tonUsd : null, $tonToman ? $now * $tonToman : null, $plShow, $pct, (int)$count, TG::username());
+        $png = PriceCard::gift($t['name'], $t['username'], $tiles, $now, $tonUsd ? $now * $tonUsd : null, $tonToman ? $now * $tonToman : null, $plShow, $pct, (int)$count, TG::username())
+            ?? Cards::gift($t['name'], $t['username'], $tiles, $now, $tonUsd ? $now * $tonUsd : null, $tonToman ? $now * $tonToman : null, $plShow, $pct, (int)$count, TG::username());
         $plLine = $plShow !== null ? UI::fill(UI::template($pl >= 0 ? 'gift_profit' : 'gift_loss'), ['ton' => Fmt::num(abs($pl)), 'percent' => sprintf('%.2f', abs($pct ?? 0)), 'toman' => $tonToman ? Fmt::toman(abs($pl) * $tonToman) : '—']) : null;
         $change = null;
         if ($last && (float)$last['value_ton']) {

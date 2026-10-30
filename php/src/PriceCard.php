@@ -601,7 +601,7 @@ final class PriceCard
         imagecopyresampled($out, $im, 0, 0, 0, 0, self::W, self::H, imagesx($im), imagesy($im));
         imagedestroy($im);
         ob_start();
-        imagejpeg($out, null, 90);
+        imagejpeg($out, null, 86);
         $bytes = (string)ob_get_clean();
         imagedestroy($out);
         return $bytes;
@@ -663,5 +663,168 @@ final class PriceCard
             'diff' => self::signed($pre . self::like(abs($v - $prev), $vs), $v < $prev),
             'bot' => (string)($o['bot'] ?? ''),
         ]);
+    }
+
+    private static function blobsAt(int $w, int $h, array $blobs, float $soft, float $gain)
+    {
+        $gw = 300;
+        $gh = max(60, (int)round($gw * $h / $w));
+        $t = imagecreatetruecolor($gw, $gh);
+        $kx = $w / $gw;
+        $ky = $h / $gh;
+        $cols = array_map(fn($b) => self::hex($b[3]), $blobs);
+        for ($y = 0; $y < $gh; $y++) {
+            $uy = ($y + 0.5) * $ky;
+            for ($x = 0; $x < $gw; $x++) {
+                $ux = ($x + 0.5) * $kx;
+                $r = 7.0;
+                $g = 8.0;
+                $b = 10.0;
+                foreach ($blobs as $i => [$cx, $cy, $rad]) {
+                    $e = ($rad + $soft - hypot($ux - $cx, $uy - $cy)) / (2 * $soft);
+                    if ($e <= 0) {
+                        continue;
+                    }
+                    $e = $e >= 1 ? 1.0 : $e * $e * (3 - 2 * $e);
+                    $a = $e * $gain;
+                    $r += ($cols[$i][0] - $r) * $a;
+                    $g += ($cols[$i][1] - $g) * $a;
+                    $b += ($cols[$i][2] - $b) * $a;
+                }
+                imagesetpixel($t, $x, $y, imagecolorallocate($t, (int)$r, (int)$g, (int)$b));
+            }
+        }
+        $S = self::SS;
+        $out = imagecreatetruecolor($w * $S, $h * $S);
+        imagecopyresampled($out, $t, 0, 0, 0, 0, $w * $S, $h * $S, $gw, $gh);
+        imagedestroy($t);
+        return $out;
+    }
+
+    private static function glassPanel($im, array $panel, int $w, int $h, array $blobs): void
+    {
+        $S = self::SS;
+        [$x1, $y1, $x2, $y2, $rad] = $panel;
+        $soft = self::blobsAt($w, $h, $blobs, 95, 0.9);
+        for ($y = $y1 * $S; $y <= $y2 * $S; $y++) {
+            [$p, $q] = self::rowSpan($x1 * $S, $x2 * $S, $y1 * $S, $y2 * $S, $rad * $S, $y);
+            if ($q >= $p) {
+                imagecopy($im, $soft, $p, $y, $p, $y, $q - $p + 1, 1);
+            }
+        }
+        imagedestroy($soft);
+        self::rrect($im, $x1 * $S, $y1 * $S, $x2 * $S, $y2 * $S, $rad * $S, self::col($im, '141518', 0.52));
+        self::rring($im, $x1 * $S, $y1 * $S, $x2 * $S, $y2 * $S, $rad * $S, 3, self::col($im, 'FFFFFF', 0.14));
+    }
+
+    private static function gradDisc($im, float $cx, float $cy, float $d, array $center, array $edge): void
+    {
+        $S = self::SS;
+        $steps = (int)max(8, $d * $S / 2);
+        for ($i = 0; $i < $steps; $i++) {
+            $t = $i / max(1, $steps - 1);
+            $c = sprintf('%02X%02X%02X', (int)($edge[0] + ($center[0] - $edge[0]) * $t), (int)($edge[1] + ($center[1] - $edge[1]) * $t), (int)($edge[2] + ($center[2] - $edge[2]) * $t));
+            $dd = (int)round($d * $S * (1 - $t * 0.85));
+            imagefilledellipse($im, (int)round($cx * $S), (int)round($cy * $S), $dd, $dd, self::col($im, $c));
+        }
+    }
+
+    public static function gift(string $owner, ?string $username, array $tiles, float $totalTon, ?float $totalUsd, ?float $totalToman, ?float $plTon, ?float $plPct, int $count, string $bot): ?string
+    {
+        if (!self::ready()) {
+            return null;
+        }
+        $S = self::SS;
+        $W = 1200;
+        $shown = array_slice($tiles, 0, 12);
+        $rows = max(1, (int)ceil(count($shown) / 2));
+        $tileH = 112;
+        $gap = 16;
+        $top = 456;
+        $H = $top + $rows * ($tileH + $gap) + 120;
+        $up = ($plTon ?? 0) >= 0;
+        $blobs = [[250, 210, 200, '7C3AED'], [$W - 220, $H - 230, 220, $up ? '12C488' : 'E5486A'], [$W - 260, 260, 150, '2F72DF']];
+        $im = imagecreatetruecolor($W * $S, $H * $S);
+        imagefilledrectangle($im, 0, 0, $W * $S, $H * $S, imagecolorallocate($im, 7, 8, 10));
+        foreach ($blobs as [$bx, $by, $br, $bc]) {
+            imagefilledellipse($im, $bx * $S, $by * $S, $br * 2 * $S, $br * 2 * $S, self::col($im, $bc));
+        }
+        imagealphablending($im, true);
+        self::glassPanel($im, [60, 60, $W - 60, $H - 90, 36], $W, $H, $blobs);
+        $white = self::col($im, 'F5F5F7');
+        $gray = self::col($im, '9A9AA0');
+        $gold = self::col($im, 'FFD66B');
+        [, $e] = self::tag($im, 104, 128, 'GIFT PORTFOLIO', 'gold', 'l');
+        self::tag($im, $e + 10, 128, number_format($count) . ' GIFTS', 'gray', 'l');
+        self::say($im, self::sayFit(32, $owner, 560, 16), $W - 104, 142, $white, $owner, 'r');
+        if ($username) {
+            self::put($im, self::lat(500), 17, $W - 104, 178, $gray, '@' . $username, 'r');
+        }
+        self::say($im, 18, 600, 232, $gray, 'ارزش کل پرتفوی', 'c');
+        $val = self::valueStr($totalTon, '');
+        $lat = self::lat(700);
+        $size = self::fit($lat, 58, $val . ' TON', 760, 28);
+        $w1 = self::inkW($lat, $size, $val);
+        $w2 = self::inkW(self::lat(600), $size * 0.5, 'TON');
+        $x0 = 600 - ($w1 + 14 + $w2) / 2;
+        self::put($im, $lat, $size, $x0, 306, $white, $val);
+        self::put($im, self::lat(600), $size * 0.5, $x0 + $w1 + 14, 306, $gray, 'TON');
+        $sub = trim(($totalUsd ? '$' . number_format($totalUsd, $totalUsd >= 100 ? 0 : 2) : '') . ($totalToman ? '  ·  ' . number_format(round($totalToman)) . ' IRT' : ''), ' ·');
+        if ($sub !== '') {
+            self::put($im, self::lat(500), 19, 600, 346, $gray, $sub, 'c');
+        }
+        if ($plTon !== null) {
+            $txt = ($up ? '+' : '−') . self::valueStr(abs($plTon), '') . ' TON' . ($plPct !== null ? '  (' . ($up ? '+' : '−') . number_format(abs($plPct), 2) . '%)' : '') . '  ·  7D';
+            $tw = self::inkW(self::lat(600), 14.5, $txt) + 36;
+            self::tag($im, 600 - $tw / 2, 392, $txt, $up ? 'green' : 'red', 'l');
+        }
+        imagefilledrectangle($im, 104 * $S, 424 * $S, ($W - 104) * $S, 424 * $S + 1, self::col($im, 'FFFFFF', 0.08));
+        $tw = (int)(($W - 208 - $gap) / 2);
+        foreach ($shown as $i => $t) {
+            $r = intdiv($i, 2);
+            $c = $i % 2;
+            $x2 = $W - 104 - $c * ($tw + $gap);
+            $x1 = $x2 - $tw;
+            $y1 = $top + $r * ($tileH + $gap);
+            $y2 = $y1 + $tileH;
+            self::rrect($im, $x1 * $S, $y1 * $S, $x2 * $S, $y2 * $S, 24 * $S, self::col($im, 'FFFFFF', 0.05));
+            self::rring($im, $x1 * $S, $y1 * $S, $x2 * $S, $y2 * $S, 24 * $S, 2, self::col($im, 'FFFFFF', 0.10));
+            $d = 80;
+            $cx = $x2 - 18 - $d / 2;
+            $cy = $y1 + $tileH / 2;
+            self::gradDisc($im, $cx, $cy, $d, $t['center'] ?? [90, 110, 200], $t['edge'] ?? [30, 34, 60]);
+            if (!empty($t['image']) && ($src = @imagecreatefromstring($t['image']))) {
+                $s = ($d - 8) * $S;
+                $k = min($s / imagesx($src), $s / imagesy($src));
+                $iw = (int)(imagesx($src) * $k);
+                $ih = (int)(imagesy($src) * $k);
+                imagecopyresampled($im, $src, (int)($cx * $S - $iw / 2), (int)($cy * $S - $ih / 2), 0, 0, $iw, $ih, imagesx($src), imagesy($src));
+                imagedestroy($src);
+            }
+            $v = !empty($t['value']) ? self::valueStr((float)$t['value'], '') . ' TON' : '—';
+            $vs = self::fit(self::lat(700), 20, $v, 170, 11);
+            self::put($im, self::lat(700), $vs, $x1 + 22, $cy + self::capH(self::lat(700), $vs) / 2, $gold, $v);
+            $room = ($cx - $d / 2 - 14) - ($x1 + 22 + self::inkW(self::lat(700), $vs, $v) + 18);
+            $title = (string)$t['title'];
+            self::say($im, self::sayFit(20, $title, $room, 11), $cx - $d / 2 - 14, $y1 + 48, $white, $title, 'r');
+            $subt = (string)($t['subtitle'] ?? '');
+            if ($subt !== '') {
+                $f = Persian::isRtl($subt) ? self::fa() : self::lat(500);
+                $str = Persian::isRtl($subt) ? Persian::visual($subt) : $subt;
+                self::put($im, $f, self::fit($f, 14.5, $str, $room, 9), $cx - $d / 2 - 14, $y1 + 80, $gray, $str, 'r');
+            }
+        }
+        $more = count($tiles) - count($shown);
+        $tail = ($more > 0 ? '+' . $more . ' MORE · ' : '') . gmdate('Y-m-d H:i', time() + 12600) . ' TEHRAN';
+        $txt = mb_strtoupper(($bot !== '' ? '@' . $bot . ' · ' : '') . $tail, 'UTF-8');
+        self::spaced($im, self::lat(600), 13.5, 600, $H - 44, self::col($im, '8C8C92'), $txt, 2.6);
+        $out = imagecreatetruecolor($W, $H);
+        imagecopyresampled($out, $im, 0, 0, 0, 0, $W, $H, imagesx($im), imagesy($im));
+        imagedestroy($im);
+        ob_start();
+        imagejpeg($out, null, 86);
+        $bytes = (string)ob_get_clean();
+        imagedestroy($out);
+        return $bytes;
     }
 }

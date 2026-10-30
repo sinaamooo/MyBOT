@@ -392,7 +392,7 @@ $ph = sent(['sendPhoto']);
 $cap = $ph[0][1]['caption'] ?? '';
 check(str_contains($cap, 'https://t.me/nft/ToyBear-55') && str_contains($cap, 'https://t.me/nft/PlushPepe-7'), 'gift links in caption');
 check(str_contains($cap, '5,020') && str_contains($cap, 'ضرر'), 'gift value and loss');
-check(str_starts_with($ph[0][1]['photo']['__bytes'] ?? '', "\x89PNG"), 'gift card png');
+check(str_starts_with($ph[0][1]['photo']['__bytes'] ?? '', "\xFF\xD8"), 'gift card image');
 
 Config::set('API_ID', '12345');
 Config::set('API_HASH', 'hash');
