@@ -4,6 +4,9 @@ if [ -f bot.pid ] && kill -0 "$(cat bot.pid)" 2>/dev/null; then
   exit 0
 fi
 PY="$PYTHON"
+if [ -z "$PY" ] && [ -x .venv/bin/python ]; then
+  PY="$PWD/.venv/bin/python"
+fi
 if [ -z "$PY" ]; then
   PY="$(ls -d "$HOME"/virtualenv/"$(basename "$PWD")"/*/bin/python 2>/dev/null | sort -V | tail -1)"
 fi
