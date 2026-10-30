@@ -122,7 +122,6 @@ final class GiftsH
         $ds = Gifts::dataset();
         $starTon = $tonUsd ? Prices::starUsd() / $tonUsd : null;
         $tiles = [];
-        $links = [];
         $now = 0.0;
         $then = 0.0;
         $unique = 0;
@@ -142,7 +141,6 @@ final class GiftsH
                 $c = $g['backdrop']['colors'] ?? [];
                 $tiles[] = ['title' => ($g['base_name'] ?? 'Gift') . ' #' . ($g['number'] ?? ''), 'subtitle' => implode(' • ', array_filter([$g['model']['name'] ?? null, $g['backdrop']['name'] ?? null])),
                     'value' => $val, 'center' => self::rgb($c['center_color'] ?? null, [90, 110, 200]), 'edge' => self::rgb($c['edge_color'] ?? null, [30, 30, 60]), 'name' => $g['name'] ?? null];
-                $links[] = 'https://t.me/nft/' . ($g['name'] ?? '');
             } else {
                 $info = $ds['unupgraded'][(string)($g['id'] ?? '')] ?? null;
                 $val = !empty($info['price_ton']) ? (float)$info['price_ton'] : null;
@@ -175,34 +173,17 @@ final class GiftsH
             $diff = $now - (float)$last['value_ton'];
             $change = UI::fill(UI::template('gift_since_last'), ['sign' => $diff >= 0 ? '+' : '-', 'ton' => Fmt::num(abs($diff)), 'percent' => sprintf('%.2f', abs($diff / (float)$last['value_ton'] * 100))]);
         }
-        $cap = function (int $n) use ($links, $t, $count, $unique, $now, $tonUsd, $tonToman, $plLine, $change) {
-            $shown = array_slice($links, 0, $n);
-            $extra = count($links) > $n ? "\n👥 " . (count($links) - $n) . ' لینک دیگر' : '';
-            return UI::t('gift_user_caption', ['name' => UI::esc($t['name']), 'count' => Fmt::int($count), 'unique_count' => Fmt::int($unique),
-                'total_ton' => Fmt::num($now), 'total_usd' => $tonUsd ? Fmt::usd($now * $tonUsd) : '—', 'total_toman' => $tonToman ? Fmt::toman($now * $tonToman) : '—',
-                'pl_line' => $plLine, 'change_line' => $change, 'links' => $shown ? implode("\n", array_map(fn($l) => "🔗 $l", $shown)) . $extra : null]);
-        };
-        $n = count($links);
-        $caption = $cap($n);
-        while (mb_strlen($caption) > 1024 && $n > 0) {
-            $caption = $cap(--$n);
+        $top = [];
+        foreach ($tiles as $x) {
+            if (!empty($x['name']) && count($top) < 3) {
+                $top[] = 'https://t.me/nft/' . $x['name'];
+            }
         }
+        $caption = UI::t('gift_user_caption', ['name' => UI::esc($t['name']), 'count' => Fmt::int($count), 'unique_count' => Fmt::int($unique),
+            'total_ton' => Fmt::num($now), 'total_usd' => $tonUsd ? Fmt::usd($now * $tonUsd) : '—', 'total_toman' => $tonToman ? Fmt::toman($now * $tonToman) : '—',
+            'pl_line' => $plLine, 'change_line' => $change, 'links' => $top ? implode("\n", array_map(fn($l) => "🔗 $l", $top)) : null]);
         $extra = Bot::isPrivate($m) ? [] : ['reply_parameters' => Bot::replyParams($m)];
         TG::photo($m['chat']['id'], $png, mb_substr($caption, 0, 1024), UI::footer(), $extra);
-        if ($n < count($links)) {
-            $chunk = [];
-            foreach (array_slice($links, $n) as $l) {
-                $chunk[] = "🔗 $l";
-                if (mb_strlen(implode("\n", $chunk)) > 3800) {
-                    $lastItem = array_pop($chunk);
-                    TG::send($m['chat']['id'], implode("\n", $chunk));
-                    $chunk = [$lastItem];
-                }
-            }
-            if ($chunk) {
-                TG::send($m['chat']['id'], implode("\n", $chunk));
-            }
-        }
     }
 }
 

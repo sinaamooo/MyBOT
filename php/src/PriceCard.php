@@ -729,6 +729,35 @@ final class PriceCard
         }
     }
 
+    public static function clean(string $s): string
+    {
+        if (class_exists('Normalizer')) {
+            $n = Normalizer::normalize($s, Normalizer::FORM_KC);
+            if (is_string($n)) {
+                $s = $n;
+            }
+        }
+        $small = ['ᴀ' => 'a', 'ʙ' => 'b', 'ᴄ' => 'c', 'ᴅ' => 'd', 'ᴇ' => 'e', 'ғ' => 'f', 'ɢ' => 'g', 'ʜ' => 'h', 'ɪ' => 'i', 'ᴊ' => 'j', 'ᴋ' => 'k', 'ʟ' => 'l', 'ᴍ' => 'm',
+            'ɴ' => 'n', 'ᴏ' => 'o', 'ᴘ' => 'p', 'ǫ' => 'q', 'ʀ' => 'r', 'ꜱ' => 's', 'ᴛ' => 't', 'ᴜ' => 'u', 'ᴠ' => 'v', 'ᴡ' => 'w', 'ʏ' => 'y', 'ᴢ' => 'z'];
+        $out = '';
+        foreach (mb_str_split($s) as $ch) {
+            $cp = mb_ord($ch);
+            if ($cp >= 0x1D400 && $cp <= 0x1D6A3) {
+                $i = ($cp - 0x1D400) % 52;
+                $ch = chr($i < 26 ? 65 + $i : 97 + $i - 26);
+            } elseif ($cp >= 0x1D7CE && $cp <= 0x1D7FF) {
+                $ch = chr(48 + ($cp - 0x1D7CE) % 10);
+            } elseif ($cp >= 0xFF01 && $cp <= 0xFF5E) {
+                $ch = chr($cp - 0xFEE0);
+            } elseif (isset($small[$ch])) {
+                $ch = $small[$ch];
+            }
+            $out .= $ch;
+        }
+        $out = preg_replace('/[^\x{0020}-\x{007E}\x{00B7}\x{00C0}-\x{024F}\x{0400}-\x{04FF}\x{2010}-\x{2027}\x{0600}-\x{06FF}\x{FB50}-\x{FDFF}\x{FE70}-\x{FEFF}\x{200C}]/u', '', $out);
+        return trim(preg_replace('/\s+/u', ' ', (string)$out));
+    }
+
     public static function gift(string $owner, ?string $username, array $tiles, float $totalTon, ?float $totalUsd, ?float $totalToman, ?float $plTon, ?float $plPct, int $count, string $bot): ?string
     {
         if (!self::ready()) {
@@ -736,7 +765,13 @@ final class PriceCard
         }
         $S = self::SS;
         $W = 1200;
+        $owner = self::clean($owner) ?: ($username ? '@' . $username : 'Telegram User');
         $shown = array_slice($tiles, 0, 12);
+        foreach ($shown as &$st) {
+            $st['title'] = self::clean((string)$st['title']) ?: 'Gift';
+            $st['subtitle'] = self::clean((string)($st['subtitle'] ?? ''));
+        }
+        unset($st);
         $rows = max(1, (int)ceil(count($shown) / 2));
         $tileH = 112;
         $gap = 16;
