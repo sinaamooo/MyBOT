@@ -40,10 +40,9 @@ async def slash_conversion(message: Message, text: str, private: bool) -> bool:
     else:
         return False
     resolved = resolve_unit(unit)
-    if not resolved:
+    if not resolved or resolved[0] != "fiat":
         return False
-    silent = resolved[0] == "crypto_guess" or not private
-    return await tools.answer_amount(message, amount, unit, silent=silent)
+    return await tools.answer_amount(message, amount, unit, silent=not private)
 
 
 @router.message(F.text | F.caption)

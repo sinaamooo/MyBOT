@@ -626,10 +626,11 @@ def test_slash_fiat(env, text, needle):
     assert needle in photo.caption
 
 
-def test_slash_crypto_and_unknown(env):
-    feed(env, msg("/10 تتر"))
-    assert "1,000,000" in env[3].last_text()
+def test_slash_only_for_fiat(env):
     n = len(env[3].sent())
+    feed(env, msg("/10 تتر"))
+    feed(env, msg("/500000 تومان"))
+    feed(env, msg("/btc"))
     feed(env, msg("/randomcommand"))
     feed(env, msg("/hello", chat_id=-951, user_id=98))
     assert len(env[3].sent()) == n
