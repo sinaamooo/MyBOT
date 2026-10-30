@@ -599,3 +599,37 @@ def test_admin_power_and_ban(env):
     feed(env, _admin_cb("adm:pm"))
     feed(env, msg("33\nسلام", chat_id=999, user_id=999))
     assert any(isinstance(c, SendMessage) and c.chat_id == 33 and "سلام" in c.text for c in session.calls)
+
+
+@pytest.mark.parametrize("text,needle", [
+    ("/500 درهم", "درهم امارات"),
+    ("/درهم 500", "درهم امارات"),
+    ("/درهم", "درهم امارات"),
+    ("/aed 500", "درهم امارات"),
+    ("/aed@TestBot 500", "درهم امارات"),
+    ("/۱۰۰۰ لیر", "لیر ترکیه"),
+    ("/eur", "یورو"),
+])
+def test_slash_fiat(env, text, needle):
+    async def rates():
+        return {"USD": 1.0, "AED": 3.6725, "EUR": 0.9, "GBP": 0.8, "TRY": 41.0}
+
+    import app.services.prices as p
+
+    env_rates = p.fiat_rates
+    p.fiat_rates = rates
+    try:
+        feed(env, msg(text, chat_id=-950, user_id=97))
+    finally:
+        p.fiat_rates = env_rates
+    photo = env[3].sent(SendPhoto)[-1]
+    assert needle in photo.caption
+
+
+def test_slash_crypto_and_unknown(env):
+    feed(env, msg("/10 تتر"))
+    assert "1,000,000" in env[3].last_text()
+    n = len(env[3].sent())
+    feed(env, msg("/randomcommand"))
+    feed(env, msg("/hello", chat_id=-951, user_id=98))
+    assert len(env[3].sent()) == n

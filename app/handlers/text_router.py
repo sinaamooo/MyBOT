@@ -8,7 +8,7 @@ from aiogram.types import Message
 
 from ..services import banking, gifts, instagram, phone
 from ..services.chain_common import extract
-from ..services.currencies import is_known_crypto_word, normalize
+from ..services.currencies import is_known_crypto_word, normalize, resolve_unit
 from ..settings import feature_on
 from ..utils.parse import looks_like_expression, parse_amount
 from . import extras, tools
@@ -22,15 +22,41 @@ TRANSLATE_WORDS = {"ترجمه", "ترجمه کن", "translate", "tr", "ترجم
 PRICE_PREFIX = re.compile(r"^(?:قیمت|نرخ|price|ارزش)\s+(.+)$", re.I)
 WALLET_PREFIX = re.compile(r"^(?:wallet|ولت|کیف پول|check|چک|hash|هش|tx)\s+(.+)$", re.I | re.S)
 PHONE_PREFIX = re.compile(r"^(?:phone|چک شماره|شماره|number)\s+(.+)$", re.I)
+SLASH = re.compile(r"^/(\S+?)(?:@\w+)?(?:\s+(.*))?$", re.S)
+
+
+async def slash_conversion(message: Message, text: str, private: bool) -> bool:
+    m = SLASH.match(text)
+    if not m:
+        return False
+    body = f"{m.group(1)} {m.group(2) or ''}".strip()
+    if len(body) > 60:
+        return False
+    parsed = parse_amount(body)
+    if parsed:
+        amount, unit = parsed
+    elif resolve_unit(body):
+        amount, unit = 1, body
+    else:
+        return False
+    resolved = resolve_unit(unit)
+    if not resolved:
+        return False
+    silent = resolved[0] == "crypto_guess" or not private
+    return await tools.answer_amount(message, amount, unit, silent=silent)
 
 
 @router.message(F.text | F.caption)
 async def on_text(message: Message, bot: Bot):
     text = (message.text or message.caption or "").strip()
-    if not text or text.startswith("/"):
+    if not text:
         return
     chat_id = message.chat.id
     private = message.chat.type == "private"
+    if text.startswith("/"):
+        if private or await feature_on(chat_id, "conversions"):
+            await slash_conversion(message, text, private)
+        return
     low = normalize(text)
 
     if message.reply_to_message and low in UID_WORDS:
