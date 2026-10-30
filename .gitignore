@@ -16,3 +16,8 @@ tmp/
 !php/data/
 php/data/*
 !php/data/.htaccess
+!php/.htaccess
+!php/src/.htaccess
+!php/assets/.htaccess
+!php/src/data/
+!php/src/data/*.json

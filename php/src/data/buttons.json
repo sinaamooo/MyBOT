@@ -1,0 +1,137 @@
+{
+ "btn_add_group": {
+  "text": "➕ افزودن به گروه",
+  "style": "primary",
+  "desc": "دکمه افزودن به گروه"
+ },
+ "btn_channel": {
+  "text": "📢 کانال ربات",
+  "style": "success",
+  "desc": "دکمه کانال ربات"
+ },
+ "btn_join": {
+  "text": "📢 عضویت در {title}",
+  "style": "primary",
+  "desc": "دکمه هر کانال عضویت اجباری ({title})"
+ },
+ "btn_check_join": {
+  "text": "✅ عضو شدم",
+  "style": "success",
+  "desc": "دکمه بررسی عضویت"
+ },
+ "btn_help": {
+  "text": "📚 راهنما",
+  "style": null,
+  "desc": "دکمه راهنما"
+ },
+ "lang_fa": {
+  "text": "🇮🇷 فارسی",
+  "style": null,
+  "desc": "زبان فارسی"
+ },
+ "lang_en": {
+  "text": "🇬🇧 انگلیسی",
+  "style": null,
+  "desc": "زبان انگلیسی"
+ },
+ "lang_ru": {
+  "text": "🇷🇺 روسی",
+  "style": null,
+  "desc": "زبان روسی"
+ },
+ "lang_zh": {
+  "text": "🇨🇳 چینی",
+  "style": null,
+  "desc": "زبان چینی"
+ },
+ "lang_ar": {
+  "text": "🇸🇦 عربی",
+  "style": null,
+  "desc": "زبان عربی"
+ },
+ "btn_scam_private": {
+  "text": "📩 ارسال مدارک",
+  "style": "danger",
+  "desc": "دکمه انتقال به پیوی برای گزارش"
+ },
+ "btn_scam_submit": {
+  "text": "✅ ثبت و ارسال",
+  "style": "success",
+  "desc": "دکمه ثبت گزارش"
+ },
+ "btn_scam_cancel": {
+  "text": "❌ لغو",
+  "style": "danger",
+  "desc": "دکمه لغو گزارش"
+ },
+ "btn_approve": {
+  "text": "✅ تایید و اعلام",
+  "style": "success",
+  "desc": "دکمه تایید مدیر"
+ },
+ "btn_reject": {
+  "text": "❌ رد گزارش",
+  "style": "danger",
+  "desc": "دکمه رد مدیر"
+ },
+ "btn_copy_id": {
+  "text": "📋 کپی آیدی",
+  "style": "primary",
+  "desc": "دکمه کپی آیدی"
+ },
+ "btn_unmute": {
+  "text": "🔊 رفع سکوت",
+  "style": "success",
+  "desc": "دکمه رفع سکوت (ادمین)"
+ },
+ "btn_explorer": {
+  "text": "🔍 اکسپلورر",
+  "style": null,
+  "desc": "دکمه اکسپلورر"
+ },
+ "btn_sender_wallet": {
+  "text": "📤 اطلاعات ولت مبدا",
+  "style": "primary",
+  "desc": "دکمه ولت مبدا زیر هش"
+ },
+ "btn_receiver_wallet": {
+  "text": "📥 اطلاعات ولت مقصد",
+  "style": "primary",
+  "desc": "دکمه ولت مقصد زیر هش"
+ },
+ "btn_trc20_history": {
+  "text": "📜 تراکنش‌های TRC20",
+  "style": null,
+  "desc": "دکمه تاریخچه TRC20"
+ },
+ "btn_tokens_file": {
+  "text": "📄 دریافت کل موجودی‌های ولت",
+  "style": null,
+  "desc": "دکمه فایل توکن‌ها"
+ },
+ "btn_prev": {
+  "text": "◀️ قبلی",
+  "style": null,
+  "desc": "دکمه صفحه قبل"
+ },
+ "btn_next": {
+  "text": "بعدی ▶️",
+  "style": null,
+  "desc": "دکمه صفحه بعد"
+ },
+ "btn_insta_story": {
+  "text": "🎥 دانلود استوری 📸",
+  "style": "primary",
+  "desc": "دکمه استوری اینستاگرام"
+ },
+ "btn_insta_highlight": {
+  "text": "💫 دانلود هایلایت",
+  "style": "primary",
+  "desc": "دکمه هایلایت اینستاگرام"
+ },
+ "btn_gift_open": {
+  "text": "🎁 مشاهده گیفت",
+  "style": "primary",
+  "desc": "دکمه مشاهده گیفت"
+ }
+}

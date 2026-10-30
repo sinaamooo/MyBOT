@@ -1,0 +1,1467 @@
+{
+ "USD": {
+  "fa": "دلار آمریکا",
+  "en": "US Dollar",
+  "cc": "us",
+  "sym": "$",
+  "aliases": [
+   "دلار",
+   "دلار امریکا",
+   "دلار آمریکایی",
+   "dollar",
+   "dollars",
+   "usd",
+   "$"
+  ]
+ },
+ "EUR": {
+  "fa": "یورو",
+  "en": "Euro",
+  "cc": "eu",
+  "sym": "€",
+  "aliases": [
+   "یورو",
+   "اورو",
+   "euro",
+   "euros",
+   "€"
+  ]
+ },
+ "GBP": {
+  "fa": "پوند انگلیس",
+  "en": "British Pound",
+  "cc": "gb",
+  "sym": "£",
+  "aliases": [
+   "پوند",
+   "پوند انگلیس",
+   "پوند انگلستان",
+   "استرلینگ",
+   "pound",
+   "pounds",
+   "£"
+  ]
+ },
+ "AED": {
+  "fa": "درهم امارات",
+  "en": "UAE Dirham",
+  "cc": "ae",
+  "sym": "د.إ",
+  "aliases": [
+   "درهم",
+   "درهم امارات",
+   "درهم اماراتی",
+   "دیرهم",
+   "dirham",
+   "dirhams"
+  ]
+ },
+ "TRY": {
+  "fa": "لیر ترکیه",
+  "en": "Turkish Lira",
+  "cc": "tr",
+  "sym": "₺",
+  "aliases": [
+   "لیر",
+   "لیره",
+   "لیر ترکیه",
+   "لیره ترکیه",
+   "lira",
+   "₺"
+  ]
+ },
+ "RUB": {
+  "fa": "روبل روسیه",
+  "en": "Russian Ruble",
+  "cc": "ru",
+  "sym": "₽",
+  "aliases": [
+   "روبل",
+   "روبل روسیه",
+   "ruble",
+   "rouble",
+   "₽"
+  ]
+ },
+ "CNY": {
+  "fa": "یوان چین",
+  "en": "Chinese Yuan",
+  "cc": "cn",
+  "sym": "¥",
+  "aliases": [
+   "یوان",
+   "یوان چین",
+   "رنمینبی",
+   "yuan",
+   "rmb"
+  ]
+ },
+ "JPY": {
+  "fa": "ین ژاپن",
+  "en": "Japanese Yen",
+  "cc": "jp",
+  "sym": "¥",
+  "aliases": [
+   "ین",
+   "ین ژاپن",
+   "yen",
+   "¥"
+  ]
+ },
+ "SAR": {
+  "fa": "ریال عربستان",
+  "en": "Saudi Riyal",
+  "cc": "sa",
+  "sym": "﷼",
+  "aliases": [
+   "ریال عربستان",
+   "ریال سعودی",
+   "ریال عربستان سعودی",
+   "riyal",
+   "saudi riyal"
+  ]
+ },
+ "IQD": {
+  "fa": "دینار عراق",
+  "en": "Iraqi Dinar",
+  "cc": "iq",
+  "sym": "ع.د",
+  "aliases": [
+   "دینار",
+   "دینار عراق",
+   "دینار عراقی",
+   "dinar"
+  ]
+ },
+ "AFN": {
+  "fa": "افغانی",
+  "en": "Afghan Afghani",
+  "cc": "af",
+  "sym": "؋",
+  "aliases": [
+   "افغانی",
+   "افغانی افغانستان",
+   "afghani"
+  ]
+ },
+ "KWD": {
+  "fa": "دینار کویت",
+  "en": "Kuwaiti Dinar",
+  "cc": "kw",
+  "sym": "د.ك",
+  "aliases": [
+   "دینار کویت",
+   "دینار کویتی"
+  ]
+ },
+ "QAR": {
+  "fa": "ریال قطر",
+  "en": "Qatari Riyal",
+  "cc": "qa",
+  "sym": "ر.ق",
+  "aliases": [
+   "ریال قطر",
+   "ریال قطری"
+  ]
+ },
+ "OMR": {
+  "fa": "ریال عمان",
+  "en": "Omani Rial",
+  "cc": "om",
+  "sym": "ر.ع",
+  "aliases": [
+   "ریال عمان",
+   "ریال عمانی"
+  ]
+ },
+ "BHD": {
+  "fa": "دینار بحرین",
+  "en": "Bahraini Dinar",
+  "cc": "bh",
+  "sym": ".د.ب",
+  "aliases": [
+   "دینار بحرین",
+   "دینار بحرینی"
+  ]
+ },
+ "JOD": {
+  "fa": "دینار اردن",
+  "en": "Jordanian Dinar",
+  "cc": "jo",
+  "sym": "د.ا",
+  "aliases": [
+   "دینار اردن",
+   "دینار اردنی"
+  ]
+ },
+ "CAD": {
+  "fa": "دلار کانادا",
+  "en": "Canadian Dollar",
+  "cc": "ca",
+  "sym": "C$",
+  "aliases": [
+   "دلار کانادا",
+   "دلار کانادایی"
+  ]
+ },
+ "AUD": {
+  "fa": "دلار استرالیا",
+  "en": "Australian Dollar",
+  "cc": "au",
+  "sym": "A$",
+  "aliases": [
+   "دلار استرالیا",
+   "دلار استرالیایی"
+  ]
+ },
+ "NZD": {
+  "fa": "دلار نیوزیلند",
+  "en": "New Zealand Dollar",
+  "cc": "nz",
+  "sym": "NZ$",
+  "aliases": [
+   "دلار نیوزیلند"
+  ]
+ },
+ "CHF": {
+  "fa": "فرانک سوئیس",
+  "en": "Swiss Franc",
+  "cc": "ch",
+  "sym": "CHF",
+  "aliases": [
+   "فرانک",
+   "فرانک سوئیس",
+   "franc"
+  ]
+ },
+ "SEK": {
+  "fa": "کرون سوئد",
+  "en": "Swedish Krona",
+  "cc": "se",
+  "sym": "kr",
+  "aliases": [
+   "کرون",
+   "کرون سوئد",
+   "krona"
+  ]
+ },
+ "NOK": {
+  "fa": "کرون نروژ",
+  "en": "Norwegian Krone",
+  "cc": "no",
+  "sym": "kr",
+  "aliases": [
+   "کرون نروژ",
+   "krone"
+  ]
+ },
+ "DKK": {
+  "fa": "کرون دانمارک",
+  "en": "Danish Krone",
+  "cc": "dk",
+  "sym": "kr",
+  "aliases": [
+   "کرون دانمارک"
+  ]
+ },
+ "ISK": {
+  "fa": "کرون ایسلند",
+  "en": "Icelandic Krona",
+  "cc": "is",
+  "sym": "kr",
+  "aliases": [
+   "کرون ایسلند"
+  ]
+ },
+ "CZK": {
+  "fa": "کرون چک",
+  "en": "Czech Koruna",
+  "cc": "cz",
+  "sym": "Kč",
+  "aliases": [
+   "کرون چک"
+  ]
+ },
+ "PLN": {
+  "fa": "زلوتی لهستان",
+  "en": "Polish Zloty",
+  "cc": "pl",
+  "sym": "zł",
+  "aliases": [
+   "زلوتی",
+   "زلوتی لهستان",
+   "zloty"
+  ]
+ },
+ "HUF": {
+  "fa": "فورینت مجارستان",
+  "en": "Hungarian Forint",
+  "cc": "hu",
+  "sym": "Ft",
+  "aliases": [
+   "فورینت",
+   "forint"
+  ]
+ },
+ "RON": {
+  "fa": "لئو رومانی",
+  "en": "Romanian Leu",
+  "cc": "ro",
+  "sym": "lei",
+  "aliases": [
+   "لئو رومانی"
+  ]
+ },
+ "BGN": {
+  "fa": "لو بلغارستان",
+  "en": "Bulgarian Lev",
+  "cc": "bg",
+  "sym": "лв",
+  "aliases": [
+   "لو بلغارستان"
+  ]
+ },
+ "RSD": {
+  "fa": "دینار صربستان",
+  "en": "Serbian Dinar",
+  "cc": "rs",
+  "sym": "дин",
+  "aliases": [
+   "دینار صربستان"
+  ]
+ },
+ "UAH": {
+  "fa": "گریونا اوکراین",
+  "en": "Ukrainian Hryvnia",
+  "cc": "ua",
+  "sym": "₴",
+  "aliases": [
+   "گریونا",
+   "hryvnia"
+  ]
+ },
+ "BYN": {
+  "fa": "روبل بلاروس",
+  "en": "Belarusian Ruble",
+  "cc": "by",
+  "sym": "Br",
+  "aliases": [
+   "روبل بلاروس"
+  ]
+ },
+ "MDL": {
+  "fa": "لئو مولداوی",
+  "en": "Moldovan Leu",
+  "cc": "md",
+  "sym": "L",
+  "aliases": [
+   "لئو مولداوی"
+  ]
+ },
+ "ALL": {
+  "fa": "لک آلبانی",
+  "en": "Albanian Lek",
+  "cc": "al",
+  "sym": "L",
+  "aliases": [
+   "لک آلبانی"
+  ]
+ },
+ "MKD": {
+  "fa": "دینار مقدونیه",
+  "en": "Macedonian Denar",
+  "cc": "mk",
+  "sym": "ден",
+  "aliases": [
+   "دینار مقدونیه"
+  ]
+ },
+ "BAM": {
+  "fa": "مارک بوسنی",
+  "en": "Bosnia Mark",
+  "cc": "ba",
+  "sym": "KM",
+  "aliases": [
+   "مارک بوسنی"
+  ]
+ },
+ "GEL": {
+  "fa": "لاری گرجستان",
+  "en": "Georgian Lari",
+  "cc": "ge",
+  "sym": "₾",
+  "aliases": [
+   "لاری",
+   "لاری گرجستان",
+   "lari"
+  ]
+ },
+ "AMD": {
+  "fa": "درام ارمنستان",
+  "en": "Armenian Dram",
+  "cc": "am",
+  "sym": "֏",
+  "aliases": [
+   "درام",
+   "درام ارمنستان",
+   "dram"
+  ]
+ },
+ "AZN": {
+  "fa": "منات آذربایجان",
+  "en": "Azerbaijani Manat",
+  "cc": "az",
+  "sym": "₼",
+  "aliases": [
+   "منات",
+   "منات آذربایجان",
+   "manat"
+  ]
+ },
+ "TMT": {
+  "fa": "منات ترکمنستان",
+  "en": "Turkmen Manat",
+  "cc": "tm",
+  "sym": "m",
+  "aliases": [
+   "منات ترکمنستان"
+  ]
+ },
+ "KZT": {
+  "fa": "تنگه قزاقستان",
+  "en": "Kazakh Tenge",
+  "cc": "kz",
+  "sym": "₸",
+  "aliases": [
+   "تنگه",
+   "تنگه قزاقستان",
+   "tenge"
+  ]
+ },
+ "UZS": {
+  "fa": "سوم ازبکستان",
+  "en": "Uzbek Som",
+  "cc": "uz",
+  "sym": "soʻm",
+  "aliases": [
+   "سوم ازبکستان",
+   "سوم"
+  ]
+ },
+ "KGS": {
+  "fa": "سوم قرقیزستان",
+  "en": "Kyrgyz Som",
+  "cc": "kg",
+  "sym": "с",
+  "aliases": [
+   "سوم قرقیزستان"
+  ]
+ },
+ "TJS": {
+  "fa": "سامانی تاجیکستان",
+  "en": "Tajik Somoni",
+  "cc": "tj",
+  "sym": "SM",
+  "aliases": [
+   "سامانی",
+   "سامانی تاجیکستان",
+   "somoni"
+  ]
+ },
+ "PKR": {
+  "fa": "روپیه پاکستان",
+  "en": "Pakistani Rupee",
+  "cc": "pk",
+  "sym": "₨",
+  "aliases": [
+   "روپیه پاکستان",
+   "روپیه پاکستانی"
+  ]
+ },
+ "INR": {
+  "fa": "روپیه هند",
+  "en": "Indian Rupee",
+  "cc": "in",
+  "sym": "₹",
+  "aliases": [
+   "روپیه",
+   "روپیه هند",
+   "روپیه هندوستان",
+   "rupee",
+   "₹"
+  ]
+ },
+ "LKR": {
+  "fa": "روپیه سریلانکا",
+  "en": "Sri Lankan Rupee",
+  "cc": "lk",
+  "sym": "Rs",
+  "aliases": [
+   "روپیه سریلانکا"
+  ]
+ },
+ "NPR": {
+  "fa": "روپیه نپال",
+  "en": "Nepalese Rupee",
+  "cc": "np",
+  "sym": "Rs",
+  "aliases": [
+   "روپیه نپال"
+  ]
+ },
+ "BDT": {
+  "fa": "تاکای بنگلادش",
+  "en": "Bangladeshi Taka",
+  "cc": "bd",
+  "sym": "৳",
+  "aliases": [
+   "تاکا",
+   "taka"
+  ]
+ },
+ "MVR": {
+  "fa": "روفیا مالدیو",
+  "en": "Maldivian Rufiyaa",
+  "cc": "mv",
+  "sym": "Rf",
+  "aliases": [
+   "روفیا"
+  ]
+ },
+ "BTN": {
+  "fa": "انگولتروم بوتان",
+  "en": "Bhutanese Ngultrum",
+  "cc": "bt",
+  "sym": "Nu",
+  "aliases": [
+   "انگولتروم"
+  ]
+ },
+ "IDR": {
+  "fa": "روپیه اندونزی",
+  "en": "Indonesian Rupiah",
+  "cc": "id",
+  "sym": "Rp",
+  "aliases": [
+   "روپیه اندونزی",
+   "rupiah"
+  ]
+ },
+ "MYR": {
+  "fa": "رینگیت مالزی",
+  "en": "Malaysian Ringgit",
+  "cc": "my",
+  "sym": "RM",
+  "aliases": [
+   "رینگیت",
+   "رینگیت مالزی",
+   "ringgit"
+  ]
+ },
+ "SGD": {
+  "fa": "دلار سنگاپور",
+  "en": "Singapore Dollar",
+  "cc": "sg",
+  "sym": "S$",
+  "aliases": [
+   "دلار سنگاپور"
+  ]
+ },
+ "THB": {
+  "fa": "بات تایلند",
+  "en": "Thai Baht",
+  "cc": "th",
+  "sym": "฿",
+  "aliases": [
+   "بات",
+   "بات تایلند",
+   "baht"
+  ]
+ },
+ "VND": {
+  "fa": "دونگ ویتنام",
+  "en": "Vietnamese Dong",
+  "cc": "vn",
+  "sym": "₫",
+  "aliases": [
+   "دونگ",
+   "dong"
+  ]
+ },
+ "PHP": {
+  "fa": "پزو فیلیپین",
+  "en": "Philippine Peso",
+  "cc": "ph",
+  "sym": "₱",
+  "aliases": [
+   "پزو فیلیپین"
+  ]
+ },
+ "KHR": {
+  "fa": "ریل کامبوج",
+  "en": "Cambodian Riel",
+  "cc": "kh",
+  "sym": "៛",
+  "aliases": [
+   "ریل کامبوج"
+  ]
+ },
+ "LAK": {
+  "fa": "کیپ لائوس",
+  "en": "Lao Kip",
+  "cc": "la",
+  "sym": "₭",
+  "aliases": [
+   "کیپ لائوس"
+  ]
+ },
+ "MMK": {
+  "fa": "کیات میانمار",
+  "en": "Myanmar Kyat",
+  "cc": "mm",
+  "sym": "K",
+  "aliases": [
+   "کیات"
+  ]
+ },
+ "BND": {
+  "fa": "دلار برونئی",
+  "en": "Brunei Dollar",
+  "cc": "bn",
+  "sym": "B$",
+  "aliases": [
+   "دلار برونئی"
+  ]
+ },
+ "KRW": {
+  "fa": "وون کره جنوبی",
+  "en": "South Korean Won",
+  "cc": "kr",
+  "sym": "₩",
+  "aliases": [
+   "وون",
+   "وون کره",
+   "won",
+   "₩"
+  ]
+ },
+ "KPW": {
+  "fa": "وون کره شمالی",
+  "en": "North Korean Won",
+  "cc": "kp",
+  "sym": "₩",
+  "aliases": [
+   "وون کره شمالی"
+  ]
+ },
+ "HKD": {
+  "fa": "دلار هنگ کنگ",
+  "en": "Hong Kong Dollar",
+  "cc": "hk",
+  "sym": "HK$",
+  "aliases": [
+   "دلار هنگ کنگ"
+  ]
+ },
+ "TWD": {
+  "fa": "دلار تایوان",
+  "en": "Taiwan Dollar",
+  "cc": "tw",
+  "sym": "NT$",
+  "aliases": [
+   "دلار تایوان"
+  ]
+ },
+ "MOP": {
+  "fa": "پاتاکا ماکائو",
+  "en": "Macanese Pataca",
+  "cc": "mo",
+  "sym": "MOP$",
+  "aliases": [
+   "پاتاکا"
+  ]
+ },
+ "MNT": {
+  "fa": "توگریک مغولستان",
+  "en": "Mongolian Tugrik",
+  "cc": "mn",
+  "sym": "₮",
+  "aliases": [
+   "توگریک"
+  ]
+ },
+ "ILS": {
+  "fa": "شکل",
+  "en": "Israeli Shekel",
+  "cc": "il",
+  "sym": "₪",
+  "aliases": [
+   "شکل",
+   "shekel"
+  ]
+ },
+ "LBP": {
+  "fa": "لیره لبنان",
+  "en": "Lebanese Pound",
+  "cc": "lb",
+  "sym": "ل.ل",
+  "aliases": [
+   "لیره لبنان",
+   "لیر لبنان"
+  ]
+ },
+ "SYP": {
+  "fa": "لیره سوریه",
+  "en": "Syrian Pound",
+  "cc": "sy",
+  "sym": "ل.س",
+  "aliases": [
+   "لیره سوریه",
+   "لیر سوریه"
+  ]
+ },
+ "YER": {
+  "fa": "ریال یمن",
+  "en": "Yemeni Rial",
+  "cc": "ye",
+  "sym": "﷼",
+  "aliases": [
+   "ریال یمن"
+  ]
+ },
+ "EGP": {
+  "fa": "پوند مصر",
+  "en": "Egyptian Pound",
+  "cc": "eg",
+  "sym": "E£",
+  "aliases": [
+   "پوند مصر",
+   "جنیه مصر",
+   "جنیه"
+  ]
+ },
+ "SDG": {
+  "fa": "پوند سودان",
+  "en": "Sudanese Pound",
+  "cc": "sd",
+  "sym": "ج.س",
+  "aliases": [
+   "پوند سودان"
+  ]
+ },
+ "SSP": {
+  "fa": "پوند سودان جنوبی",
+  "en": "South Sudanese Pound",
+  "cc": "ss",
+  "sym": "£",
+  "aliases": [
+   "پوند سودان جنوبی"
+  ]
+ },
+ "LYD": {
+  "fa": "دینار لیبی",
+  "en": "Libyan Dinar",
+  "cc": "ly",
+  "sym": "ل.د",
+  "aliases": [
+   "دینار لیبی"
+  ]
+ },
+ "TND": {
+  "fa": "دینار تونس",
+  "en": "Tunisian Dinar",
+  "cc": "tn",
+  "sym": "د.ت",
+  "aliases": [
+   "دینار تونس"
+  ]
+ },
+ "DZD": {
+  "fa": "دینار الجزایر",
+  "en": "Algerian Dinar",
+  "cc": "dz",
+  "sym": "د.ج",
+  "aliases": [
+   "دینار الجزایر"
+  ]
+ },
+ "MAD": {
+  "fa": "درهم مراکش",
+  "en": "Moroccan Dirham",
+  "cc": "ma",
+  "sym": "د.م",
+  "aliases": [
+   "درهم مراکش"
+  ]
+ },
+ "MRU": {
+  "fa": "اوگوئیا موریتانی",
+  "en": "Mauritanian Ouguiya",
+  "cc": "mr",
+  "sym": "UM",
+  "aliases": [
+   "اوگوئیا"
+  ]
+ },
+ "ZAR": {
+  "fa": "رند آفریقای جنوبی",
+  "en": "South African Rand",
+  "cc": "za",
+  "sym": "R",
+  "aliases": [
+   "رند",
+   "rand"
+  ]
+ },
+ "NGN": {
+  "fa": "نایرا نیجریه",
+  "en": "Nigerian Naira",
+  "cc": "ng",
+  "sym": "₦",
+  "aliases": [
+   "نایرا",
+   "naira"
+  ]
+ },
+ "GHS": {
+  "fa": "سدی غنا",
+  "en": "Ghanaian Cedi",
+  "cc": "gh",
+  "sym": "₵",
+  "aliases": [
+   "سدی"
+  ]
+ },
+ "KES": {
+  "fa": "شیلینگ کنیا",
+  "en": "Kenyan Shilling",
+  "cc": "ke",
+  "sym": "KSh",
+  "aliases": [
+   "شیلینگ کنیا",
+   "شیلینگ"
+  ]
+ },
+ "TZS": {
+  "fa": "شیلینگ تانزانیا",
+  "en": "Tanzanian Shilling",
+  "cc": "tz",
+  "sym": "TSh",
+  "aliases": [
+   "شیلینگ تانزانیا"
+  ]
+ },
+ "UGX": {
+  "fa": "شیلینگ اوگاندا",
+  "en": "Ugandan Shilling",
+  "cc": "ug",
+  "sym": "USh",
+  "aliases": [
+   "شیلینگ اوگاندا"
+  ]
+ },
+ "SOS": {
+  "fa": "شیلینگ سومالی",
+  "en": "Somali Shilling",
+  "cc": "so",
+  "sym": "Sh",
+  "aliases": [
+   "شیلینگ سومالی"
+  ]
+ },
+ "ETB": {
+  "fa": "بیر اتیوپی",
+  "en": "Ethiopian Birr",
+  "cc": "et",
+  "sym": "Br",
+  "aliases": [
+   "بیر اتیوپی"
+  ]
+ },
+ "ERN": {
+  "fa": "ناکفا اریتره",
+  "en": "Eritrean Nakfa",
+  "cc": "er",
+  "sym": "Nfk",
+  "aliases": [
+   "ناکفا"
+  ]
+ },
+ "DJF": {
+  "fa": "فرانک جیبوتی",
+  "en": "Djiboutian Franc",
+  "cc": "dj",
+  "sym": "Fdj",
+  "aliases": [
+   "فرانک جیبوتی"
+  ]
+ },
+ "RWF": {
+  "fa": "فرانک رواندا",
+  "en": "Rwandan Franc",
+  "cc": "rw",
+  "sym": "FRw",
+  "aliases": [
+   "فرانک رواندا"
+  ]
+ },
+ "BIF": {
+  "fa": "فرانک بوروندی",
+  "en": "Burundian Franc",
+  "cc": "bi",
+  "sym": "FBu",
+  "aliases": [
+   "فرانک بوروندی"
+  ]
+ },
+ "CDF": {
+  "fa": "فرانک کنگو",
+  "en": "Congolese Franc",
+  "cc": "cd",
+  "sym": "FC",
+  "aliases": [
+   "فرانک کنگو"
+  ]
+ },
+ "GNF": {
+  "fa": "فرانک گینه",
+  "en": "Guinean Franc",
+  "cc": "gn",
+  "sym": "FG",
+  "aliases": [
+   "فرانک گینه"
+  ]
+ },
+ "KMF": {
+  "fa": "فرانک کومور",
+  "en": "Comorian Franc",
+  "cc": "km",
+  "sym": "CF",
+  "aliases": [
+   "فرانک کومور"
+  ]
+ },
+ "XAF": {
+  "fa": "فرانک آفریقای مرکزی",
+  "en": "Central African CFA",
+  "cc": "cm",
+  "sym": "FCFA",
+  "aliases": [
+   "فرانک آفریقای مرکزی"
+  ]
+ },
+ "XOF": {
+  "fa": "فرانک آفریقای غربی",
+  "en": "West African CFA",
+  "cc": "sn",
+  "sym": "CFA",
+  "aliases": [
+   "فرانک آفریقای غربی"
+  ]
+ },
+ "XPF": {
+  "fa": "فرانک اقیانوسیه",
+  "en": "CFP Franc",
+  "cc": "pf",
+  "sym": "₣",
+  "aliases": [
+   "فرانک اقیانوسیه"
+  ]
+ },
+ "AOA": {
+  "fa": "کوانزا آنگولا",
+  "en": "Angolan Kwanza",
+  "cc": "ao",
+  "sym": "Kz",
+  "aliases": [
+   "کوانزا"
+  ]
+ },
+ "MZN": {
+  "fa": "متیکال موزامبیک",
+  "en": "Mozambican Metical",
+  "cc": "mz",
+  "sym": "MT",
+  "aliases": [
+   "متیکال"
+  ]
+ },
+ "ZMW": {
+  "fa": "کواچا زامبیا",
+  "en": "Zambian Kwacha",
+  "cc": "zm",
+  "sym": "ZK",
+  "aliases": [
+   "کواچا زامبیا"
+  ]
+ },
+ "MWK": {
+  "fa": "کواچا مالاوی",
+  "en": "Malawian Kwacha",
+  "cc": "mw",
+  "sym": "MK",
+  "aliases": [
+   "کواچا مالاوی"
+  ]
+ },
+ "BWP": {
+  "fa": "پولا بوتسوانا",
+  "en": "Botswana Pula",
+  "cc": "bw",
+  "sym": "P",
+  "aliases": [
+   "پولا"
+  ]
+ },
+ "NAD": {
+  "fa": "دلار نامیبیا",
+  "en": "Namibian Dollar",
+  "cc": "na",
+  "sym": "N$",
+  "aliases": [
+   "دلار نامیبیا"
+  ]
+ },
+ "LSL": {
+  "fa": "لوتی لسوتو",
+  "en": "Lesotho Loti",
+  "cc": "ls",
+  "sym": "L",
+  "aliases": [
+   "لوتی"
+  ]
+ },
+ "SZL": {
+  "fa": "لیلانگنی اسواتینی",
+  "en": "Swazi Lilangeni",
+  "cc": "sz",
+  "sym": "E",
+  "aliases": [
+   "لیلانگنی"
+  ]
+ },
+ "MGA": {
+  "fa": "آریاری ماداگاسکار",
+  "en": "Malagasy Ariary",
+  "cc": "mg",
+  "sym": "Ar",
+  "aliases": [
+   "آریاری"
+  ]
+ },
+ "MUR": {
+  "fa": "روپیه موریس",
+  "en": "Mauritian Rupee",
+  "cc": "mu",
+  "sym": "₨",
+  "aliases": [
+   "روپیه موریس"
+  ]
+ },
+ "SCR": {
+  "fa": "روپیه سیشل",
+  "en": "Seychellois Rupee",
+  "cc": "sc",
+  "sym": "₨",
+  "aliases": [
+   "روپیه سیشل"
+  ]
+ },
+ "CVE": {
+  "fa": "اسکودو کیپ ورد",
+  "en": "Cape Verdean Escudo",
+  "cc": "cv",
+  "sym": "Esc",
+  "aliases": [
+   "اسکودو"
+  ]
+ },
+ "GMD": {
+  "fa": "دالاسی گامبیا",
+  "en": "Gambian Dalasi",
+  "cc": "gm",
+  "sym": "D",
+  "aliases": [
+   "دالاسی"
+  ]
+ },
+ "LRD": {
+  "fa": "دلار لیبریا",
+  "en": "Liberian Dollar",
+  "cc": "lr",
+  "sym": "L$",
+  "aliases": [
+   "دلار لیبریا"
+  ]
+ },
+ "SLE": {
+  "fa": "لئون سیرالئون",
+  "en": "Sierra Leonean Leone",
+  "cc": "sl",
+  "sym": "Le",
+  "aliases": [
+   "لئون"
+  ]
+ },
+ "STN": {
+  "fa": "دوبرا سائوتومه",
+  "en": "São Tomé Dobra",
+  "cc": "st",
+  "sym": "Db",
+  "aliases": [
+   "دوبرا"
+  ]
+ },
+ "MXN": {
+  "fa": "پزو مکزیک",
+  "en": "Mexican Peso",
+  "cc": "mx",
+  "sym": "MX$",
+  "aliases": [
+   "پزو",
+   "پزو مکزیک",
+   "peso"
+  ]
+ },
+ "BRL": {
+  "fa": "رئال برزیل",
+  "en": "Brazilian Real",
+  "cc": "br",
+  "sym": "R$",
+  "aliases": [
+   "رئال",
+   "رئال برزیل",
+   "real"
+  ]
+ },
+ "ARS": {
+  "fa": "پزو آرژانتین",
+  "en": "Argentine Peso",
+  "cc": "ar",
+  "sym": "AR$",
+  "aliases": [
+   "پزو آرژانتین"
+  ]
+ },
+ "CLP": {
+  "fa": "پزو شیلی",
+  "en": "Chilean Peso",
+  "cc": "cl",
+  "sym": "CL$",
+  "aliases": [
+   "پزو شیلی"
+  ]
+ },
+ "COP": {
+  "fa": "پزو کلمبیا",
+  "en": "Colombian Peso",
+  "cc": "co",
+  "sym": "CO$",
+  "aliases": [
+   "پزو کلمبیا"
+  ]
+ },
+ "PEN": {
+  "fa": "سول پرو",
+  "en": "Peruvian Sol",
+  "cc": "pe",
+  "sym": "S/",
+  "aliases": [
+   "سول پرو"
+  ]
+ },
+ "UYU": {
+  "fa": "پزو اروگوئه",
+  "en": "Uruguayan Peso",
+  "cc": "uy",
+  "sym": "$U",
+  "aliases": [
+   "پزو اروگوئه"
+  ]
+ },
+ "PYG": {
+  "fa": "گوارانی پاراگوئه",
+  "en": "Paraguayan Guarani",
+  "cc": "py",
+  "sym": "₲",
+  "aliases": [
+   "گوارانی"
+  ]
+ },
+ "BOB": {
+  "fa": "بولیویانو",
+  "en": "Bolivian Boliviano",
+  "cc": "bo",
+  "sym": "Bs",
+  "aliases": [
+   "بولیویانو"
+  ]
+ },
+ "VES": {
+  "fa": "بولیوار ونزوئلا",
+  "en": "Venezuelan Bolívar",
+  "cc": "ve",
+  "sym": "Bs.S",
+  "aliases": [
+   "بولیوار"
+  ]
+ },
+ "CRC": {
+  "fa": "کولون کاستاریکا",
+  "en": "Costa Rican Colón",
+  "cc": "cr",
+  "sym": "₡",
+  "aliases": [
+   "کولون"
+  ]
+ },
+ "GTQ": {
+  "fa": "کتزال گواتمالا",
+  "en": "Guatemalan Quetzal",
+  "cc": "gt",
+  "sym": "Q",
+  "aliases": [
+   "کتزال"
+  ]
+ },
+ "HNL": {
+  "fa": "لمپیرا هندوراس",
+  "en": "Honduran Lempira",
+  "cc": "hn",
+  "sym": "L",
+  "aliases": [
+   "لمپیرا"
+  ]
+ },
+ "NIO": {
+  "fa": "کوردوبا نیکاراگوئه",
+  "en": "Nicaraguan Córdoba",
+  "cc": "ni",
+  "sym": "C$",
+  "aliases": [
+   "کوردوبا"
+  ]
+ },
+ "PAB": {
+  "fa": "بالبوا پاناما",
+  "en": "Panamanian Balboa",
+  "cc": "pa",
+  "sym": "B/.",
+  "aliases": [
+   "بالبوا"
+  ]
+ },
+ "DOP": {
+  "fa": "پزو دومینیکن",
+  "en": "Dominican Peso",
+  "cc": "do",
+  "sym": "RD$",
+  "aliases": [
+   "پزو دومینیکن"
+  ]
+ },
+ "CUP": {
+  "fa": "پزو کوبا",
+  "en": "Cuban Peso",
+  "cc": "cu",
+  "sym": "₱",
+  "aliases": [
+   "پزو کوبا"
+  ]
+ },
+ "HTG": {
+  "fa": "گورد هائیتی",
+  "en": "Haitian Gourde",
+  "cc": "ht",
+  "sym": "G",
+  "aliases": [
+   "گورد"
+  ]
+ },
+ "JMD": {
+  "fa": "دلار جامائیکا",
+  "en": "Jamaican Dollar",
+  "cc": "jm",
+  "sym": "J$",
+  "aliases": [
+   "دلار جامائیکا"
+  ]
+ },
+ "TTD": {
+  "fa": "دلار ترینیداد",
+  "en": "Trinidad Dollar",
+  "cc": "tt",
+  "sym": "TT$",
+  "aliases": [
+   "دلار ترینیداد"
+  ]
+ },
+ "BBD": {
+  "fa": "دلار باربادوس",
+  "en": "Barbadian Dollar",
+  "cc": "bb",
+  "sym": "Bds$",
+  "aliases": [
+   "دلار باربادوس"
+  ]
+ },
+ "BSD": {
+  "fa": "دلار باهاما",
+  "en": "Bahamian Dollar",
+  "cc": "bs",
+  "sym": "B$",
+  "aliases": [
+   "دلار باهاما"
+  ]
+ },
+ "BZD": {
+  "fa": "دلار بلیز",
+  "en": "Belize Dollar",
+  "cc": "bz",
+  "sym": "BZ$",
+  "aliases": [
+   "دلار بلیز"
+  ]
+ },
+ "BMD": {
+  "fa": "دلار برمودا",
+  "en": "Bermudian Dollar",
+  "cc": "bm",
+  "sym": "BD$",
+  "aliases": [
+   "دلار برمودا"
+  ]
+ },
+ "KYD": {
+  "fa": "دلار جزایر کیمن",
+  "en": "Cayman Dollar",
+  "cc": "ky",
+  "sym": "CI$",
+  "aliases": [
+   "دلار کیمن"
+  ]
+ },
+ "XCD": {
+  "fa": "دلار کارائیب شرقی",
+  "en": "East Caribbean Dollar",
+  "cc": "ag",
+  "sym": "EC$",
+  "aliases": [
+   "دلار کارائیب"
+  ]
+ },
+ "AWG": {
+  "fa": "فلورین آروبا",
+  "en": "Aruban Florin",
+  "cc": "aw",
+  "sym": "ƒ",
+  "aliases": [
+   "فلورین آروبا"
+  ]
+ },
+ "ANG": {
+  "fa": "گیلدر آنتیل",
+  "en": "Antillean Guilder",
+  "cc": "cw",
+  "sym": "ƒ",
+  "aliases": [
+   "گیلدر"
+  ]
+ },
+ "SRD": {
+  "fa": "دلار سورینام",
+  "en": "Surinamese Dollar",
+  "cc": "sr",
+  "sym": "Sr$",
+  "aliases": [
+   "دلار سورینام"
+  ]
+ },
+ "GYD": {
+  "fa": "دلار گویان",
+  "en": "Guyanese Dollar",
+  "cc": "gy",
+  "sym": "G$",
+  "aliases": [
+   "دلار گویان"
+  ]
+ },
+ "FJD": {
+  "fa": "دلار فیجی",
+  "en": "Fijian Dollar",
+  "cc": "fj",
+  "sym": "FJ$",
+  "aliases": [
+   "دلار فیجی"
+  ]
+ },
+ "PGK": {
+  "fa": "کینا پاپوآ",
+  "en": "Papua New Guinean Kina",
+  "cc": "pg",
+  "sym": "K",
+  "aliases": [
+   "کینا"
+  ]
+ },
+ "SBD": {
+  "fa": "دلار جزایر سلیمان",
+  "en": "Solomon Islands Dollar",
+  "cc": "sb",
+  "sym": "SI$",
+  "aliases": [
+   "دلار سلیمان"
+  ]
+ },
+ "VUV": {
+  "fa": "واتو وانواتو",
+  "en": "Vanuatu Vatu",
+  "cc": "vu",
+  "sym": "VT",
+  "aliases": [
+   "واتو"
+  ]
+ },
+ "WST": {
+  "fa": "تالا ساموآ",
+  "en": "Samoan Tala",
+  "cc": "ws",
+  "sym": "WS$",
+  "aliases": [
+   "تالا"
+  ]
+ },
+ "TOP": {
+  "fa": "پاآنگا تونگا",
+  "en": "Tongan Paʻanga",
+  "cc": "to",
+  "sym": "T$",
+  "aliases": [
+   "پاآنگا"
+  ]
+ },
+ "XAU": {
+  "fa": "انس طلا",
+  "en": "Gold Ounce",
+  "cc": null,
+  "sym": "XAU",
+  "aliases": [
+   "انس طلا",
+   "اونس طلا",
+   "طلا",
+   "gold"
+  ]
+ },
+ "XAG": {
+  "fa": "انس نقره",
+  "en": "Silver Ounce",
+  "cc": null,
+  "sym": "XAG",
+  "aliases": [
+   "انس نقره",
+   "اونس نقره",
+   "نقره",
+   "silver"
+  ]
+ }
+}

@@ -1,0 +1,270 @@
+{
+ "evm": [
+  {
+   "key": "eth",
+   "name": "Ethereum (ERC20)",
+   "symbol": "ETH",
+   "rpcs": [
+    "https://ethereum-rpc.publicnode.com",
+    "https://eth.llamarpc.com",
+    "https://cloudflare-eth.com",
+    "https://eth.drpc.org"
+   ],
+   "explorer": "https://etherscan.io",
+   "tokens": {
+    "USDT": [
+     "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+     6
+    ],
+    "USDC": [
+     "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+     6
+    ],
+    "DAI": [
+     "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+     18
+    ],
+    "WBTC": [
+     "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",
+     8
+    ],
+    "SHIB": [
+     "0x95aD61b0a150d79219dCF64E1E6Cc01f0B64C4cE",
+     18
+    ],
+    "PEPE": [
+     "0x6982508145454Ce325dDbE47a25d4ec3d2311933",
+     18
+    ],
+    "LINK": [
+     "0x514910771AF9Ca656af840dff83E8264EcF986CA",
+     18
+    ]
+   }
+  },
+  {
+   "key": "bsc",
+   "name": "BNB Smart Chain (BEP20)",
+   "symbol": "BNB",
+   "rpcs": [
+    "https://bsc-rpc.publicnode.com",
+    "https://bsc-dataseed.bnbchain.org",
+    "https://bsc-dataseed1.binance.org",
+    "https://bsc.drpc.org"
+   ],
+   "explorer": "https://bscscan.com",
+   "tokens": {
+    "USDT": [
+     "0x55d398326f99059fF775485246999027B3197955",
+     18
+    ],
+    "USDC": [
+     "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d",
+     18
+    ],
+    "BUSD": [
+     "0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56",
+     18
+    ],
+    "ETH": [
+     "0x2170Ed0880ac9A755fd29B2688956BD959F933F8",
+     18
+    ],
+    "CAKE": [
+     "0x0E09FaBB73Bd3Ade0a17ECC321fD13a19e81cE82",
+     18
+    ]
+   }
+  },
+  {
+   "key": "polygon",
+   "name": "Polygon",
+   "symbol": "POL",
+   "rpcs": [
+    "https://polygon-bor-rpc.publicnode.com",
+    "https://polygon-rpc.com",
+    "https://polygon.drpc.org"
+   ],
+   "explorer": "https://polygonscan.com",
+   "tokens": {
+    "USDT": [
+     "0xc2132D05D31c914a87C6611C10748AEb04B58e8F",
+     6
+    ],
+    "USDC": [
+     "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
+     6
+    ],
+    "USDC.e": [
+     "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174",
+     6
+    ]
+   }
+  },
+  {
+   "key": "arbitrum",
+   "name": "Arbitrum One",
+   "symbol": "ETH",
+   "rpcs": [
+    "https://arbitrum-one-rpc.publicnode.com",
+    "https://arb1.arbitrum.io/rpc",
+    "https://arbitrum.drpc.org"
+   ],
+   "explorer": "https://arbiscan.io",
+   "tokens": {
+    "USDT": [
+     "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9",
+     6
+    ],
+    "USDC": [
+     "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+     6
+    ],
+    "ARB": [
+     "0x912CE59144191C1204E64559FE8253a0e49E6548",
+     18
+    ]
+   }
+  },
+  {
+   "key": "optimism",
+   "name": "Optimism",
+   "symbol": "ETH",
+   "rpcs": [
+    "https://optimism-rpc.publicnode.com",
+    "https://mainnet.optimism.io",
+    "https://optimism.drpc.org"
+   ],
+   "explorer": "https://optimistic.etherscan.io",
+   "tokens": {
+    "USDT": [
+     "0x94b008aA00579c1307B0EF2c499aD98a8ce58e58",
+     6
+    ],
+    "USDC": [
+     "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
+     6
+    ],
+    "OP": [
+     "0x4200000000000000000000000000000000000042",
+     18
+    ]
+   }
+  },
+  {
+   "key": "base",
+   "name": "Base",
+   "symbol": "ETH",
+   "rpcs": [
+    "https://base-rpc.publicnode.com",
+    "https://mainnet.base.org",
+    "https://base.drpc.org"
+   ],
+   "explorer": "https://basescan.org",
+   "tokens": {
+    "USDC": [
+     "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+     6
+    ],
+    "USDT": [
+     "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2",
+     6
+    ]
+   }
+  },
+  {
+   "key": "avax",
+   "name": "Avalanche C-Chain",
+   "symbol": "AVAX",
+   "rpcs": [
+    "https://avalanche-c-chain-rpc.publicnode.com",
+    "https://api.avax.network/ext/bc/C/rpc"
+   ],
+   "explorer": "https://snowtrace.io",
+   "tokens": {
+    "USDT": [
+     "0x9702230A8Ea53601f5cD2dc00fDBc13d4dF4A8c7",
+     6
+    ],
+    "USDC": [
+     "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E",
+     6
+    ]
+   }
+  },
+  {
+   "key": "linea",
+   "name": "Linea",
+   "symbol": "ETH",
+   "rpcs": [
+    "https://linea-rpc.publicnode.com",
+    "https://rpc.linea.build"
+   ],
+   "explorer": "https://lineascan.build",
+   "tokens": {
+    "USDC": [
+     "0x176211869cA2b568f2A7D4EE941E073a821EE1ff",
+     6
+    ],
+    "USDT": [
+     "0xA219439258ca9da29E9Cc4cE5596924745e12B93",
+     6
+    ]
+   }
+  }
+ ],
+ "trc20": {
+  "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t": [
+   "USDT",
+   6
+  ],
+  "TEkxiTehnzSmSe2XqrBj4w32RUN966rdz8": [
+   "USDC",
+   6
+  ],
+  "TPYmHEhy5n8TCEfYGqW2rPxsghSfzghPDn": [
+   "USDD",
+   18
+  ],
+  "TUpMhErZL2fhh4sVNULAbNKLokS4GjC1F4": [
+   "TUSD",
+   18
+  ],
+  "TAFjULxiVgT4qWk6UZwjqwZXTSaGaqnVp4": [
+   "BTT",
+   18
+  ],
+  "TCFLL5dx5ZJdKnWuesXxi1VPwjLVmWZZy9": [
+   "JST",
+   18
+  ],
+  "TSSMHYeV2uE9qYH95DqyoCuNCzEL1NvU3S": [
+   "SUN",
+   18
+  ],
+  "TLa2f6VPqDgRE67v1736s7bJ8Ray5wYjU7": [
+   "WIN",
+   6
+  ]
+ },
+ "sol_tokens": {
+  "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB": "USDT",
+  "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v": "USDC",
+  "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263": "BONK",
+  "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN": "JUP",
+  "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm": "WIF"
+ },
+ "sol_rpcs": [
+  "https://solana-rpc.publicnode.com",
+  "https://api.mainnet-beta.solana.com"
+ ],
+ "xrp_rpcs": [
+  "https://xrplcluster.com",
+  "https://s1.ripple.com:51234",
+  "https://s2.ripple.com:51234"
+ ],
+ "sui_rpcs": [
+  "https://fullnode.mainnet.sui.io:443",
+  "https://sui-rpc.publicnode.com"
+ ]
+}
