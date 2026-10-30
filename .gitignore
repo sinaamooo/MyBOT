@@ -8,3 +8,8 @@ __pycache__/
 venv/
 *.session
 .pytest_cache/
+bot.pid
+bot.log
+passenger_wsgi.py
+.htaccess
+tmp/

@@ -88,6 +88,25 @@ WantedBy=multi-user.target
 sudo systemctl enable --now mybot
 ```
 
+### اجرا روی cPanel
+
+1. فایل زیپ را در File Manager آپلود و Extract کنید (پوشه `MyBOT`).
+2. **Setup Python App** → Create Application: نسخه پایتون **3.10 یا بالاتر**، Application root: `MyBOT`.
+3. در همان صفحه `requirements.txt` را اضافه و **Run Pip Install** را بزنید.
+4. در Terminal:
+
+```bash
+bash ~/MyBOT/run.sh
+```
+
+5. Cron Jobs → هر دقیقه (`* * * * *`):
+
+```bash
+bash /home/USERNAME/MyBOT/run.sh
+```
+
+لاگ: `~/MyBOT/bot.log` — توقف: `bash ~/MyBOT/stop.sh`
+
 ## ⚙️ تنظیمات مهم در BotFather و گروه
 
 1. **Group Privacy را خاموش کنید**: `BotFather → /mybots → Bot Settings → Group Privacy → Turn off` (برای اینکه ربات همه پیام‌های گروه را ببیند).
