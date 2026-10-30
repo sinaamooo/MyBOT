@@ -36,8 +36,8 @@
   "desc": "عدم عضویت (پاپ‌آپ)"
  },
  "conv_crypto": {
-  "text": "🪙 <b>{amount} {symbol}</b> = <b>{toman}</b> تومان\n\n<blockquote>🔴     ترون: <code>{trx}</code> TRX\n💠     تون: <code>{ton}</code> TON\n💵     دلار: <code>{usd}</code> $\n⭐️     استارز: <code>{stars}</code> Stars</blockquote>\n🗓 {time}",
-  "desc": "تبدیل ارز دیجیتال ({amount} {symbol} {name} {toman} {trx} {ton} {usd} {stars} {price_usd} {price_toman} {change} {time})"
+  "text": "‏<tg-emoji emoji-id=\"5843796824367832872\">💵</tg-emoji> <b>{amount} {title}</b> = <b>{toman}</b> تومان\n\n<blockquote>🔴     ترون: <code>{trx}</code> TRX\n💠     تون: <code>{ton}</code> TON\n💵     دلار: <code>{usd}</code> $\n⭐️     استارز: <code>{stars}</code> Stars</blockquote>\n🗓 {time}",
+  "desc": "تبدیل ارز دیجیتال ({amount} {symbol} {title} {name} {toman} {trx} {ton} {usd} {stars} {price_usd} {price_toman} {change} {time})"
  },
  "conv_toman": {
   "text": "💰 <b>{amount} {unit}</b>\n\n<blockquote>💵     تتر: <code>{usdt}</code> USDT\n💠     تون: <code>{ton}</code> TON\n🔴     ترون: <code>{trx}</code> TRX</blockquote>\n🗓 {time}",

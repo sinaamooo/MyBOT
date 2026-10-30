@@ -65,6 +65,7 @@ final class Convert
             'amount' => Fmt::num($amount),
             'symbol' => $S,
             'name' => $name,
+            'title' => UI::esc(Currencies::cryptoName($S) ?? $S),
             'toman' => $toman !== null ? Fmt::toman($toman) : null,
             'price_usd' => Fmt::usd($q['price']),
             'price_toman' => $usdt ? Fmt::toman($q['price'] * $usdt) : null,
