@@ -1,19 +1,11 @@
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
+"""Entry point: python main.py"""
+import asyncio
 
-TOKEN = "8713048674:AAG-leqn3bNxEW38C-dlzxI_AVUS2DB7n5Y"
+from app.bot import run
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [[InlineKeyboardButton("دکمه 1", callback_data='btn1')]]
-    await update.message.reply_text("خوش آمدید!", reply_markup=InlineKeyboardMarkup(keyboard))
-
-async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    await query.edit_message_text("روی دکمه کلیک شد!")
-
-app = Application.builder().token(TOKEN).build()
-app.add_handler(CommandHandler("start", start))
-app.add_handler(CallbackQueryHandler(button))
-print("ربات روشن شد")
-app.run_polling()
+if __name__ == "__main__":
+    try:
+        asyncio.run(run())
+    except (KeyboardInterrupt, SystemExit) as exc:
+        if isinstance(exc, SystemExit) and exc.code not in (None, 0):
+            raise
