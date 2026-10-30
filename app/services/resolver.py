@@ -1,4 +1,3 @@
-"""Resolve @usernames to ids: local DB, Bot API (channels/groups), optional MTProto (Telethon)."""
 from __future__ import annotations
 
 import logging
@@ -15,7 +14,7 @@ _client = None
 
 @dataclass
 class Target:
-    kind: str  # "user" | "chat"
+    kind: str
     id: int
     name: str
     username: str | None
@@ -56,7 +55,7 @@ async def resolve(bot: Bot, username: str) -> Target | None:
         if chat.type == "private":
             return Target("user", chat.id, " ".join(filter(None, [chat.first_name, chat.last_name])), chat.username)
         return Target("chat", chat.id, chat.title or username, chat.username)
-    except Exception:  # noqa: BLE001
+    except Exception:
         pass
     try:
         client = await _telethon()
@@ -70,6 +69,6 @@ async def resolve(bot: Bot, username: str) -> Target | None:
             if isinstance(entity, (Channel, Chat)):
                 return Target("chat", int(f"-100{entity.id}") if isinstance(entity, Channel) else -entity.id,
                               entity.title, getattr(entity, "username", None))
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         log.info("telethon resolve failed for %s: %s", username, exc)
     return None

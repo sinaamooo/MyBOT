@@ -1,10 +1,3 @@
-"""Telegram gift (NFT) pricing.
-
-Price data comes from a public, frequently refreshed dataset with floor prices
-aggregated from Portals / GetGems / MRKT (collection, model, backdrop and symbol
-floors). Gift attributes come from Fragment metadata / the t.me/nft page, or
-directly from the Bot API (getUserGifts / getChatGifts).
-"""
 from __future__ import annotations
 
 import asyncio
@@ -49,7 +42,6 @@ def find_links(text: str) -> list[tuple[str, int]]:
     return out
 
 
-# ------------------------------------------------------------------ dataset
 @ttl_cache(600)
 async def dataset() -> dict:
     data = await safe(get_json(f"{RAW}/main/Gifts_Details.json", timeout=20), {})
@@ -73,7 +65,6 @@ async def attribute_floors(short_name: str) -> dict:
 
 @ttl_cache(6 * 3600)
 async def floors_days_ago(days: int = 7) -> dict[str, float]:
-    """Collection floors from ``days`` ago (via the dataset's git history)."""
     until = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() - days * 86400))
     commits = await safe(get_json(f"https://api.github.com/repos/{DATA_REPO}/commits",
                                   params={"until": until, "per_page": 1, "path": "Gifts_Details.json"}, timeout=15))
@@ -86,7 +77,6 @@ async def floors_days_ago(days: int = 7) -> dict[str, float]:
 
 
 async def portals_floor(short: str) -> float | None:
-    """Optional live floor from Portals (requires PORTALS_AUTH 'tma ...' header)."""
     if not config.portals_auth:
         return None
     data = await safe(get_json("https://portals-market.com/api/collections/floors",
@@ -123,14 +113,12 @@ async def value_of(collection_name: str, model: str | None, backdrop: str | None
     mf = (attrs.get("models") or {}).get(norm(model or "")) if model else None
     bf = (attrs.get("backdrops") or {}).get(norm(backdrop or "")) if backdrop else None
     sf = (attrs.get("symbols") or {}).get(norm(symbol or "")) if symbol else None
-    # a gift is worth at least the floor of each of its traits; the model is the strongest signal
     candidates = [v for v in (floor, mf, bf, sf) if v]
     estimate = max(candidates) if candidates else None
     old = (await floors_days_ago()).get(norm(item.get("full_name", "")))
     return Valuation(item.get("full_name"), floor, mf, bf, sf, estimate, old)
 
 
-# ------------------------------------------------------------------ gift metadata from link
 @dataclass
 class GiftMeta:
     slug: str

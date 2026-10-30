@@ -1,4 +1,3 @@
-"""SQLite storage (aiosqlite) with an in-memory cache for settings and texts."""
 from __future__ import annotations
 
 import json
@@ -91,6 +90,7 @@ class Database:
         self.conn: aiosqlite.Connection | None = None
         self._settings: dict[str, Any] = {}
         self._texts: dict[str, str] = {}
+        self._banned: set[int] = set()
 
     async def connect(self) -> None:
         Path(self.path).parent.mkdir(parents=True, exist_ok=True)
@@ -98,7 +98,13 @@ class Database:
         self.conn.row_factory = aiosqlite.Row
         await self.conn.execute("PRAGMA journal_mode=WAL")
         await self.conn.executescript(SCHEMA)
+        async with self.conn.execute("PRAGMA table_info(users)") as cur:
+            cols = {row["name"] for row in await cur.fetchall()}
+        if "banned" not in cols:
+            await self.conn.execute("ALTER TABLE users ADD COLUMN banned INTEGER DEFAULT 0")
         await self.conn.commit()
+        async with self.conn.execute("SELECT id FROM users WHERE banned=1") as cur:
+            self._banned = {row["id"] for row in await cur.fetchall()}
         async with self.conn.execute("SELECT key, value FROM kv") as cur:
             for row in await cur.fetchall():
                 try:
@@ -112,7 +118,6 @@ class Database:
         if self.conn:
             await self.conn.close()
 
-    # ---------------- settings ----------------
     def get(self, key: str, default: Any = None) -> Any:
         return self._settings.get(key, default)
 
@@ -129,7 +134,6 @@ class Database:
         await self.conn.execute("DELETE FROM kv WHERE key=?", (key,))
         await self.conn.commit()
 
-    # ---------------- texts ----------------
     def text_override(self, key: str) -> str | None:
         return self._texts.get(key)
 
@@ -146,7 +150,6 @@ class Database:
         await self.conn.execute("DELETE FROM texts WHERE key=?", (key,))
         await self.conn.commit()
 
-    # ---------------- users ----------------
     async def touch_user(self, user, count_message: bool = False, started: bool = False) -> None:
         now = int(time.time())
         await self.conn.execute(
@@ -203,6 +206,21 @@ class Database:
         user = await self.get_user(user_id)
         return float(user["balance"] or 0) if user else amount
 
+    def is_banned(self, user_id: int) -> bool:
+        return user_id in self._banned
+
+    async def set_banned(self, user_id: int, banned: bool) -> None:
+        await self.conn.execute(
+            "INSERT INTO users(id, banned, first_seen, last_seen) VALUES(?, ?, ?, ?) "
+            "ON CONFLICT(id) DO UPDATE SET banned=excluded.banned",
+            (user_id, int(banned), int(time.time()), int(time.time())),
+        )
+        await self.conn.commit()
+        if banned:
+            self._banned.add(user_id)
+        else:
+            self._banned.discard(user_id)
+
     async def user_ids(self, only_started: bool = True) -> list[int]:
         query = "SELECT id FROM users" + (" WHERE started=1" if only_started else "")
         async with self.conn.execute(query) as cur:
@@ -212,7 +230,6 @@ class Database:
         async with self.conn.execute("SELECT COUNT(*) AS c FROM users") as cur:
             return (await cur.fetchone())["c"]
 
-    # ---------------- chats ----------------
     async def upsert_chat(self, chat, active: bool = True) -> None:
         await self.conn.execute(
             """
@@ -261,7 +278,6 @@ class Database:
         ) as cur:
             return (await cur.fetchone())["c"]
 
-    # ---------------- strikes (warnings) ----------------
     async def add_strike(self, chat_id: int, user_id: int, kind: str) -> int:
         now = int(time.time())
         await self.conn.execute(
@@ -292,7 +308,6 @@ class Database:
             await self.conn.execute("DELETE FROM strikes WHERE chat_id=? AND user_id=?", (chat_id, user_id))
         await self.conn.commit()
 
-    # ---------------- scams ----------------
     async def create_scam(self, target_id, target_username, target_name, reporter_id, origin_chat) -> int:
         cur = await self.conn.execute(
             "INSERT INTO scams(target_id, target_username, target_name, reporter_id, origin_chat, created_at, status)"
@@ -341,7 +356,6 @@ class Database:
         ) as cur:
             return [dict(r) for r in await cur.fetchall()]
 
-    # ---------------- gift snapshots ----------------
     async def last_gift_snapshot(self, owner_id: int) -> dict | None:
         async with self.conn.execute(
             "SELECT * FROM gift_snapshots WHERE owner_id=? ORDER BY ts DESC LIMIT 1", (owner_id,)
@@ -356,7 +370,6 @@ class Database:
         )
         await self.conn.commit()
 
-    # ---------------- translations ----------------
     async def save_translation(self, chat_id: int, message_id: int, requester_id: int, text: str) -> None:
         await self.conn.execute(
             "INSERT OR REPLACE INTO translations(chat_id, message_id, requester_id, text, used, created_at)"
@@ -366,7 +379,6 @@ class Database:
         await self.conn.commit()
 
     async def claim_translation(self, chat_id: int, message_id: int) -> dict | None:
-        """Atomically mark a pending translation as used. Returns the row only for the first caller."""
         cur = await self.conn.execute(
             "UPDATE translations SET used=1 WHERE chat_id=? AND message_id=? AND used=0", (chat_id, message_id)
         )
@@ -392,9 +404,7 @@ class Database:
             row = await c.fetchone()
         return dict(row) if row else None
 
-    # ---------------- whale alert dedupe ----------------
     async def mark_alert(self, alert_id: str) -> bool:
-        """Returns True if the alert is new."""
         cur = await self.conn.execute(
             "INSERT OR IGNORE INTO seen_alerts(id, ts) VALUES(?, ?)", (alert_id, int(time.time()))
         )

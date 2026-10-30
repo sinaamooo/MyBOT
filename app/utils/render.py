@@ -1,4 +1,3 @@
-"""Pillow drawing primitives with proper Persian (RTL) text support."""
 from __future__ import annotations
 
 import io
@@ -12,7 +11,7 @@ from ..config import FONTS_DIR
 RAQM = features.check("raqm")
 _RTL = re.compile(r"[؀-ۿݐ-ݿﭐ-﷿ﹰ-﻿]")
 
-if not RAQM:  # pragma: no cover - depends on system libs
+if not RAQM:
     try:
         import arabic_reshaper
         from bidi.algorithm import get_display
@@ -96,7 +95,6 @@ def glass_box(canvas: Image.Image, box: tuple[int, int, int, int], radius: int =
     layer = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
     d = ImageDraw.Draw(layer)
     d.rounded_rectangle(box, radius=radius, fill=(*tint, fill_alpha), outline=(*tint, outline_alpha), width=2)
-    # top highlight for the "glass" look
     x0, y0, x1, y1 = box
     if highlight:
         d.rounded_rectangle((x0 + 3, y0 + 3, x1 - 3, y0 + (y1 - y0) // 2), radius=max(radius - 3, 4),

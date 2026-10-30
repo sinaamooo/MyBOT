@@ -1,4 +1,3 @@
-"""Gift pricing: t.me/nft links and /gift portfolio cards."""
 from __future__ import annotations
 
 import io
@@ -26,7 +25,6 @@ def _ton_rates(snap) -> tuple[float | None, float | None]:
     return usd, (usd * snap.usdt_toman if usd and snap.usdt_toman else None)
 
 
-# ------------------------------------------------------------------ single gift link
 async def answer_gift_link(message: Message, slug: str, number: int) -> None:
     meta = await gifts.gift_meta(slug, number)
     name = meta.name if meta else gifts._split_name(slug)
@@ -64,7 +62,6 @@ async def answer_gift_link(message: Message, slug: str, number: int) -> None:
     await send(message, text, markup=ui.footer_kb([[ui.button("btn_gift_open", url=link)]]), preview_url=link)
 
 
-# ------------------------------------------------------------------ portfolio
 async def _fetch_owned(bot: Bot, target: resolver.Target) -> tuple[list, int]:
     items: list = []
     total = 0
@@ -123,7 +120,7 @@ async def gift_cmd(message: Message, bot: Bot, command: CommandObject):
 async def _portfolio(message: Message, bot: Bot, target: resolver.Target) -> None:
     try:
         owned, total_count = await _fetch_owned(bot, target)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         log.info("get gifts failed for %s: %s", target.id, exc)
         await send(message, ui.t("gift_user_unknown"))
         return
@@ -180,7 +177,6 @@ async def _portfolio(message: Message, bot: Bot, target: resolver.Target) -> Non
                 value_ton=value,
             ))
 
-    # thumbnails for unique gifts shown on the card
     tiles.sort(key=lambda t: t.value_ton or 0, reverse=True)
     thumbs = await gifts.gather_limited(
         [gifts.gift_image(t.extra["name"]) if t.extra.get("name") else _none() for t in tiles[:20]], 8
@@ -189,7 +185,7 @@ async def _portfolio(message: Message, bot: Bot, target: resolver.Target) -> Non
         if data:
             try:
                 tile.image = Image.open(io.BytesIO(data))
-            except Exception:  # noqa: BLE001
+            except Exception:
                 pass
 
     pl_ton = total_now - total_then if total_then else None

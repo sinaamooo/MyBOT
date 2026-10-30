@@ -1,4 +1,3 @@
-"""Telegram helpers: admin checks, membership checks (cached), mute/unmute, delayed delete."""
 from __future__ import annotations
 
 import asyncio
@@ -33,7 +32,7 @@ async def is_chat_admin(bot: Bot, chat_id: int, user_id: int) -> bool:
     try:
         member = await bot.get_chat_member(chat_id, user_id)
         ok = member.status in (ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.CREATOR)
-    except Exception:  # noqa: BLE001
+    except Exception:
         ok = False
     _admin_cache[key] = (time.time(), ok)
     return ok
@@ -55,7 +54,7 @@ async def is_member(bot: Bot, channel_id: int | str, user_id: int) -> bool:
         ok = member.status not in (ChatMemberStatus.LEFT, ChatMemberStatus.KICKED) and not (
             member.status == ChatMemberStatus.RESTRICTED and not getattr(member, "is_member", True)
         )
-    except Exception as exc:  # noqa: BLE001 - bot is not admin in channel / channel removed
+    except Exception as exc:
         now = time.time()
         if now - _bad_channels.get(hash(channel_id), 0) > 600:
             log.warning("cannot check membership in %s (make the bot admin there): %s", channel_id, exc)
@@ -83,7 +82,7 @@ async def mute(bot: Bot, chat_id: int, user_id: int, minutes: int) -> bool:
             use_independent_chat_permissions=True,
         )
         return True
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         log.info("mute failed in %s: %s", chat_id, exc)
         return False
 
@@ -98,7 +97,7 @@ async def unmute(bot: Bot, chat_id: int, user_id: int) -> bool:
         )
         await bot.restrict_chat_member(chat_id, user_id, permissions=perms, use_independent_chat_permissions=True)
         return True
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         log.info("unmute failed in %s: %s", chat_id, exc)
         return False
 
@@ -108,7 +107,7 @@ async def safe_delete(message: Message | None) -> None:
         return
     try:
         await message.delete()
-    except Exception:  # noqa: BLE001
+    except Exception:
         pass
 
 
@@ -127,7 +126,6 @@ _throttle: dict[tuple, float] = {}
 
 
 def throttled(key: tuple, seconds: float) -> bool:
-    """Return True if the action identified by key happened less than ``seconds`` ago."""
     now = time.time()
     last = _throttle.get(key, 0)
     if now - last < seconds:

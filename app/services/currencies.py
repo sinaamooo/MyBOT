@@ -1,9 +1,7 @@
-"""Currency catalogue: world fiat currencies (Persian names + flags) and crypto aliases."""
 from __future__ import annotations
 
 import re
 
-# code: (Persian name, English name, flag country code, symbol, extra aliases)
 FIAT: dict[str, tuple[str, str, str | None, str, tuple[str, ...]]] = {
     "USD": ("دلار آمریکا", "US Dollar", "us", "$", ("دلار", "دلار امریکا", "دلار آمریکایی", "dollar", "dollars", "usd", "$")),
     "EUR": ("یورو", "Euro", "eu", "€", ("یورو", "اورو", "euro", "euros", "€")),
@@ -158,7 +156,6 @@ FIAT: dict[str, tuple[str, str, str | None, str, tuple[str, ...]]] = {
     "XAG": ("انس نقره", "Silver Ounce", None, "XAG", ("انس نقره", "اونس نقره", "نقره", "silver")),
 }
 
-# Crypto: symbol -> (Persian name, aliases)
 CRYPTO: dict[str, tuple[str, tuple[str, ...]]] = {
     "USDT": ("تتر", ("تتر", "تدر", "tether", "usdt", "دلار تتر")),
     "TON": ("تون کوین", ("تون", "تن", "تون کوین", "تونکوین", "toncoin", "ton", "گرام")),
@@ -261,7 +258,7 @@ def normalize(text: str) -> str:
     text = (text or "").strip().lower()
     text = text.replace("ي", "ی").replace("ك", "ک").replace("ى", "ی").replace("ۀ", "ه").replace("ة", "ه")
     text = text.replace("‌", " ").replace("‏", "").replace("‎", "").replace("ـ", "")
-    text = re.sub(r"[ً-ٰٟ]", "", text)  # Arabic diacritics
+    text = re.sub(r"[ً-ٰٟ]", "", text)
     return _SPACE.sub(" ", text).strip()
 
 
@@ -273,7 +270,6 @@ def _build() -> None:
     for code, (fa, en, _cc, sym, aliases) in FIAT.items():
         for a in (code, fa, en, *aliases):
             _FIAT_INDEX.setdefault(normalize(a), code)
-    # a few generic forms
     for code, (fa, *_rest) in FIAT.items():
         _FIAT_INDEX.setdefault(normalize(fa.replace(" ", "")), code)
     for sym, (fa, aliases) in CRYPTO.items():
@@ -283,12 +279,10 @@ def _build() -> None:
 
 _build()
 
-# symbols that are both ISO fiat codes and common crypto tickers -> treat as crypto
 CRYPTO_PRIORITY = {"TON", "BTC", "ETH", "SOL", "DOT", "OP"}
 
 
 def resolve_unit(unit: str) -> tuple[str, str] | None:
-    """Return (kind, code). kind in: toman, rial, stars, fiat, crypto, crypto_guess."""
     u = normalize(unit)
     if not u:
         return None
@@ -301,13 +295,11 @@ def resolve_unit(unit: str) -> tuple[str, str] | None:
     if u.upper() in CRYPTO_PRIORITY:
         return "crypto", u.upper()
     if u in _FIAT_INDEX:
-        # prefer the crypto meaning for words like "ton" / "تون" which are also crypto names
         if u in _CRYPTO_INDEX and not re.fullmatch(r"[a-z]{3}", u):
             return "crypto", _CRYPTO_INDEX[u]
         return "fiat", _FIAT_INDEX[u]
     if u in _CRYPTO_INDEX:
         return "crypto", _CRYPTO_INDEX[u]
-    # unknown latin ticker -> try as crypto (long tail via APIs)
     if re.fullmatch(r"[a-z0-9]{2,12}", u) and not u.isdigit():
         return "crypto_guess", u.upper()
     return None
@@ -319,7 +311,6 @@ def crypto_name(symbol: str) -> str | None:
 
 
 def is_known_crypto_word(text: str) -> str | None:
-    """Exact alias match used for 'price of 1 unit' messages (e.g. 'btc', 'تتر')."""
     return _CRYPTO_INDEX.get(normalize(text))
 
 

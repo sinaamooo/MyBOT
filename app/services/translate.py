@@ -1,4 +1,3 @@
-"""Translation with several free back-ends (Google gtx, MyMemory, Lingva)."""
 from __future__ import annotations
 
 import re

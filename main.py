@@ -1,4 +1,3 @@
-"""Entry point: python main.py"""
 import asyncio
 
 from app.bot import run

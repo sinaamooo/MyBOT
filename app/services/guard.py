@@ -1,4 +1,3 @@
-"""Heuristics for self-bots ("سلف"), advertising bots ("تبچی") and scam behaviour."""
 from __future__ import annotations
 
 import hashlib
@@ -10,7 +9,6 @@ from datetime import datetime, timedelta, timezone
 
 from ..utils.fmt import TEHRAN, en_digits
 
-# ------------------------------------------------------------------ scam phrases
 SCAM_PATTERNS = [
     r"بیا\s*(?:پی\s*وی|پیوی|پیو|پی|پ\s*و|خصوصی|دایرکت|دایرکتم)",
     r"(?:پی\s*وی|پیوی|پی)\s*(?:بیا|بیاین|بیاید|پیام\s*بده|چک\s*کن)",
@@ -39,7 +37,6 @@ def is_scammy(text: str, extra: list[str] | None = None) -> bool:
     return any(k and normalize_fa(k) in t for k in (extra or []))
 
 
-# ------------------------------------------------------------------ self-bot
 _CLOCK = re.compile(r"(?<!\d)([01]?\d|2[0-3])\s*[:：︰∶.]\s*([0-5]\d)(?!\d)")
 
 
@@ -60,7 +57,6 @@ def clock_in_name(name: str) -> tuple[int, int] | None:
 
 
 def clock_is_now(hm: tuple[int, int], tolerance_min: int = 3) -> bool:
-    """True if the clock in the name matches the current time in a common timezone."""
     now_utc = datetime.now(timezone.utc)
     zones = [TEHRAN, timezone.utc, timezone(timedelta(hours=3)), timezone(timedelta(hours=4))]
     for tz in zones:
@@ -92,7 +88,6 @@ def fully_formatted(text: str | None, entities) -> bool:
 
 
 class SelfDetector:
-    """Rolling score per (chat, user)."""
 
     WINDOW = 15 * 60
     THRESHOLD = 6
@@ -125,7 +120,6 @@ class SelfDetector:
     def on_message(self, chat_id: int, user, text: str | None, entities, reply_delta: float | None) -> int:
         key = (chat_id, user.id)
         score = self.score(key)
-        # clock in name (self "time in name" feature)
         name = f"{user.first_name or ''} {user.last_name or ''}"
         hm = clock_in_name(name)
         prev = self.names.get(user.id)
@@ -135,14 +129,12 @@ class SelfDetector:
                 score = self.add(key, 4, "clock_now")
             if prev and prev != name and clock_in_name(prev):
                 score = self.add(key, 4, "clock_changed")
-        # whole message auto-formatted, several times in a row
         if fully_formatted(text, entities):
             self.formatted_streak[key] += 1
             if self.formatted_streak[key] >= 3:
                 score = self.add(key, 2, "auto_format")
         else:
             self.formatted_streak[key] = 0
-        # instant auto replies
         if reply_delta is not None and reply_delta <= 0:
             score = self.add(key, 1, "instant_reply")
         return score
@@ -156,7 +148,6 @@ class SelfDetector:
         return self.score(key)
 
 
-# ------------------------------------------------------------------ tabchi
 _LINK = re.compile(r"(?:https?://|www\.|t\.me/|telegram\.(?:me|dog)/|tg://)", re.I)
 _INVITE = re.compile(r"(?:t\.me|telegram\.me)/(?:\+|joinchat/)", re.I)
 _MENTION = re.compile(r"(?<![\w@])@[A-Za-z][A-Za-z0-9_]{4,}")
@@ -173,7 +164,7 @@ class TabchiDetector:
     def __init__(self):
         self.join_times: dict[tuple[int, int], float] = {}
         self.msg_counts: dict[tuple[int, int], int] = defaultdict(int)
-        self.history: dict[int, deque] = defaultdict(lambda: deque(maxlen=30))  # user -> (ts, chat, hash)
+        self.history: dict[int, deque] = defaultdict(lambda: deque(maxlen=30))
 
     def joined(self, chat_id: int, user_id: int) -> None:
         self.join_times[(chat_id, user_id)] = time.time()

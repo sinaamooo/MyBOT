@@ -1,4 +1,3 @@
-"""Price engine: crypto (many exchanges + aggregators), USDT/Toman (Iranian exchanges), fiat rates."""
 from __future__ import annotations
 
 import asyncio
@@ -31,7 +30,6 @@ def _f(x) -> float | None:
         return None
 
 
-# ------------------------------------------------------------------ crypto sources
 async def _binance(sym: str):
     for host in ("https://api.binance.com", "https://data-api.binance.vision"):
         data = await safe(get_json(f"{host}/api/v3/ticker/24hr", params={"symbol": f"{sym}USDT"}, timeout=6))
@@ -133,7 +131,6 @@ async def crypto_quote(symbol: str) -> Quote | None:
         return None
     prices = [p for _, p, _ in found]
     med = statistics.median(prices)
-    # drop outliers (same ticker for a different coin on a small exchange)
     good = [f for f in found if abs(f[1] - med) / med <= 0.2] or found
     if len(good) >= 3:
         price = statistics.median(p for _, p, _ in good)
@@ -152,7 +149,6 @@ async def crypto_usd(symbol: str) -> float | None:
     return q.price if q else None
 
 
-# ------------------------------------------------------------------ USDT -> Toman
 async def _nobitex():
     data = await get_json(
         "https://api.nobitex.ir/market/stats", params={"srcCurrency": "usdt", "dstCurrency": "rls"}, timeout=7
@@ -215,10 +211,8 @@ async def usdt_toman() -> float | None:
     return rate
 
 
-# ------------------------------------------------------------------ fiat
 @ttl_cache(1800)
 async def fiat_rates() -> dict[str, float]:
-    """Units of each currency per 1 USD."""
     rates: dict[str, float] = {}
     for url in (
         "https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json",

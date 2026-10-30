@@ -1,4 +1,3 @@
-"""/settings for group admins: per-group feature switches."""
 from __future__ import annotations
 
 from aiogram import Bot, F, Router

@@ -1,4 +1,3 @@
-"""Bot / dispatcher factory."""
 from __future__ import annotations
 
 import asyncio
@@ -22,8 +21,8 @@ from aiogram.types import (
 from . import ui
 from .config import config
 from .db import get_db, init_db
-from .handlers import admin, gifts, group_settings, scam, start, text_router, tools
-from .middlewares.guard import GroupGuardMiddleware, PrivateForceJoinMiddleware
+from .handlers import admin, extras, gifts, group_settings, scam, start, text_router, tools
+from .middlewares.guard import AccessMiddleware, GroupGuardMiddleware, PrivateForceJoinMiddleware
 from .middlewares.tracking import TrackingMiddleware
 from .services import resolver
 from .services.whales import WhaleWatcher
@@ -61,7 +60,6 @@ def _strip_premium(method):
 
 
 class PremiumEmojiFallback(BaseRequestMiddleware):
-    """If Telegram rejects premium emoji (e.g. owner without Premium), retry with normal emoji."""
 
     async def __call__(self, make_request, bot, method):
         try:
@@ -95,7 +93,8 @@ def build_dispatcher() -> Dispatcher:
     dp.message.outer_middleware(PrivateForceJoinMiddleware())
     dp.callback_query.outer_middleware(PrivateForceJoinMiddleware())
     dp.message.outer_middleware(GroupGuardMiddleware())
-    # order matters: specific routers first, free-text dispatcher last
+    dp.message.outer_middleware(AccessMiddleware())
+    dp.callback_query.outer_middleware(AccessMiddleware())
     dp.include_routers(
         admin.router,
         scam.router,
@@ -103,6 +102,7 @@ def build_dispatcher() -> Dispatcher:
         group_settings.router,
         gifts.router,
         tools.router,
+        extras.router,
         text_router.router,
     )
 
@@ -124,6 +124,10 @@ COMMANDS_PRIVATE = [
     BotCommand(command="scam", description="گزارش کلاهبردار"),
     BotCommand(command="check", description="استعلام کلاهبردار"),
     BotCommand(command="wallet", description="چکر ولت / هش"),
+    BotCommand(command="arz", description="نرخ ارز بازار آزاد"),
+    BotCommand(command="card", description="استعلام کارت / شبا"),
+    BotCommand(command="phone", description="چکر شماره تلگرام"),
+    BotCommand(command="insta", description="اینستاگرام"),
 ]
 COMMANDS_GROUP = [
     BotCommand(command="p", description="قیمت ارزها"),
@@ -132,6 +136,7 @@ COMMANDS_GROUP = [
     BotCommand(command="emoji", description="کد ایموجی پریمیوم"),
     BotCommand(command="scam", description="گزارش کلاهبردار"),
     BotCommand(command="check", description="استعلام کلاهبردار"),
+    BotCommand(command="arz", description="نرخ ارز بازار آزاد"),
     BotCommand(command="settings", description="تنظیمات گروه (ادمین)"),
     BotCommand(command="help", description="راهنما"),
 ]
@@ -142,7 +147,7 @@ async def _housekeeping() -> None:
         await asyncio.sleep(6 * 3600)
         try:
             await get_db().cleanup()
-        except Exception:  # noqa: BLE001
+        except Exception:
             log.exception("cleanup failed")
 
 
@@ -166,7 +171,7 @@ async def run() -> None:
     try:
         await bot.set_my_commands(COMMANDS_PRIVATE, scope=BotCommandScopeAllPrivateChats())
         await bot.set_my_commands(COMMANDS_GROUP, scope=BotCommandScopeAllGroupChats())
-    except Exception:  # noqa: BLE001
+    except Exception:
         log.warning("could not set bot commands")
 
     watcher = WhaleWatcher(bot)

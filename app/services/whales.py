@@ -1,4 +1,3 @@
-"""Large transfer (whale) monitor: Ethereum, BSC, TRON, Bitcoin (+ optional Whale Alert API)."""
 from __future__ import annotations
 
 import asyncio
@@ -85,7 +84,7 @@ class WhaleWatcher:
                     await self.publish(alerts)
             except asyncio.CancelledError:
                 raise
-            except Exception:  # noqa: BLE001
+            except Exception:
                 log.exception("whale scan failed")
             await asyncio.sleep(45)
 
@@ -104,7 +103,6 @@ class WhaleWatcher:
         )
         return [a for group in results for a in group]
 
-    # -------------------------------------------------------------- EVM tokens
     async def scan_evm(self, key: str) -> list[Alert]:
         chain = next(c for c in EVM_CHAINS if c.key == key)
         head = hex_int(await rpc(chain.rpcs, "eth_blockNumber", []))
@@ -157,7 +155,6 @@ class WhaleWatcher:
                                      tx.get("to") or "", f"{chain.explorer}/tx/{h}"))
         return out
 
-    # -------------------------------------------------------------- TRON
     async def scan_tron(self) -> list[Alert]:
         now_ms = int(time.time() * 1000)
         if self.tron_ts is None or now_ms - self.tron_ts > 5 * 60_000:
@@ -191,7 +188,6 @@ class WhaleWatcher:
             params["fingerprint"] = fingerprint
         return out
 
-    # -------------------------------------------------------------- Bitcoin
     async def scan_btc(self) -> list[Alert]:
         from ..utils.http import get_text
 
@@ -216,7 +212,6 @@ class WhaleWatcher:
                              main.get("addr") or "", f"https://mempool.space/tx/{h}"))
         return out
 
-    # -------------------------------------------------------------- Whale Alert API (optional)
     async def scan_whale_alert(self) -> list[Alert]:
         if not config.whale_alert_key:
             return []
@@ -239,7 +234,6 @@ class WhaleWatcher:
                              to.get("address", ""), f"https://whale-alert.io/transaction/{tx.get('blockchain')}/{tx.get('hash')}"))
         return out
 
-    # -------------------------------------------------------------- publish
     async def publish(self, alerts: list[Alert]) -> None:
         if not alerts:
             return
@@ -273,7 +267,7 @@ class WhaleWatcher:
                     continue
                 try:
                     await self.bot.send_message(g["id"], text)
-                except Exception as exc:  # noqa: BLE001
+                except Exception as exc:
                     log.debug("whale alert to %s failed: %s", g["id"], exc)
                     if "kicked" in str(exc).lower() or "not found" in str(exc).lower():
                         await db.set_chat_active(g["id"], False)

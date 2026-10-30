@@ -1,4 +1,3 @@
-"""Number / date formatting helpers (Persian friendly)."""
 from __future__ import annotations
 
 import math
@@ -8,7 +7,7 @@ try:
     from zoneinfo import ZoneInfo
 
     TEHRAN = ZoneInfo("Asia/Tehran")
-except Exception:  # pragma: no cover - tzdata missing
+except Exception:
     TEHRAN = timezone(timedelta(hours=3, minutes=30))
 
 FA_DIGITS = str.maketrans("0123456789", "۰۱۲۳۴۵۶۷۸۹")
@@ -33,7 +32,6 @@ def _strip(s: str) -> str:
 
 
 def num(x: float | int | None, decimals: int | None = None) -> str:
-    """Smart number formatting: big numbers with separators, small with significant digits."""
     if x is None:
         return "—"
     try:
@@ -95,7 +93,6 @@ def change_badge(x: float | None) -> str | None:
     return f"{icon} <b>{percent(x)}</b>"
 
 
-# ------------------------------------------------------------------ Jalali
 def gregorian_to_jalali(gy: int, gm: int, gd: int) -> tuple[int, int, int]:
     g_d_m = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334]
     gy2 = gy + 1 if gm > 2 else gy

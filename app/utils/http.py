@@ -1,4 +1,3 @@
-"""Shared aiohttp session, JSON helpers and a tiny async TTL cache."""
 from __future__ import annotations
 
 import asyncio
@@ -107,16 +106,14 @@ async def get_bytes(url: str, timeout: float = 15, headers: dict | None = None) 
 
 
 async def safe(coro: Awaitable, default: Any = None, label: str = "") -> Any:
-    """Await ``coro`` and swallow errors (logged at debug level)."""
     try:
         return await coro
-    except Exception as exc:  # noqa: BLE001 - external APIs fail in many ways
+    except Exception as exc:
         log.debug("request failed %s: %s", label, exc)
         return default
 
 
 async def first_ok(*coros: Awaitable, default: Any = None) -> Any:
-    """Run coroutines sequentially until one returns a non-None value."""
     for coro in coros:
         result = await safe(coro)
         if result is not None:
@@ -125,7 +122,6 @@ async def first_ok(*coros: Awaitable, default: Any = None) -> Any:
 
 
 def ttl_cache(seconds: float, maxsize: int = 2048):
-    """Cache async function results (including None) for ``seconds``."""
 
     def deco(fn: Callable):
         store: dict[Any, tuple[float, Any]] = {}
@@ -151,7 +147,7 @@ def ttl_cache(seconds: float, maxsize: int = 2048):
                 store[key] = (time.monotonic(), value)
                 return value
 
-        wrapper.cache_clear = store.clear  # type: ignore[attr-defined]
+        wrapper.cache_clear = store.clear
         return wrapper
 
     return deco

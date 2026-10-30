@@ -1,4 +1,3 @@
-"""Admin panel: texts, buttons, premium emoji, forced channels, settings, scam reports, stats, broadcast."""
 from __future__ import annotations
 
 import asyncio
@@ -57,16 +56,13 @@ def home_kb():
         [B("😎 ایموجی پریمیوم", "adm:emo"), B("📢 عضویت اجباری", "adm:fj")],
         [B("⚙️ تنظیمات", "adm:set"), B("🚨 گزارش‌ها", "adm:scams")],
         [B("📊 آمار", "adm:stats"), B("📣 ارسال همگانی", "adm:bcmenu")],
+        [B("🚫 مسدود / آزاد", "adm:ban"), B("📨 پیام به کاربر", "adm:pm")],
+        [B(("🟢 ربات روشن" if gget("bot_enabled") else "🔴 ربات خاموش"), "adm:power",
+           "success" if gget("bot_enabled") else "danger")],
     ])
 
 
-HOME_TEXT = (
-    "🛠 <b>پنل مدیریت ربات</b>\n"
-    "از منوی زیر بخش موردنظر را انتخاب کنید.\n\n"
-    "💡 نکته: برای استفاده از ایموجی پریمیوم کافیست هنگام ویرایش متن‌ها، ایموجی پریمیوم بفرستید؛ "
-    "یا در بخش «ایموجی پریمیوم» برای هر ایموجی معمولی یک ایموجی پریمیوم تعریف کنید تا در همه متن‌ها و دکمه‌ها "
-    "خودکار جایگزین شود."
-)
+HOME_TEXT = "🛠 <b>پنل مدیریت ربات</b>"
 
 
 @router.message(Command("panel", "admin", "پنل", ignore_case=True), F.chat.type == "private")
@@ -95,7 +91,6 @@ async def cancel(message: Message, state: FSMContext):
     await message.answer("❌ لغو شد.", reply_markup=home_kb())
 
 
-# ------------------------------------------------------------------ texts
 @router.callback_query(F.data.startswith("adm:texts:"))
 async def texts_list(call: CallbackQuery):
     page = int(call.data.rsplit(":", 1)[1])
@@ -129,8 +124,7 @@ async def text_view(call: CallbackQuery):
     desc = TEXTS[key][1]
     current = ui.template(key)
     info = (
-        f"🔑 <code>{key}</code>\n📄 {html.escape(desc.split('(')[0])}\n🧩 متغیرها: {_placeholders(desc)}\n"
-        "ℹ️ اگر مقدار یک متغیر خالی باشد، کل آن خط خودکار حذف می‌شود.\n\n⬇️ متن فعلی:"
+        f"🔑 <code>{key}</code>\n📄 {html.escape(desc.split('(')[0])}\n🧩 متغیرها: {_placeholders(desc)}\n\n⬇️ متن فعلی:"
     )
     kb = ui.kb([[B("✏️ ویرایش", f"adm:tedit:{key}", "primary"), B("♻️ پیش‌فرض", f"adm:treset:{key}", "danger")],
                 [B("🔙 بازگشت", "adm:texts:0")]])
@@ -138,16 +132,14 @@ async def text_view(call: CallbackQuery):
     await call.message.answer(info)
     try:
         await call.message.answer(ui.apply_emoji_map(current), reply_markup=kb)
-    except Exception:  # noqa: BLE001
+    except Exception:
         await call.message.answer(f"<pre>{html.escape(current)}</pre>", reply_markup=kb)
 
 
 @router.callback_query(F.data.startswith("adm:tedit:"))
 async def text_edit(call: CallbackQuery, state: FSMContext):
     key = call.data.split(":", 2)[2]
-    await wait_for(call, state, "text", f"✏️ متن جدید برای <code>{key}</code> را بفرستید.\n"
-                   "می‌توانید از فرمت‌بندی تلگرام (بولد، نقل‌قول، ...) و ایموجی پریمیوم استفاده کنید.\n"
-                   f"🧩 متغیرها: {_placeholders(TEXTS[key][1])}", key=key)
+    await wait_for(call, state, "text", f"✏️ متن جدید <code>{key}</code>\n🧩 {_placeholders(TEXTS[key][1])}", key=key)
 
 
 @router.callback_query(F.data.startswith("adm:treset:"))
@@ -161,11 +153,10 @@ def message_html(message: Message) -> str:
     text = message.text or message.caption or ""
     has_entities = bool(message.entities or message.caption_entities)
     if not has_entities and re.search(r"</?(?:b|i|u|s|code|pre|a|blockquote|tg-emoji|tg-spoiler)\b", text):
-        return text  # raw HTML typed by the admin
+        return text
     return message.html_text if message.text else (message.html_text or "")
 
 
-# ------------------------------------------------------------------ buttons
 @router.callback_query(F.data == "adm:btns")
 async def buttons_list(call: CallbackQuery):
     conf = gget("buttons") or {}
@@ -247,15 +238,12 @@ async def button_emoji(call: CallbackQuery, state: FSMContext):
                    key=key)
 
 
-# ------------------------------------------------------------------ premium emoji map
 @router.callback_query(F.data == "adm:emo")
 async def emoji_menu(call: CallbackQuery):
     emap: dict = gget("emoji_map") or {}
     lines = [f'{k} ← <tg-emoji emoji-id="{v}">{k}</tg-emoji> <code>{v}</code>' for k, v in list(emap.items())[:40]]
     text = (
-        "😎 <b>ایموجی‌های پریمیوم</b>\n"
-        "هر ایموجی معمولی که اینجا به ایموجی پریمیوم وصل شود، در همه متن‌ها و دکمه‌ها خودکار پریمیوم نمایش داده می‌شود.\n"
-        "⚠️ شرط: صاحب ربات باید تلگرام پریمیوم داشته باشد.\n\n" + ("\n".join(lines) or "— خالی —")
+        "😎 <b>ایموجی‌های پریمیوم</b>\n\n" + ("\n".join(lines) or "— خالی —")
     )
     kb = ui.kb([[B("➕ افزودن", "adm:emoadd", "success"), B("➖ حذف", "adm:emodel", "danger")],
                 [B("🗑 حذف همه", "adm:emoclear"), *BACK]])
@@ -265,8 +253,7 @@ async def emoji_menu(call: CallbackQuery):
 
 @router.callback_query(F.data == "adm:emoadd")
 async def emoji_add(call: CallbackQuery, state: FSMContext):
-    await wait_for(call, state, "emo_add", "➕ ایموجی‌های پریمیوم را بفرستید (چند تا با هم هم می‌شود).\n"
-                   "هر ایموجی پریمیوم جایگزین ایموجی معمولی معادل خودش می‌شود.")
+    await wait_for(call, state, "emo_add", "➕ ایموجی پریمیوم را بفرستید.")
 
 
 @router.callback_query(F.data == "adm:emodel")
@@ -280,14 +267,12 @@ async def emoji_clear(call: CallbackQuery):
     await call.answer("🗑", show_alert=True)
 
 
-# ------------------------------------------------------------------ forced channels
 async def _fj_view(message: Message, edit: bool = True):
     channels = gget("force_channels") or []
     lines = [f"{i + 1}. {html.escape(c.get('title') or '')} — <code>{c['id']}</code>\n   {html.escape(c.get('url') or '')}"
              for i, c in enumerate(channels)]
     text = (
-        "📢 <b>عضویت اجباری</b>\n"
-        "⚠️ ربات باید در هر کانال <b>ادمین</b> باشد تا بتواند عضویت را بررسی کند.\n\n" + ("\n".join(lines) or "— کانالی ثبت نشده —")
+        "📢 <b>عضویت اجباری</b>\n\n" + ("\n".join(lines) or "— کانالی ثبت نشده —")
     )
     rows = [[B(f"❌ حذف {i + 1}", f"adm:fjdel:{i}")] for i in range(len(channels))]
     rows.append([B(f"{'✅' if gget('force_join_groups') else '❌'} در گروه‌ها", "adm:tog:force_join_groups:fj"),
@@ -307,8 +292,7 @@ async def fj_menu(call: CallbackQuery):
 
 @router.callback_query(F.data == "adm:fjadd")
 async def fj_add(call: CallbackQuery, state: FSMContext):
-    await wait_for(call, state, "fj_add", "📢 یوزرنیم کانال (@channel)، آیدی عددی (-100...) یا یک پیام فوروارد شده از کانال را بفرستید.\n"
-                   "برای کانال خصوصی می‌توانید بعد از آیدی، لینک دعوت را هم بنویسید:\n<code>-100123456 https://t.me/+abc</code>")
+    await wait_for(call, state, "fj_add", "📢 یوزرنیم، آیدی عددی یا فوروارد پیام کانال را بفرستید.\n<code>-100123456 https://t.me/+abc</code>")
 
 
 @router.callback_query(F.data.startswith("adm:fjdel:"))
@@ -322,7 +306,6 @@ async def fj_del(call: CallbackQuery):
     await _fj_view(call.message)
 
 
-# ------------------------------------------------------------------ settings
 async def _settings_view(message: Message, edit: bool = True):
     rows = []
     row: list = []
@@ -339,7 +322,7 @@ async def _settings_view(message: Message, edit: bool = True):
         rows.append([B(f"✏️ {label}: {value if value not in (None, '') else '—'}", f"adm:val:{key}")])
     rows.append([B("📝 کلمات اضافه ضدکلاهبرداری", "adm:val:scam_extra_keywords")])
     rows.append(BACK)
-    text = "⚙️ <b>تنظیمات کلی</b>\n(تنظیمات هر گروه را ادمین‌های آن گروه با /settings تغییر می‌دهند)"
+    text = "⚙️ <b>تنظیمات کلی</b>"
     if edit:
         await message.edit_text(text, reply_markup=ui.kb(rows))
     else:
@@ -376,7 +359,6 @@ async def value_edit(call: CallbackQuery, state: FSMContext):
                    key=key)
 
 
-# ------------------------------------------------------------------ scams
 @router.callback_query(F.data == "adm:scams")
 async def scams_menu(call: CallbackQuery):
     db = get_db()
@@ -403,7 +385,6 @@ async def unscam(message: Message, command: CommandObject):
     await message.answer("✅ لغو شد.")
 
 
-# ------------------------------------------------------------------ stats
 @router.callback_query(F.data == "adm:stats")
 async def stats(call: CallbackQuery):
     from ..services import prices
@@ -426,12 +407,12 @@ async def stats(call: CallbackQuery):
     await call.message.edit_text(text, reply_markup=ui.kb([BACK]))
 
 
-# ------------------------------------------------------------------ broadcast
 @router.callback_query(F.data == "adm:bcmenu")
 async def bc_menu(call: CallbackQuery):
     await call.answer()
     await call.message.edit_text("📣 <b>ارسال همگانی</b>\nمقصد را انتخاب کنید:", reply_markup=ui.kb([
-        [B("👤 کاربران", "adm:bc:users"), B("👥 گروه‌ها", "adm:bc:groups"), B("🌐 همه", "adm:bc:all")], BACK]))
+        [B("👤 کاربران", "adm:bc:users"), B("👥 گروه‌ها", "adm:bc:groups"), B("🌐 همه", "adm:bc:all")],
+        [B("📩 فوروارد به کاربران", "adm:bc:fusers"), B("📩 فوروارد به گروه‌ها", "adm:bc:fgroups")], BACK]))
 
 
 @router.callback_query(F.data.startswith("adm:bc:"))
@@ -442,6 +423,8 @@ async def bc_target(call: CallbackQuery, state: FSMContext):
 
 async def _broadcast(bot: Bot, source: Message, target: str, report: Message) -> None:
     db = get_db()
+    forward = target.startswith("f")
+    target = target.lstrip("f")
     ids: list[int] = []
     if target in ("users", "all"):
         ids += await db.user_ids()
@@ -450,15 +433,34 @@ async def _broadcast(bot: Bot, source: Message, target: str, report: Message) ->
     ok = fail = 0
     for chat_id in ids:
         try:
-            await bot.copy_message(chat_id, source.chat.id, source.message_id)
+            if forward:
+                await bot.forward_message(chat_id, source.chat.id, source.message_id)
+            else:
+                await bot.copy_message(chat_id, source.chat.id, source.message_id)
             ok += 1
-        except Exception:  # noqa: BLE001
+        except Exception:
             fail += 1
         await asyncio.sleep(0.04)
     await report.edit_text(f"✅ ارسال همگانی تمام شد.\nموفق: {ok}\nناموفق: {fail}")
 
 
-# ------------------------------------------------------------------ FSM input
+@router.callback_query(F.data == "adm:power")
+async def power(call: CallbackQuery):
+    await gset("bot_enabled", not gget("bot_enabled"))
+    await call.answer("🟢" if gget("bot_enabled") else "🔴", show_alert=False)
+    await call.message.edit_reply_markup(reply_markup=home_kb())
+
+
+@router.callback_query(F.data == "adm:ban")
+async def ban_menu(call: CallbackQuery, state: FSMContext):
+    await wait_for(call, state, "ban", "🚫 آیدی عددی کاربر را بفرستید (مسدود ↔ آزاد).")
+
+
+@router.callback_query(F.data == "adm:pm")
+async def pm_menu(call: CallbackQuery, state: FSMContext):
+    await wait_for(call, state, "pm", "📨 به این شکل بفرستید:\n<code>آیدی عددی</code>\n<code>متن پیام</code>")
+
+
 @router.message(StateFilter(AdminFSM.waiting), F.chat.type == "private")
 async def admin_input(message: Message, state: FSMContext, bot: Bot):
     data = await state.get_data()
@@ -473,7 +475,7 @@ async def admin_input(message: Message, state: FSMContext, bot: Bot):
         preview = re.sub(r'href="\{[a-z_]+\}"', 'href="https://t.me"', new)
         try:
             await message.answer("👁 پیش‌نمایش:\n\n" + ui.apply_emoji_map(preview))
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             await message.answer(f"❌ متن نامعتبر است: {html.escape(str(exc))}")
             return
         await get_db().set_text(key, new)
@@ -565,6 +567,33 @@ async def admin_input(message: Message, state: FSMContext, bot: Bot):
         await _settings_view(message, edit=False)
         return
 
+    if action == "ban":
+        raw = fmt.en_digits((message.text or "").strip())
+        if not raw.isdigit():
+            await message.answer("⚠️ آیدی عددی معتبر بفرستید.")
+            return
+        uid = int(raw)
+        db = get_db()
+        banned = not db.is_banned(uid)
+        await db.set_banned(uid, banned)
+        await state.clear()
+        await message.answer(f"{'🚫 کاربر مسدود شد' if banned else '✅ کاربر آزاد شد'}: <code>{uid}</code>", reply_markup=home_kb())
+        return
+
+    if action == "pm":
+        first, _, rest = (message.text or "").strip().partition("\n")
+        uid = fmt.en_digits(first.strip())
+        if not uid.isdigit() or not rest.strip():
+            await message.answer("⚠️ ورودی نامعتبر.")
+            return
+        try:
+            await bot.send_message(int(uid), ui.t("admin_message", text=html.escape(rest.strip())))
+            await message.answer("✅ پیام ارسال شد.", reply_markup=home_kb())
+        except Exception as exc:
+            await message.answer(f"❌ ارسال نشد: <code>{html.escape(str(exc))}</code>", reply_markup=home_kb())
+        await state.clear()
+        return
+
     if action == "broadcast":
         await state.clear()
         report = await message.answer("⏳ در حال ارسال...")
@@ -592,19 +621,19 @@ async def _add_channel(message: Message, bot: Bot, state: FSMContext) -> None:
         return
     try:
         chat = await bot.get_chat(ref)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         await message.answer(f"❌ کانال پیدا نشد. ربات را در کانال عضو و ادمین کنید.\n<code>{html.escape(str(exc))}</code>")
         return
     try:
         me = await bot.get_chat_member(chat.id, bot.id)
         is_admin = me.status in ("administrator", "creator")
-    except Exception:  # noqa: BLE001
+    except Exception:
         is_admin = False
     url = invite or (f"https://t.me/{chat.username}" if chat.username else chat.invite_link)
     if not url and is_admin:
         try:
             url = (await bot.create_chat_invite_link(chat.id, name="force-join")).invite_link
-        except Exception:  # noqa: BLE001
+        except Exception:
             url = None
     if not url:
         await message.answer("⚠️ لینک دعوت پیدا نشد. آیدی و لینک را با هم بفرستید: <code>-100123 https://t.me/+abc</code>")
@@ -618,7 +647,6 @@ async def _add_channel(message: Message, bot: Bot, state: FSMContext) -> None:
     await _fj_view(message, edit=False)
 
 
-# ------------------------------------------------------------------ misc admin commands
 @router.message(Command("addbalance"))
 async def add_balance(message: Message, command: CommandObject):
     parts = (command.args or "").split()
@@ -647,4 +675,4 @@ async def set_rate(message: Message, command: CommandObject):
     await message.answer("✅ ذخیره شد.")
 
 
-_ = DEFAULTS  # keep import for discoverability of setting keys
+_ = DEFAULTS

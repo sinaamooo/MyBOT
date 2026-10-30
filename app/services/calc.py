@@ -1,4 +1,3 @@
-"""Safe arithmetic evaluator (no eval)."""
 from __future__ import annotations
 
 import ast

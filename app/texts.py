@@ -1,17 +1,8 @@
-"""Default (editable) texts and buttons.
-
-Every text can be overridden by the admin from the panel. Placeholders use the
-``{name}`` syntax. If a placeholder resolves to ``None`` the *whole line* that
-contains it is dropped, so admins can freely design templates and optional
-lines disappear automatically.
-"""
 from __future__ import annotations
 
 SEP = "━━━━━━━━━━━━━━━━━"
 
-# key: (default template, description for admin panel)
 TEXTS: dict[str, tuple[str, str]] = {
-    # ------------------------------------------------------------------ general
     "start_private": (
         "👋 سلام <b>{name}</b> خوش اومدی!\n"
         f"{SEP}\n"
@@ -67,7 +58,6 @@ TEXTS: dict[str, tuple[str, str]] = {
     ),
     "error": ("⚠️ خطایی رخ داد، لطفا دوباره تلاش کنید.", "خطای عمومی"),
     "loading": ("⏳ لطفا صبر کنید...", "در حال پردازش"),
-    # ------------------------------------------------------------- force join
     "force_join_private": (
         "🔒 <b>{name}</b> عزیز\n"
         "برای استفاده از ربات ابتدا باید در کانال‌های زیر عضو شوید 👇\n"
@@ -83,7 +73,6 @@ TEXTS: dict[str, tuple[str, str]] = {
     ),
     "force_join_ok": ("✅ عضویت شما تایید شد، خوش آمدید!", "تایید عضویت (پاپ‌آپ)"),
     "force_join_not_yet": ("❌ هنوز در همه کانال‌ها عضو نشده‌اید!", "عدم عضویت (پاپ‌آپ)"),
-    # ------------------------------------------------------------ conversions
     "conv_crypto": (
         "💎 <b>{amount} {symbol}</b> <i>{name}</i>\n"
         f"{SEP}\n"
@@ -158,7 +147,6 @@ TEXTS: dict[str, tuple[str, str]] = {
     "market_line": ("{icon} <b>{symbol}</b>: <code>{usd}</code> $ | <code>{toman}</code> ت {change}", "هر خط تابلوی قیمت ({icon} {symbol} {usd} {toman} {change})"),
     "currency_not_found": ("❌ ارز «{query}» پیدا نشد.", "ارز پیدا نشد ({query})"),
     "price_unavailable": ("⚠️ دریافت قیمت در حال حاضر ممکن نیست، کمی بعد تلاش کنید.", "قیمت در دسترس نیست"),
-    # ------------------------------------------------------------- checkers
     "wallet_checking": ("🔎 در حال بررسی کیف پول روی همه شبکه‌ها...", "در حال چک ولت"),
     "wallet_header": (
         "👛 <b>نتیجه چکر کیف پول</b>\n"
@@ -175,6 +163,7 @@ TEXTS: dict[str, tuple[str, str]] = {
         "🪙 توکن‌ها:\n{tokens}\n"
         "🔁 تعداد تراکنش: <code>{txs}</code>\n"
         "🖼 NFT: <code>{nfts}</code>\n"
+        "📅 تاریخ ساخت ولت: {created}\n"
         "📌 وضعیت: {status}\n"
         "🔗 <a href=\"{explorer}\">مشاهده در اکسپلورر</a>"
         "</blockquote>",
@@ -199,6 +188,8 @@ TEXTS: dict[str, tuple[str, str]] = {
         "📌 وضعیت: {status}\n"
         "💸 مقدار: <code>{amount}</code>\n"
         "💵 ارزش: <code>{usd}</code> $ | <code>{toman}</code> ت\n"
+        "🪙 توکن: {token}\n"
+        "📜 کانترکت / آیدی توکن: <code>{contract}</code>\n"
         "📤 از: <code>{sender}</code>\n"
         "📥 به: <code>{receiver}</code>\n"
         "⛽️ کارمزد: <code>{fee}</code>\n"
@@ -214,7 +205,104 @@ TEXTS: dict[str, tuple[str, str]] = {
         "❌ این هش روی هیچ‌کدام از شبکه‌های پشتیبانی شده پیدا نشد.\n🔑 <code>{hash}</code>",
         "هش پیدا نشد ({hash})",
     ),
-    # ------------------------------------------------------------------ gifts
+    "tron_transfers": (
+        "📜 <b>تراکنش‌های TRC20</b>\n"
+        "📍 <code>{address}</code>\n"
+        "📄 صفحه {page} از {pages} | کل: {total}\n"
+        f"{SEP}\n"
+        "{items}",
+        "لیست تراکنش‌های TRC20 ({address} {page} {pages} {total} {items})",
+    ),
+    "tron_transfer_item": (
+        "{direction} <b>{amount} {symbol}</b> • {time}\n"
+        "   👤 <code>{party}</code>\n"
+        "   🔗 <a href=\"https://tronscan.org/#/transaction/{hash}\">مشاهده تراکنش</a>",
+        "هر تراکنش در لیست TRC20 ({direction} {amount} {symbol} {time} {party} {hash})",
+    ),
+    "tron_transfers_empty": ("📭 تراکنش TRC20 برای این ولت ثبت نشده است.", "ولت بدون تراکنش TRC20"),
+    "tron_tokens_file": ("📄 لیست کامل {total} توکن ولت\n<code>{address}</code>", "کپشن فایل توکن‌ها ({total} {address})"),
+    "not_your_button": ("❌ شما دسترسی ندارید", "دکمه مال کاربر دیگر (پاپ‌آپ)"),
+    "expired": ("⌛️ این دکمه منقضی شده است، دوباره درخواست دهید.", "دکمه منقضی (پاپ‌آپ)"),
+    "card_result": (
+        "💳 <b>استعلام کارت بانکی</b>\n"
+        f"{SEP}\n"
+        "<blockquote>"
+        "🔢 شماره کارت: <code>{card}</code>\n"
+        "🏦 بانک: <b>{bank}</b>\n"
+        "👤 صاحب کارت: <b>{owner}</b>\n"
+        "🧾 شبا: <code>{iban}</code>\n"
+        "🔐 اعتبارسنجی: {valid}\n"
+        "{extra}"
+        "</blockquote>",
+        "نتیجه استعلام کارت ({card} {bank} {owner} {iban} {valid} {extra})",
+    ),
+    "iban_result": (
+        "🧾 <b>استعلام شماره شبا</b>\n"
+        f"{SEP}\n"
+        "<blockquote>"
+        "🔢 شبا: <code>{iban}</code>\n"
+        "🏦 بانک: <b>{bank}</b>\n"
+        "🔐 اعتبارسنجی: {valid}"
+        "</blockquote>",
+        "نتیجه استعلام شبا ({iban} {bank} {valid})",
+    ),
+    "phone_result": (
+        "📱 <b>چکر شماره تلگرام</b>\n"
+        f"{SEP}\n"
+        "<blockquote>"
+        "☎️ شماره: <code>{phone}</code>\n"
+        "{status} {description}"
+        "</blockquote>",
+        "نتیجه چکر شماره ({phone} {status} {description})",
+    ),
+    "phone_invalid": ("⚠️ شماره را به شکل بین‌المللی بفرستید، مثلا: <code>/phone +15005550006</code>", "راهنمای چکر شماره"),
+    "phone_failed": ("🔵 مشکل از سمت سرور است، کمی بعد دوباره تلاش کنید.", "خطای چکر شماره"),
+    "arz_board": (
+        "🏦 <b>نرخ ارز بازار آزاد</b>\n"
+        f"{SEP}\n"
+        "<blockquote>{lines}</blockquote>\n"
+        "📡 منبع: {source}\n"
+        "🕰 {time}",
+        "تابلوی نرخ ارز /arz ({lines} {source} {time})",
+    ),
+    "arz_line": ("{flag} {name}: <code>{toman}</code> ت {change}", "هر خط تابلوی ارز ({flag} {name} {toman} {change})"),
+    "insta_loading": ("🔍 در حال دریافت اطلاعات از اینستاگرام...", "در حال دریافت اینستاگرام"),
+    "insta_count": ("🔱 لطفا صبر کنید\n🗂 تعداد عکس و فیلم‌ها: {count}", "تعداد مدیا ({count})"),
+    "insta_media_caption": ("({index}/{count})\n🤖 ارسال شده توسط: @{bot}", "کپشن هر مدیا ({index} {count} {bot})"),
+    "insta_not_found": ("♻️ اطلاعاتی پیدا نشد.", "اینستاگرام پیدا نشد"),
+    "insta_private": ("🔒 پیج مورد نظر شخصی است.", "پیج خصوصی"),
+    "insta_no_story": ("♻️ پیج مورد نظر استوری ندارد.", "بدون استوری"),
+    "insta_no_highlight": ("♻️ پیج مورد نظر هایلایت ندارد.", "بدون هایلایت"),
+    "insta_no_key": ("⚠️ سرویس اینستاگرام هنوز توسط مدیر فعال نشده است.", "کلید اینستاگرام تنظیم نشده"),
+    "insta_highlights": ("♻️ هایلایت‌های <b>{username}</b>", "لیست هایلایت‌ها ({username})"),
+    "insta_info": (
+        "📸 <b>اطلاعات پیج اینستاگرام</b>\n"
+        f"{SEP}\n"
+        "<blockquote>"
+        "🆔 آیدی: <code>{id}</code>\n"
+        "🖊 نام: <b>{name}</b>\n"
+        "✉️ یوزرنیم: <code>{username}</code>\n"
+        "👥 فالوور: <code>{followers}</code>\n"
+        "👣 فالووینگ: <code>{following}</code>\n"
+        "📝 پست: <code>{posts}</code>\n"
+        "🔵 تیک آبی: {verified}\n"
+        "🔒 خصوصی: {private}"
+        "</blockquote>\n"
+        "🔖 بیو:\n<blockquote expandable>{bio}</blockquote>",
+        "اطلاعات پیج اینستاگرام ({id} {name} {username} {followers} {following} {posts} {verified} {private} {bio})",
+    ),
+    "bot_off": ("💤 ربات در حال حاضر خاموش است.", "ربات خاموش"),
+    "banned": ("⛔️ شما از ربات مسدود شده‌اید.", "کاربر مسدود"),
+    "bot_promoted": (
+        "💎 <b>ربات در این گروه ادمین شد!</b>\n"
+        f"{SEP}\n"
+        "🔗 برای استعلام هش کافیه هش یا لینک تراکنش رو بفرستی\n"
+        "👛 برای استعلام ولت: <code>wallet آدرس</code>\n"
+        "💱 برای قیمت: <code>10 تتر</code>\n"
+        "⚙️ تنظیمات گروه: /settings",
+        "پیام ادمین شدن ربات در گروه",
+    ),
+    "admin_message": ("👨‍💻 <b>پیام از طرف مدیریت</b>\n\n{text}", "پیام مدیر به کاربر ({text})"),
     "gift_link": (
         "🎁 <b>{name} #{number}</b>\n"
         f"{SEP}\n"
@@ -262,7 +350,6 @@ TEXTS: dict[str, tuple[str, str]] = {
         "کاربر پیدا نشد",
     ),
     "gift_not_found": ("❌ اطلاعات این گیفت پیدا نشد.", "گیفت پیدا نشد"),
-    # ---------------------------------------------------------------- guards
     "self_warn": (
         "⚠️ {mention}\n"
         "🤖 <b>سلف (کنترل خودکار) روی اکانت شما شناسایی شد!</b>\n"
@@ -290,7 +377,6 @@ TEXTS: dict[str, tuple[str, str]] = {
         "⚠️ از معامله با این شخص خودداری کنید.",
         "هشدار حضور کلاهبردار ({mention} {reason})",
     ),
-    # ------------------------------------------------------------------ scam
     "scam_usage": (
         "ℹ️ نحوه گزارش: <code>/scam @username</code>\nیا روی پیام کلاهبردار ریپلای کنید و <code>/scam</code> بفرستید.",
         "راهنمای /scam",
@@ -343,7 +429,6 @@ TEXTS: dict[str, tuple[str, str]] = {
         "⛔️ {target} در <b>لیست کلاهبرداران</b> است!\n📝 علت: {reason}\n🔖 پرونده: #{id}",
         "استعلام کلاهبردار ({target} {reason} {id})",
     ),
-    # ------------------------------------------------------------------ tools
     "uid": (
         "🆔 <b>اطلاعات کاربر</b>\n"
         "<blockquote>"
@@ -425,7 +510,6 @@ TEXTS: dict[str, tuple[str, str]] = {
     "only_group_admins": ("⛔️ فقط ادمین‌های گروه می‌توانند این کار را انجام دهند.", "فقط ادمین (پاپ‌آپ)"),
 }
 
-# key: (default text, default style or None, description)
 BUTTONS: dict[str, tuple[str, str | None, str]] = {
     "btn_add_group": ("➕ افزودن به گروه", "primary", "دکمه افزودن به گروه"),
     "btn_channel": ("📢 کانال ربات", "success", "دکمه کانال ربات"),
@@ -445,5 +529,13 @@ BUTTONS: dict[str, tuple[str, str | None, str]] = {
     "btn_copy_id": ("📋 کپی آیدی", "primary", "دکمه کپی آیدی"),
     "btn_unmute": ("🔊 رفع سکوت", "success", "دکمه رفع سکوت (ادمین)"),
     "btn_explorer": ("🔍 اکسپلورر", None, "دکمه اکسپلورر"),
+    "btn_sender_wallet": ("📤 اطلاعات ولت مبدا", "primary", "دکمه ولت مبدا زیر هش"),
+    "btn_receiver_wallet": ("📥 اطلاعات ولت مقصد", "primary", "دکمه ولت مقصد زیر هش"),
+    "btn_trc20_history": ("📜 تراکنش‌های TRC20", None, "دکمه تاریخچه TRC20"),
+    "btn_tokens_file": ("📄 دریافت کل موجودی‌های ولت", None, "دکمه فایل توکن‌ها"),
+    "btn_prev": ("◀️ قبلی", None, "دکمه صفحه قبل"),
+    "btn_next": ("بعدی ▶️", None, "دکمه صفحه بعد"),
+    "btn_insta_story": ("🎥 دانلود استوری 📸", "primary", "دکمه استوری اینستاگرام"),
+    "btn_insta_highlight": ("💫 دانلود هایلایت", "primary", "دکمه هایلایت اینستاگرام"),
     "btn_gift_open": ("🎁 مشاهده گیفت", "primary", "دکمه مشاهده گیفت"),
 }

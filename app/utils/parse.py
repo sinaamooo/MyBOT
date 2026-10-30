@@ -1,4 +1,3 @@
-"""Parsing helpers: amounts with units ("10 تتر", "500000 تومان", "$100") and expressions."""
 from __future__ import annotations
 
 import re
@@ -29,14 +28,12 @@ _UNIT_FIRST = re.compile(rf"^(?P<unit>[^\d]{{1,30}}?)\s*(?P<num>{_NUM})\s*(?P<mu
 def clean_number_text(text: str) -> str:
     text = en_digits(text or "").strip()
     text = text.replace("٫", ".").replace("٬", "").replace("،", "")
-    # remove thousands separators like 1,000,000 or 1 000 000 (only between digit groups of 3)
     text = re.sub(r"(?<=\d)[,_](?=\d{3}\b)", "", text)
     text = re.sub(r"(?<=\d),(?=\d)", "", text)
     return text
 
 
 def parse_amount(text: str) -> tuple[float, str] | None:
-    """'10 تتر' -> (10.0, 'تتر'); '2.5m تومان' -> (2_500_000.0, 'تومان'); '$100' -> (100, '$')."""
     if not text or len(text) > 48 or "\n" in text.strip():
         return None
     t = clean_number_text(text)
@@ -56,14 +53,12 @@ def parse_amount(text: str) -> tuple[float, str] | None:
     return amount, unit
 
 
-# ------------------------------------------------------------- calculator
 _CALC_CHARS = re.compile(r"^[\d\s.+\-*/×÷x^%()=]+$", re.I)
 _DATE_LIKE = re.compile(r"^\d{2,4}[/\-]\d{1,2}[/\-]\d{1,4}$")
 _PHONE_LIKE = re.compile(r"^(?:\+?\d{1,3}[\s-]?)?0?\d{3}[\s-]\d{3,4}[\s-]?\d{0,4}$")
 
 
 def looks_like_expression(text: str) -> str | None:
-    """Return a normalised python expression if text is a pure arithmetic expression."""
     if not text or len(text) > 120:
         return None
     t = clean_number_text(text).strip().rstrip("=").strip()
@@ -74,10 +69,8 @@ def looks_like_expression(text: str) -> str | None:
     if not re.search(r"\d", t):
         return None
     expr = t.replace("×", "*").replace("x", "*").replace("X", "*").replace("÷", "/").replace("^", "**")
-    # must contain at least one binary operator between operands
     if not re.search(r"[\d)]\s*(\*\*|[+\-*/%])\s*[\d(.-]", expr):
         return None
-    # leading-zero phone numbers like 0912-345-6789
     if re.fullmatch(r"0\d{2,}(\s*-\s*\d+)+", expr):
         return None
     return expr

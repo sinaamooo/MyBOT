@@ -1,4 +1,3 @@
-"""/scam report flow (evidence -> admin review -> announce in all groups) and /check lookups."""
 from __future__ import annotations
 
 import asyncio
@@ -154,10 +153,10 @@ async def notify_admins(bot: Bot, row: dict, reporter) -> None:
             for mid in row["evidence"][:30]:
                 try:
                     await bot.copy_message(admin, reporter.id, mid)
-                except Exception:  # noqa: BLE001
+                except Exception:
                     pass
             await bot.send_message(admin, text, reply_markup=kb)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             log.warning("cannot notify admin %s: %s", admin, exc)
 
 
@@ -182,12 +181,12 @@ async def admin_decision(call: CallbackQuery, bot: Bot):
     status = "✅ تایید شد و در گروه‌ها اعلام می‌شود" if approved else "❌ رد شد"
     try:
         await call.message.edit_text(f"{call.message.html_text}\n\n<b>{status}</b>")
-    except Exception:  # noqa: BLE001
+    except Exception:
         pass
     try:
         await bot.send_message(row["reporter_id"], ui.t("scam_approved_user" if approved else "scam_rejected_user",
                                                         id=row["id"]))
-    except Exception:  # noqa: BLE001
+    except Exception:
         pass
     if approved:
         asyncio.create_task(broadcast_scammer(bot, row))
@@ -206,7 +205,7 @@ async def broadcast_scammer(bot: Bot, row: dict) -> int:
         try:
             await bot.send_message(g["id"], text, reply_markup=ui.footer_kb())
             sent += 1
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             if "kicked" in str(exc).lower() or "not found" in str(exc).lower():
                 await db.set_chat_active(g["id"], False)
         await asyncio.sleep(0.05)

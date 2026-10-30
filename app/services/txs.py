@@ -1,4 +1,3 @@
-"""Transaction hash checker for all supported networks."""
 from __future__ import annotations
 
 import asyncio
@@ -50,6 +49,9 @@ class TxResult:
     confirmations: int | str | None = None
     timestamp: int | None = None
     usd: float | None = None
+    token_type: str | None = None
+    token_name: str | None = None
+    contract: str | None = None
 
 
 async def _usd(amount: float | None, symbol: str | None) -> float | None:
@@ -62,7 +64,6 @@ async def _usd(amount: float | None, symbol: str | None) -> float | None:
     return amount * p if p else None
 
 
-# ------------------------------------------------------------------ EVM
 _token_meta_cache: dict[tuple[str, str], tuple[str, int]] = {}
 
 
@@ -105,7 +106,6 @@ async def _evm_tx(chain: EvmChain, h: str) -> TxResult | None:
     amount = hex_int(tx.get("value")) / 1e18
     symbol = chain.symbol
     sender, receiver = tx.get("from"), tx.get("to")
-    # token transfer (first Transfer log)
     for log_item in (receipt or {}).get("logs", []) or []:
         topics = log_item.get("topics") or []
         if len(topics) == 3 and topics[0].lower() == TRANSFER_TOPIC:
@@ -137,9 +137,10 @@ async def check_evm_tx(h: str) -> TxResult | None:
     return None
 
 
-# ------------------------------------------------------------------ UTXO
 async def _esplora_tx(base: str, h: str, name: str, symbol: str, explorer: str) -> TxResult | None:
     tx = await get_json(f"{base}/api/tx/{h}", timeout=10)
+    if not isinstance(tx, dict) or tx.get("txid") != h:
+        return None
     st = tx.get("status") or {}
     tip = await safe(get_text(f"{base}/api/blocks/tip/height", timeout=8))
     conf = int(tip) - st["block_height"] + 1 if st.get("confirmed") and tip and tip.strip().isdigit() else 0
@@ -158,7 +159,7 @@ async def _esplora_tx(base: str, h: str, name: str, symbol: str, explorer: str) 
 
 async def _blockcypher_tx(coin: str, h: str, name: str, symbol: str, explorer: str) -> TxResult | None:
     tx = await get_json(f"https://api.blockcypher.com/v1/{coin}/main/txs/{h}", timeout=10)
-    if not tx or tx.get("error"):
+    if not isinstance(tx, dict) or tx.get("error") or tx.get("hash") != h:
         return None
     ins = [a for i in tx.get("inputs", []) for a in (i.get("addresses") or [])]
     outs = sorted(tx.get("outputs", []), key=lambda o: o.get("value", 0), reverse=True)
@@ -186,16 +187,18 @@ async def check_dash_tx(h: str) -> TxResult | None:
     return await safe(_blockcypher_tx("dash", h, "Dash", "DASH", f"https://blockchair.com/dash/transaction/{h}"))
 
 
-# ------------------------------------------------------------------ TRON
 async def check_tron_tx(h: str) -> TxResult | None:
     explorer = f"https://tronscan.org/#/transaction/{h}"
     info = await safe(get_json("https://apilist.tronscanapi.com/api/transaction-info", params={"hash": h},
                                headers=tronscan_headers(), timeout=10))
-    if isinstance(info, dict) and info.get("hash"):
+    if isinstance(info, dict) and info.get("hash") and info.get("contractRet") is not None:
         status = OK if info.get("contractRet") == "SUCCESS" and info.get("confirmed") else (
             PENDING if not info.get("confirmed") else FAIL)
+        cd = info.get("contractData") or {}
         amount, symbol = None, "TRX"
-        sender, receiver = info.get("ownerAddress"), info.get("toAddress")
+        token_type, token_name, contract = "COIN", "TRON", None
+        sender = cd.get("owner_address") or info.get("ownerAddress")
+        receiver = cd.get("to_address") or info.get("toAddress")
         trc20 = info.get("trc20TransferInfo") or info.get("tokenTransferInfo")
         if isinstance(trc20, list) and trc20:
             trc20 = trc20[0]
@@ -203,20 +206,26 @@ async def check_tron_tx(h: str) -> TxResult | None:
             dec = int(trc20.get("decimals") or 6)
             amount = int(trc20["amount_str"]) / 10 ** dec
             symbol = trc20.get("symbol") or "TRC20"
+            token_type, token_name = "TRC20", trc20.get("name") or symbol
+            contract = trc20.get("contract_address") or cd.get("contract_address")
             sender = trc20.get("from_address") or sender
             receiver = trc20.get("to_address") or receiver
-        else:
-            cd = info.get("contractData") or {}
-            if cd.get("amount") is not None:
-                amount = int(cd["amount"]) / 1e6
+        elif cd.get("asset_name") and cd.get("amount") is not None:
+            ti = cd.get("tokenInfo") or {}
+            dec = int(ti.get("tokenDecimal") or 0)
+            amount = int(cd["amount"]) / 10 ** dec
+            symbol = ti.get("tokenAbbr") or str(cd.get("asset_name"))
+            token_type, token_name, contract = "TRC10", ti.get("tokenName") or symbol, str(ti.get("tokenId") or cd.get("asset_name"))
+        elif cd.get("amount") is not None:
+            amount = int(cd["amount"]) / 1e6
         cost = info.get("cost") or {}
         fee_sun = cost.get("fee") or 0
         fee = f"{fee_sun / 1e6:g} TRX"
         if cost.get("energy_usage_total"):
             fee += f" • ⚡️ {cost['energy_usage_total']:,} Energy"
         ts = int(info["timestamp"]) // 1000 if info.get("timestamp") else None
-        return TxResult("TRON (TRC20)", status, h, explorer, amount, symbol, sender, receiver, fee,
-                        info.get("block"), info.get("confirmations"), ts)
+        return TxResult("TRON", status, h, explorer, amount, symbol, sender, receiver, fee,
+                        info.get("block"), info.get("confirmations"), ts, None, token_type, token_name, contract)
 
     tx = await safe(post_json("https://api.trongrid.io/wallet/gettransactionbyid", {"value": h},
                               headers=tron_headers(), timeout=10))
@@ -227,27 +236,36 @@ async def check_tron_tx(h: str) -> TxResult | None:
     contract = ((tx.get("raw_data") or {}).get("contract") or [{}])[0]
     value = (contract.get("parameter") or {}).get("value") or {}
     amount, symbol = None, "TRX"
+    token_type, token_name, token_contract = "COIN", "TRON", None
     sender = tron_hex_to_base58(value.get("owner_address", ""))
     receiver = tron_hex_to_base58(value.get("to_address", "")) if value.get("to_address") else None
     if contract.get("type") == "TransferContract":
         amount = value.get("amount", 0) / 1e6
+    elif contract.get("type") == "TransferAssetContract":
+        asset = value.get("asset_name", "")
+        try:
+            asset = bytes.fromhex(asset).decode()
+        except ValueError:
+            pass
+        amount, symbol = value.get("amount", 0), str(asset)
+        token_type, token_name, token_contract = "TRC10", str(asset), str(asset)
     elif contract.get("type") == "TriggerSmartContract":
         data = value.get("data", "")
         token_addr = tron_hex_to_base58(value.get("contract_address", ""))
+        token_type, token_contract = "TRC20", token_addr
         if data.startswith("a9059cbb") and len(data) >= 136:
             sym, dec = TRC20_TOKENS.get(token_addr, ("TRC20", 6))
             receiver = tron_hex_to_base58("41" + data[32:72])
             amount = int(data[72:136], 16) / 10 ** dec
-            symbol = sym
+            symbol = token_name = sym
     ret = ((tx.get("ret") or [{}])[0]).get("contractRet")
     status = OK if ret == "SUCCESS" and txinfo.get("blockNumber") else (FAIL if ret and ret != "SUCCESS" else PENDING)
     fee = f"{txinfo.get('fee', 0) / 1e6:g} TRX"
     ts = txinfo.get("blockTimeStamp", 0) // 1000 or None
-    return TxResult("TRON (TRC20)", status, h, explorer, amount, symbol, sender, receiver, fee,
-                    txinfo.get("blockNumber"), None, ts)
+    return TxResult("TRON", status, h, explorer, amount, symbol, sender, receiver, fee,
+                    txinfo.get("blockNumber"), None, ts, None, token_type, token_name, token_contract)
 
 
-# ------------------------------------------------------------------ TON
 def _ton_hash_variants(h: str) -> list[str]:
     out = [h]
     try:
@@ -256,7 +274,7 @@ def _ton_hash_variants(h: str) -> list[str]:
         else:
             raw = base64.urlsafe_b64decode(h.replace("+", "-").replace("/", "_") + "=" * (-len(h) % 4))
             out.append(raw.hex())
-    except Exception:  # noqa: BLE001
+    except Exception:
         pass
     return out
 
@@ -308,7 +326,6 @@ async def check_ton_tx(h: str) -> TxResult | None:
     return None
 
 
-# ------------------------------------------------------------------ Solana
 async def check_sol_tx(sig: str) -> TxResult | None:
     tx = await safe(rpc(SOL_RPCS, "getTransaction",
                         [sig, {"encoding": "jsonParsed", "maxSupportedTransactionVersion": 0}]))
@@ -335,7 +352,6 @@ async def check_sol_tx(sig: str) -> TxResult | None:
             mint = info.get("mint")
             symbol = SOL_TOKENS.get(mint, "SPL")
             if amount is None:
-                # plain transfer: resolve decimals from post balances
                 for b in meta.get("postTokenBalances") or []:
                     if b.get("mint") in SOL_TOKENS:
                         symbol = SOL_TOKENS[b["mint"]]
@@ -348,7 +364,6 @@ async def check_sol_tx(sig: str) -> TxResult | None:
                     f"{meta.get('fee', 0) / 1e9:g} SOL", tx.get("slot"), None, tx.get("blockTime"))
 
 
-# ------------------------------------------------------------------ XRP
 async def check_xrp_tx(h: str) -> TxResult | None:
     for url in XRP_RPCS:
         data = await safe(post_json(url, {"method": "tx", "params": [{"transaction": h, "binary": False}]},
@@ -373,7 +388,6 @@ async def check_xrp_tx(h: str) -> TxResult | None:
     return None
 
 
-# ------------------------------------------------------------------ router
 async def check_tx(kind: str, h: str) -> TxResult | None:
     if kind == "hex64x":
         result = await check_evm_tx(h)

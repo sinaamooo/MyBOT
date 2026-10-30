@@ -1,11 +1,11 @@
-"""Builds conversion answers for '<amount> <unit>' messages."""
 from __future__ import annotations
 
 from dataclasses import dataclass
 
 from .. import ui
 from ..utils import fmt
-from . import cards, prices
+from ..utils.http import safe
+from . import cards, prices, tgju
 from .currencies import FIAT, crypto_name, flag_emoji
 
 
@@ -100,6 +100,9 @@ async def _fiat(amount: float, code: str) -> Answer | None:
     name_fa, name_en, cc, _sym, _aliases = FIAT.get(code, (code, code, None, code, ()))
     usd = amount / rates[code]
     toman = usd * snap.usdt_toman if snap.usdt_toman else None
+    market = await safe(tgju.toman_rate(code, toman / amount if toman else None), label="tgju")
+    if market:
+        toman = market * amount
     eur = usd * rates["EUR"] if rates.get("EUR") else None
     ton = usd / snap.ton_usd if snap.ton_usd else None
     trx = usd / snap.trx_usd if snap.trx_usd else None

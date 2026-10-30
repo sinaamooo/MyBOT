@@ -1,4 +1,3 @@
-"""End-to-end flows through the real dispatcher with a fake Telegram API session."""
 import asyncio
 import os
 import tempfile
@@ -42,14 +41,16 @@ from aiogram.types import (
 os.environ.setdefault("BOT_TOKEN", "42:TEST")
 os.environ["ADMIN_IDS"] = "999"
 
-from app import config as config_mod  # noqa: E402
+from app import config as config_mod
 
 config_mod.config = config_mod.Config()
-import app.handlers.admin as admin_mod  # noqa: E402,F401  (filters read admin ids at import)
-from app import db as dbmod  # noqa: E402
-from app import ui  # noqa: E402
-from app.bot import PremiumEmojiFallback, build_dispatcher  # noqa: E402
-from app.services import prices, translate  # noqa: E402
+import app.handlers.admin as admin_mod
+
+assert admin_mod
+from app import db as dbmod
+from app import ui
+from app.bot import PremiumEmojiFallback, build_dispatcher
+from app.services import prices, translate
 
 BOT_USER = User(id=1, is_bot=True, first_name="Bot", username="TestBot")
 NON_MEMBER_CHANNEL = -1001
@@ -65,7 +66,7 @@ class FakeSession(BaseSession):
     async def close(self):
         pass
 
-    async def stream_content(self, *a, **kw):  # pragma: no cover
+    async def stream_content(self, *a, **kw):
         yield b""
 
     def _msg(self, chat_id, text=None, caption=None, reply_markup=None):
@@ -75,6 +76,12 @@ class FakeSession(BaseSession):
                        from_user=BOT_USER, text=text, caption=caption, reply_markup=reply_markup)
 
     async def make_request(self, bot, method, timeout=None):
+        result = await self._make_request(bot, method, timeout)
+        if hasattr(result, "as_"):
+            result = result.as_(bot)
+        return result
+
+    async def _make_request(self, bot, method, timeout=None):
         self.calls.append(method)
         if isinstance(method, GetMe):
             return BOT_USER
@@ -133,7 +140,6 @@ def env(monkeypatch):
     asyncio.set_event_loop(loop)
     path = os.path.join(tempfile.mkdtemp(), "flow.db")
     loop.run_until_complete(dbmod.init_db(path))
-    request = None  # noqa: F841
 
     async def quote(sym):
         table = {"USDT": 1.0, "TON": 3.0, "TRX": 0.25, "BTC": 100000.0, "ETH": 4000.0}
@@ -159,7 +165,7 @@ def env(monkeypatch):
     bot = Bot("42:TEST", session=session, default=__import__("aiogram").client.default.DefaultBotProperties(parse_mode="HTML"))
     global _DP
     if _DP is None:
-        _DP = build_dispatcher()  # routers can only be attached once per process
+        _DP = build_dispatcher()
     dp = _DP
     ui.BOT_USERNAME = "TestBot"
     yield loop, bot, dp, session
@@ -201,9 +207,9 @@ def test_start_and_footer(env):
 def test_crypto_conversion(env):
     feed(env, msg("10 تتر"))
     text = env[3].last_text()
-    assert "1,000,000" in text  # toman
-    assert "3.3333" in text  # TON
-    assert "40" in text  # TRX
+    assert "1,000,000" in text
+    assert "3.3333" in text
+    assert "40" in text
     assert "{" not in text
 
 
@@ -257,7 +263,7 @@ def test_translate_once(env):
                           data="tr:en", message=bot_msg)
     n = len(session.sent(EditMessageText))
     feed(env, again)
-    assert len(session.sent(EditMessageText)) == n  # only once
+    assert len(session.sent(EditMessageText)) == n
 
 
 def test_emoji_command(env):
@@ -287,7 +293,6 @@ def test_force_join_group(env):
     warn = session.sent(SendMessage)[-1]
     assert "کانال" in warn.text
     assert warn.reply_markup.inline_keyboard[0][0].url == "https://t.me/main"
-    # group admins are not affected
     n = len(session.calls)
     feed(env, msg("salam", chat_id=-200, user_id=777))
     assert not any(isinstance(c, DeleteMessage) for c in session.calls[n:])
@@ -358,7 +363,7 @@ def test_group_settings_toggle(env):
     feed(env, cb)
     n = len(session.sent())
     feed(env, msg("2+2", chat_id=-400, user_id=778))
-    assert len(session.sent()) == n  # calculator disabled in this group
+    assert len(session.sent()) == n
 
 
 def _unique(base, slug, number, model, backdrop, symbol):
@@ -405,7 +410,7 @@ def test_gift_portfolio(env, monkeypatch):
     monkeypatch.setattr(gift_service, "floors_days_ago", fake_old)
     monkeypatch.setattr(gift_service, "gift_image", no_image)
 
-    orig = session.make_request
+    orig = session._make_request
 
     async def make_request(bot_, method, timeout=None):
         if isinstance(method, GetUserGifts):
@@ -413,12 +418,12 @@ def test_gift_portfolio(env, monkeypatch):
             return OwnedGifts(total_count=2, gifts=owned)
         return await orig(bot_, method, timeout)
 
-    monkeypatch.setattr(session, "make_request", make_request)
+    monkeypatch.setattr(session, "_make_request", make_request)
     feed(env, msg("/gift", chat_id=-500, user_id=70, first_name="Sina"))
     photo = session.sent(SendPhoto)[-1]
     assert "https://t.me/nft/ToyBear-55" in photo.caption and "https://t.me/nft/PlushPepe-7" in photo.caption
-    assert "5,020" in photo.caption  # 20 (wizard model floor) + 5000 (black backdrop floor)
-    assert "ضرر" in photo.caption  # plush pepe floor dropped over 7 days
+    assert "5,020" in photo.caption
+    assert "ضرر" in photo.caption
 
 
 def _admin_cb(data, cid="40"):
@@ -440,12 +445,10 @@ def test_admin_panel_navigation(env):
     conf = dbmod.get_db().get("buttons")
     assert conf["btn_channel"]["style"] == "danger"
     assert dbmod.get_db().get("anti_self") is False
-    # premium emoji map via panel
     feed(env, _admin_cb("adm:emoadd"))
     ent = MessageEntity(type="custom_emoji", offset=0, length=2, custom_emoji_id="555")
     feed(env, msg("💎", chat_id=999, user_id=999, entities=[ent]))
     assert dbmod.get_db().get("emoji_map") == {"💎": "555"}
-    # button premium emoji
     feed(env, _admin_cb("adm:bemoji:btn_add_group"))
     feed(env, msg("😎", chat_id=999, user_id=999,
                   entities=[MessageEntity(type="custom_emoji", offset=0, length=2, custom_emoji_id="777")]))
@@ -454,9 +457,145 @@ def test_admin_panel_navigation(env):
     start = session.sent(SendMessage)[-1]
     add_btn = [b for row in start.reply_markup.inline_keyboard for b in row if b.url and "startgroup" in b.url][0]
     assert add_btn.icon_custom_emoji_id == "777"
-    # numeric setting
     feed(env, _admin_cb("adm:val:usdt_toman_manual"))
     feed(env, msg("۱۰۵۰۰۰", chat_id=999, user_id=999))
     assert dbmod.get_db().get("usdt_toman_manual") == 105000
     loop.run_until_complete(dbmod.get_db().set("emoji_map", {}))
     loop.run_until_complete(dbmod.get_db().set("anti_self", True))
+
+
+def test_card_and_iban_messages(env, monkeypatch):
+    from app.services import banking
+
+    async def fake(url, **kw):
+        return {"result": {"name": "علی رضایی"}}
+
+    monkeypatch.setattr(banking, "get_json", fake)
+    loop, bot, dp, session = env
+    feed(env, msg("6037-9975-9950-3209", chat_id=-600, user_id=80))
+    out = session.last_text()
+    assert "ملی" in out and "علی رضایی" in out and "6037-9975-9950-3209" in out
+    n = len(session.sent())
+    feed(env, msg("6037-9975-9950-3201", chat_id=-600, user_id=80))
+    assert len(session.sent()) == n
+    feed(env, msg("IR820540102680020817909002", chat_id=-600, user_id=80))
+    assert "پارسیان" in session.last_text()
+
+
+def test_phone_command(env, monkeypatch):
+    from app.services import phone
+
+    async def fake(url, **kw):
+        return {"status": "⚫️"}
+
+    monkeypatch.setattr(phone, "get_json", fake)
+    feed(env, msg("/phone +15005550006"))
+    assert "بن شده" in env[3].last_text()
+
+
+def test_tron_tx_buttons_and_wallet_extras(env, monkeypatch):
+    from app.services import txs as tx_service
+    from app.services import wallets as w
+
+    loop, bot, dp, session = env
+    sender, receiver = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t", "TKHuVq1oKVruCGLvqVexFs6dawKv6fQgFs"
+
+    async def fake_tx(url, **kw):
+        return {"hash": "e" * 64, "contractRet": "SUCCESS", "confirmed": True, "timestamp": 1700000000000,
+                "contractData": {"owner_address": sender, "to_address": receiver, "amount": 5000000}}
+
+    async def fake_wallet(url, **kw):
+        if "v1/accounts" in url:
+            return {"success": True, "data": [{"balance": 7000000, "create_time": 1600000000000, "trc20": []}]}
+        if "accountv2" in url:
+            return {"totalTransactionCount": 3}
+        if "account/tokens" in url:
+            return {"total": 1, "data": [{"tokenId": "_", "tokenType": "trc10", "quantity": 7, "tokenAbbr": "trx"}]}
+        return {"total": 1, "token_transfers": [{"quant": "1000000", "tokenInfo": {"tokenDecimal": 6, "tokenAbbr": "USDT"},
+                                                 "from_address": "TA", "to_address": receiver,
+                                                 "block_ts": 1700000000000, "transaction_id": "f" * 64}]}
+
+    monkeypatch.setattr(tx_service, "get_json", fake_tx)
+    monkeypatch.setattr(w, "get_json", fake_wallet)
+    feed(env, msg("e" * 64, chat_id=-700, user_id=90))
+    tx_msg = session.sent(SendMessage)[-1]
+    assert "5 TRX" in tx_msg.text and "COIN" in tx_msg.text
+    btns = [b for row in tx_msg.reply_markup.inline_keyboard for b in row if b.callback_data and b.callback_data.startswith("wl:")]
+    assert len(btns) == 2
+    bot_msg = Message(message_id=900, date=datetime.now(timezone.utc), chat=Chat(id=-700, type="supergroup"),
+                      from_user=BOT_USER, text="x")
+    stranger = CallbackQuery(id="50", from_user=User(id=91, is_bot=False, first_name="s"), chat_instance="c",
+                             data=btns[1].callback_data, message=bot_msg)
+    feed(env, stranger)
+    assert session.calls[-1].show_alert
+    mine = CallbackQuery(id="51", from_user=User(id=90, is_bot=False, first_name="m"), chat_instance="c",
+                         data=btns[1].callback_data, message=bot_msg)
+    feed(env, mine)
+    wallet_msg = [c for c in session.sent(SendMessage) if "TRON" in (c.text or "") and "موجودی" in c.text][-1]
+    assert "تاریخ ساخت" in wallet_msg.text
+    extra = [b for row in wallet_msg.reply_markup.inline_keyboard for b in row if b.callback_data and b.callback_data[:3] in ("tt:", "tj:")]
+    assert len(extra) == 2
+    feed(env, CallbackQuery(id="52", from_user=User(id=90, is_bot=False, first_name="m"), chat_instance="c",
+                            data=extra[0].callback_data, message=bot_msg))
+    assert "TRC20" in session.last_text() and "USDT" in session.last_text()
+    from aiogram.methods import SendDocument
+
+    feed(env, CallbackQuery(id="53", from_user=User(id=90, is_bot=False, first_name="m"), chat_instance="c",
+                            data=extra[1].callback_data, message=bot_msg))
+    assert any(isinstance(c, SendDocument) for c in session.calls)
+
+
+def test_wallet_prefix_in_group(env, monkeypatch):
+    from app.handlers import tools as tools_mod
+
+    seen = []
+
+    async def fake_checker(message, kind, token, owner_id=None):
+        seen.append((kind, token))
+
+    monkeypatch.setattr(tools_mod, "run_checker", fake_checker)
+    feed(env, msg("wallet TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t", chat_id=-800, user_id=95))
+    assert seen == [("tron", "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t")]
+
+
+def test_instagram_link_flow(env, monkeypatch):
+    import dataclasses
+
+    from aiogram.methods import SendVideo
+
+    from app.services import instagram
+
+    async def fake(url, params=None, **kw):
+        return {"status": 200, "result": {"medias": [{"url": "https://x/1.jpg", "extension": "jpg"},
+                                                     {"url": "https://x/2.mp4", "extension": "mp4"}]}}
+
+    monkeypatch.setattr(instagram, "config", dataclasses.replace(instagram.config, instagram_api_key="K"))
+    monkeypatch.setattr(instagram, "get_json", fake)
+    loop, bot, dp, session = env
+    feed(env, msg("https://www.instagram.com/reel/ABC123/", chat_id=-900, user_id=96))
+    photos = [c for c in session.calls if isinstance(c, SendPhoto) and c.photo == "https://x/1.jpg"]
+    videos = [c for c in session.calls if isinstance(c, SendVideo)]
+    assert photos and videos and "(2/2)" in videos[-1].caption
+
+
+def test_admin_power_and_ban(env):
+    loop, bot, dp, session = env
+    feed(env, _admin_cb("adm:power"))
+    assert dbmod.get_db().get("bot_enabled") is False
+    feed(env, msg("10 تتر", chat_id=31, user_id=31))
+    assert "خاموش" in session.last_text()
+    feed(env, msg("/panel", chat_id=999, user_id=999))
+    assert "پنل مدیریت" in session.last_text()
+    feed(env, _admin_cb("adm:power"))
+    assert dbmod.get_db().get("bot_enabled") is True
+    feed(env, _admin_cb("adm:ban"))
+    feed(env, msg("32", chat_id=999, user_id=999))
+    assert dbmod.get_db().is_banned(32)
+    feed(env, msg("10 تتر", chat_id=32, user_id=32))
+    assert "مسدود" in session.last_text()
+    feed(env, _admin_cb("adm:ban"))
+    feed(env, msg("32", chat_id=999, user_id=999))
+    assert not dbmod.get_db().is_banned(32)
+    feed(env, _admin_cb("adm:pm"))
+    feed(env, msg("33\nسلام", chat_id=999, user_id=999))
+    assert any(isinstance(c, SendMessage) and c.chat_id == 33 and "سلام" in c.text for c in session.calls)

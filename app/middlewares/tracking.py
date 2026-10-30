@@ -1,4 +1,3 @@
-"""Stores users / chats and counts activity."""
 from __future__ import annotations
 
 import logging
@@ -31,6 +30,6 @@ class TrackingMiddleware(BaseMiddleware):
                     await db.touch_user(event.reply_to_message.from_user)
             elif isinstance(event, CallbackQuery) and event.from_user:
                 await db.touch_user(event.from_user)
-        except Exception:  # noqa: BLE001 - tracking must never block handling
+        except Exception:
             log.exception("tracking failed")
         return await handler(event, data)

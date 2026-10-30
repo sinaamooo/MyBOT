@@ -1,4 +1,3 @@
-"""Runtime configuration loaded from environment variables / .env file."""
 from __future__ import annotations
 
 import os
@@ -7,7 +6,7 @@ from pathlib import Path
 
 try:
     from dotenv import load_dotenv
-except ImportError:  # pragma: no cover
+except ImportError:
     load_dotenv = None
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -35,10 +34,8 @@ class Config:
     admin_ids: list[int] = field(default_factory=lambda: _ids(os.getenv("ADMIN_IDS", "")))
     db_path: str = field(default_factory=lambda: os.getenv("DB_PATH", str(DATA_DIR / "bot.db")))
     channel_url: str = field(default_factory=lambda: os.getenv("CHANNEL_URL", "").strip())
-    # HTTP(S)/SOCKS proxy for both Telegram and external APIs (useful on servers inside Iran)
     proxy: str = field(default_factory=lambda: os.getenv("PROXY", "").strip())
     telegram_proxy: str = field(default_factory=lambda: os.getenv("TELEGRAM_PROXY", "").strip())
-    # Optional API keys (everything works without them, keys only raise rate limits)
     etherscan_key: str = field(default_factory=lambda: os.getenv("ETHERSCAN_API_KEY", "").strip())
     trongrid_key: str = field(default_factory=lambda: os.getenv("TRONGRID_API_KEY", "").strip())
     tronscan_key: str = field(default_factory=lambda: os.getenv("TRONSCAN_API_KEY", "").strip())
@@ -47,10 +44,14 @@ class Config:
     coingecko_key: str = field(default_factory=lambda: os.getenv("COINGECKO_API_KEY", "").strip())
     whale_alert_key: str = field(default_factory=lambda: os.getenv("WHALE_ALERT_API_KEY", "").strip())
     portals_auth: str = field(default_factory=lambda: os.getenv("PORTALS_AUTH", "").strip())
-    # Optional MTProto credentials (my.telegram.org) to resolve any @username for /gift
     api_id: int = field(default_factory=lambda: int(os.getenv("API_ID", "0") or 0))
     api_hash: str = field(default_factory=lambda: os.getenv("API_HASH", "").strip())
     log_level: str = field(default_factory=lambda: os.getenv("LOG_LEVEL", "INFO").upper())
+    instagram_api_url: str = field(default_factory=lambda: os.getenv("INSTAGRAM_API_URL", "https://api.codesazan.ir/Instagram").strip())
+    instagram_api_key: str = field(default_factory=lambda: os.getenv("INSTAGRAM_API_KEY", "").strip())
+    cardinfo_api_url: str = field(default_factory=lambda: os.getenv("CARDINFO_API_URL", "http://167.235.240.118/api/Cardinfo/").strip())
+    cardinfo_api_token: str = field(default_factory=lambda: os.getenv("CARDINFO_API_TOKEN", "codesazan").strip())
+    phone_api_url: str = field(default_factory=lambda: os.getenv("PHONE_CHECK_API_URL", "https://api-bot.site/check/Check.php").strip())
 
 
 config = Config()

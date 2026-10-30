@@ -1,4 +1,3 @@
-"""Group protection middleware + private force-join gate."""
 from __future__ import annotations
 
 import logging
@@ -28,7 +27,6 @@ def unmute_kb(chat_id: int, user_id: int, kind: str):
 
 
 async def handle_self_score(bot: Bot, chat_id: int, user, score: int) -> bool:
-    """Warn first, mute on repeat. Returns True if the user got muted."""
     from ..services.guard import SelfDetector
 
     if score < SelfDetector.THRESHOLD:
@@ -79,7 +77,6 @@ class GroupGuardMiddleware(BaseMiddleware):
         db = get_db()
         text = event.text or event.caption or ""
 
-        # 1) advertising bots (tabchi)
         if await feature_on(chat_id, "anti_tabchi"):
             score, reasons = tabchi_detector.evaluate(event)
             if score >= tabchi_detector.THRESHOLD:
@@ -95,18 +92,16 @@ class GroupGuardMiddleware(BaseMiddleware):
                         )
                 return None
 
-        # 2) known scammers
         scammer = await db.find_scammer(user.id, user.username)
         if scammer:
             if gget("auto_ban_scammers"):
                 try:
                     await bot.ban_chat_member(chat_id, user.id)
-                except Exception:  # noqa: BLE001
+                except Exception:
                     pass
             if not tg.throttled((chat_id, user.id, "scammer"), 3600):
                 await event.reply(ui.t("scam_known", mention=ui.mention(user), reason=ui.esc(scammer.get("reason") or "—")))
 
-        # 3) forced channel membership
         channels = gget("force_channels") or []
         if channels and await feature_on(chat_id, "force_join_groups"):
             missing = await tg.missing_channels(bot, user.id, channels)
@@ -120,7 +115,6 @@ class GroupGuardMiddleware(BaseMiddleware):
                     tg.delete_later(msg, 90)
                 return None
 
-        # 4) self-bots
         if await feature_on(chat_id, "anti_self"):
             reply_delta = None
             rt = event.reply_to_message
@@ -130,7 +124,6 @@ class GroupGuardMiddleware(BaseMiddleware):
             if await handle_self_score(bot, chat_id, user, score):
                 return None
 
-        # 5) scam behaviour warning
         if text and await feature_on(chat_id, "anti_scam") and is_scammy(text, gget("scam_extra_keywords")):
             if not tg.throttled((chat_id, user.id, "scamwarn"), 600) and not tg.throttled((chat_id, "scamwarn"), 30):
                 msg = await event.reply(ui.t("scam_keyword_warn", mention=ui.mention(user)))
@@ -172,4 +165,32 @@ class PrivateForceJoinMiddleware(BaseMiddleware):
             if missing:
                 await event.answer(ui.plain("force_join_not_yet"), show_alert=True)
                 return None
+        return await handler(event, data)
+
+
+class AccessMiddleware(BaseMiddleware):
+    async def __call__(
+        self,
+        handler: Callable[[TelegramObject, dict[str, Any]], Awaitable[Any]],
+        event: TelegramObject,
+        data: dict[str, Any],
+    ) -> Any:
+        user = getattr(event, "from_user", None)
+        if not user or tg.is_bot_admin_user(user.id):
+            return await handler(event, data)
+        db = get_db()
+        private = (isinstance(event, Message) and event.chat.type == "private") or (
+            isinstance(event, CallbackQuery) and event.message and event.message.chat.type == "private")
+        if db.is_banned(user.id):
+            if isinstance(event, CallbackQuery):
+                await event.answer(ui.plain("banned"), show_alert=True)
+            elif private and not tg.throttled((user.id, "banned"), 3600):
+                await event.answer(ui.t("banned"))
+            return None
+        if not gget("bot_enabled"):
+            if isinstance(event, CallbackQuery):
+                await event.answer(ui.plain("bot_off"), show_alert=True)
+            elif private and not tg.throttled((user.id, "botoff"), 600):
+                await event.answer(ui.t("bot_off"))
+            return None
         return await handler(event, data)

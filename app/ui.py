@@ -1,4 +1,3 @@
-"""Text rendering (templates + premium emoji) and glass (inline) buttons."""
 from __future__ import annotations
 
 import html
@@ -12,7 +11,7 @@ from .db import get_db
 from .settings import gget
 from .texts import BUTTONS, TEXTS
 
-BOT_USERNAME = ""  # filled on startup
+BOT_USERNAME = ""
 
 _PLACEHOLDER = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\}")
 _TAG = re.compile(r"(<[^>]+>)")
@@ -24,9 +23,7 @@ def esc(value: Any) -> str:
     return html.escape(str(value), quote=False)
 
 
-# ---------------------------------------------------------------- templates
 def _unbalanced_tags(line: str) -> tuple[list[str], list[str]]:
-    """Return (unclosed opening tags, unmatched closing tags) of a line."""
     opened: list[tuple[str, str]] = []
     closing: list[str] = []
     for tag in _TAG.findall(line):
@@ -47,9 +44,8 @@ def _unbalanced_tags(line: str) -> tuple[list[str], list[str]]:
 
 
 def fill(template: str, **values: Any) -> str:
-    """Fill ``{placeholders}``. Lines whose placeholder value is None are dropped."""
     out_lines: list[str] = []
-    carry = ""  # opening tags from dropped lines, prepended to the next kept line
+    carry = ""
     for line in template.split("\n"):
         names = _PLACEHOLDER.findall(line)
         if any(n in values and values[n] is None for n in names):
@@ -84,7 +80,6 @@ def t(key: str, **values: Any) -> str:
     return apply_emoji_map(fill(template(key), **values))
 
 
-# ---------------------------------------------------------- premium emoji
 def _emoji_regex(emoji_map: dict[str, str]) -> re.Pattern | None:
     keys = sorted((k for k in emoji_map if k), key=len, reverse=True)
     if not keys:
@@ -100,7 +95,6 @@ _emoji_cache: tuple[int, re.Pattern | None] = (0, None)
 
 
 def apply_emoji_map(text: str) -> str:
-    """Wrap configured emojis with <tg-emoji> so they render as premium emoji."""
     global _emoji_cache
     emoji_map: dict[str, str] = gget("emoji_map") or {}
     if not emoji_map or not text:
@@ -154,7 +148,6 @@ def _is_emoji_token(token: str) -> bool:
 
 
 def split_leading_emoji(text: str) -> tuple[str, str]:
-    """'💎 Hello' -> ('💎', 'Hello')"""
     text = text.strip()
     head, _, rest = text.partition(" ")
     if rest and _is_emoji_token(head):
@@ -162,7 +155,6 @@ def split_leading_emoji(text: str) -> tuple[str, str]:
     return "", text
 
 
-# ------------------------------------------------------------------ buttons
 def button(
     key: str,
     *,
@@ -233,6 +225,5 @@ def username_or_dash(username: str | None) -> str:
 
 
 def plain(key: str, **values: Any) -> str:
-    """Rendered text without HTML (for callback popups, max 200 chars)."""
     text = re.sub(r"<[^>]+>", "", fill(template(key), **values))
     return html.unescape(text)[:200]

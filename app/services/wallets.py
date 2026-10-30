@@ -1,4 +1,3 @@
-"""Wallet checker for all supported networks."""
 from __future__ import annotations
 
 import asyncio
@@ -46,6 +45,8 @@ class ChainResult:
     txs: int | str | None = None
     nfts: int | None = None
     status: str | None = None
+    created: int | None = None
+    kind: str | None = None
 
     @property
     def total_usd(self) -> float:
@@ -75,7 +76,6 @@ async def _fill_usd(result: ChainResult) -> ChainResult:
     return result
 
 
-# ------------------------------------------------------------------ EVM
 async def _evm_chain(chain: EvmChain, address: str) -> ChainResult | None:
     calls: list[tuple[str, list]] = [
         ("eth_getBalance", [address, "latest"]),
@@ -106,7 +106,6 @@ async def check_evm(address: str) -> list[ChainResult]:
     return [r for r in results if r]
 
 
-# ------------------------------------------------------------------ UTXO chains
 async def _esplora(base: str, address: str, name: str, symbol: str, explorer: str) -> ChainResult:
     data = await get_json(f"{base}/api/address/{address}", timeout=10)
     cs, ms = data.get("chain_stats", {}), data.get("mempool_stats", {})
@@ -166,22 +165,70 @@ async def check_bch(address: str) -> list[ChainResult]:
                         f"https://blockchair.com/bitcoin-cash/address/{addr}", txs=info.get("transaction_count"))]
 
 
-# ------------------------------------------------------------------ TRON
+async def tron_all_tokens(address: str) -> dict:
+    data = await get_json("https://apilist.tronscanapi.com/api/account/tokens",
+                          params={"address": address, "start": 0, "limit": 1000}, headers=tronscan_headers(), timeout=15)
+    tokens = []
+    for item in data.get("data") or []:
+        ttype = str(item.get("tokenType") or "").lower()
+        entry = {
+            "Amount": item.get("quantity"),
+            "Name": item.get("tokenName"),
+            "Symbol": item.get("tokenAbbr"),
+            "TokenType": "COIN" if item.get("tokenId") == "_" else ttype.upper(),
+        }
+        if ttype == "trc20":
+            entry["Contract_address"] = item.get("tokenId")
+        else:
+            entry["TokenId"] = item.get("tokenId")
+        if item.get("amountInUsd") is not None:
+            entry["AmountInUsd"] = item.get("amountInUsd")
+        tokens.append(entry)
+    return {"total": data.get("total", len(tokens)), "wallet": address, "token": tokens}
+
+
+async def tron_trc20_transfers(address: str, page: int = 1, per_page: int = 10) -> dict:
+    data = await get_json("https://apilist.tronscanapi.com/api/new/token_trc20/transfers",
+                          params={"limit": per_page, "start": (page - 1) * per_page, "relatedAddress": address},
+                          headers=tronscan_headers(), timeout=15)
+    items = []
+    for item in data.get("token_transfers") or []:
+        info = item.get("tokenInfo") or {}
+        dec = int(info.get("tokenDecimal") or 0)
+        try:
+            amount = int(item.get("quant") or 0) / 10 ** dec
+        except (TypeError, ValueError):
+            amount = 0
+        items.append({
+            "amount": amount,
+            "symbol": info.get("tokenAbbr") or "TRC20",
+            "from": item.get("from_address"),
+            "to": item.get("to_address"),
+            "ts": int(item.get("block_ts") or 0) // 1000,
+            "hash": item.get("transaction_id"),
+        })
+    total = int(data.get("total") or 0)
+    return {"total": total, "pages": max(1, -(-total // per_page)), "page": page, "items": items}
+
+
 async def check_tron(address: str) -> list[ChainResult]:
-    grid, scan = await asyncio.gather(
+    grid, scan, all_tokens = await asyncio.gather(
         safe(get_json(f"https://api.trongrid.io/v1/accounts/{address}", headers=tron_headers(), timeout=10)),
         safe(get_json("https://apilist.tronscanapi.com/api/accountv2", params={"address": address},
                       headers=tronscan_headers(), timeout=10)),
+        safe(tron_all_tokens(address)),
     )
     explorer = f"https://tronscan.org/#/address/{address}"
     tokens: dict[str, Token] = {}
     trx = None
     status = None
     txs = None
+    created = None
     acc = (grid or {}).get("data") or []
     if acc:
         a = acc[0]
         trx = a.get("balance", 0) / 1e6
+        created = int(a["create_time"]) // 1000 if a.get("create_time") else None
         for item in a.get("trc20", []) or []:
             for contract, raw in item.items():
                 if contract in TRC20_TOKENS:
@@ -193,6 +240,8 @@ async def check_tron(address: str) -> list[ChainResult]:
         status = "⚪️ اکانت فعال نشده"
     if isinstance(scan, dict) and scan:
         txs = scan.get("totalTransactionCount") or scan.get("transactions")
+        if created is None and scan.get("date_created"):
+            created = int(scan["date_created"]) // 1000
         if trx is None and scan.get("balance") is not None:
             trx = scan.get("balance", 0) / 1e6
         for tok in scan.get("withPriceTokens") or []:
@@ -214,13 +263,26 @@ async def check_tron(address: str) -> list[ChainResult]:
                 break
         if scan.get("activated") is False:
             status = "⚪️ اکانت فعال نشده"
+    for item in (all_tokens or {}).get("token", []):
+        sym = str(item.get("Symbol") or "").upper()
+        try:
+            amount = float(item.get("Amount") or 0)
+        except (TypeError, ValueError):
+            continue
+        if item.get("TokenType") == "COIN" or sym == "TRX":
+            if trx is None:
+                trx = amount
+            continue
+        if not sym or sym in tokens or len(tokens) > 15 or amount <= 0:
+            continue
+        usd = item.get("AmountInUsd")
+        tokens[sym] = Token(sym, amount, float(usd) if usd else None)
     if trx is None and not tokens:
         return []
-    return [ChainResult("TRON (TRC20)", "TRX", trx or 0, explorer, tokens=list(tokens.values()), txs=txs,
-                        status=status)]
+    return [ChainResult("TRON", "TRX", trx or 0, explorer, tokens=list(tokens.values()), txs=txs,
+                        status=status, created=created, kind="tron")]
 
 
-# ------------------------------------------------------------------ TON
 async def check_ton(address: str) -> list[ChainResult]:
     acc, jettons, nfts, center = await asyncio.gather(
         safe(get_json(f"https://tonapi.io/v2/accounts/{address}", headers=tonapi_headers(), timeout=10)),
@@ -259,7 +321,6 @@ async def check_ton(address: str) -> list[ChainResult]:
                         nfts=nft_count, status=status)]
 
 
-# ------------------------------------------------------------------ Solana
 async def check_sol(address: str) -> list[ChainResult]:
     bal = await safe(rpc(SOL_RPCS, "getBalance", [address]))
     if bal is None:
@@ -283,7 +344,6 @@ async def check_sol(address: str) -> list[ChainResult]:
                         txs=txs)]
 
 
-# ------------------------------------------------------------------ XRP
 async def check_xrp(address: str) -> list[ChainResult]:
     for url in XRP_RPCS:
         data = await safe(post_json(url, {"method": "account_info",
@@ -298,7 +358,6 @@ async def check_xrp(address: str) -> list[ChainResult]:
     return []
 
 
-# ------------------------------------------------------------------ SUI / Aptos (0x + 64 hex)
 async def check_sui(address: str) -> list[ChainResult]:
     res = await safe(rpc(SUI_RPCS, "suix_getAllBalances", [address]))
     if not isinstance(res, list) or not res:
@@ -331,7 +390,6 @@ async def check_aptos(address: str) -> list[ChainResult]:
                         txs=int((acc or {}).get("sequence_number", 0)) if acc else None)]
 
 
-# ------------------------------------------------------------------ router
 CHECKERS = {
     "evm": check_evm,
     "btc": check_btc,

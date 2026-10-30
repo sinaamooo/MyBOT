@@ -1,4 +1,3 @@
-"""Shared blockchain helpers: network configs, JSON-RPC, base58, ABI decoding."""
 from __future__ import annotations
 
 import hashlib
@@ -19,7 +18,7 @@ class EvmChain:
     symbol: str
     rpcs: list[str]
     explorer: str
-    tokens: dict[str, tuple[str, int]] = field(default_factory=dict)  # symbol -> (address, decimals)
+    tokens: dict[str, tuple[str, int]] = field(default_factory=dict)
 
 
 EVM_CHAINS: list[EvmChain] = [
@@ -151,7 +150,6 @@ def toncenter_params() -> dict:
     return {"api_key": config.toncenter_key} if config.toncenter_key else {}
 
 
-# ------------------------------------------------------------------ JSON-RPC
 class RpcError(Exception):
     pass
 
@@ -162,7 +160,7 @@ async def rpc(urls: list[str], method: str, params: list | dict, timeout: float 
         try:
             data = await post_json(url, {"jsonrpc": "2.0", "id": 1, "method": method, "params": params},
                                    timeout=timeout)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             last = exc
             continue
         if isinstance(data, dict) and "result" in data:
@@ -172,7 +170,6 @@ async def rpc(urls: list[str], method: str, params: list | dict, timeout: float 
 
 
 async def rpc_batch(urls: list[str], calls: list[tuple[str, list]], timeout: float = 12) -> list:
-    """JSON-RPC batch with per-call fallback. Returns results (None on error) in order."""
     body = [{"jsonrpc": "2.0", "id": i, "method": m, "params": p} for i, (m, p) in enumerate(calls)]
     for url in urls:
         data = await safe(post_json(url, body, timeout=timeout))
@@ -186,7 +183,6 @@ async def rpc_batch(urls: list[str], calls: list[tuple[str, list]], timeout: flo
     return out
 
 
-# ------------------------------------------------------------------ encoding
 def b58encode(data: bytes) -> str:
     n = int.from_bytes(data, "big")
     out = ""
@@ -195,6 +191,25 @@ def b58encode(data: bytes) -> str:
         out = B58_ALPHABET[r] + out
     pad = len(data) - len(data.lstrip(b"\0"))
     return "1" * pad + out
+
+
+def b58decode(text: str) -> bytes:
+    n = 0
+    for ch in text:
+        n = n * 58 + B58_ALPHABET.index(ch)
+    raw = n.to_bytes((n.bit_length() + 7) // 8, "big") if n else b""
+    pad = len(text) - len(text.lstrip("1"))
+    return b"\0" * pad + raw
+
+
+def b58check_valid(text: str) -> bool:
+    try:
+        raw = b58decode(text)
+    except ValueError:
+        return False
+    if len(raw) < 5:
+        return False
+    return hashlib.sha256(hashlib.sha256(raw[:-4]).digest()).digest()[:4] == raw[-4:]
 
 
 def b58check_encode(payload: bytes) -> str:
@@ -238,8 +253,8 @@ def decode_abi_string(hex_data: str | None) -> str | None:
             if offset == 32 and len(raw) >= 64:
                 length = int.from_bytes(raw[32:64], "big")
                 return raw[64:64 + length].decode("utf-8", "ignore").strip("\0") or None
-        return raw[:32].decode("utf-8", "ignore").strip("\0") or None  # bytes32 symbols (e.g. MKR)
-    except Exception:  # noqa: BLE001
+        return raw[:32].decode("utf-8", "ignore").strip("\0") or None
+    except Exception:
         return None
 
 
@@ -251,7 +266,6 @@ def wei(value, decimals: int) -> float:
     return hex_int(value) / (10 ** decimals) if isinstance(value, str) else value / (10 ** decimals)
 
 
-# ------------------------------------------------------------------ detection
 PATTERNS = {
     "evm": re.compile(r"^0x[0-9a-fA-F]{40}$"),
     "hex64x": re.compile(r"^0x[0-9a-fA-F]{64}$"),
@@ -284,12 +298,13 @@ def classify(token: str) -> str | None:
     for kind in ("evm", "hex64x", "tron", "ton", "bch", "btc", "ltc", "doge", "dash", "xrp", "hex64", "solsig",
                  "sol", "b64hash"):
         if PATTERNS[kind].match(token):
+            if kind == "tron" and not b58check_valid(token):
+                return None
             return kind
     return None
 
 
 def extract(text: str, strict: bool) -> tuple[str, str] | None:
-    """Find an address / hash in text. strict=True: message must be only the token or an explorer link."""
     text = (text or "").strip()
     if not text or len(text) > 400:
         return None

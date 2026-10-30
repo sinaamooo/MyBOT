@@ -1,4 +1,3 @@
-"""Helpers shared by handlers."""
 from __future__ import annotations
 
 from aiogram.types import BufferedInputFile, InlineKeyboardMarkup, LinkPreviewOptions, Message, ReplyParameters

@@ -7,5 +7,4 @@ Pillow>=10.4
 arabic-reshaper>=3.0
 python-bidi>=0.4
 tzdata>=2024.1
-# optional: lets /gift resolve ANY @username (needs API_ID / API_HASH)
 telethon>=1.36

@@ -1,4 +1,3 @@
-"""Image cards: world-currency conversion card and gift portfolio card."""
 from __future__ import annotations
 
 import asyncio
@@ -24,7 +23,6 @@ def _flag_image(cc: str | None, code: str) -> Image.Image:
         path = FLAGS_DIR / f"{cc}.png"
         if path.exists():
             return Image.open(path).convert("RGBA")
-    # metal / unknown -> coloured badge with code
     color = {"XAU": (212, 175, 55), "XAG": (192, 192, 200)}.get(code, (70, 90, 160))
     img = Image.new("RGBA", (320, 240), (*color, 255))
     d = ImageDraw.Draw(img)
@@ -34,7 +32,7 @@ def _flag_image(cc: str | None, code: str) -> Image.Image:
 
 @dataclass
 class ConvRow:
-    label: str  # Persian label
+    label: str
     value: str
     unit: str
 
@@ -49,7 +47,6 @@ def fiat_card(code: str, name_fa: str, name_en: str, cc: str | None, amount_text
     R.glow(canvas, (120, H - 80), 240, (99, 102, 241), 80)
     d = ImageDraw.Draw(canvas)
 
-    # header: flag on the right (RTL)
     fw, fh = 210, 158
     fx, fy = W - 60 - fw, 50
     R.shadow(canvas, (fx, fy, fx + fw, fy + fh), radius=26)
@@ -60,7 +57,6 @@ def fiat_card(code: str, name_fa: str, name_en: str, cc: str | None, amount_text
     R.draw_text(d, (title_right, 62), name_fa, R.fit_font(name_fa, 640, 64, "Black"), fill=WHITE, anchor="ra")
     R.draw_text(d, (title_right, 150), f"{name_en} • {code}", R.font(30, "Medium"), fill=MUTED, anchor="ra")
 
-    # amount pill (left side)
     pill_text = f"{amount_text} {code}"
     pf = R.fit_font(pill_text, 420, 60, "Black")
     pw = int(R.text_width(pill_text, pf)) + 70
@@ -68,13 +64,12 @@ def fiat_card(code: str, name_fa: str, name_en: str, cc: str | None, amount_text
     d = ImageDraw.Draw(canvas)
     R.draw_text(d, (60 + pw // 2, 130), pill_text, pf, fill=WHITE, anchor="mm")
 
-    # conversion grid 3 x 2
     cols, gap, top = 3, 26, 250
     bw = (W - 120 - gap * (cols - 1)) // cols
     bh = 180
     for i, row in enumerate(rows[:6]):
         r, c = divmod(i, cols)
-        x1 = W - 60 - c * (bw + gap)  # fill right-to-left
+        x1 = W - 60 - c * (bw + gap)
         x0 = x1 - bw
         y0 = top + r * (bh + gap)
         R.glass_box(canvas, (x0, y0, x1, y0 + bh), radius=30)
@@ -84,7 +79,6 @@ def fiat_card(code: str, name_fa: str, name_en: str, cc: str | None, amount_text
         R.draw_text(d, (x0 + bw // 2, y0 + 105), row.value, vf, fill=WHITE, anchor="mm")
         R.draw_text(d, (x0 + 28, y0 + bh - 22), row.unit, R.font(24, "Medium"), fill=GOLD, anchor="ls")
 
-    # footer
     fy0 = H - 92
     R.glass_box(canvas, (60, fy0, W - 60, H - 30), radius=24, fill_alpha=16)
     d = ImageDraw.Draw(canvas)
@@ -96,11 +90,10 @@ def fiat_card(code: str, name_fa: str, name_en: str, cc: str | None, amount_text
     return R.to_png_bytes(canvas)
 
 
-# ------------------------------------------------------------------ gift portfolio
 @dataclass
 class GiftTile:
-    title: str  # "Plush Pepe #123"
-    subtitle: str  # model name
+    title: str
+    subtitle: str
     value_ton: float | None
     center_color: tuple = (90, 110, 200)
     edge_color: tuple = (40, 50, 110)
@@ -129,7 +122,6 @@ def gift_card(owner_name: str, owner_username: str | None, tiles: list[GiftTile]
         R.draw_text(d, (W - 60, 176), f"@{owner_username}", R.font(28, "Medium"), fill=MUTED, anchor="ra")
     R.draw_text(d, (60, 60), "GIFT PORTFOLIO", R.font(26, "Black"), fill=GOLD, anchor="la")
 
-    # stat boxes
     stats = [
         ("تعداد گیفت", fmt_num(total_count), WHITE),
         ("ارزش کل (TON)", fmt_num(total_ton), WHITE),
@@ -153,7 +145,6 @@ def gift_card(owner_name: str, owner_username: str | None, tiles: list[GiftTile]
         R.draw_text(d, (x0 + bw // 2, y0 + 80), value, R.fit_font(value, bw - 30, 40, "Black", 18), fill=color,
                     anchor="mm")
 
-    # tiles
     tw = (W - 120 - gap) // cols
     for i, tile in enumerate(shown):
         r, c = divmod(i, cols)
@@ -179,7 +170,6 @@ def gift_card(owner_name: str, owner_username: str | None, tiles: list[GiftTile]
         R.draw_text(d, (text_right, y0 + 72), tile.subtitle, R.fit_font(tile.subtitle, room, 24, "Medium", 12),
                     fill=MUTED, anchor="ra")
 
-    # footer
     more = len(tiles) - len(shown)
     footer = jalali_date()
     if bot_username:
@@ -192,5 +182,4 @@ def gift_card(owner_name: str, owner_username: str | None, tiles: list[GiftTile]
 
 
 async def render(fn, *args, **kwargs) -> bytes:
-    """Render a card in a worker thread so the event loop stays responsive."""
     return await asyncio.to_thread(fn, *args, **kwargs)

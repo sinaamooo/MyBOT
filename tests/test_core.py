@@ -24,7 +24,6 @@ def database():
     loop.close()
 
 
-# ------------------------------------------------------------------ amounts
 @pytest.mark.parametrize("text,expected", [
     ("10 تتر", (10, "تتر")),
     ("۱۰ تتر", (10, "تتر")),
@@ -92,7 +91,6 @@ def test_flags_exist_for_all_fiat():
     assert flag_emoji("ae") == "🇦🇪"
 
 
-# ------------------------------------------------------------------ calculator
 @pytest.mark.parametrize("text,result", [
     ("200+79", "279"),
     ("698*789", "550,722"),
@@ -123,7 +121,6 @@ def test_calculator_errors():
         calc.evaluate("__import__('os')")
 
 
-# ------------------------------------------------------------------ chains
 @pytest.mark.parametrize("token,kind", [
     ("0xdAC17F958D2ee523a2206206994597C13D831ec7", "evm"),
     ("TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t", "tron"),
@@ -156,7 +153,6 @@ def test_tron_hex_to_base58():
     assert tron_hex_to_base58("41a614f803b6fd780986a42c78ec9c7f77e6ded13c") == "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"
 
 
-# ------------------------------------------------------------------ templates
 def test_fill_drops_lines_and_keeps_tags():
     tpl = "<b>T</b>\n<blockquote>A: {a}\nB: {b}\nC: {c}</blockquote>\nend {d}"
     out = ui.fill(tpl, a=None, b="2", c=None, d="x")
@@ -191,7 +187,6 @@ def test_all_default_texts_render():
         assert ui.t(key)
 
 
-# ------------------------------------------------------------------ misc
 def test_jalali():
     assert gregorian_to_jalali(2026, 10, 30) == (1405, 8, 8)
     assert gregorian_to_jalali(2024, 3, 20) == (1403, 1, 1)

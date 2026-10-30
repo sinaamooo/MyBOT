@@ -1,22 +1,22 @@
-"""Prices, checkers, /emoji, UID, /account, calculator and translation."""
 from __future__ import annotations
 
 import asyncio
 import html
+import json
 import logging
 
 from aiogram import Bot, F, Router
 from aiogram.filters import Command, CommandObject
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import BufferedInputFile, CallbackQuery, Message
 
 from .. import ui
 from ..db import get_db
 from ..services import account as acc
 from ..services import calc, prices, translate, txs, wallets
-from ..services.chain_common import HASH_KINDS, extract
+from ..services.chain_common import ADDRESS_KINDS, HASH_KINDS, extract
 from ..services.convert import convert
 from ..services.currencies import resolve_unit
-from ..utils import fmt
+from ..utils import fmt, store
 from ..utils.http import safe
 from ..utils.parse import looks_like_expression, parse_amount
 from .common import reply_params, send, send_answer
@@ -28,7 +28,6 @@ MARKET = [("💵", "USDT"), ("🟠", "BTC"), ("🔷", "ETH"), ("💎", "TON"), (
           ("🟣", "SOL"), ("🐶", "DOGE"), ("🟨", "NOT")]
 
 
-# ------------------------------------------------------------------ prices
 async def market_board(message: Message) -> None:
     rate = await prices.usdt_toman()
     quotes = await asyncio.gather(*(prices.crypto_quote(s) for _, s in MARKET))
@@ -54,7 +53,6 @@ async def answer_amount(message: Message, amount: float, unit: str, silent: bool
         return False
     kind, code = resolved
     if kind == "crypto_guess" and silent:
-        # avoid answering random words in groups unless they really are coins
         pass
     answer = await safe(convert(amount, kind, code), label="convert")
     if answer is None:
@@ -79,20 +77,20 @@ async def price_cmd(message: Message, command: CommandObject):
         await answer_amount(message, 1, arg, silent=False)
 
 
-# ------------------------------------------------------------------ wallet / hash
-async def run_checker(message: Message, kind: str, token: str) -> None:
+async def run_checker(message: Message, kind: str, token: str, owner_id: int | None = None) -> None:
+    owner = owner_id or (message.from_user.id if message.from_user else 0)
     is_hash = kind in HASH_KINDS
     wait = await send(message, ui.t("tx_checking" if is_hash else "wallet_checking"), markup=None)
     try:
         if is_hash or kind in ("hex64x",):
             tx = await txs.check_tx(kind, token)
             if tx:
-                await _send_tx(message, tx)
+                await _send_tx(message, tx, owner)
                 return
             if kind == "hex64x":
                 found = await wallets.check_wallet(kind, token)
                 if found:
-                    await _send_wallet(message, token, found)
+                    await _send_wallet(message, token, found, owner)
                     return
             await send(message, ui.t("tx_not_found", hash=ui.esc(token)))
             return
@@ -100,10 +98,10 @@ async def run_checker(message: Message, kind: str, token: str) -> None:
         if not found and kind == "sol" and len(token) in (43, 44):
             tx = await txs.check_tx("sol", token)
             if tx:
-                await _send_tx(message, tx)
+                await _send_tx(message, tx, owner)
                 return
         if found:
-            await _send_wallet(message, token, found)
+            await _send_wallet(message, token, found, owner)
         else:
             await send(message, ui.t("wallet_not_found", address=ui.esc(token)))
     finally:
@@ -112,7 +110,7 @@ async def run_checker(message: Message, kind: str, token: str) -> None:
         await safe_delete(wait)
 
 
-async def _send_wallet(message: Message, address: str, found: list[wallets.ChainResult]) -> None:
+async def _send_wallet(message: Message, address: str, found: list[wallets.ChainResult], owner: int) -> None:
     rate = await prices.usdt_toman()
     parts = [ui.t("wallet_header", address=ui.esc(address), count=len(found))]
     total = 0.0
@@ -132,6 +130,7 @@ async def _send_wallet(message: Message, address: str, found: list[wallets.Chain
             tokens=tokens,
             txs=fmt.integer(r.txs) if isinstance(r.txs, (int, float)) else (r.txs if r.txs else None),
             nfts=fmt.integer(r.nfts) if r.nfts else None,
+            created=fmt.jalali_date(r.created) if r.created else None,
             status=r.status,
             explorer=html.escape(r.explorer, quote=True),
         ))
@@ -140,19 +139,29 @@ async def _send_wallet(message: Message, address: str, found: list[wallets.Chain
     text = "\n".join(parts)
     if len(text) > 4000:
         text = text[:3990].rsplit("\n", 1)[0]
-    await send(message, text)
+    rows = []
+    if any(r.kind == "tron" for r in found):
+        key = store.put({"addr": address, "owner": owner})
+        rows.append([ui.button("btn_trc20_history", callback_data=f"tt:{key}:1"),
+                     ui.button("btn_tokens_file", callback_data=f"tj:{key}")])
+    await send(message, text, markup=ui.footer_kb(rows))
 
 
-async def _send_tx(message: Message, tx: txs.TxResult) -> None:
+async def _send_tx(message: Message, tx: txs.TxResult, owner: int) -> None:
     rate = await prices.usdt_toman()
     amount = f"{fmt.num(tx.amount)} {ui.esc(tx.symbol or '')}" if tx.amount is not None else (ui.esc(tx.symbol) if tx.symbol else None)
-    await send(message, ui.t(
+    token = None
+    if tx.token_type:
+        token = f"{ui.esc(tx.token_name or tx.symbol or '')} ({tx.token_type})"
+    text = ui.t(
         "tx_result",
         network=ui.esc(tx.network),
         status=tx.status,
         amount=amount,
         usd=fmt.usd(tx.usd) if tx.usd else None,
         toman=fmt.toman(tx.usd * rate) if tx.usd and rate else None,
+        token=token,
+        contract=ui.esc(tx.contract) if tx.contract else None,
         sender=ui.esc(tx.sender) if tx.sender else None,
         receiver=ui.esc(tx.receiver) if tx.receiver else None,
         fee=ui.esc(tx.fee) if tx.fee else None,
@@ -161,7 +170,101 @@ async def _send_tx(message: Message, tx: txs.TxResult) -> None:
         time=fmt.jalali_date(tx.timestamp) if tx.timestamp else None,
         hash=ui.esc(tx.hash),
         explorer=html.escape(tx.explorer, quote=True),
-    ))
+    )
+    row = []
+    for addr, key in ((tx.sender, "btn_sender_wallet"), (tx.receiver, "btn_receiver_wallet")):
+        found = extract(str(addr or "").split(" ")[0], strict=True)
+        if found and found[0] in ADDRESS_KINDS:
+            row.append(ui.button(key, callback_data=f"wl:{store.put({'addr': found[1], 'kind': found[0], 'owner': owner})}"))
+    await send(message, text, markup=ui.footer_kb([row] if row else None))
+
+
+def _owned(call: CallbackQuery, data: dict | None) -> str | None:
+    if not data:
+        return "expired"
+    if data.get("owner") and data["owner"] != call.from_user.id:
+        return "not_your_button"
+    return None
+
+
+@router.callback_query(F.data.startswith("wl:"))
+async def wallet_button(call: CallbackQuery):
+    data = store.get(call.data.split(":", 1)[1])
+    err = _owned(call, data)
+    if err:
+        await call.answer(ui.plain(err), show_alert=True)
+        return
+    await call.answer()
+    await run_checker(call.message, data["kind"], data["addr"], owner_id=call.from_user.id)
+
+
+def _transfers_text(address: str, res: dict) -> str:
+    items = []
+    for it in res["items"]:
+        incoming = (it.get("to") or "") == address
+        items.append(ui.fill(
+            ui.template("tron_transfer_item"),
+            direction="📥" if incoming else "📤",
+            amount=fmt.num(it["amount"]),
+            symbol=ui.esc(it["symbol"]),
+            time=fmt.jalali_date(it["ts"]) if it["ts"] else "—",
+            party=ui.esc(it.get("from") if incoming else it.get("to")),
+            hash=ui.esc(it.get("hash") or ""),
+        ))
+    return ui.t("tron_transfers", address=ui.esc(address), page=res["page"], pages=res["pages"], total=fmt.integer(res["total"]),
+                items="\n".join(items))
+
+
+@router.callback_query(F.data.startswith("tt:") | F.data.startswith("tp:"))
+async def tron_transfers_button(call: CallbackQuery):
+    prefix, key, page_s = call.data.split(":", 2)
+    data = store.get(key)
+    err = _owned(call, data)
+    if err:
+        await call.answer(ui.plain(err), show_alert=True)
+        return
+    page = max(1, int(page_s))
+    res = await safe(wallets.tron_trc20_transfers(data["addr"], page))
+    if not res:
+        await call.answer(ui.plain("price_unavailable"), show_alert=True)
+        return
+    if not res["items"]:
+        await call.answer(ui.plain("tron_transfers_empty"), show_alert=True)
+        return
+    await call.answer()
+    nav = []
+    if page > 1:
+        nav.append(ui.button("btn_prev", callback_data=f"tp:{key}:{page - 1}"))
+    if page < res["pages"]:
+        nav.append(ui.button("btn_next", callback_data=f"tp:{key}:{page + 1}"))
+    text = _transfers_text(data["addr"], res)
+    markup = ui.kb([nav]) if nav else None
+    if prefix == "tp":
+        try:
+            await call.message.edit_text(text, reply_markup=markup)
+            return
+        except Exception:
+            pass
+    await call.message.answer(text, reply_markup=markup)
+
+
+@router.callback_query(F.data.startswith("tj:"))
+async def tron_tokens_button(call: CallbackQuery):
+    data = store.get(call.data.split(":", 1)[1])
+    err = _owned(call, data)
+    if err:
+        await call.answer(ui.plain(err), show_alert=True)
+        return
+    res = await safe(wallets.tron_all_tokens(data["addr"]))
+    if not res:
+        await call.answer(ui.plain("price_unavailable"), show_alert=True)
+        return
+    await call.answer()
+    payload = json.dumps(res, ensure_ascii=False, indent=2).encode()
+    await call.message.answer_document(
+        BufferedInputFile(payload, f"tokens_{data['addr'][:8]}.json"),
+        caption=ui.t("tron_tokens_file", total=res.get("total", 0), address=ui.esc(data["addr"])),
+    )
 
 
 @router.message(Command("wallet", "w", "tx", "hash", "check_wallet", ignore_case=True))
@@ -173,7 +276,6 @@ async def wallet_cmd(message: Message, command: CommandObject):
     await run_checker(message, *found)
 
 
-# ------------------------------------------------------------------ UID
 async def send_uid(message: Message) -> None:
     target = message.reply_to_message.from_user if message.reply_to_message else message.from_user
     if message.reply_to_message and message.reply_to_message.sender_chat:
@@ -193,7 +295,6 @@ async def uid_cmd(message: Message):
     await send_uid(message)
 
 
-# ------------------------------------------------------------------ /emoji
 @router.message(Command("emoji", "emojiid", ignore_case=True))
 async def emoji_cmd(message: Message, bot: Bot):
     items: list[tuple[str, str]] = []
@@ -229,7 +330,6 @@ async def emoji_cmd(message: Message, bot: Bot):
     await send(message, text[:4000], markup=ui.kb([[ui.button("btn_copy_id", copy_text=copy)]]))
 
 
-# ------------------------------------------------------------------ /account
 @router.message(Command("account", "acc", "me", "info", ignore_case=True))
 async def account_cmd(message: Message, bot: Bot, command: CommandObject):
     target = message.from_user
@@ -238,7 +338,7 @@ async def account_cmd(message: Message, bot: Bot, command: CommandObject):
     elif command.args and command.args.strip().lstrip("-").isdigit():
         try:
             target = (await bot.get_chat_member(message.chat.id, int(command.args.strip()))).user
-        except Exception:  # noqa: BLE001
+        except Exception:
             pass
     db = get_db()
     info, photos, gifts = await asyncio.gather(
@@ -286,7 +386,6 @@ async def account_cmd(message: Message, bot: Bot, command: CommandObject):
     await send(message, text)
 
 
-# ------------------------------------------------------------------ calculator
 async def answer_calc(message: Message, expr: str) -> bool:
     try:
         value = calc.evaluate(expr)
@@ -304,7 +403,6 @@ async def calc_cmd(message: Message, command: CommandObject):
         await send(message, ui.t("calc_result", expr=ui.esc(command.args or ""), result="؟"), markup=None)
 
 
-# ------------------------------------------------------------------ translation
 LANG_ROWS = [["fa", "en", "ru"], ["zh", "ar"]]
 
 
@@ -356,6 +454,6 @@ async def translate_cb(call: CallbackQuery):
         text = ui.t("translate_result", lang=translate.LANGS[lang][0], text=ui.esc(result[:3700]))
         try:
             await call.message.edit_text(text, reply_markup=ui.footer_kb())
-        except Exception:  # noqa: BLE001
+        except Exception:
             await call.message.answer(text, reply_markup=ui.footer_kb())
     _tr_locks.pop(key, None)

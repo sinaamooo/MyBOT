@@ -1,4 +1,3 @@
-"""/start, /help, bot membership events, force-join and unmute callbacks, anti-self edits."""
 from __future__ import annotations
 
 import logging
@@ -60,7 +59,6 @@ async def noop(call: CallbackQuery):
     await call.answer()
 
 
-# ------------------------------------------------------------------ bot added / removed
 @router.my_chat_member()
 async def my_chat_member(event: ChatMemberUpdated, bot: Bot):
     db = get_db()
@@ -68,14 +66,20 @@ async def my_chat_member(event: ChatMemberUpdated, bot: Bot):
     if event.chat.type in ("group", "supergroup", "channel"):
         active = status in ("member", "administrator")
         await db.upsert_chat(event.chat, active=active)
-        if active and event.old_chat_member.status in ("left", "kicked") and event.chat.type != "channel":
+        if event.chat.type == "channel" or not active:
+            return
+        key = None
+        if status == "administrator" and event.old_chat_member.status != "administrator":
+            key = "bot_promoted"
+        elif event.old_chat_member.status in ("left", "kicked"):
+            key = "bot_added"
+        if key:
             try:
-                await bot.send_message(event.chat.id, ui.t("bot_added"), reply_markup=ui.footer_kb())
-            except Exception:  # noqa: BLE001
+                await bot.send_message(event.chat.id, ui.t(key), reply_markup=ui.footer_kb())
+            except Exception:
                 pass
 
 
-# ------------------------------------------------------------------ member joins
 async def _on_join(bot: Bot, chat_id: int, user) -> None:
     if user.is_bot:
         return
@@ -85,7 +89,7 @@ async def _on_join(bot: Bot, chat_id: int, user) -> None:
         if gget("auto_ban_scammers"):
             try:
                 await bot.ban_chat_member(chat_id, user.id)
-            except Exception:  # noqa: BLE001
+            except Exception:
                 pass
         if not tg.throttled((chat_id, user.id, "scammer"), 3600):
             await bot.send_message(chat_id, ui.t("scam_known", mention=ui.mention(user),
@@ -106,7 +110,6 @@ async def new_members(message: Message, bot: Bot):
         await _on_join(bot, message.chat.id, user)
 
 
-# ------------------------------------------------------------------ anti-self via edits
 @router.edited_message(F.chat.type.in_({"group", "supergroup"}))
 async def edited(message: Message, bot: Bot):
     user = message.from_user
@@ -121,7 +124,6 @@ async def edited(message: Message, bot: Bot):
     await handle_self_score(bot, message.chat.id, user, score)
 
 
-# ------------------------------------------------------------------ force-join check button
 @router.callback_query(F.data.startswith("fj:"))
 async def force_join_check(call: CallbackQuery, bot: Bot):
     owner = int(call.data.split(":", 1)[1])
@@ -144,7 +146,6 @@ async def force_join_check(call: CallbackQuery, bot: Bot):
         await tg.safe_delete(call.message)
 
 
-# ------------------------------------------------------------------ unmute button (group admins)
 @router.callback_query(F.data.startswith("unmute:"))
 async def unmute_cb(call: CallbackQuery, bot: Bot):
     _, uid, kind = call.data.split(":", 2)
@@ -160,7 +161,7 @@ async def unmute_cb(call: CallbackQuery, bot: Bot):
         try:
             member = await bot.get_chat_member(chat_id, user_id)
             mention = ui.mention(member.user)
-        except Exception:  # noqa: BLE001
+        except Exception:
             mention = f"<code>{user_id}</code>"
         await call.message.edit_text(ui.t("unmuted", mention=mention))
     else:
