@@ -92,6 +92,29 @@ function base_http(): void
     ];
 }
 
+
+function mt_fake(): void
+{
+    MTProto::$fake = function (string $method, array $args) {
+        $GLOBALS['mt_calls'][] = [$method, $args];
+        if ($method === 'contacts.resolveUsername') {
+            if ($args['username'] !== 'tofan') {
+                throw new MTError(400, 'USERNAME_NOT_OCCUPIED');
+            }
+            return ['_' => 'contacts.resolvedPeer', 'peer' => ['_' => 'peerUser', 'user_id' => 777000111], 'chats' => [],
+                'users' => [['_' => 'user', 'id' => 777000111, 'access_hash' => -55, 'first_name' => 'Tofan', 'username' => 'tofan']]];
+        }
+        if ($method === 'payments.getSavedStarGifts') {
+            return ['_' => 'payments.savedStarGifts', 'count' => 2, 'gifts' => [
+                ['_' => 'savedStarGift', 'gift' => ['_' => 'starGiftUnique', 'title' => 'Plush Pepe', 'slug' => 'PlushPepe-1', 'num' => 1, 'value_usd_amount' => 300000,
+                    'attributes' => [['_' => 'starGiftAttributeModel', 'name' => 'Kek', 'rarity' => ['permille' => 5]], ['_' => 'starGiftAttributeBackdrop', 'name' => 'Black', 'center_color' => 0x363738, 'edge_color' => 0x0E0F0F, 'rarity' => ['permille' => 9]]]]],
+                ['_' => 'savedStarGift', 'gift' => ['_' => 'starGift', 'id' => 5170233102089322756, 'stars' => 100, 'availability_total' => 10], 'convert_stars' => 85],
+            ], 'chats' => [], 'users' => []];
+        }
+        throw new MTError(400, 'METHOD_INVALID');
+    };
+}
+
 $pass = 0;
 $fail = 0;
 function check($cond, string $name): void
@@ -370,6 +393,20 @@ $cap = $ph[0][1]['caption'] ?? '';
 check(str_contains($cap, 'https://t.me/nft/ToyBear-55') && str_contains($cap, 'https://t.me/nft/PlushPepe-7'), 'gift links in caption');
 check(str_contains($cap, '5,020') && str_contains($cap, 'ضرر'), 'gift value and loss');
 check(str_starts_with($ph[0][1]['photo']['__bytes'] ?? '', "\x89PNG"), 'gift card png');
+
+Config::set('API_ID', '12345');
+Config::set('API_HASH', 'hash');
+mt_fake();
+reset_calls();
+feed(msg('/gift @tofan', -500, 70, null, null, 'Sina'));
+$ph = sent(['sendPhoto']);
+$cap = $ph[0][1]['caption'] ?? '';
+check(str_contains($cap, 'https://t.me/nft/PlushPepe-1') && str_contains($cap, 'Tofan'), 'gift by username via mtproto');
+reset_calls();
+feed(msg('/gift @nobody_x', -500, 70, null, null, 'Sina'));
+check(str_contains((string)last_text(), 'نتوانستم'), 'gift unknown username');
+MTProto::$fake = null;
+Config::set('API_ID', '');
 
 $GLOBALS['http']['cardinfo.test'] = ['result' => ['name' => 'علی رضایی']];
 reset_calls();

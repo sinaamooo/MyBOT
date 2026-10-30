@@ -600,7 +600,7 @@ final class Resolver
             }
             return ['kind' => 'chat', 'id' => (int)$c['id'], 'name' => $c['title'] ?? $username, 'username' => $c['username'] ?? $username];
         }
-        return null;
+        return MTProto::enabled() ? MTProto::resolve($username) : null;
     }
 }
 

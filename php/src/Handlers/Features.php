@@ -74,6 +74,9 @@ final class GiftsH
 
     private static function owned(array $t): ?array
     {
+        if ($t['kind'] === 'mt') {
+            return MTProto::gifts($t);
+        }
         $items = [];
         $total = 0;
         $offset = null;
@@ -81,6 +84,9 @@ final class GiftsH
             $p = ['limit' => 100] + ($offset ? ['offset' => $offset] : []);
             $r = $t['kind'] === 'chat' ? TG::api('getChatGifts', ['chat_id' => $t['id']] + $p) : TG::api('getUserGifts', ['user_id' => $t['id']] + $p);
             if ($r === null) {
+                if (!$i && !empty($t['username']) && MTProto::enabled() && ($mt = MTProto::resolve($t['username']))) {
+                    return MTProto::gifts($mt);
+                }
                 return $i ? [$items, $total] : null;
             }
             $items = array_merge($items, $r['gifts'] ?? []);
@@ -126,6 +132,9 @@ final class GiftsH
                 $unique++;
                 $v = Gifts::valueOf($g['base_name'] ?? '', $g['model']['name'] ?? null, $g['backdrop']['name'] ?? null, $g['symbol']['name'] ?? null);
                 $val = $v['estimate'];
+                if (!$val && !empty($og['value_usd']) && $tonUsd) {
+                    $val = $og['value_usd'] / $tonUsd;
+                }
                 if ($val) {
                     $now += $val;
                     $then += $val * (($v['floor'] && $v['floor_7d']) ? $v['floor_7d'] / $v['floor'] : 1.0);
@@ -233,7 +242,7 @@ final class Scam
         }
         $u = ltrim(str_replace('https://t.me/', '', $arg), '@');
         $r = Resolver::resolve($u);
-        return ($r && $r['kind'] === 'user') ? [$r['id'], $u, $r['name']] : [null, $u, null];
+        return ($r && ($r['kind'] === 'user' || ($r['kind'] === 'mt' && $r['type'] === 'user'))) ? [$r['id'], $u, $r['name']] : [null, $u, null];
     }
 
     public static function cmd(array $m, string $args): void
