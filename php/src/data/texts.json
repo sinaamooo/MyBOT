@@ -36,23 +36,23 @@
   "desc": "عدم عضویت (پاپ‌آپ)"
  },
  "conv_crypto": {
-  "text": "🪙 <b>{amount} {symbol}</b> = <b>{toman}</b> تومان\n<blockquote>🔴     ترون: <code>{trx}</code> TRX\n💠     تون: <code>{ton}</code> TON\n💵     دلار: <code>{usd}</code> $\n⭐️     استارز: <code>{stars}</code> Stars</blockquote>\n🗓 {time}",
+  "text": "🪙 <b>{amount} {symbol}</b> = <b>{toman}</b> تومان\n\n<blockquote>🔴     ترون: <code>{trx}</code> TRX\n💠     تون: <code>{ton}</code> TON\n💵     دلار: <code>{usd}</code> $\n⭐️     استارز: <code>{stars}</code> Stars</blockquote>\n🗓 {time}",
   "desc": "تبدیل ارز دیجیتال ({amount} {symbol} {name} {toman} {trx} {ton} {usd} {stars} {price_usd} {price_toman} {change} {time})"
  },
  "conv_toman": {
-  "text": "💰 <b>{amount} {unit}</b>\n<blockquote>💵     تتر: <code>{usdt}</code> USDT\n💠     تون: <code>{ton}</code> TON\n🔴     ترون: <code>{trx}</code> TRX</blockquote>\n🗓 {time}",
+  "text": "💰 <b>{amount} {unit}</b>\n\n<blockquote>💵     تتر: <code>{usdt}</code> USDT\n💠     تون: <code>{ton}</code> TON\n🔴     ترون: <code>{trx}</code> TRX</blockquote>\n🗓 {time}",
   "desc": "تبدیل تومان ({amount} {unit} {usdt} {ton} {trx} {usdt_rate} {time})"
  },
  "conv_stars": {
-  "text": "⭐️ <b>{amount} استارز</b> = <b>{toman}</b> تومان\n<blockquote>💵     دلار: <code>{usd}</code> $\n💠     تون: <code>{ton}</code> TON\n🔴     ترون: <code>{trx}</code> TRX</blockquote>\n🗓 {time}",
+  "text": "⭐️ <b>{amount} استارز</b> = <b>{toman}</b> تومان\n\n<blockquote>💵     دلار: <code>{usd}</code> $\n💠     تون: <code>{ton}</code> TON\n🔴     ترون: <code>{trx}</code> TRX</blockquote>\n🗓 {time}",
   "desc": "تبدیل استارز ({amount} {toman} {usd} {ton} {trx} {star_usd} {time})"
  },
  "conv_fiat": {
-  "text": "💱 <b>{amount} {name}</b> = <b>{toman}</b> تومان\n<blockquote>💵     دلار: <code>{usd}</code> $\n💠     تون: <code>{ton}</code> TON\n🔴     ترون: <code>{trx}</code> TRX\n⭐️     استارز: <code>{stars}</code> Stars</blockquote>\n🗓 {time}",
+  "text": "💱 <b>{amount} {name}</b> = <b>{toman}</b> تومان\n\n<blockquote>💵     دلار: <code>{usd}</code> $\n💠     تون: <code>{ton}</code> TON\n🔴     ترون: <code>{trx}</code> TRX\n⭐️     استارز: <code>{stars}</code> Stars</blockquote>\n🗓 {time}",
   "desc": "کپشن کارت ارز کشورها ({flag} {amount} {name} {code} {toman} {unit_toman} {usd} {ton} {trx} {stars} {time})"
  },
  "market": {
-  "text": "📊 <b>بازار لحظه‌ای</b>\n<blockquote>{lines}</blockquote>\n💵 تتر: <code>{usdt_toman}</code> تومان\n🗓 {time}",
+  "text": "📊 <b>بازار لحظه‌ای</b>\n\n<blockquote>{lines}</blockquote>\n💵 تتر: <code>{usdt_toman}</code> تومان\n🗓 {time}",
   "desc": "تابلوی قیمت /p ({lines} {usdt_toman} {time})"
  },
  "market_line": {
@@ -144,7 +144,7 @@
   "desc": "خطای چکر شماره"
  },
  "arz_board": {
-  "text": "💱 <b>نرخ ارز بازار آزاد</b>\n<blockquote>{lines}</blockquote>\n🗓 {time}",
+  "text": "💱 <b>نرخ ارز بازار آزاد</b>\n\n<blockquote>{lines}</blockquote>\n🗓 {time}",
   "desc": "تابلوی نرخ ارز بازار آزاد ({lines} {source} {time})"
  },
  "arz_line": {
@@ -372,11 +372,11 @@
   "desc": "فقط ادمین (پاپ‌آپ)"
  },
  "conv_gold": {
-  "text": "🏅 <b>{amount} {name}</b> = <b>{toman}</b> تومان\n<blockquote>💵     دلار: <code>{usd}</code> $\n📈     تغییر ۲۴ ساعته: {change}</blockquote>\n🗓 {time}",
+  "text": "🏅 <b>{amount} {name}</b> = <b>{toman}</b> تومان\n\n<blockquote>💵     دلار: <code>{usd}</code> $\n📈     تغییر ۲۴ ساعته: {change}</blockquote>\n🗓 {time}",
   "desc": "کپشن طلا و سکه ({amount} {name} {toman} {usd} {change} {time})"
  },
  "premium_prices": {
-  "text": "👑 <b>قیمت تلگرام پریمیوم</b>\n<blockquote>{lines}</blockquote>\n🗓 {time}",
+  "text": "👑 <b>قیمت تلگرام پریمیوم</b>\n\n<blockquote>{lines}</blockquote>\n🗓 {time}",
   "desc": "قیمت پریمیوم ({lines} {time})"
  },
  "premium_line": {
@@ -384,7 +384,7 @@
   "desc": "هر خط پریمیوم ({months} {toman} {ton} {usd})"
  },
  "stars_prices": {
-  "text": "⭐️ <b>قیمت استارز تلگرام</b>\n<blockquote>{lines}</blockquote>\n💰 هر استار: <code>{each}</code> تومان\n🗓 {time}",
+  "text": "⭐️ <b>قیمت استارز تلگرام</b>\n\n<blockquote>{lines}</blockquote>\n💰 هر استار: <code>{each}</code> تومان\n🗓 {time}",
   "desc": "قیمت بسته‌های استارز ({lines} {each} {time})"
  },
  "stars_line": {
