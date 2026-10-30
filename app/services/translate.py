@@ -63,6 +63,7 @@ async def translate(text: str, lang_key: str) -> str | None:
     for chunk in chunks:
         result = (
             await safe(_google(chunk, target), label="google")
+            or await safe(_google(chunk, target), label="google_retry")
             or await safe(_lingva(chunk, target), label="lingva")
             or await safe(_mymemory(chunk, target, target_full), label="mymemory")
         )

@@ -13,3 +13,6 @@ bot.log
 passenger_wsgi.py
 .htaccess
 tmp/
+!php/data/
+php/data/*
+!php/data/.htaccess
