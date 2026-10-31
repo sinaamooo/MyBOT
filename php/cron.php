@@ -23,8 +23,18 @@ try {
 }
 try {
     Market::refresh([], true, true);
+    Convert::prerender();
 } catch (Throwable $e) {
     error_log('cron market: ' . $e->getMessage());
+}
+try {
+    if (!FileCache::has('gift_dataset', 540)) {
+        FileCache::forget();
+        Gifts::dataset();
+        Gifts::floorsDaysAgo();
+    }
+} catch (Throwable $e) {
+    error_log('cron gifts: ' . $e->getMessage());
 }
 if (time() - (int)DB::kvGet('emoji_checked_at', 0) > 86400) {
     UI::validateEmoji();

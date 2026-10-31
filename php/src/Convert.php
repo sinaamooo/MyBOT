@@ -246,4 +246,30 @@ final class Convert
         }
         return UI::t('stars_prices', ['lines' => implode("\n", $lines), 'each' => Fmt::toman($starUsd * $usdt), 'time' => Fmt::now()]);
     }
+
+    const POPULAR = [['crypto', 'USDT'], ['crypto', 'BTC'], ['crypto', 'ETH'], ['crypto', 'TON'], ['crypto', 'TRX'], ['crypto', 'BNB'], ['crypto', 'SOL'],
+        ['crypto', 'DOGE'], ['crypto', 'NOT'], ['crypto', 'XRP'], ['fiat', 'USD'], ['fiat', 'EUR'], ['fiat', 'AED'], ['fiat', 'TRY'], ['fiat', 'GBP'],
+        ['fiat', 'IQD'], ['fiat', 'CNY'], ['gold', 'GOLD18'], ['gold', 'GOLD24'], ['gold', 'COIN'], ['gold', 'OUNCE']];
+
+    public static function prerender(): int
+    {
+        if (!PriceCard::ready()) {
+            return 0;
+        }
+        PriceCard::warm(PriceCard::basePairs(array_merge(array_column(array_filter(self::POPULAR, fn($p) => $p[0] === 'crypto'), 1), ['STARS'])));
+        $n = 0;
+        foreach (self::POPULAR as [$kind, $code]) {
+            try {
+                $a = self::run(1, $kind, $code);
+                if (!empty($a['key']) && !empty($a['card'])) {
+                    PriceCard::cached($a['key'], $a['card']);
+                    $n++;
+                }
+            } catch (Throwable $e) {
+                error_log('prerender: ' . $e->getMessage());
+            }
+        }
+        PriceCard::prune();
+        return $n;
+    }
 }

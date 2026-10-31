@@ -49,7 +49,7 @@ final class Tools
             $photo = $fid;
         } elseif (!empty($a['card'])) {
             try {
-                $photo = ($a['card'])();
+                $photo = !empty($a['key']) ? PriceCard::cached($a['key'], $a['card']) : ($a['card'])();
             } catch (Throwable $e) {
                 error_log('card: ' . $e->getMessage());
             }

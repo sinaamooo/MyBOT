@@ -32,7 +32,7 @@ final class Gifts
 
     public static function dataset(): array
     {
-        return Cache::remember('gift_dataset', 600, function () {
+        return FileCache::remember('gift_dataset', 600, function () {
             $d = Http::json(self::RAW . '/main/Gifts_Details.json', ['timeout' => 20]) ?: [];
             $index = [];
             $byId = [];
@@ -58,24 +58,44 @@ final class Gifts
 
     public static function attributeFloors(string $short): array
     {
-        return Cache::remember('gift_attr:' . $short, 600, function () use ($short) {
-            $d = Http::json(self::RAW . "/main/models/$short/prices.json", ['timeout' => 15]);
-            if (!is_array($d)) {
-                return [];
+        return FileCache::remember('gift_attr:' . $short, 1800, fn() => self::attrsFrom(Http::json(self::RAW . "/main/models/$short/prices.json", ['timeout' => 10])));
+    }
+
+    private static function attrsFrom($d): array
+    {
+        if (!is_array($d)) {
+            return [];
+        }
+        $out = [];
+        foreach (['models', 'backdrops', 'symbols'] as $k) {
+            foreach ($d[$k] ?? [] as $n => $v) {
+                $out[$k][self::norm($n)] = $v;
             }
-            $out = [];
-            foreach (['models', 'backdrops', 'symbols'] as $k) {
-                foreach ($d[$k] ?? [] as $n => $v) {
-                    $out[$k][self::norm($n)] = $v;
-                }
+        }
+        return $out;
+    }
+
+    public static function prefetch(array $collections): void
+    {
+        $ds = self::dataset();
+        $reqs = [];
+        foreach (array_unique($collections) as $c) {
+            $short = $ds['index'][self::norm($c)]['short_name'] ?? null;
+            if ($short && !FileCache::has('gift_attr:' . $short, 1800)) {
+                $reqs[$short] = ['url' => self::RAW . "/main/models/$short/prices.json", 'timeout' => 10];
             }
-            return $out;
-        });
+        }
+        foreach (array_chunk($reqs, 16, true) as $chunk) {
+            foreach (Http::multiJson($chunk) as $short => $d) {
+                FileCache::put('gift_attr:' . $short, self::attrsFrom($d));
+            }
+        }
+        self::floorsDaysAgo();
     }
 
     public static function floorsDaysAgo(int $days = 7): array
     {
-        return Cache::remember('gift_old:' . $days, 6 * 3600, function () use ($days) {
+        return FileCache::remember('gift_old:' . $days, 6 * 3600, function () use ($days) {
             $until = gmdate('Y-m-d\TH:i:s\Z', time() - $days * 86400);
             $c = Http::json('https://api.github.com/repos/' . self::REPO . '/commits', ['params' => ['until' => $until, 'per_page' => 1, 'path' => 'Gifts_Details.json'], 'timeout' => 15]);
             $sha = $c[0]['sha'] ?? null;
@@ -99,7 +119,7 @@ final class Gifts
         if ($auth === '') {
             return null;
         }
-        $f = Cache::remember('portals_floors', 300, fn() => Http::json('https://portals-market.com/api/collections/floors', ['headers' => ['Authorization' => $auth], 'timeout' => 10])['floorPrices'] ?? []);
+        $f = FileCache::remember('portals_floors', 300, fn() => Http::json('https://portals-market.com/api/collections/floors', ['headers' => ['Authorization' => $auth], 'timeout' => 10])['floorPrices'] ?? []);
         $v = $f[$short] ?? $f[str_replace('_', '', $short)] ?? null;
         return is_numeric($v) ? (float)$v : null;
     }
@@ -212,18 +232,30 @@ final class Gifts
 
     public static function images(array $names): array
     {
-        $reqs = [];
-        foreach ($names as $k => $n) {
-            if ($n) {
-                $reqs[$k] = ['url' => 'https://nft.fragment.com/gift/' . strtolower($n) . '.small.jpg', 'timeout' => 6];
-            }
+        $dir = Config::$root . '/data/cards';
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0755, true);
         }
         $out = [];
+        $reqs = [];
+        foreach ($names as $k => $n) {
+            if (!$n) {
+                continue;
+            }
+            $f = $dir . '/g_' . md5(strtolower($n)) . '.jpg';
+            if (is_file($f) && time() - (int)@filemtime($f) < 7 * 86400 && ($b = @file_get_contents($f))) {
+                $out[$k] = $b;
+                continue;
+            }
+            $reqs[$k] = ['url' => 'https://nft.fragment.com/gift/' . strtolower($n) . '.small.jpg', 'timeout' => 6];
+        }
         foreach ($reqs ? Http::multi($reqs) : [] as $k => $r) {
             if ($r['status'] >= 200 && $r['status'] < 300 && strlen($r['body']) > 500) {
                 $out[$k] = $r['body'];
+                @file_put_contents($dir . '/g_' . md5(strtolower((string)$names[$k])) . '.jpg', $r['body']);
             }
         }
+        ksort($out);
         return $out;
     }
 }

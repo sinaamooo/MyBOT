@@ -467,6 +467,61 @@ final class Cache
     }
 }
 
+final class FileCache
+{
+    private static array $mem = [];
+
+    private static function path(string $k): string
+    {
+        $d = Config::get('CACHE_DIR') ?: Config::$root . '/data/cache';
+        if (!is_dir($d)) {
+            @mkdir($d, 0755, true);
+        }
+        return $d . '/' . md5($k) . '.json';
+    }
+
+    public static function remember(string $k, int $ttl, callable $fn)
+    {
+        if (array_key_exists($k, self::$mem)) {
+            return self::$mem[$k];
+        }
+        $f = self::path($k);
+        if (is_file($f) && time() - (int)@filemtime($f) < $ttl) {
+            $v = json_decode((string)@file_get_contents($f), true);
+            if (is_array($v) && array_key_exists('v', $v)) {
+                return self::$mem[$k] = $v['v'];
+            }
+        }
+        $v = $fn();
+        self::put($k, $v);
+        return $v;
+    }
+
+    public static function put(string $k, $v): void
+    {
+        self::$mem[$k] = $v;
+        $f = self::path($k);
+        $tmp = $f . '.' . bin2hex(random_bytes(4));
+        if (@file_put_contents($tmp, json_encode(['v' => $v], JSON_UNESCAPED_UNICODE)) !== false) {
+            @rename($tmp, $f);
+        }
+    }
+
+    public static function has(string $k, int $ttl): bool
+    {
+        if (array_key_exists($k, self::$mem)) {
+            return true;
+        }
+        $f = self::path($k);
+        return is_file($f) && time() - (int)@filemtime($f) < $ttl;
+    }
+
+    public static function forget(): void
+    {
+        self::$mem = [];
+    }
+}
+
 final class Store
 {
     public static function put($value, int $ttl = 86400): string

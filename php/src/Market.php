@@ -38,9 +38,19 @@ final class Market
         $s = is_array($s) ? $s : [];
         $age = time() - (int)($s['at'] ?? 0);
         if ($age > self::FRESH && !Http::$fake) {
-            $new = self::refresh($s, $age > self::STALE);
-            if ($new) {
-                $s = $new;
+            if (!empty($s['irt']) && $age < 86400) {
+                register_shutdown_function(function () use ($s) {
+                    try {
+                        self::refresh($s);
+                    } catch (Throwable $e) {
+                        error_log('market refresh: ' . $e->getMessage());
+                    }
+                });
+            } else {
+                $new = self::refresh($s, true);
+                if ($new) {
+                    $s = $new;
+                }
             }
         }
         return self::$snap = $s;
@@ -104,6 +114,7 @@ final class Market
         $reqs = [
             'wallex' => ['url' => 'https://api.wallex.ir/v1/markets', 'timeout' => 6],
             'gecko' => ['url' => 'https://api.coingecko.com/api/v3/coins/markets', 'params' => ['vs_currency' => 'usd', 'order' => 'market_cap_desc', 'per_page' => 250, 'page' => 1, 'price_change_percentage' => '24h'], 'headers' => ['x-cg-demo-api-key' => $gk], 'timeout' => 7],
+            'okx' => ['url' => 'https://www.okx.com/api/v5/market/tickers', 'params' => ['instType' => 'SPOT'], 'timeout' => 6],
             'nobitex' => ['url' => 'https://api.nobitex.ir/market/stats', 'params' => ['srcCurrency' => 'usdt,btc,eth,ton,trx', 'dstCurrency' => 'rls'], 'timeout' => 6],
             'bitpin' => ['url' => 'https://api.bitpin.org/api/v1/mkt/tickers/', 'timeout' => 6],
             'tabdeal' => ['url' => 'https://api1.tabdeal.org/r/api/v1/ticker/price', 'params' => ['symbol' => 'USDTIRT'], 'timeout' => 6],
@@ -127,6 +138,16 @@ final class Market
                 continue;
             }
             $coins[$sym] = [$usd, self::num($r['price_change_percentage_24h'] ?? null), mb_substr((string)($r['name'] ?? $sym), 0, 40)];
+        }
+        foreach ((array)($res['okx']['data'] ?? []) as $r) {
+            if (!preg_match('/^([A-Z0-9]{1,12})-USDT$/', (string)($r['instId'] ?? ''), $mm) || isset($coins[$mm[1]])) {
+                continue;
+            }
+            $last = self::num($r['last'] ?? null);
+            $open = self::num($r['open24h'] ?? null);
+            if ($last) {
+                $coins[$mm[1]] = [$last, $open ? ($last - $open) / $open * 100 : null, $mm[1]];
+            }
         }
         $irts = [];
         $irtChg = null;

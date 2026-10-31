@@ -59,17 +59,16 @@ final class GiftsH
             self::link($m, ...$links[0]);
             return;
         }
+        if (Cache::throttled('giftcmd:' . ($m['from']['id'] ?? 0), 8)) {
+            return;
+        }
         $t = self::target($m, $args);
         if (!$t) {
             Bot::send($m, UI::t('gift_user_unknown'));
             return;
         }
-        $wait = Bot::send($m, UI::t('loading'), null);
-        try {
-            self::portfolio($m, $t);
-        } finally {
-            Bot::deleteMsg($wait);
-        }
+        TG::api('sendChatAction', ['chat_id' => $m['chat']['id'], 'action' => 'upload_photo']);
+        self::portfolio($m, $t);
     }
 
     private static function owned(array $t): ?array
@@ -120,6 +119,7 @@ final class GiftsH
         $tonUsd = $s['ton'];
         $tonToman = $tonUsd && $s['toman'] ? $tonUsd * $s['toman'] : null;
         $ds = Gifts::dataset();
+        Gifts::prefetch(array_map(fn($og) => (string)($og['gift']['base_name'] ?? ''), array_filter($owned, fn($og) => ($og['type'] ?? '') === 'unique')));
         $starTon = $tonUsd ? Prices::starUsd() / $tonUsd : null;
         $tiles = [];
         $now = 0.0;
@@ -156,7 +156,7 @@ final class GiftsH
             }
         }
         usort($tiles, fn($a, $b) => ($b['value'] ?? 0) <=> ($a['value'] ?? 0));
-        $imgs = Gifts::images(array_map(fn($x) => $x['name'], array_slice($tiles, 0, 20)));
+        $imgs = Gifts::images(array_map(fn($x) => $x['name'], array_slice($tiles, 0, 12)));
         foreach ($imgs as $i => $bytes) {
             $tiles[$i]['image'] = $bytes;
         }

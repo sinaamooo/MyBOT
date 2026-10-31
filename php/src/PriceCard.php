@@ -2,7 +2,7 @@
 
 final class PriceCard
 {
-    const SS = 2;
+    const SS = 1;
     const W = 1200;
     const H = 675;
     const PANEL = [180, 98, 1020, 577, 36];
@@ -359,7 +359,7 @@ final class PriceCard
         return ['pad' => $in > 0 && $holes / $in > 0.18 && $corner < 3, 'brand' => $brand];
     }
 
-    private static function blobs(array $blobs, float $soft, float $gain)
+    private static function blobs(array $blobs, float $soft, float $gain, int $S = self::SS)
     {
         $gw = 300;
         $gh = 169;
@@ -388,7 +388,6 @@ final class PriceCard
                 imagesetpixel($t, $x, $y, imagecolorallocate($t, (int)$r, (int)$g, (int)$b));
             }
         }
-        $S = self::SS;
         $out = function_exists('imagescale') ? imagescale($t, self::W * $S, self::H * $S, IMG_BILINEAR_FIXED) : false;
         if (!$out) {
             $out = imagecreatetruecolor(self::W * $S, self::H * $S);
@@ -400,26 +399,30 @@ final class PriceCard
 
     private static function base(string $a, string $b)
     {
-        $f = self::dataDir() . '/base_' . md5($a . '|' . $b) . '.png';
-        if (is_file($f) && ($im = @imagecreatefrompng($f)) && imagesx($im) === self::W * self::SS) {
+        $f = self::dataDir() . '/base1_' . md5($a . '|' . $b) . '.png';
+        if (is_file($f) && ($im = @imagecreatefrompng($f)) && imagesx($im) === self::W) {
             imagealphablending($im, true);
             return $im;
         }
-        $S = self::SS;
+        $S = 2;
         [$x1, $y1, $x2, $y2, $rad] = self::PANEL;
         $bl = [[292, 202, 182, $a], [967, 520, 182, $b]];
-        $im = self::blobs($bl, 7, 1.0);
-        $soft = self::blobs($bl, 95, 0.9);
-        imagealphablending($im, true);
+        $big = self::blobs($bl, 7, 1.0, $S);
+        $soft = self::blobs($bl, 95, 0.9, $S);
+        imagealphablending($big, true);
         for ($y = $y1 * $S; $y <= $y2 * $S; $y++) {
             [$p, $q] = self::rowSpan($x1 * $S, $x2 * $S, $y1 * $S, $y2 * $S, $rad * $S, $y);
             if ($q >= $p) {
-                imagecopy($im, $soft, $p, $y, $p, $y, $q - $p + 1, 1);
+                imagecopy($big, $soft, $p, $y, $p, $y, $q - $p + 1, 1);
             }
         }
         imagedestroy($soft);
-        self::rrect($im, $x1 * $S, $y1 * $S, $x2 * $S, $y2 * $S, $rad * $S, self::col($im, '141518', 0.52));
-        self::rring($im, $x1 * $S, $y1 * $S, $x2 * $S, $y2 * $S, $rad * $S, 3, self::col($im, 'FFFFFF', 0.14));
+        self::rrect($big, $x1 * $S, $y1 * $S, $x2 * $S, $y2 * $S, $rad * $S, self::col($big, '141518', 0.52));
+        self::rring($big, $x1 * $S, $y1 * $S, $x2 * $S, $y2 * $S, $rad * $S, 3, self::col($big, 'FFFFFF', 0.14));
+        $im = imagecreatetruecolor(self::W, self::H);
+        imagecopyresampled($im, $big, 0, 0, 0, 0, self::W, self::H, self::W * $S, self::H * $S);
+        imagedestroy($big);
+        imagealphablending($im, true);
         $tmp = $f . '.' . bin2hex(random_bytes(4));
         if (@imagepng($im, $tmp, 1)) {
             @rename($tmp, $f);
@@ -427,6 +430,61 @@ final class PriceCard
             @unlink($tmp);
         }
         return $im;
+    }
+
+    public static function cached(string $key, callable $fn, int $ttl = 600): ?string
+    {
+        $f = self::dataDir() . '/r_' . md5($key) . '.jpg';
+        if (is_file($f) && time() - (int)@filemtime($f) < $ttl) {
+            $b = @file_get_contents($f);
+            if (is_string($b) && strlen($b) > 500) {
+                return $b;
+            }
+        }
+        $b = $fn();
+        if (is_string($b) && strlen($b) > 500) {
+            $tmp = $f . '.' . bin2hex(random_bytes(4));
+            if (@file_put_contents($tmp, $b) !== false) {
+                @rename($tmp, $f);
+            }
+        }
+        return $b;
+    }
+
+    public static function prune(int $age = 900): void
+    {
+        foreach ((array)glob(self::dataDir() . '/r_*.jpg') as $f) {
+            if (time() - (int)@filemtime($f) > $age) {
+                @unlink($f);
+            }
+        }
+    }
+
+    public static function warm(array $pairs): int
+    {
+        $n = 0;
+        foreach ($pairs as [$a, $b]) {
+            if (!is_file(self::dataDir() . '/base1_' . md5($a . '|' . $b) . '.png')) {
+                imagedestroy(self::base($a, $b));
+                $n++;
+            }
+        }
+        return $n;
+    }
+
+    public static function basePairs(array $syms): array
+    {
+        $out = [['12C488', '2F72DF'], ['E5486A', '2F72DF']];
+        foreach ($syms as $sym) {
+            $logo = self::loadImg(self::asset('coins/' . strtolower($sym) . '.png'));
+            $brand = $logo ? (self::logoShape($logo)['brand'] ?: self::coinColors($sym)[0]) : self::coinColors($sym)[0];
+            if ($logo) {
+                imagedestroy($logo);
+            }
+            $out[] = [self::glowHex($brand), '12C488'];
+            $out[] = [self::glowHex($brand), 'E5486A'];
+        }
+        return $out;
     }
 
     private static function tag($im, float $x, float $yc, string $text, string $tone = 'gray', string $align = 'r'): array
@@ -597,13 +655,10 @@ final class PriceCard
             self::put($im, $lat, self::fit($lat, 22, $v, 220, 12), $cx, 510, self::col($im, $hex), $v, 'c');
         }
         self::foot($im, (string)($o['bot'] ?? ''));
-        $out = imagecreatetruecolor(self::W, self::H);
-        imagecopyresampled($out, $im, 0, 0, 0, 0, self::W, self::H, imagesx($im), imagesy($im));
-        imagedestroy($im);
         ob_start();
-        imagejpeg($out, null, 86);
+        imagejpeg($im, null, 84);
         $bytes = (string)ob_get_clean();
-        imagedestroy($out);
+        imagedestroy($im);
         return $bytes;
     }
 
@@ -779,13 +834,24 @@ final class PriceCard
         $H = $top + $rows * ($tileH + $gap) + 120;
         $up = ($plTon ?? 0) >= 0;
         $blobs = [[250, 210, 200, '7C3AED'], [$W - 220, $H - 230, 220, $up ? '12C488' : 'E5486A'], [$W - 260, 260, 150, '2F72DF']];
-        $im = imagecreatetruecolor($W * $S, $H * $S);
-        imagefilledrectangle($im, 0, 0, $W * $S, $H * $S, imagecolorallocate($im, 7, 8, 10));
-        foreach ($blobs as [$bx, $by, $br, $bc]) {
-            imagefilledellipse($im, $bx * $S, $by * $S, $br * 2 * $S, $br * 2 * $S, self::col($im, $bc));
+        $bf = self::dataDir() . '/gbase_' . md5(json_encode($blobs) . "|$W|$H|$S") . '.png';
+        $im = is_file($bf) ? @imagecreatefrompng($bf) : null;
+        if (!$im) {
+            $im = imagecreatetruecolor($W * $S, $H * $S);
+            imagefilledrectangle($im, 0, 0, $W * $S, $H * $S, imagecolorallocate($im, 7, 8, 10));
+            foreach ($blobs as [$bx, $by, $br, $bc]) {
+                imagefilledellipse($im, $bx * $S, $by * $S, $br * 2 * $S, $br * 2 * $S, self::col($im, $bc));
+            }
+            imagealphablending($im, true);
+            self::glassPanel($im, [60, 60, $W - 60, $H - 90, 36], $W, $H, $blobs);
+            $tmp = $bf . '.' . bin2hex(random_bytes(4));
+            if (@imagepng($im, $tmp, 1)) {
+                @rename($tmp, $bf);
+            } else {
+                @unlink($tmp);
+            }
         }
         imagealphablending($im, true);
-        self::glassPanel($im, [60, 60, $W - 60, $H - 90, 36], $W, $H, $blobs);
         $white = self::col($im, 'F5F5F7');
         $gray = self::col($im, '9A9AA0');
         $gold = self::col($im, 'FFD66B');
@@ -857,7 +923,7 @@ final class PriceCard
         imagecopyresampled($out, $im, 0, 0, 0, 0, $W, $H, imagesx($im), imagesy($im));
         imagedestroy($im);
         ob_start();
-        imagejpeg($out, null, 86);
+        imagejpeg($out, null, 84);
         $bytes = (string)ob_get_clean();
         imagedestroy($out);
         return $bytes;
