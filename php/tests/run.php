@@ -588,13 +588,28 @@ cb($wb[1]['callback_data'], 90, -700);
 $wm = array_values(array_filter(sent(['sendMessage']), fn($c) => str_contains($c[1]['text'], 'TRON') && str_contains($c[1]['text'], 'موجودی')))[0] ?? null;
 check($wm && str_contains($wm[1]['text'], 'تاریخ ساخت'), 'tron wallet created');
 $ex = array_values(array_filter(buttons($wm ?? [0, []]), fn($b) => in_array(substr($b['callback_data'] ?? '', 0, 3), ['tt:', 'tj:'], true)));
-check(count($ex) === 2, 'tron extra buttons');
+check(count($ex) === 1 && str_starts_with($ex[0]['callback_data'], 'tt:'), 'tron single transactions button');
+$acct = $GLOBALS['http']['api.trongrid.io/v1/accounts'];
+unset($GLOBALS['http']['api.trongrid.io/v1/accounts']);
+$GLOBALS['http']['/transactions'] = '{"success":false}';
+$GLOBALS['http']['api.trongrid.io/v1/accounts'] = $acct;
 reset_calls();
 cb($ex[0]['callback_data'], 90, -700);
-check(str_contains((string)last_text(), 'TRC20') && str_contains((string)last_text(), 'USDT'), 'trc20 history');
+check(str_contains((string)last_text(), 'تراکنش‌های ولت') && str_contains((string)last_text(), 'USDT'), 'tron history via tronscan fallback');
+unset($GLOBALS['http']['api.trongrid.io/v1/accounts'], $GLOBALS['http']['/transactions']);
+$hx = '41' . str_repeat('ab', 20);
+$GLOBALS['http']['/transactions/trc20'] = fn($r) => ['success' => true, 'data' => array_fill(0, 10, ['transaction_id' => 'aa11', 'token_info' => ['symbol' => 'USDT', 'decimals' => 6], 'block_timestamp' => 1700000000000, 'from' => 'TFrom', 'to' => 'TJRabPrwbZy45sbavfcjinPJC18kjpRTv8', 'value' => '2500000']), 'meta' => ['fingerprint' => empty($r['params']['fingerprint']) ? 'FP2' : null]];
+$GLOBALS['http']['/transactions'] = ['success' => true, 'data' => [['txID' => 'bb22', 'block_timestamp' => 1700000500000, 'raw_data' => ['contract' => [['type' => 'TransferContract', 'parameter' => ['value' => ['amount' => 3000000, 'owner_address' => '41' . bin2hex(Chain::b58decode('TJRabPrwbZy45sbavfcjinPJC18kjpRTv8') ? substr(Chain::b58decode('TJRabPrwbZy45sbavfcjinPJC18kjpRTv8'), 1, 20) : ''), 'to_address' => $hx]]]]]]], 'meta' => []];
+$GLOBALS['http']['api.trongrid.io/v1/accounts'] = $acct;
 reset_calls();
-cb($ex[1]['callback_data'], 90, -700);
-check(array_filter($GLOBALS['calls'], fn($c) => $c[0] === 'sendDocument'), 'tokens file');
+cb($ex[0]['callback_data'], 90, -700);
+$ht = (string)last_text();
+$nb = array_values(array_filter(buttons(end($GLOBALS['calls'])), fn($b) => str_starts_with($b['callback_data'] ?? '', 'tp:')));
+check(str_contains($ht, '2.5 USDT') && str_contains($ht, '3 TRX') && str_contains($ht, Chain::tronB58($hx)) && count($nb) === 1, 'tron history trongrid with trx and next page');
+reset_calls();
+cb($nb[0]['callback_data'], 90, -700);
+check(str_contains((string)last_text(), 'صفحه: <b>2</b>') || str_contains(json_encode($GLOBALS['calls'], JSON_UNESCAPED_UNICODE), 'صفحه: <b>2</b>'), 'tron history page 2');
+unset($GLOBALS['http']['/transactions/trc20'], $GLOBALS['http']['/transactions']);
 
 $GLOBALS['http']['publicnode.com'] = function ($r) {
     if (!isset($r['json'][0])) {

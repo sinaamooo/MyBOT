@@ -138,7 +138,7 @@ final class Diamonds
         }
         $lines = [];
         foreach ($rows as $i => $r) {
-            $lines[] = UI::fill(UI::template('dm_top_line'), ['rank' => $i + 1, 'name' => UI::esc(($r['name'] ?? '') !== '' ? $r['name'] : 'کاربر ' . $r['id']),
+            $lines[] = UI::fill(UI::template('dm_top_line'), ['medal' => ['👑', '💎', '🏅'][$i] ?? '🔹', 'rank' => $i + 1, 'name' => UI::esc(($r['name'] ?? '') !== '' ? $r['name'] : 'کاربر ' . $r['id']),
                 'points' => Fmt::int($r['points']), 'level' => self::level((float)$r['points'])]);
         }
         return UI::t('dm_top', ['lines' => implode("\n", $lines)]);
@@ -339,7 +339,7 @@ final class Games
     private static function pname(array $p): string
     {
         $dot = ($p['mark'] ?? 1) === 1 ? '🔴' : '🟢';
-        return $dot . ' ' . (!empty($p['uname']) ? '@' . UI::esc($p['uname']) : UI::esc($p['name'] ?? (string)$p['id']));
+        return $dot . '    ' . (!empty($p['uname']) ? '@' . UI::esc($p['uname']) : UI::esc($p['name'] ?? (string)$p['id']));
     }
 
     private static function prize(float $stake): array

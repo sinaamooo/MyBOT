@@ -25,7 +25,7 @@ final class Bot
     const CALLBACKS = [
         'fj:' => ['Bot', 'forceJoinCheck'], 'unmute:' => ['Bot', 'unmuteCb'], 'tr:' => ['Tools', 'translateCb'], 'gs:' => ['Groups', 'toggle'],
         'scam:' => ['Scam', 'buttons'], 'scamadm:' => ['Scam', 'decision'], 'adm:' => ['Admin', 'callback'], 'wl:' => ['Tools', 'walletButton'],
-        'tt:' => ['Tools', 'transfers'], 'tp:' => ['Tools', 'transfers'], 'tj:' => ['Tools', 'tokensFile'], 'is:' => ['Extras', 'story'],
+        'tt:' => ['Tools', 'transfers'], 'tp:' => ['Tools', 'transfers'], 'is:' => ['Extras', 'story'],
         'ih:' => ['Extras', 'highlights'], 'hi:' => ['Extras', 'highlightItems'], 'gd:' => ['Games', 'doozCb'], 'gn:' => ['Games', 'mineCb'], 'gj:' => ['Diamonds', 'jailCb'],
     ];
 

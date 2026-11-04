@@ -154,6 +154,9 @@ final class Tools
                 return;
             }
             $w ? self::sendWallet($m, $token, $w, $owner) : Bot::send($m, UI::t('wallet_not_found', ['address' => UI::esc($token)]));
+        } catch (Throwable $e) {
+            error_log('checker: ' . $e->getMessage());
+            Bot::send($m, UI::t('error'));
         } finally {
             Bot::deleteMsg($wait);
         }
@@ -166,9 +169,9 @@ final class Tools
         $total = 0.0;
         foreach ($found as $r) {
             $total += Wallets::totalUsd($r);
-            $tokens = implode("\n", array_map(fn($t) => '   • <code>' . Fmt::num($t['amount']) . '</code> ' . UI::esc($t['symbol']) . ($t['usd'] ? ' (≈ ' . Fmt::usd($t['usd']) . '$)' : ''), array_slice($r['tokens'], 0, 12)));
+            $tokens = implode("\n", array_map(fn($t) => UI::badge((string)$t['symbol'], '🔹') . '    <code>' . Fmt::num($t['amount']) . '</code> ' . UI::esc($t['symbol']) . ($t['usd'] ? '  ≈ <code>' . Fmt::usd($t['usd']) . '</code> $' : ''), array_slice($r['tokens'], 0, 12)));
             $parts[] = UI::t('wallet_chain', [
-                'chain' => UI::esc($r['chain']), 'balance' => Fmt::num($r['balance']), 'symbol' => $r['symbol'],
+                'chain_icon' => UI::badge($r['symbol'], '🔷'), 'chain' => UI::esc($r['chain']), 'balance' => Fmt::num($r['balance']), 'symbol' => $r['symbol'],
                 'usd' => $r['usd'] !== null ? Fmt::usd($r['usd']) : null, 'toman' => $r['usd'] !== null && $rate ? Fmt::toman($r['usd'] * $rate) : null,
                 'tokens' => $tokens !== '' ? $tokens : null,
                 'txs' => is_numeric($r['txs']) ? Fmt::int($r['txs']) : ($r['txs'] ?: null),
@@ -177,7 +180,7 @@ final class Tools
             ]);
         }
         $parts[] = UI::t('wallet_footer', ['total_usd' => Fmt::usd($total), 'total_toman' => $rate ? Fmt::toman($total * $rate) : null, 'time' => Fmt::now()]);
-        $text = implode("\n", $parts);
+        $text = implode("\n\n", $parts);
         if (mb_strlen($text) > 4000) {
             $text = mb_substr($text, 0, 3990);
             $text = mb_substr($text, 0, mb_strrpos($text, "\n"));
@@ -186,7 +189,7 @@ final class Tools
         foreach ($found as $r) {
             if ($r['kind'] === 'tron') {
                 $k = Store::put(['addr' => $address, 'owner' => $owner]);
-                $rows[] = [UI::button('btn_trc20_history', ['cb' => "tt:$k:1"]), UI::button('btn_tokens_file', ['cb' => "tj:$k"])];
+                $rows[] = [UI::button('btn_trc20_history', ['cb' => "tt:$k:1"])];
                 break;
             }
         }
@@ -246,29 +249,40 @@ final class Tools
             return;
         }
         $page = max(1, (int)$page);
-        $res = Wallets::tronTransfers($d['addr'], $page);
+        $fp = $page === 1 ? [] : Cache::get("tfp:$key:$page");
+        if ($page > 1 && !is_array($fp)) {
+            TG::answer($cq['id'], UI::plain('expired'), true);
+            return;
+        }
+        $res = Wallets::tronTransfers($d['addr'], $page, 10, $fp);
         if (!$res) {
             TG::answer($cq['id'], UI::plain('price_unavailable'), true);
             return;
         }
-        if (!$res['items']) {
+        if (!$res['items'] && $page === 1) {
             TG::answer($cq['id'], UI::plain('tron_transfers_empty'), true);
             return;
         }
         TG::answer($cq['id']);
+        if ($res['more']) {
+            Cache::set("tfp:$key:" . ($page + 1), $res['next'], 86400);
+        }
         $items = [];
         foreach ($res['items'] as $it) {
             $in = ($it['to'] ?? '') === $d['addr'];
-            $items[] = UI::fill(UI::template('tron_transfer_item'), ['direction' => $in ? '📥' : '📤', 'amount' => Fmt::num($it['amount']),
-                'symbol' => UI::esc($it['symbol']), 'time' => $it['ts'] ? Fmt::jalali($it['ts']) : '—',
-                'party' => UI::esc($in ? $it['from'] : $it['to']), 'hash' => UI::esc($it['hash'] ?? '')]);
+            $items[] = UI::fill(UI::template('tron_transfer_item'), ['direction' => $in ? '📥' : '📤', 'kind' => $in ? 'دریافت' : 'ارسال',
+                'amount' => Fmt::num($it['amount']), 'symbol' => UI::esc($it['symbol']), 'time' => $it['ts'] ? Fmt::jalali($it['ts']) : '—',
+                'side' => $in ? 'از' : 'به', 'party' => UI::esc((string)($in ? $it['from'] : $it['to'])), 'hash' => UI::esc($it['hash'] ?? '')]);
         }
-        $text = UI::t('tron_transfers', ['address' => UI::esc($d['addr']), 'page' => $res['page'], 'pages' => $res['pages'], 'total' => Fmt::int($res['total']), 'items' => implode("\n", $items)]);
+        $text = UI::t('tron_transfers', ['address' => UI::esc($d['addr']), 'page' => $page, 'items' => implode("\n", $items)]);
+        if (mb_strlen($text) > 4000) {
+            $text = mb_substr($text, 0, mb_strrpos(mb_substr($text, 0, 3990), '</blockquote>') + 13);
+        }
         $nav = [];
         if ($page > 1) {
             $nav[] = UI::button('btn_prev', ['cb' => "tp:$key:" . ($page - 1)]);
         }
-        if ($page < $res['pages']) {
+        if ($res['more']) {
             $nav[] = UI::button('btn_next', ['cb' => "tp:$key:" . ($page + 1)]);
         }
         $kb = $nav ? UI::kb([$nav]) : null;
@@ -277,23 +291,6 @@ final class Tools
             return;
         }
         TG::send($chat, $text, $kb);
-    }
-
-    public static function tokensFile(array $cq, string $key): void
-    {
-        $d = Store::get($key);
-        if ($err = self::owned($cq, $d)) {
-            TG::answer($cq['id'], UI::plain($err), true);
-            return;
-        }
-        $res = Wallets::tronAllTokens($d['addr']);
-        if (!$res) {
-            TG::answer($cq['id'], UI::plain('price_unavailable'), true);
-            return;
-        }
-        TG::answer($cq['id']);
-        TG::document($cq['message']['chat']['id'], json_encode($res, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
-            'tokens_' . substr($d['addr'], 0, 8) . '.json', UI::t('tron_tokens_file', ['total' => $res['total'], 'address' => UI::esc($d['addr'])]));
     }
 
     public static function uid(array $m, string $args = ''): void

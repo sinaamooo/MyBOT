@@ -56,7 +56,7 @@
   "desc": "تابلوی قیمت /p ({lines} {usdt_toman} {time})"
  },
  "market_line": {
-  "text": "{icon} <b>{symbol}</b>  <code>{usd}</code> $  ·  <code>{toman}</code> ت  {change}",
+  "text": "{icon}    <b>{symbol}</b>  <code>{usd}</code> $  ·  <code>{toman}</code> ت  {change}",
   "desc": "هر خط تابلوی قیمت ({icon} {symbol} {usd} {toman} {change})"
  },
  "currency_not_found": {
@@ -76,11 +76,11 @@
   "desc": "سربرگ چکر ولت ({address} {count})"
  },
  "wallet_chain": {
-  "text": "<b>{chain}</b>\n<blockquote>💰  موجودی: <code>{balance}</code> {symbol}\n💵  ارزش: <code>{usd}</code> $ | <code>{toman}</code> ت\n🪙  توکن‌ها:\n{tokens}\n💱  تعداد تراکنش: <code>{txs}</code>\n{nft_icon} NFT: <code>{nfts}</code>\n🗓  تاریخ ساخت ولت: {created}\n🏷  وضعیت: {status}\n🔗  <a href=\"{explorer}\">مشاهده در اکسپلورر</a></blockquote>",
+  "text": "{chain_icon} <b>{chain}</b>\n<blockquote>💰    موجودی: <code>{balance}</code> {symbol}\n💵    ارزش دلاری: <code>{usd}</code> $\n🇮🇷    ارزش تومانی: <code>{toman}</code> تومان\n🪙    توکن‌ها:\n{tokens}\n💱    تعداد تراکنش: <code>{txs}</code>\n{nft_icon}    NFT: <code>{nfts}</code>\n⌛️    تاریخ ساخت ولت: {created}\n🏷    وضعیت: {status}\n🔗    <a href=\"{explorer}\">مشاهده در اکسپلورر</a></blockquote>",
   "desc": "بلوک هر شبکه در چکر ولت ({chain} {balance} {symbol} {usd} {toman} {tokens} {txs} {nfts} {status} {explorer})"
  },
  "wallet_footer": {
-  "text": "👛 <b>مجموع دارایی:</b> <code>{total_usd}</code> $ | <code>{total_toman}</code> تومان\n🗓 {time}",
+  "text": "📊 <b>مجموع دارایی</b>\n<blockquote>💵    دلار: <code>{total_usd}</code> $\n🇮🇷    تومان: <code>{total_toman}</code> تومان</blockquote>\n🗓 {time}",
   "desc": "پاورقی چکر ولت ({total_usd} {total_toman} {time})"
  },
  "wallet_not_found": {
@@ -92,7 +92,7 @@
   "desc": "در حال چک هش"
  },
  "tx_result": {
-  "text": "🔗 <b>نتیجه چکر هش تراکنش</b>\n<blockquote>🌐    شبکه: <b>{network}</b>\n🏷    وضعیت: {status}\n💸    مقدار: <code>{amount}</code>\n💵    ارزش: <code>{usd}</code> $ | <code>{toman}</code> ت\n🪙    توکن: {token}\n📋    کانترکت / آیدی توکن: <code>{contract}</code>\n📤    از: <code>{sender}</code>\n📥    به: <code>{receiver}</code>\n🔥    کارمزد: <code>{fee}</code>\n🗄    بلاک: <code>{block}</code>\n✅    تاییدها: <code>{confirmations}</code>\n🗓    زمان: {time}</blockquote>\n🔑 <code>{hash}</code>\n🔍 <a href=\"{explorer}\">مشاهده در اکسپلورر</a>",
+  "text": "🔗 <b>نتیجه چکر هش تراکنش</b>\n<blockquote>🌐    شبکه: <b>{network}</b>\n🏷    وضعیت: {status}\n💸    مقدار: <code>{amount}</code>\n💵    ارزش دلاری: <code>{usd}</code> $\n🇮🇷    ارزش تومانی: <code>{toman}</code> تومان\n🪙    توکن: {token}\n📋    کانترکت / آیدی توکن: <code>{contract}</code>\n📤    از: <code>{sender}</code>\n📥    به: <code>{receiver}</code>\n🔥    کارمزد: <code>{fee}</code>\n🗄    بلاک: <code>{block}</code>\n✅    تاییدها: <code>{confirmations}</code>\n🗓    زمان: {time}</blockquote>\n🔑 <code>{hash}</code>\n🔍 <a href=\"{explorer}\">مشاهده در اکسپلورر</a>",
   "desc": "نتیجه چک هش ({network} {status} {amount} {usd} {toman} {sender} {receiver} {fee} {block} {confirmations} {time} {hash} {explorer})"
  },
  "tx_not_found": {
@@ -100,20 +100,16 @@
   "desc": "هش پیدا نشد ({hash})"
  },
  "tron_transfers": {
-  "text": "📋 <b>تراکنش‌های TRC20</b>\n🗺 <code>{address}</code>\n📜 صفحه {page} از {pages} | کل: {total}\n{items}",
+  "text": "📜 <b>تراکنش‌های ولت</b>\n🗺 <code>{address}</code>\n📋 صفحه: <b>{page}</b>\n\n{items}",
   "desc": "لیست تراکنش‌های TRC20 ({address} {page} {pages} {total} {items})"
  },
  "tron_transfer_item": {
-  "text": "{direction} <b>{amount} {symbol}</b> • {time}\n   👤 <code>{party}</code>\n   🔗 <a href=\"https://tronscan.org/#/transaction/{hash}\">مشاهده تراکنش</a>",
+  "text": "<blockquote>{direction}    {kind}: <b>{amount} {symbol}</b>\n🗓    زمان: {time}\n👤    {side}: <code>{party}</code>\n🔗    <a href=\"https://tronscan.org/#/transaction/{hash}\">مشاهده تراکنش</a></blockquote>",
   "desc": "هر تراکنش در لیست TRC20 ({direction} {amount} {symbol} {time} {party} {hash})"
  },
  "tron_transfers_empty": {
-  "text": "📥 تراکنش TRC20 برای این ولت ثبت نشده است.",
+  "text": "📥 هیچ تراکنشی برای این ولت ثبت نشده است.",
   "desc": "ولت بدون تراکنش TRC20"
- },
- "tron_tokens_file": {
-  "text": "📋 لیست کامل {total} توکن ولت\n<code>{address}</code>",
-  "desc": "کپشن فایل توکن‌ها ({total} {address})"
  },
  "not_your_button": {
   "text": "❌ شما دسترسی ندارید",
@@ -360,7 +356,7 @@
   "desc": "خطای ترجمه"
  },
  "calc_result": {
-  "text": "🧮 <code>{expr}</code>\n<blockquote>⚖️ <b>{result}</b></blockquote>",
+  "text": "🧮 <code>{expr}</code>\n<blockquote>⚖️    <b>{result}</b></blockquote>",
   "desc": "نتیجه ماشین حساب ({expr} {result})"
  },
  "account": {
@@ -420,7 +416,7 @@
   "desc": "برترین‌ها ({lines})"
  },
  "dm_top_line": {
-  "text": "{rank}. {name}  <b>{points}</b> الماس  (سطح {level})",
+  "text": "{medal}    {rank}. {name}  <b>{points}</b> الماس  (سطح {level})",
   "desc": "هر خط برترین‌ها ({rank} {name} {points} {level})"
  },
  "dm_top_none": {

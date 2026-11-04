@@ -73,10 +73,13 @@ final class Chain
         return ['url' => $url, 'method' => 'POST', 'json' => ['jsonrpc' => '2.0', 'id' => 1, 'method' => $method, 'params' => $params], 'timeout' => $timeout];
     }
 
-    public static function rpc(array $urls, string $method, array $params, int $timeout = 10)
+    public static function rpc(array $urls, string $method, array $params, int $timeout = 8)
     {
-        foreach ($urls as $u) {
-            $d = Http::decode(Http::request(self::rpcReq($u, $method, $params, $timeout)));
+        $reqs = [];
+        foreach (array_slice($urls, 0, 3) as $i => $u) {
+            $reqs[$i] = self::rpcReq($u, $method, $params, $timeout);
+        }
+        foreach ($reqs ? Http::multiJson($reqs) : [] as $d) {
             if (is_array($d) && array_key_exists('result', $d)) {
                 return $d['result'];
             }
@@ -114,19 +117,26 @@ final class Chain
         return $out;
     }
 
-    public static function batch(array $urls, array $calls, int $timeout = 12): array
+    public static function batch(array $urls, array $calls, int $timeout = 8): array
     {
-        foreach ($urls as $u) {
-            $r = self::batchParse(Http::decode(Http::request(self::batchReq($u, $calls, $timeout))), count($calls));
-            if ($r !== null) {
+        $reqs = [];
+        foreach (array_slice($urls, 0, 3) as $i => $u) {
+            $reqs[$i] = self::batchReq($u, $calls, $timeout);
+        }
+        foreach ($reqs ? Http::multiJson($reqs) : [] as $d) {
+            if (($r = self::batchParse($d, count($calls))) !== null) {
                 return $r;
             }
         }
-        $out = [];
-        foreach ($calls as [$m, $p]) {
-            $out[] = self::rpc($urls, $m, $p, $timeout);
+        $reqs = [];
+        foreach ($calls as $i => [$m, $p]) {
+            $reqs[$i] = self::rpcReq($urls[0] ?? '', $m, $p, $timeout);
         }
-        return $out;
+        $out = [];
+        foreach ($urls ? Http::multiJson($reqs) : [] as $i => $d) {
+            $out[$i] = is_array($d) ? ($d['result'] ?? null) : null;
+        }
+        return array_replace(array_fill(0, count($calls), null), $out);
     }
 
     public static function hexInt($v): float
@@ -341,30 +351,44 @@ final class Wallets
     {
         $chains = Chain::evm();
         $callsBy = [];
-        $reqs = [];
         foreach ($chains as $i => $c) {
             $calls = [['eth_getBalance', [$address, 'latest']], ['eth_getTransactionCount', [$address, 'latest']], ['eth_getCode', [$address, 'latest']]];
-            foreach ($c['tokens'] as $sym => [$contract, $dec]) {
+            foreach ($c['tokens'] as [$contract]) {
                 $calls[] = ['eth_call', [['to' => $contract, 'data' => Chain::balanceOfData($address)], 'latest']];
             }
             $callsBy[$i] = $calls;
-            $reqs[$i] = Chain::batchReq($c['rpcs'][0], $calls);
         }
-        $res = Http::multiJson($reqs);
+        $got = [];
+        foreach ([[0, 2], [2, 3]] as [$from, $len]) {
+            $reqs = [];
+            foreach ($chains as $i => $c) {
+                if (!isset($got[$i])) {
+                    foreach (array_slice($c['rpcs'], $from, $len) as $j => $u) {
+                        $reqs["$i|$j"] = Chain::batchReq($u, $callsBy[$i], 7);
+                    }
+                }
+            }
+            if (!$reqs) {
+                break;
+            }
+            foreach (Http::multiJson($reqs) as $k => $d) {
+                $i = (int)strtok($k, '|');
+                if (!isset($got[$i]) && ($r = Chain::batchParse($d, count($callsBy[$i])))) {
+                    $got[$i] = $r;
+                }
+            }
+        }
         $out = [];
         foreach ($chains as $i => $c) {
-            $r = Chain::batchParse($res[$i], count($callsBy[$i]));
-            if ($r === null) {
-                $r = Chain::batch(array_slice($c['rpcs'], 1, 2), $callsBy[$i]);
-            }
-            if ($r[0] === null && $r[1] === null) {
+            $r = $got[$i] ?? null;
+            if (!$r || ($r[0] === null && $r[1] === null)) {
                 continue;
             }
             $tokens = [];
             $j = 3;
-            foreach ($c['tokens'] as $sym => [$contract, $dec]) {
+            foreach ($c['tokens'] as $sym => [, $dec]) {
                 $raw = $r[$j++] ?? null;
-                $amt = ($raw && $raw !== '0x') ? Chain::hexInt($raw) / 10 ** $dec : 0;
+                $amt = (is_string($raw) && strlen($raw) <= 66 && $raw !== '0x') ? Chain::hexInt($raw) / 10 ** $dec : 0;
                 if ($amt > 0) {
                     $tokens[] = self::tok($sym, $amt);
                 }
@@ -378,9 +402,18 @@ final class Wallets
         return $out;
     }
 
-    private static function esplora(string $base, string $address, string $name, string $sym, string $explorer): ?array
+    private static function first(array $reqs, callable $parse): ?array
     {
-        $d = Http::json("$base/api/address/$address", ['timeout' => 10]);
+        foreach (Http::multi($reqs) as $k => $res) {
+            if (($r = $parse($k, Http::decode($res))) !== null) {
+                return $r;
+            }
+        }
+        return null;
+    }
+
+    private static function esploraParse($d, string $address, string $name, string $sym, string $explorer): ?array
+    {
         if (!is_array($d) || !isset($d['chain_stats'])) {
             return null;
         }
@@ -390,50 +423,55 @@ final class Wallets
         $pend = ($ms['funded_txo_sum'] ?? 0) - ($ms['spent_txo_sum'] ?? 0);
         return self::result($name, $sym, $sat / 1e8, "$explorer/address/$address", [
             'txs' => ($cs['tx_count'] ?? 0) + ($ms['tx_count'] ?? 0),
-            'status' => $pend ? '🔍 در انتظار: ' . sprintf('%+g', $pend / 1e8) . " $sym" : null,
+            'status' => $pend ? '⏳ در انتظار: ' . sprintf('%+g', $pend / 1e8) . " $sym" : null,
         ]);
     }
 
-    private static function blockcypher(string $coin, string $address, string $name, string $sym, string $explorer): ?array
+    private static function cypherParse($d, string $name, string $sym, string $explorer): ?array
     {
-        $d = Http::json("https://api.blockcypher.com/v1/$coin/main/addrs/$address/balance", ['timeout' => 10]);
         if (!is_array($d) || !isset($d['address'])) {
             return null;
         }
         return self::result($name, $sym, ($d['final_balance'] ?? $d['balance'] ?? 0) / 1e8, $explorer, ['txs' => $d['final_n_tx'] ?? $d['n_tx'] ?? null]);
     }
 
+    private static function utxo(string $a, array $esplora, ?string $cypher, string $name, string $sym, string $explorer): array
+    {
+        $reqs = [];
+        foreach ($esplora as $i => $base) {
+            $reqs["e$i"] = ['url' => "$base/api/address/$a", 'timeout' => 8];
+        }
+        if ($cypher) {
+            $reqs['c'] = ['url' => "https://api.blockcypher.com/v1/$cypher/main/addrs/$a/balance", 'timeout' => 8];
+        }
+        $r = self::first($reqs, fn($k, $d) => $k === 'c' ? self::cypherParse($d, $name, $sym, "$explorer/address/$a") : self::esploraParse($d, $a, $name, $sym, $explorer));
+        return $r ? [$r] : [];
+    }
+
     public static function btc(string $a): array
     {
-        $r = self::esplora('https://mempool.space', $a, 'Bitcoin', 'BTC', 'https://mempool.space')
-            ?? self::esplora('https://blockstream.info', $a, 'Bitcoin', 'BTC', 'https://mempool.space')
-            ?? self::blockcypher('btc', $a, 'Bitcoin', 'BTC', "https://mempool.space/address/$a");
-        return $r ? [$r] : [];
+        return self::utxo($a, ['https://mempool.space', 'https://blockstream.info'], 'btc', 'Bitcoin', 'BTC', 'https://mempool.space');
     }
 
     public static function ltc(string $a): array
     {
-        $r = self::esplora('https://litecoinspace.org', $a, 'Litecoin', 'LTC', 'https://litecoinspace.org')
-            ?? self::blockcypher('ltc', $a, 'Litecoin', 'LTC', "https://litecoinspace.org/address/$a");
-        return $r ? [$r] : [];
+        return self::utxo($a, ['https://litecoinspace.org'], 'ltc', 'Litecoin', 'LTC', 'https://litecoinspace.org');
     }
 
     public static function doge(string $a): array
     {
         $ex = "https://blockchair.com/dogecoin/address/$a";
-        $r = self::blockcypher('doge', $a, 'Dogecoin', 'DOGE', $ex);
-        if (!$r) {
-            $d = Http::json("https://dogechain.info/api/v1/address/balance/$a", ['timeout' => 10]);
-            if (!empty($d['success'])) {
-                $r = self::result('Dogecoin', 'DOGE', (float)($d['balance'] ?? 0), $ex);
-            }
-        }
+        $r = self::first([
+            'c' => ['url' => "https://api.blockcypher.com/v1/doge/main/addrs/$a/balance", 'timeout' => 8],
+            'd' => ['url' => "https://dogechain.info/api/v1/address/balance/$a", 'timeout' => 8],
+        ], fn($k, $d) => $k === 'c' ? self::cypherParse($d, 'Dogecoin', 'DOGE', $ex) : (!empty($d['success']) ? self::result('Dogecoin', 'DOGE', (float)($d['balance'] ?? 0), $ex) : null));
         return $r ? [$r] : [];
     }
 
     public static function dash(string $a): array
     {
-        $r = self::blockcypher('dash', $a, 'Dash', 'DASH', "https://blockchair.com/dash/address/$a");
+        $d = Http::json("https://api.blockcypher.com/v1/dash/main/addrs/$a/balance", ['timeout' => 8]);
+        $r = self::cypherParse($d, 'Dash', 'DASH', "https://blockchair.com/dash/address/$a");
         return $r ? [$r] : [];
     }
 
@@ -476,26 +514,61 @@ final class Wallets
         return ['total' => $d['total'] ?? count($tokens), 'wallet' => $a, 'token' => $tokens];
     }
 
-    public static function tronAllTokens(string $a): ?array
+    public static function tronTransfers(string $a, int $page = 1, int $per = 10, array $fp = []): ?array
     {
-        return self::tronTokensParse(Http::decode(Http::request(self::tronTokensReq($a))), $a);
-    }
-
-    public static function tronTransfers(string $a, int $page = 1, int $per = 10): ?array
-    {
-        $d = Http::json('https://apilist.tronscanapi.com/api/new/token_trc20/transfers', [
-            'params' => ['limit' => $per, 'start' => ($page - 1) * $per, 'relatedAddress' => $a], 'headers' => Chain::tronscanHeaders(), 'timeout' => 15]);
-        if (!is_array($d)) {
+        $fp += ['t' => null, 'x' => null];
+        $h = Chain::tronHeaders();
+        $base = "https://api.trongrid.io/v1/accounts/$a";
+        $reqs = [];
+        if ($fp['t'] !== false) {
+            $reqs['t'] = ['url' => "$base/transactions/trc20", 'params' => ['limit' => $per, 'only_confirmed' => 'true'] + ($fp['t'] ? ['fingerprint' => $fp['t']] : []), 'headers' => $h, 'timeout' => 10];
+        }
+        if ($fp['x'] !== false) {
+            $reqs['x'] = ['url' => "$base/transactions", 'params' => ['limit' => $per, 'only_confirmed' => 'true', 'search_internal' => 'false'] + ($fp['x'] ? ['fingerprint' => $fp['x']] : []), 'headers' => $h, 'timeout' => 10];
+        }
+        if ($page === 1) {
+            $reqs['s'] = ['url' => 'https://apilist.tronscanapi.com/api/new/token_trc20/transfers', 'params' => ['limit' => $per, 'start' => 0, 'relatedAddress' => $a], 'headers' => Chain::tronscanHeaders(), 'timeout' => 10];
+        }
+        $res = $reqs ? Http::multiJson($reqs) : [];
+        $items = [];
+        $next = ['t' => false, 'x' => false];
+        $ok = false;
+        $addr = fn($v) => is_string($v) && strlen($v) === 42 && str_starts_with($v, '41') ? Chain::tronB58($v) : $v;
+        if (!empty($res['t']['success'])) {
+            $ok = true;
+            foreach ($res['t']['data'] ?? [] as $it) {
+                $dec = (int)($it['token_info']['decimals'] ?? 0);
+                $items[] = ['amount' => is_numeric($it['value'] ?? null) ? $it['value'] / 10 ** $dec : 0, 'symbol' => $it['token_info']['symbol'] ?? 'TRC20',
+                    'from' => $it['from'] ?? null, 'to' => $it['to'] ?? null, 'ts' => intdiv((int)($it['block_timestamp'] ?? 0), 1000), 'hash' => $it['transaction_id'] ?? null];
+            }
+            $next['t'] = count($res['t']['data'] ?? []) >= $per ? ($res['t']['meta']['fingerprint'] ?? false) : false;
+        }
+        if (!empty($res['x']['success'])) {
+            $ok = true;
+            foreach ($res['x']['data'] ?? [] as $it) {
+                $c = $it['raw_data']['contract'][0] ?? [];
+                if (($c['type'] ?? '') !== 'TransferContract') {
+                    continue;
+                }
+                $v = $c['parameter']['value'] ?? [];
+                $items[] = ['amount' => ($v['amount'] ?? 0) / 1e6, 'symbol' => 'TRX', 'from' => $addr($v['owner_address'] ?? null), 'to' => $addr($v['to_address'] ?? null),
+                    'ts' => intdiv((int)($it['block_timestamp'] ?? $it['raw_data']['timestamp'] ?? 0), 1000), 'hash' => $it['txID'] ?? null];
+            }
+            $next['x'] = count($res['x']['data'] ?? []) >= $per ? ($res['x']['meta']['fingerprint'] ?? false) : false;
+        }
+        if (!$ok && is_array($res['s'] ?? null) && isset($res['s']['token_transfers'])) {
+            $ok = true;
+            foreach ($res['s']['token_transfers'] as $it) {
+                $dec = (int)($it['tokenInfo']['tokenDecimal'] ?? 0);
+                $items[] = ['amount' => is_numeric($it['quant'] ?? null) ? $it['quant'] / 10 ** $dec : 0, 'symbol' => $it['tokenInfo']['tokenAbbr'] ?? 'TRC20',
+                    'from' => $it['from_address'] ?? null, 'to' => $it['to_address'] ?? null, 'ts' => intdiv((int)($it['block_ts'] ?? 0), 1000), 'hash' => $it['transaction_id'] ?? null];
+            }
+        }
+        if (!$ok) {
             return null;
         }
-        $items = [];
-        foreach ($d['token_transfers'] ?? [] as $it) {
-            $dec = (int)($it['tokenInfo']['tokenDecimal'] ?? 0);
-            $items[] = ['amount' => is_numeric($it['quant'] ?? null) ? $it['quant'] / 10 ** $dec : 0, 'symbol' => $it['tokenInfo']['tokenAbbr'] ?? 'TRC20',
-                'from' => $it['from_address'] ?? null, 'to' => $it['to_address'] ?? null, 'ts' => intdiv((int)($it['block_ts'] ?? 0), 1000), 'hash' => $it['transaction_id'] ?? null];
-        }
-        $total = (int)($d['total'] ?? 0);
-        return ['total' => $total, 'pages' => max(1, (int)ceil($total / $per)), 'page' => $page, 'items' => $items];
+        usort($items, fn($x, $y) => $y['ts'] <=> $x['ts']);
+        return ['items' => $items, 'page' => $page, 'next' => $next, 'more' => $next['t'] !== false || $next['x'] !== false];
     }
 
     public static function tron(string $a): array
@@ -651,17 +724,18 @@ final class Wallets
 
     public static function xrp(string $a): array
     {
-        foreach (Chain::rpcs('xrp_rpcs') as $u) {
-            $d = Http::postJson($u, ['method' => 'account_info', 'params' => [['account' => $a, 'ledger_index' => 'validated']]], ['timeout' => 10]);
-            $r = $d['result'] ?? [];
-            if (isset($r['account_data'])) {
-                return [self::result('XRP Ledger', 'XRP', ($r['account_data']['Balance'] ?? 0) / 1e6, "https://xrpscan.com/account/$a", ['txs' => $r['account_data']['Sequence'] ?? null])];
-            }
-            if (($r['error'] ?? '') === 'actNotFound') {
-                return [];
-            }
+        $reqs = [];
+        foreach (Chain::rpcs('xrp_rpcs') as $i => $u) {
+            $reqs[$i] = ['url' => $u, 'method' => 'POST', 'json' => ['method' => 'account_info', 'params' => [['account' => $a, 'ledger_index' => 'validated']]], 'timeout' => 8];
         }
-        return [];
+        $r = self::first($reqs, function ($k, $d) use ($a) {
+            $x = $d['result'] ?? [];
+            if (isset($x['account_data'])) {
+                return self::result('XRP Ledger', 'XRP', ($x['account_data']['Balance'] ?? 0) / 1e6, "https://xrpscan.com/account/$a", ['txs' => $x['account_data']['Sequence'] ?? null]);
+            }
+            return null;
+        });
+        return $r ? [$r] : [];
     }
 
     public static function sui(string $a): array
@@ -703,7 +777,8 @@ final class Wallets
 
     public static function check(string $kind, string $address): array
     {
-        $found = match ($kind) {
+        try {
+            $found = match ($kind) {
             'hex64x' => array_merge(self::sui($address), self::aptos($address)),
             'evm' => self::evm($address),
             'btc' => self::btc($address),
@@ -716,7 +791,11 @@ final class Wallets
             'sol' => self::sol($address),
             'xrp' => self::xrp($address),
             default => [],
-        };
+            };
+        } catch (Throwable $e) {
+            error_log('wallet ' . $kind . ': ' . $e->getMessage());
+            $found = [];
+        }
         $found = array_values(array_filter($found, [self::class, 'active']));
         foreach ($found as &$r) {
             self::fill($r);
