@@ -107,6 +107,8 @@ final class Convert
         $chg = Market::usdtChange();
         $inv = $chg !== null && $chg > -100 ? (1 / (1 + $chg / 100) - 1) * 100 : 0.0;
         $text = UI::t('conv_toman', [
+            'icon' => $tag === 'IRR' ? UI::badge('IRR', '💰') : '💰',
+            'usdt_icon' => UI::badge('USDT', '💵'),
             'amount' => Fmt::toman($shown),
             'unit' => $tag === 'IRR' ? 'ریال' : 'تومان',
             'usdt' => Fmt::num($usd),
@@ -163,6 +165,7 @@ final class Convert
         $toman = $px ? $amount * $px['toman'] : null;
         $isUsd = $code === 'USD';
         $text = UI::t('conv_fiat', [
+            'icon' => UI::badge($code, '💱'),
             'flag' => Currencies::flag($f['cc']),
             'amount' => Fmt::num($amount),
             'name' => $f['fa'],
@@ -202,6 +205,7 @@ final class Convert
         $total = $amount * $g['toman'];
         $name = Market::GOLD[$code][1] ?? 'انس جهانی طلا';
         $text = UI::t('conv_gold', [
+            'icon' => UI::badge('GOLD', '🏅'),
             'amount' => Fmt::num($amount),
             'name' => $name,
             'toman' => $isOunce ? ($usdt ? Fmt::toman($total * $usdt) : null) : Fmt::toman($total),
@@ -232,7 +236,7 @@ final class Convert
             $lines[] = UI::fill(UI::template('premium_line'), ['months' => $months, 'toman' => Fmt::toman($usd * $usdt),
                 'ton' => Fmt::num($usd / $tonUsd, 2), 'usd' => Fmt::usd($usd)]);
         }
-        return UI::t('premium_prices', ['lines' => implode("\n", $lines), 'time' => Fmt::now()]);
+        return UI::t('premium_prices', ['icon' => UI::badge('PREMIUM', '👑'), 'lines' => implode("\n", $lines), 'time' => Fmt::now()]);
     }
 
     public static function starsText(): ?string

@@ -20,7 +20,7 @@ final class Tools
             Bot::reply($m, UI::t('price_unavailable'));
             return;
         }
-        Bot::reply($m, UI::t('market', ['lines' => implode("\n", $lines), 'usdt_toman' => $rate ? Fmt::toman($rate) : null, 'time' => Fmt::now()]));
+        Bot::reply($m, UI::t('market', ['lines' => implode("\n", $lines), 'usdt_icon' => UI::badge('USDT', '💵'), 'usdt_toman' => $rate ? Fmt::toman($rate) : null, 'time' => Fmt::now()]));
         self::react($m);
     }
 
@@ -172,7 +172,7 @@ final class Tools
                 'usd' => $r['usd'] !== null ? Fmt::usd($r['usd']) : null, 'toman' => $r['usd'] !== null && $rate ? Fmt::toman($r['usd'] * $rate) : null,
                 'tokens' => $tokens !== '' ? $tokens : null,
                 'txs' => is_numeric($r['txs']) ? Fmt::int($r['txs']) : ($r['txs'] ?: null),
-                'nfts' => $r['nfts'] ? Fmt::int($r['nfts']) : null, 'created' => $r['created'] ? Fmt::jalali($r['created']) : null,
+                'nft_icon' => UI::badge('NFT', '🎞'), 'nfts' => $r['nfts'] ? Fmt::int($r['nfts']) : null, 'created' => $r['created'] ? Fmt::jalali($r['created']) : null,
                 'status' => $r['status'], 'explorer' => UI::attr($r['explorer']),
             ]);
         }
@@ -378,7 +378,7 @@ final class Tools
         $xp = (int)($row['xp'] ?? 0);
         $text = UI::t('account', [
             'name' => UI::mention($t), 'id' => $t['id'], 'username' => UI::uname($t['username'] ?? null),
-            'premium' => !empty($t['is_premium']) ? '✅   دارد' : '❌   ندارد', 'level' => $level,
+            'premium_icon' => UI::badge('PREMIUM', '💫'), 'premium' => !empty($t['is_premium']) ? '✅   دارد' : '❌   ندارد', 'level' => $level,
             'created' => Fmt::jalaliLong(Account::created((int)$t['id'])), 'dc' => $dc ? "DC$dc • " . (Account::DC[$dc] ?? '') : null,
             'lang' => !empty($t['language_code']) ? strtoupper($t['language_code']) : null, 'birthdate' => $bd,
             'bio' => !empty($info['bio']) ? UI::esc($info['bio']) : null, 'gifts' => $gifts ? Fmt::int($gifts['total_count'] ?? 0) : null,

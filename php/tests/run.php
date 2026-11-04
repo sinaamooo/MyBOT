@@ -660,6 +660,14 @@ foreach (['/500 درهم' => 'درهم امارات', '/درهم 500' => 'دره
     check($p && str_contains($p[0][1]['caption'], $needle), "slash fiat $q");
 }
 reset_calls();
+feed(msg('/eur', -950, 97));
+$p = sent(['sendPhoto']);
+check($p && str_starts_with($p[0][1]['caption'], '<tg-emoji emoji-id="5143440726729688808">') && (Settings::defaults()['emoji_map']['💵'] ?? '') === '5143517971716507647', 'fiat currency badge and dollar emoji');
+reset_calls();
+feed(msg('500000 ریال', 98, 98));
+$p = sent(['sendPhoto']);
+check($p && str_contains($p[0][1]['caption'], '5141084185548557015') && str_contains($p[0][1]['caption'], '5843796824367832872'), 'rial badge and usdt badge');
+reset_calls();
 foreach (['/10 تتر', '/500000 تومان', '/btc', '/randomcommand', '/aed@OtherBot 5'] as $q) {
     feed(msg($q));
 }

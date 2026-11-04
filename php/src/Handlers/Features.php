@@ -450,7 +450,7 @@ final class Extras
                 continue;
             }
             $market = $market || $px['source'] === 'market';
-            $lines[] = UI::fill(UI::template('arz_line'), ['flag' => Currencies::flag($f['cc']), 'name' => $f['fa'], 'toman' => Fmt::toman($px['toman']),
+            $lines[] = UI::fill(UI::template('arz_line'), ['icon' => UI::badge($code, Currencies::flag($f['cc']) ?: '💱'), 'flag' => Currencies::flag($f['cc']), 'name' => $f['fa'], 'toman' => Fmt::toman($px['toman']),
                 'change' => $px['change'] !== null ? Fmt::badge($px['change']) : '']);
         }
         if (!$lines) {
