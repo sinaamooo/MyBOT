@@ -330,7 +330,7 @@ final class Translate
 
 final class Account
 {
-    const DC = [1 => 'Miami 🇺🇸', 2 => 'Amsterdam 🇳🇱', 3 => 'Miami 🇺🇸', 4 => 'Amsterdam 🇳🇱', 5 => 'Singapore 🇸🇬'];
+    const DC = [1 => 'Miami', 2 => 'Amsterdam', 3 => 'Miami', 4 => 'Amsterdam', 5 => 'Singapore'];
 
     public static function created(int $id): int
     {
@@ -575,17 +575,80 @@ final class Instagram
 
     public static function post(string $link): ?array
     {
-        $d = self::call(['type' => 'postdownloader', 'link' => $link]);
-        if (!$d) {
-            return null;
-        }
         $out = [];
-        foreach ($d['result']['medias'] ?? [] as $m) {
-            if (!empty($m['url'])) {
-                $out[] = ['url' => $m['url'], 'kind' => in_array(strtolower((string)($m['extension'] ?? '')), ['mp4', 'mov'], true) ? 'video' : 'photo'];
+        if (self::enabled() && ($d = self::call(['type' => 'postdownloader', 'link' => $link]))) {
+            foreach ($d['result']['medias'] ?? [] as $m) {
+                if (!empty($m['url'])) {
+                    $out[] = ['url' => $m['url'], 'kind' => in_array(strtolower((string)($m['extension'] ?? '')), ['mp4', 'mov'], true) ? 'video' : 'photo'];
+                }
+            }
+        }
+        return $out ?: self::direct($link);
+    }
+
+    private static function nodes(?array $n): array
+    {
+        if (!$n) {
+            return [];
+        }
+        $list = !empty($n['edge_sidecar_to_children']['edges']) ? array_column($n['edge_sidecar_to_children']['edges'], 'node') : [$n];
+        $out = [];
+        foreach ($list as $x) {
+            if (!empty($x['is_video']) && !empty($x['video_url'])) {
+                $out[] = ['url' => $x['video_url'], 'kind' => 'video'];
+            } elseif (!empty($x['display_url'])) {
+                $out[] = ['url' => $x['display_url'], 'kind' => 'photo'];
             }
         }
         return $out;
+    }
+
+    public static function direct(string $link): ?array
+    {
+        if (!preg_match('~/(?:p|reel|reels|tv)/([A-Za-z0-9_-]+)~', $link, $mm)) {
+            return null;
+        }
+        $sc = $mm[1];
+        $lsd = 'AVqbxe3J_YA';
+        $head = ['X-IG-App-ID' => '936619743392459', 'X-FB-LSD' => $lsd, 'X-ASBD-ID' => '129477', 'Sec-Fetch-Site' => 'same-origin',
+            'Origin' => 'https://www.instagram.com', 'Referer' => "https://www.instagram.com/p/$sc/", 'Content-Type' => 'application/x-www-form-urlencoded'];
+        $vars = [
+            '8845758582119845' => ['shortcode' => $sc, 'fetch_tagged_user_count' => null, 'hoisted_comment_id' => null, 'hoisted_reply_id' => null],
+            '10015901848480474' => ['shortcode' => $sc],
+        ];
+        $reqs = [];
+        foreach ($vars as $doc => $v) {
+            $reqs[$doc] = ['method' => 'POST', 'url' => 'https://www.instagram.com/graphql/query', 'headers' => $head, 'timeout' => 20,
+                'form' => http_build_query(['lsd' => $lsd, 'doc_id' => (string)$doc, 'variables' => json_encode($v)])];
+        }
+        $reqs['embed'] = ['url' => "https://www.instagram.com/p/$sc/embed/captioned/", 'timeout' => 20, 'headers' => ['Accept' => 'text/html']];
+        $res = Http::multi($reqs);
+        foreach (array_keys($vars) as $doc) {
+            $d = json_decode($res[$doc]['body'] ?? '', true);
+            $n = $d['data']['xdt_shortcode_media'] ?? $d['data']['shortcode_media'] ?? null;
+            if ($out = self::nodes(is_array($n) ? $n : null)) {
+                return $out;
+            }
+        }
+        $html = (string)($res['embed']['body'] ?? '');
+        if (preg_match('/"contextJSON":"((?:[^"\\\\]|\\\\.)*)"/', $html, $cm)) {
+            $ctx = json_decode((string)json_decode('"' . $cm[1] . '"'), true);
+            $n = $ctx['gql_data']['shortcode_media'] ?? $ctx['context']['media'] ?? null;
+            if ($out = self::nodes(is_array($n) ? $n : null)) {
+                return $out;
+            }
+        }
+        if (preg_match('/\\\\?"video_url\\\\?":\\\\?"(https:[^"]+?)\\\\?"/', $html, $vm)) {
+            return [['url' => str_replace(['\\/', '\\u0026', '\\'], ['/', '&', ''], $vm[1]), 'kind' => 'video']];
+        }
+        if (preg_match('/class="EmbeddedMediaImage"[^>]*src="([^"]+)"/', $html, $im) || preg_match('/<img[^>]+class="EmbeddedMediaImage"[^>]*>/', $html, $im)) {
+            $src = $im[1] ?? (preg_match('/src="([^"]+)"/', $im[0], $s2) ? $s2[1] : '');
+            if ($src !== '') {
+                return [['url' => html_entity_decode($src), 'kind' => 'photo']];
+            }
+        }
+        self::$lastStatus = 404;
+        return null;
     }
 
     public static function profile(string $u): ?array

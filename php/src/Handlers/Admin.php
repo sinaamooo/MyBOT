@@ -431,7 +431,7 @@ final class Admin
                 TG::api('editMessageReplyMarkup', ['chat_id' => $chat, 'message_id' => $cq['message']['message_id'], 'reply_markup' => self::homeKb()]);
                 return;
             case 'ban':
-                self::wait($cq, 'ban', '⛔️ آیدی عددی کاربر را بفرستید (مسدود ↔ آزاد).');
+                self::wait($cq, 'ban', '⛔️ آیدی عددی کاربر را بفرستید (مسدود / آزاد).');
                 return;
             case 'pm':
                 self::wait($cq, 'pm', "📨 به این شکل بفرستید:\n<code>آیدی عددی</code>\n<code>متن پیام</code>");

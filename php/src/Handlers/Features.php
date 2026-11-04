@@ -389,7 +389,7 @@ final class Extras
     public static function answerCard(array $m, string $d): void
     {
         $i = Banking::lookup($d);
-        $extra = implode("\n", array_map(fn($k, $v) => '▫️ ' . UI::esc($k) . ': <code>' . UI::esc($v) . '</code>', array_keys($i['extra']), $i['extra']));
+        $extra = implode("\n", array_map(fn($k, $v) => '🔹    ' . UI::esc($k) . ': <code>' . UI::esc($v) . '</code>', array_keys($i['extra']), $i['extra']));
         Bot::send($m, UI::t('card_result', ['card' => Banking::format($d), 'bank' => $i['bank'] ? UI::esc($i['bank']) : null, 'owner' => $i['owner'] ? UI::esc($i['owner']) : null,
             'iban' => $i['iban'] ? UI::esc($i['iban']) : null, 'valid' => $i['valid'] ? '✅ معتبر' : '❌ نامعتبر', 'extra' => $extra !== '' ? $extra : null]),
             UI::footer([[UI::button('btn_copy_id', ['copy' => $d])]]));
@@ -422,13 +422,29 @@ final class Extras
             Bot::send($m, UI::t('phone_failed'));
             return;
         }
-        Bot::send($m, UI::t('phone_result', ['phone' => UI::esc($num), 'status' => $r[0], 'description' => $r[1]]));
+        Bot::send($m, UI::t('phone_result', ['phone' => UI::esc($num), 'status' => self::PHONE_ICON[$r[0]] ?? '📶', 'description' => $r[1]]));
     }
 
     public static function phone(array $m, string $args): void
     {
         $n = Phone::clean($args);
         $n ? self::answerPhone($m, $n) : Bot::send($m, UI::t('phone_invalid'), null);
+    }
+
+    const PHONE_ICON = ['🟢' => '🟢', '⚪' => '✔️', '🟡' => '⏳', '🔴' => '🔴', '⚫' => '⛔️', '🟣' => '❌', '🔵' => '🔵'];
+    const ARZ_FAMILY = ['CAD' => 'USD', 'AUD' => 'USD', 'OMR' => 'IRR', 'QAR' => 'IRR'];
+
+    private static function arzIcon(string $code, string $cc): string
+    {
+        $b = Config::data('badges');
+        if (isset($b[$code])) {
+            return UI::badge($code);
+        }
+        if (isset(self::ARZ_FAMILY[$code])) {
+            return UI::badge(self::ARZ_FAMILY[$code]);
+        }
+        $flag = Currencies::flag($cc);
+        return UI::emojiId($flag) ? $flag : '🪙';
     }
 
     public static function arz(array $m, string $args = ''): void
@@ -450,7 +466,7 @@ final class Extras
                 continue;
             }
             $market = $market || $px['source'] === 'market';
-            $lines[] = UI::fill(UI::template('arz_line'), ['icon' => UI::badge($code, Currencies::flag($f['cc']) ?: '💱'), 'flag' => Currencies::flag($f['cc']), 'name' => $f['fa'], 'toman' => Fmt::toman($px['toman']),
+            $lines[] = UI::fill(UI::template('arz_line'), ['icon' => self::arzIcon($code, (string)$f['cc']), 'flag' => Currencies::flag($f['cc']), 'name' => $f['fa'], 'toman' => Fmt::toman($px['toman']),
                 'change' => $px['change'] !== null ? Fmt::badge($px['change']) : '']);
         }
         if (!$lines) {
@@ -487,7 +503,7 @@ final class Extras
 
     public static function instaLink(array $m, string $link): void
     {
-        if (!Instagram::enabled()) {
+        if (preg_match('~/stories/~i', $link) && !Instagram::enabled()) {
             if (Bot::isPrivate($m)) {
                 Bot::send($m, UI::t('insta_no_key'), null);
             }

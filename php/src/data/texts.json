@@ -132,7 +132,7 @@
   "desc": "نتیجه استعلام شبا ({iban} {bank} {valid})"
  },
  "phone_result": {
-  "text": "📨 <b>چکر شماره تلگرام</b>\n<blockquote>📶    شماره: <code>{phone}</code>\n{status} {description}</blockquote>",
+  "text": "📨 <b>چکر شماره تلگرام</b>\n<blockquote>📶    شماره: <code>{phone}</code>\n{status}    {description}</blockquote>",
   "desc": "نتیجه چکر شماره ({phone} {status} {description})"
  },
  "phone_invalid": {

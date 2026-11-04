@@ -195,18 +195,18 @@ final class UI
                 $out .= $c;
                 continue;
             }
-            $out .= preg_replace_callback('/\n|' . substr($rx, 1, -2) . '/u', function ($m) use ($lookup, $quote, &$used) {
-                if ($m[0] === "\n") {
+            $out .= preg_replace_callback('/\n|' . substr($rx, 1, -2) . '/u', function ($m) use ($lookup, $quote, &$used, $c) {
+                [$e, $at] = $m[0];
+                if ($e === "\n") {
                     $used = false;
-                    return $m[0];
+                    return $e;
                 }
-                if ($quote && $used) {
-                    return $m[0];
-                }
+                $next = substr($c, $at + strlen($e), 1);
+                $pad = $quote && $used && $next !== '' && $next !== "\n" ? ' ' : '';
                 $used = true;
-                $id = $lookup[str_replace("\u{FE0F}", '', $m[0])] ?? '';
-                return '<tg-emoji emoji-id="' . $id . '">' . $m[0] . '</tg-emoji>';
-            }, $c);
+                $id = $lookup[str_replace("\u{FE0F}", '', $e)] ?? '';
+                return '<tg-emoji emoji-id="' . $id . '">' . $e . '</tg-emoji>' . $pad;
+            }, $c, -1, $n, PREG_OFFSET_CAPTURE);
         }
         return $out;
     }

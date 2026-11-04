@@ -540,7 +540,11 @@ $rx = array_values(array_filter($GLOBALS['calls'], fn($c) => $c[0] === 'setMessa
 check(count($rx) === 1 && $rx[0][1]['reaction'][0]['emoji'] === '🐳', 'fallback remembered per chat');
 $GLOBALS['reject_blue'] = false;
 
-check(str_contains(UI::emojiMap("<blockquote>👤    سازنده: 🔴 @ali</blockquote>"), 'سازنده: 🔴 @ali'), 'only first emoji in a quote line is premium');
+$prevMap = Settings::get('emoji_map');
+Settings::set('emoji_map', Settings::defaults()['emoji_map']);
+$qm = UI::emojiMap("<blockquote>👤    سازنده: 🔴 @ali\n✅    دارد ⭐️</blockquote>");
+check(substr_count($qm, '<tg-emoji') === 4 && str_contains($qm, '🔴</tg-emoji>  @ali') && str_contains($qm, '⭐️</tg-emoji></blockquote>') && str_contains($qm, '✅</tg-emoji>    دارد'), 'all quote emojis premium with extra space mid-line');
+Settings::set('emoji_map', $prevMap);
 reset_calls();
 Start::registerCommands();
 $cmds = array_values(array_filter($GLOBALS['calls'], fn($c) => $c[0] === 'setMyCommands'));
@@ -632,6 +636,20 @@ feed(msg('https://www.instagram.com/reel/ABC123/', -900, 96));
 $vid = array_values(array_filter($GLOBALS['calls'], fn($c) => $c[0] === 'sendVideo'));
 $pho = array_values(array_filter($GLOBALS['calls'], fn($c) => $c[0] === 'sendPhoto' && ($c[1]['photo'] ?? '') === 'https://x/1.jpg'));
 check($vid && $pho && str_contains($vid[0][1]['caption'], '(2/2)'), 'instagram download');
+
+Config::set('INSTAGRAM_API_KEY', '');
+$GLOBALS['http']['instagram.com/graphql/query'] = ['data' => ['xdt_shortcode_media' => ['is_video' => true, 'video_url' => 'https://cdn/v.mp4', 'display_url' => 'https://cdn/v.jpg']]];
+reset_calls();
+feed(msg('https://www.instagram.com/reel/XYZ987/?igsh=abc', -900, 97));
+$vid = array_values(array_filter($GLOBALS['calls'], fn($c) => $c[0] === 'sendVideo' && ($c[1]['video'] ?? '') === 'https://cdn/v.mp4'));
+check(count($vid) === 1, 'instagram download without key');
+unset($GLOBALS['http']['instagram.com/graphql/query']);
+$GLOBALS['http']['/embed/captioned/'] = '<div><img class="EmbeddedMediaImage" alt="x" src="https://cdn/p.jpg?a=1&amp;b=2"></div>';
+reset_calls();
+feed(msg('https://www.instagram.com/p/QQQ111/', -900, 98));
+$pho = array_values(array_filter($GLOBALS['calls'], fn($c) => $c[0] === 'sendPhoto' && ($c[1]['photo'] ?? '') === 'https://cdn/p.jpg?a=1&b=2'));
+check(count($pho) === 1, 'instagram embed fallback');
+unset($GLOBALS['http']['/embed/captioned/']);
 
 cb('adm:power', 999, 999);
 check(Settings::get('bot_enabled') === false, 'power off');
