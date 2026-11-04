@@ -44,7 +44,7 @@ final class Tools
     public static function sendPriced(array $m, array $a): void
     {
         $photo = null;
-        $fk = !empty($a['key']) ? 'fid:' . md5($a['key']) : null;
+        $fk = !empty($a['key']) ? 'fid:' . md5(Config::get('BOT_TOKEN') . '|' . $a['key']) : null;
         if ($fk && ($fid = Cache::get($fk))) {
             $photo = $fid;
         } elseif (!empty($a['card'])) {

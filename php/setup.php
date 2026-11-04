@@ -40,7 +40,7 @@ $me = TG::api('getMe');
 if (!$me) {
     exit('getMe failed: ' . TG::$lastError . "\n");
 }
-Cache::set('bot_me', $me, 86400);
+Cache::set(TG::meKey(), $me, 86400);
 $ok = TG::api('setWebhook', [
     'url' => $url,
     'secret_token' => $secret,

@@ -307,7 +307,12 @@ final class TG
 
     public static function me(): array
     {
-        return Cache::remember('bot_me', 86400, fn() => self::api('getMe') ?? []);
+        return Cache::remember(self::meKey(), 86400, fn() => self::api('getMe') ?? []);
+    }
+
+    public static function meKey(): string
+    {
+        return 'bot_me:' . substr(md5(Config::get('BOT_TOKEN')), 0, 12);
     }
 
     public static function username(): string

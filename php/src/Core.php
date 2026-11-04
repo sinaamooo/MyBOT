@@ -202,7 +202,7 @@ SQL);
              VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
              ON CONFLICT(id) DO UPDATE SET username=excluded.username, first_name=excluded.first_name, last_name=excluded.last_name,
              is_premium=excluded.is_premium, last_seen=excluded.last_seen, msg_count=users.msg_count + ?, xp=users.xp + ?,
-             started=MAX(users.started, excluded.started)',
+             started=MAX(CAST(users.started AS INTEGER), CAST(excluded.started AS INTEGER))',
             [$u['id'], isset($u['username']) ? strtolower($u['username']) : null, $u['first_name'] ?? null, $u['last_name'] ?? null,
              (int)!empty($u['is_premium']), $now, $now, $c, $c, (int)$started, $c, $c]
         );
@@ -239,7 +239,30 @@ SQL);
 
     public static function userIds(): array
     {
-        return array_map('intval', array_column(self::all('SELECT id FROM users WHERE started=1 AND banned=0'), 'id'));
+        return array_map('intval', array_column(self::all('SELECT id FROM users WHERE banned=0 AND id > 0'), 'id'));
+    }
+
+    public static function stats(): array
+    {
+        $now = time();
+        return self::one('SELECT COUNT(*) total, SUM(started=1) started, SUM(banned=1) banned, SUM(is_premium=1) premium,
+            SUM(last_seen>=?) day, SUM(last_seen>=?) week, SUM(first_seen>=?) fresh FROM users', [$now - 86400, $now - 7 * 86400, $now - 86400]) ?? [];
+    }
+
+    public static function deleteUser(int $id): void
+    {
+        self::q('DELETE FROM users WHERE id=?', [$id]);
+        self::q('DELETE FROM states WHERE user_id=?', [$id]);
+    }
+
+    public static function groupsPage(int $page, int $per): array
+    {
+        return self::all("SELECT * FROM chats WHERE active=1 AND type IN ('group','supergroup') ORDER BY added_at DESC LIMIT ? OFFSET ?", [$per, $page * $per]);
+    }
+
+    public static function chat(int $id): ?array
+    {
+        return self::one('SELECT * FROM chats WHERE id=?', [$id]);
     }
 
     public static function countUsers(): int

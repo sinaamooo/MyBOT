@@ -275,7 +275,7 @@ final class UI
         $row = [];
         $u = TG::username();
         if ($u !== '') {
-            $row[] = self::button('btn_add_group', ['url' => "https://t.me/$u?startgroup=true"]);
+            $row[] = self::button('btn_add_group', ['url' => "https://t.me/$u?startgroup=true&admin=change_info+delete_messages+restrict_members+invite_users+pin_messages+manage_chat"]);
         }
         if (($c = self::channelUrl()) !== '') {
             $row[] = self::button('btn_channel', ['url' => $c]);

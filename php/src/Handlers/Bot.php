@@ -456,8 +456,7 @@ final class Bot
         $msg = $cq['message'];
         self::deleteMsg($msg);
         if (self::isPrivate($msg)) {
-            TG::send($msg['chat']['id'], UI::t('start_private', ['name' => UI::esc($cq['from']['first_name'] ?? ''), 'bot_username' => TG::username()]),
-                UI::footer([[UI::button('btn_help', ['cb' => 'help'])]]));
+            TG::send($msg['chat']['id'], UI::t('start_private', ['name' => UI::esc($cq['from']['first_name'] ?? ''), 'bot_username' => TG::username()]), UI::footer());
         }
     }
 
@@ -559,7 +558,7 @@ final class Start
             return;
         }
         TG::send($m['chat']['id'], UI::t('start_private', ['name' => UI::esc($m['from']['first_name'] ?? ''), 'bot_username' => TG::username()]),
-            UI::footer([[UI::button('btn_help', ['cb' => 'help'])]]), ['__quick' => true]);
+            UI::footer(), ['__quick' => true]);
     }
 
     public static function help(array $m, string $args): void

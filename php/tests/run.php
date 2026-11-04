@@ -369,7 +369,7 @@ reset_calls();
 feed(msg('/panel', 5, 5));
 check(!str_contains((string)last_text(), 'پنل مدیریت'), 'non admin panel');
 
-foreach (['home', 'texts:0', 'texts:1', 'text:conv_crypto', 'btns', 'btn:btn_channel', 'bstyle:btn_channel:danger', 'fj', 'set:1', 'set:2', 'texts:price', 'text:conv_crypto:price', 'tog:anti_self:set', 'scams', 'stats', 'bcmenu'] as $d) {
+foreach (['home', 'stats', 'groups:0', 'startbtn', 'user:5', 'texts:0', 'texts:1', 'text:conv_crypto', 'btns', 'btn:btn_channel', 'bstyle:btn_channel:danger', 'fj', 'set:1', 'set:2', 'texts:price', 'text:conv_crypto:price', 'tog:anti_self:set', 'scams', 'stats', 'bcmenu'] as $d) {
     reset_calls();
     cb("adm:$d", 999, 999);
     check($GLOBALS['calls'] && !array_filter($GLOBALS['calls'], fn($c) => ($c[1]['text'] ?? '') === '⛔️'), "admin nav $d");
@@ -447,6 +447,9 @@ reset_calls();
 feed(msg('سلام', -4400, 801));
 feed(msg('خوبی', -4400, 802));
 check(count(sent(['getChatAdministrators'])) === 1 && !sent(['getChatMember']), 'admin list cached per chat');
+DB::touchUser(['id' => 4242, 'first_name' => 's'], true, true);
+DB::touchUser(['id' => 4242, 'first_name' => 's']);
+check((int)DB::user(4242)['started'] === 1, 'started flag survives later updates');
 
 $GLOBALS['http']['cardinfo.test'] = ['result' => ['name' => 'علی رضایی']];
 reset_calls();

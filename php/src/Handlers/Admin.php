@@ -76,7 +76,8 @@ final class Admin
         'self_mute_minutes' => 'مدت سکوت سلف (دقیقه، 0 = دائمی)', 'tabchi_mute_minutes' => 'مدت سکوت تبچی (دقیقه، 0 = دائمی)',
     ];
     const STRINGS = ['channel_url' => 'لینک کانال ربات', 'channel_title' => 'نام کانال ربات'];
-    const HOME = '⚙️ <b>پنل مدیریت ربات</b>';
+    const HOME = '⚙️ <b>پنل مدیریت کاربران</b>';
+    const GPAGE = 10;
 
     private static function toggles(): array
     {
@@ -102,15 +103,43 @@ final class Admin
 
     public static function homeKb(): array
     {
-        $on = (bool)Settings::get('bot_enabled');
         return UI::kb([
-            [UI::raw('📋 متن‌ها', 'adm:texts', 'primary'), UI::raw('🔲 دکمه‌ها', 'adm:btns', 'primary')],
-            [UI::raw('⚙️ تنظیمات', 'adm:set:1'), UI::raw('🔒 عضویت اجباری', 'adm:fj')],
-            [UI::raw('🚨 گزارش‌ها', 'adm:scams'), UI::raw('📊 آمار', 'adm:stats')],
-            [UI::raw('📢 ارسال همگانی', 'adm:bcmenu'), UI::raw('📨 پیام به کاربر', 'adm:pm')],
-            [UI::raw('⛔️ مسدود / آزاد', 'adm:ban')],
-            [UI::raw($on ? '🟢 ربات روشن است' : '🔴 ربات خاموش است', 'adm:power', $on ? 'success' : 'danger')],
+            [UI::raw('📊 آمار کاربران', 'adm:stats', 'primary'), UI::raw('👥 گروه‌ها', 'adm:groups:0', 'primary')],
+            [UI::raw('🔍 جستجوی کاربر', 'adm:find')],
+            [UI::raw('⛔️ مسدود / آزاد', 'adm:ban', 'danger'), UI::raw('⛔️ حذف کاربر', 'adm:del', 'danger')],
+            [UI::raw('📨 پیام به کاربر', 'adm:pm'), UI::raw('📢 ارسال همگانی', 'adm:bcmenu')],
+            [UI::raw('🔗 دکمه‌های استارت', 'adm:startbtn', 'success')],
         ]);
+    }
+
+    private static function userCard(int $id): array
+    {
+        $u = DB::user($id);
+        if (!$u) {
+            return ["⚠️ کاربر <code>$id</code> در دیتابیس ربات نیست.", UI::kb([[UI::raw('⛔️ مسدود / آزاد', "adm:uban:$id", 'danger')], self::back()])];
+        }
+        $name = trim(($u['first_name'] ?? '') . ' ' . ($u['last_name'] ?? '')) ?: '—';
+        $text = "👤 <b>اطلاعات کاربر</b>\n<blockquote>👤     نام: <a href=\"tg://user?id=$id\">" . UI::esc($name) . "</a>\n🆔     آیدی عددی: <code>$id</code>\n🔗     یوزرنیم: "
+            . UI::uname($u['username'] ?? null) . "\n⭐️     پریمیوم: " . (!empty($u['is_premium']) ? 'دارد' : 'ندارد') . "\n💬     پیام‌ها: <code>" . Fmt::int($u['msg_count'] ?? 0)
+            . "</code>\n🗓     اولین بازدید: " . (!empty($u['first_seen']) ? Fmt::jalali((int)$u['first_seen']) : '—') . "\n🗓     آخرین بازدید: "
+            . (!empty($u['last_seen']) ? Fmt::jalali((int)$u['last_seen']) : '—') . "\n✅     استارت ربات: " . (!empty($u['started']) ? 'بله' : 'خیر')
+            . "\n⛔️     وضعیت: " . (!empty($u['banned']) ? 'مسدود' : 'آزاد') . '</blockquote>';
+        $kb = UI::kb([[UI::raw(!empty($u['banned']) ? '✅ آزاد کردن' : '⛔️ مسدود کردن', "adm:uban:$id", !empty($u['banned']) ? 'success' : 'danger'),
+            UI::raw('⛔️ حذف', "adm:udel:$id", 'danger')], [UI::raw('📨 پیام', "adm:upm:$id")], self::back()]);
+        return [$text, $kb];
+    }
+
+    private static function startView(int|string $chat, ?array $cq = null): void
+    {
+        $conf = Settings::get('buttons') ?: [];
+        $def = Config::data('buttons');
+        $t = fn($k) => UI::esc(($conf[$k]['text'] ?? '') !== '' ? $conf[$k]['text'] : $def[$k]['text']);
+        $url = UI::channelUrl();
+        $text = "🔗 <b>دکمه‌های زیر پیام استارت</b>\n<blockquote>👥     دکمه افزودن به گروه: <code>" . $t('btn_add_group') . "</code>\n📢     دکمه کانال: <code>" . $t('btn_channel')
+            . "</code>\n🔗     لینک کانال: " . ($url !== '' ? UI::esc($url) : '— ثبت نشده —') . '</blockquote>';
+        $kb = UI::kb([[UI::raw('🔗 لینک کانال اصلی', 'adm:sbval:channel_url', 'primary')],
+            [UI::raw('📋 متن دکمه افزودن', 'adm:sbtext:btn_add_group'), UI::raw('📋 متن دکمه کانال', 'adm:sbtext:btn_channel')], self::back()]);
+        $cq ? self::editOrSend($cq, $text, $kb) : TG::send($chat, $text, $kb);
     }
 
     public static function panel(array $m, string $args = ''): void
@@ -275,11 +304,90 @@ final class Admin
                 self::editOrSend($cq, implode("\n", $lines), UI::kb($rows));
                 return;
             case 'stats':
-                $rate = Prices::usdtToman();
+                $st = DB::stats();
                 TG::answer($cq['id']);
-                self::editOrSend($cq, "📊 <b>آمار ربات</b>\n👤 کاربران: <b>" . Fmt::int(DB::countUsers()) . "</b>\n👥 گروه‌های فعال: <b>" . Fmt::int(DB::countGroups())
-                    . "</b>\n🚨 گزارش در انتظار: <b>" . count(DB::listScams('pending', 1000)) . "</b>\n⛔️ کلاهبرداران ثبت شده: <b>" . count(DB::listScams('approved', 100000))
-                    . "</b>\n💹 نرخ تتر: <b>" . ($rate ? Fmt::toman($rate) : '—') . '</b> تومان', UI::kb([self::back()]));
+                self::editOrSend($cq, "📊 <b>آمار کاربران</b>\n<blockquote>👤     کل کاربران: <b>" . Fmt::int($st['total'] ?? 0) . "</b>\n✅     استارت کرده: <b>" . Fmt::int($st['started'] ?? 0)
+                    . "</b>\n🔥     فعال ۲۴ ساعت: <b>" . Fmt::int($st['day'] ?? 0) . "</b>\n📈     فعال ۷ روز: <b>" . Fmt::int($st['week'] ?? 0) . "</b>\n🆙     جدید امروز: <b>"
+                    . Fmt::int($st['fresh'] ?? 0) . "</b>\n⭐️     پریمیوم: <b>" . Fmt::int($st['premium'] ?? 0) . "</b>\n⛔️     مسدود: <b>" . Fmt::int($st['banned'] ?? 0)
+                    . "</b>\n👥     گروه‌های فعال: <b>" . Fmt::int(DB::countGroups()) . '</b></blockquote>', UI::kb([self::back()]));
+                return;
+            case 'groups':
+                $page = max(0, (int)($p[1] ?? 0));
+                $total = DB::countGroups();
+                $rows = [];
+                foreach (DB::groupsPage($page, self::GPAGE) as $g) {
+                    $rows[] = [UI::raw('👥 ' . mb_substr($g['title'] ?: (string)$g['id'], 0, 40), 'adm:grp:' . $g['id'] . ':' . $page)];
+                }
+                $nav = [];
+                if ($page > 0) {
+                    $nav[] = UI::raw('⬆️ قبلی', 'adm:groups:' . ($page - 1));
+                }
+                if (($page + 1) * self::GPAGE < $total) {
+                    $nav[] = UI::raw('⬇️ بعدی', 'adm:groups:' . ($page + 1));
+                }
+                $rows[] = $nav;
+                $rows[] = self::back();
+                TG::answer($cq['id']);
+                self::editOrSend($cq, '👥 <b>گروه‌های ربات</b> (' . Fmt::int($total) . ")\nصفحه " . Fmt::int($page + 1) . ' از ' . Fmt::int(max(1, (int)ceil($total / self::GPAGE))), UI::kb($rows));
+                return;
+            case 'grp':
+                $gid = (int)($p[1] ?? 0);
+                $g = DB::chat($gid);
+                TG::answer($cq['id']);
+                $cnt = TG::api('getChatMemberCount', ['chat_id' => $gid]);
+                $link = !empty($g['username']) ? 'https://t.me/' . $g['username'] : null;
+                self::editOrSend($cq, "👥 <b>" . UI::esc($g['title'] ?? (string)$gid) . "</b>\n<blockquote>🆔     آیدی: <code>$gid</code>\n👤     تعداد اعضا: <b>" . (is_int($cnt) ? Fmt::int($cnt) : '—')
+                    . "</b>\n🔗     لینک: " . ($link ? UI::esc($link) : '—') . "\n🗓     اضافه شدن ربات: " . (!empty($g['added_at']) ? Fmt::jalali((int)$g['added_at']) : '—') . '</blockquote>',
+                    UI::kb([[UI::raw('⛔️ خروج ربات از گروه', "adm:gleave:$gid", 'danger')], self::back('adm:groups:' . (int)($p[2] ?? 0))]));
+                return;
+            case 'gleave':
+                $gid = (int)($p[1] ?? 0);
+                TG::api('leaveChat', ['chat_id' => $gid]);
+                DB::setChatActive($gid, false);
+                TG::answer($cq['id'], 'ربات از گروه خارج شد', true);
+                self::editOrSend($cq, '✅ ربات از گروه <code>' . $gid . '</code> خارج شد.', UI::kb([self::back('adm:groups:0')]));
+                return;
+            case 'find':
+                self::wait($cq, 'find', '🔍 آیدی عددی یا یوزرنیم کاربر را بفرستید.');
+                return;
+            case 'del':
+                self::wait($cq, 'del', '⛔️ آیدی عددی کاربری که باید حذف شود را بفرستید.');
+                return;
+            case 'uban':
+                $id = (int)($p[1] ?? 0);
+                DB::setBanned($id, !DB::isBanned($id));
+                TG::answer($cq['id'], DB::isBanned($id) ? 'مسدود شد' : 'آزاد شد');
+                [$t, $kb] = self::userCard($id);
+                self::editOrSend($cq, $t, $kb);
+                return;
+            case 'udel':
+                $id = (int)($p[1] ?? 0);
+                TG::answer($cq['id']);
+                self::editOrSend($cq, "⚠️ کاربر <code>$id</code> از دیتابیس ربات حذف شود؟", UI::kb([[UI::raw('✅ بله، حذف شود', "adm:udelok:$id", 'danger'), UI::raw('⛔️ نه', "adm:user:$id")]]));
+                return;
+            case 'udelok':
+                $id = (int)($p[1] ?? 0);
+                DB::deleteUser($id);
+                TG::answer($cq['id'], 'حذف شد', true);
+                self::editOrSend($cq, "✅ کاربر <code>$id</code> حذف شد.", self::homeKb());
+                return;
+            case 'user':
+                TG::answer($cq['id']);
+                [$t, $kb] = self::userCard((int)($p[1] ?? 0));
+                self::editOrSend($cq, $t, $kb);
+                return;
+            case 'upm':
+                self::wait($cq, 'upm', '📨 متن پیام را بفرستید.', ['key' => (string)(int)($p[1] ?? 0)]);
+                return;
+            case 'startbtn':
+                TG::answer($cq['id']);
+                self::startView($chat, $cq);
+                return;
+            case 'sbval':
+                self::wait($cq, 'sbval', "🔗 لینک کانال اصلی را بفرستید (مثلا <code>https://t.me/yourchannel</code>).\nبرای حذف: <code>-</code>", ['key' => 'channel_url']);
+                return;
+            case 'sbtext':
+                self::wait($cq, 'sbtext', '📋 متن جدید دکمه را بفرستید. ایموجی اول متن خودکار پریمیوم می‌شود.', ['key' => $p[1] ?? '']);
                 return;
             case 'bcmenu':
                 TG::answer($cq['id']);
@@ -497,6 +605,57 @@ final class Admin
                 DB::setBanned($id, $ban);
                 State::clear($uid);
                 TG::send($chat, ($ban ? '⛔️ کاربر مسدود شد' : '✅ کاربر آزاد شد') . ": <code>$id</code>", self::homeKb());
+                return;
+            case 'find':
+                $q = ltrim(Fmt::en($text), '@');
+                $u = ctype_digit($q) ? DB::user((int)$q) : DB::userByUsername($q);
+                State::clear($uid);
+                if (!$u) {
+                    TG::send($chat, '⚠️ کاربر در دیتابیس ربات پیدا نشد.', self::homeKb());
+                    return;
+                }
+                [$t, $kb] = self::userCard((int)$u['id']);
+                TG::send($chat, $t, $kb);
+                return;
+            case 'del':
+                $raw = Fmt::en($text);
+                if (!ctype_digit($raw)) {
+                    TG::send($chat, '⚠️ آیدی عددی معتبر بفرستید.');
+                    return;
+                }
+                DB::deleteUser((int)$raw);
+                State::clear($uid);
+                TG::send($chat, "✅ کاربر <code>$raw</code> حذف شد.", self::homeKb());
+                return;
+            case 'upm':
+                if ($text === '') {
+                    TG::send($chat, '⚠️ متن خالی است.');
+                    return;
+                }
+                $ok = TG::send((int)$key, UI::t('admin_message', ['text' => UI::esc($text)])) !== null;
+                State::clear($uid);
+                TG::send($chat, $ok ? '✅ پیام ارسال شد.' : '❌ ارسال نشد: <code>' . UI::esc((string)TG::$lastError) . '</code>', self::homeKb());
+                return;
+            case 'sbval':
+                if ($text !== '-' && !preg_match('#^(https?://)?(t\.me|telegram\.me)/\S+$#i', $text) && !preg_match('/^@\w{4,}$/', $text)) {
+                    TG::send($chat, '⚠️ لینک معتبر تلگرام بفرستید، مثلا <code>https://t.me/yourchannel</code>');
+                    return;
+                }
+                $url = $text === '-' ? '' : (str_starts_with($text, '@') ? 'https://t.me/' . substr($text, 1) : (preg_match('#^https?://#i', $text) ? $text : 'https://' . $text));
+                Settings::set('channel_url', $url);
+                State::clear($uid);
+                TG::send($chat, '✅ ذخیره شد.');
+                self::startView($chat);
+                return;
+            case 'sbtext':
+                if (!isset(Config::data('buttons')[$key]) || $text === '') {
+                    State::clear($uid);
+                    return;
+                }
+                self::setButton($key, ['text' => mb_substr($text, 0, 64)]);
+                State::clear($uid);
+                TG::send($chat, '✅ ذخیره شد.');
+                self::startView($chat);
                 return;
             case 'pm':
                 [$first, $rest] = array_pad(explode("\n", $text, 2), 2, '');
