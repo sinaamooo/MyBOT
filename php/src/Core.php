@@ -85,9 +85,10 @@ final class DB
         self::$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
         self::$pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
         self::$pdo->exec('PRAGMA busy_timeout=8000');
-        self::$pdo->exec('PRAGMA journal_mode=WAL');
         self::$pdo->exec('PRAGMA synchronous=NORMAL');
-        self::$pdo->exec(<<<SQL
+        if ((int)self::$pdo->query('PRAGMA user_version')->fetchColumn() < 3) {
+            self::$pdo->exec('PRAGMA journal_mode=WAL');
+            self::$pdo->exec(<<<SQL
 CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS texts (k TEXT PRIMARY KEY, v TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, username TEXT, first_name TEXT, last_name TEXT, is_premium INTEGER DEFAULT 0, first_seen INTEGER, last_seen INTEGER, msg_count INTEGER DEFAULT 0, xp INTEGER DEFAULT 0, balance REAL DEFAULT 0, started INTEGER DEFAULT 0, banned INTEGER DEFAULT 0);
@@ -111,6 +112,8 @@ CREATE INDEX IF NOT EXISTS idx_msglog ON msglog(user_id, ts);
 CREATE TABLE IF NOT EXISTS names (user_id INTEGER PRIMARY KEY, name TEXT, ts INTEGER);
 CREATE TABLE IF NOT EXISTS delete_queue (chat_id INTEGER, message_id INTEGER, at INTEGER);
 SQL);
+            self::$pdo->exec('PRAGMA user_version=3');
+        }
         self::$kv = [];
         foreach (self::$pdo->query('SELECT k, v FROM kv') as $row) {
             self::$kv[$row['k']] = json_decode($row['v'], true);

@@ -11,25 +11,11 @@ if ($secret !== '' && !hash_equals($secret, (string)($_SERVER['HTTP_X_TELEGRAM_B
 $update = json_decode((string)file_get_contents('php://input'), true);
 ignore_user_abort(true);
 set_time_limit(180);
-http_response_code(200);
-header('Content-Type: text/plain');
-header('Content-Length: 2');
-header('Connection: close');
-echo 'ok';
-if (function_exists('fastcgi_finish_request')) {
-    fastcgi_finish_request();
-} elseif (function_exists('litespeed_finish_request')) {
-    litespeed_finish_request();
-} else {
-    while (ob_get_level() > 0) {
-        ob_end_flush();
-    }
-    flush();
-}
-if (!is_array($update) || !isset($update['update_id'])) {
-    exit;
-}
-if (Cache::throttled('upd:' . $update['update_id'], 86400)) {
+TG::$hook = true;
+register_shutdown_function([TG::class, 'closeHook']);
+if (!is_array($update) || !isset($update['update_id']) || Cache::throttled('upd:' . $update['update_id'], 86400)) {
+    TG::closeHook();
     exit;
 }
 Bot::handle($update);
+TG::closeHook();

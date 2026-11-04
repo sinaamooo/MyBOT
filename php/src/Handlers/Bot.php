@@ -58,6 +58,23 @@ final class Bot
         return ['message_id' => $m['message_id'], 'allow_sending_without_reply' => true];
     }
 
+    public static function reply(array $m, string $text, $markup = false, ?string $photo = null): void
+    {
+        if ($markup === false) {
+            $markup = UI::footer();
+        }
+        $extra = ['__quick' => true];
+        if (!self::isPrivate($m) && isset($m['message_id'])) {
+            $extra['reply_parameters'] = self::replyParams($m);
+        }
+        $chat = $m['chat']['id'];
+        if ($photo !== null && mb_strlen($text) <= 1024) {
+            TG::photo($chat, $photo, $text, $markup, $extra);
+            return;
+        }
+        TG::send($chat, $text, $markup, $extra);
+    }
+
     public static function send(array $m, string $text, $markup = false, ?string $photo = null, bool $reply = true, ?string $preview = null): ?array
     {
         if ($markup === false) {
@@ -96,10 +113,28 @@ final class Bot
         }
     }
 
+    public static function chatAdmins(int $chat): ?array
+    {
+        $v = Cache::get("admins:$chat", $hit);
+        if ($hit) {
+            return $v;
+        }
+        $r = TG::api('getChatAdministrators', ['chat_id' => $chat]);
+        if (!is_array($r)) {
+            return null;
+        }
+        $ids = array_values(array_filter(array_map(fn($a) => (int)($a['user']['id'] ?? 0), $r)));
+        Cache::set("admins:$chat", $ids, 600);
+        return $ids;
+    }
+
     public static function isChatAdmin(int $chat, int $user): bool
     {
         if (Config::isAdmin($user)) {
             return true;
+        }
+        if ($chat < 0 && ($ids = self::chatAdmins($chat)) !== null) {
+            return in_array($user, $ids, true);
         }
         return Cache::remember("adm:$chat:$user", 300, function () use ($chat, $user) {
             $m = TG::api('getChatMember', ['chat_id' => $chat, 'user_id' => $user]);
@@ -480,6 +515,9 @@ final class Bot
             self::onJoin((int)$e['chat']['id'], $user);
         }
         Cache::forget("adm:{$e['chat']['id']}:{$user['id']}");
+        if (in_array($old, ['administrator', 'creator'], true) || in_array($new, ['administrator', 'creator'], true)) {
+            Cache::forget("admins:{$e['chat']['id']}");
+        }
     }
 
     private static function onJoin(int $chat, array $user): void
@@ -521,12 +559,12 @@ final class Start
             return;
         }
         TG::send($m['chat']['id'], UI::t('start_private', ['name' => UI::esc($m['from']['first_name'] ?? ''), 'bot_username' => TG::username()]),
-            UI::footer([[UI::button('btn_help', ['cb' => 'help'])]]));
+            UI::footer([[UI::button('btn_help', ['cb' => 'help'])]]), ['__quick' => true]);
     }
 
     public static function help(array $m, string $args): void
     {
-        TG::send($m['chat']['id'], UI::t('help'), UI::footer());
+        TG::send($m['chat']['id'], UI::t('help'), UI::footer(), ['__quick' => true]);
     }
 }
 
@@ -555,10 +593,10 @@ final class Groups
     {
         $chat = (int)$m['chat']['id'];
         if (!Bot::isChatAdmin($chat, $m['from']['id'])) {
-            Bot::send($m, UI::t('only_group_admins'), null);
+            Bot::reply($m, UI::t('only_group_admins'), null);
             return;
         }
-        Bot::send($m, UI::t('group_settings', ['title' => UI::esc($m['chat']['title'] ?? '')]), self::kb($chat));
+        Bot::reply($m, UI::t('group_settings', ['title' => UI::esc($m['chat']['title'] ?? '')]), self::kb($chat));
     }
 
     public static function toggle(array $cq, string $key): void

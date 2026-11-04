@@ -17,10 +17,10 @@ final class Tools
                 'toman' => $rate ? Fmt::toman($q['price'] * $rate) : '—', 'change' => $sym !== 'USDT' ? Fmt::badge($q['change']) : '']);
         }
         if (!$lines) {
-            Bot::send($m, UI::t('price_unavailable'));
+            Bot::reply($m, UI::t('price_unavailable'));
             return;
         }
-        Bot::send($m, UI::t('market', ['lines' => implode("\n", $lines), 'usdt_toman' => $rate ? Fmt::toman($rate) : null, 'time' => Fmt::now()]));
+        Bot::reply($m, UI::t('market', ['lines' => implode("\n", $lines), 'usdt_toman' => $rate ? Fmt::toman($rate) : null, 'time' => Fmt::now()]));
     }
 
     public static function answerAmount(array $m, float $amount, string $unit, bool $silent): bool
@@ -32,7 +32,7 @@ final class Tools
         $a = Convert::run($amount, $r[0], $r[1]);
         if (!$a) {
             if (!$silent) {
-                Bot::send($m, UI::t('currency_not_found', ['query' => UI::esc($unit)]));
+                Bot::reply($m, UI::t('currency_not_found', ['query' => UI::esc($unit)]));
                 return true;
             }
             return false;
@@ -54,8 +54,12 @@ final class Tools
                 error_log('card: ' . $e->getMessage());
             }
         }
+        if (!empty($fid)) {
+            Bot::reply($m, $a['text'], false, $fid);
+            return;
+        }
         $sent = Bot::send($m, $a['text'], false, $photo ?: null);
-        if ($fk && !empty($sent['photo']) && !isset($fid)) {
+        if ($fk && !empty($sent['photo'])) {
             $big = end($sent['photo']);
             if (!empty($big['file_id'])) {
                 Cache::set($fk, $big['file_id'], 3 * 86400);
@@ -65,12 +69,12 @@ final class Tools
 
     public static function premium(array $m): void
     {
-        Bot::send($m, Convert::premiumText() ?? UI::t('price_unavailable'));
+        Bot::reply($m, Convert::premiumText() ?? UI::t('price_unavailable'));
     }
 
     public static function starsBoard(array $m): void
     {
-        Bot::send($m, Convert::starsText() ?? UI::t('price_unavailable'));
+        Bot::reply($m, Convert::starsText() ?? UI::t('price_unavailable'));
     }
 
     public static function price(array $m, string $args): void
@@ -87,7 +91,7 @@ final class Tools
     {
         $f = Chain::extract($args, false);
         if (!$f) {
-            Bot::send($m, UI::t('help'));
+            Bot::reply($m, UI::t('help'));
             return;
         }
         self::runChecker($m, $f[0], $f[1]);
@@ -265,7 +269,7 @@ final class Tools
         $r = $m['reply_to_message'] ?? null;
         if ($r && isset($r['sender_chat'])) {
             $c = $r['sender_chat'];
-            Bot::send($m, UI::t('uid', ['name' => UI::esc($c['title'] ?? ''), 'id' => $c['id'], 'username' => UI::uname($c['username'] ?? null)]),
+            Bot::reply($m, UI::t('uid', ['name' => UI::esc($c['title'] ?? ''), 'id' => $c['id'], 'username' => UI::uname($c['username'] ?? null)]),
                 UI::kb([[UI::button('btn_copy_id', ['copy' => (string)$c['id']])]]));
             return;
         }
@@ -273,7 +277,7 @@ final class Tools
         if (!$t) {
             return;
         }
-        Bot::send($m, UI::t('uid', ['name' => UI::mention($t), 'id' => $t['id'], 'username' => UI::uname($t['username'] ?? null)]),
+        Bot::reply($m, UI::t('uid', ['name' => UI::mention($t), 'id' => $t['id'], 'username' => UI::uname($t['username'] ?? null)]),
             UI::kb([[UI::button('btn_copy_id', ['copy' => (string)$t['id']])]]));
     }
 
@@ -299,14 +303,14 @@ final class Tools
         }
         $items = array_slice($items, 0, 25, true);
         if (!$items) {
-            Bot::send($m, UI::t('emoji_none'));
+            Bot::reply($m, UI::t('emoji_none'));
             return;
         }
         $parts = [];
         foreach ($items as $id => $char) {
             $parts[] = UI::t('emoji_item', ['emoji' => '<tg-emoji emoji-id="' . $id . '">' . UI::esc($char) . '</tg-emoji>', 'id' => $id]);
         }
-        Bot::send($m, mb_substr(implode("\n", $parts), 0, 4000));
+        Bot::reply($m, mb_substr(implode("\n", $parts), 0, 4000));
     }
 
     public static function account(array $m, string $args = ''): void
@@ -352,7 +356,7 @@ final class Tools
                 return;
             }
         }
-        Bot::send($m, $text);
+        Bot::reply($m, $text);
     }
 
     public static function answerCalc(array $m, string $expr): bool
@@ -363,7 +367,7 @@ final class Tools
             return false;
         }
         $shown = str_replace(['**', '*', '/'], ['^', '×', '÷'], $expr);
-        Bot::send($m, UI::t('calc_result', ['expr' => UI::esc($shown), 'result' => Calc::format($v)]), null);
+        Bot::reply($m, UI::t('calc_result', ['expr' => UI::esc($shown), 'result' => Calc::format($v)]), null);
         return true;
     }
 
@@ -371,7 +375,7 @@ final class Tools
     {
         $e = Parse::expression($args);
         if (!$e || !self::answerCalc($m, $e)) {
-            Bot::send($m, UI::t('calc_result', ['expr' => UI::esc($args), 'result' => '؟']), null);
+            Bot::reply($m, UI::t('calc_result', ['expr' => UI::esc($args), 'result' => '؟']), null);
         }
     }
 
@@ -380,7 +384,7 @@ final class Tools
         $src = $m['reply_to_message'] ?? null;
         $text = $src ? ($src['text'] ?? $src['caption'] ?? '') : '';
         if (trim($text) === '') {
-            Bot::send($m, UI::t('translate_need_reply'), null);
+            Bot::reply($m, UI::t('translate_need_reply'), null);
             return;
         }
         $rows = [];

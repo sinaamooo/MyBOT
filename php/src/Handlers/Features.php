@@ -62,12 +62,12 @@ final class GiftsH
         if (Cache::throttled('giftcmd:' . ($m['from']['id'] ?? 0), 8)) {
             return;
         }
+        TG::api('sendChatAction', ['chat_id' => $m['chat']['id'], 'action' => 'upload_photo', '__quick' => true]);
         $t = self::target($m, $args);
         if (!$t) {
             Bot::send($m, UI::t('gift_user_unknown'));
             return;
         }
-        TG::api('sendChatAction', ['chat_id' => $m['chat']['id'], 'action' => 'upload_photo']);
         self::portfolio($m, $t);
     }
 

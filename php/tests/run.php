@@ -52,6 +52,8 @@ TG::$fake = function (string $method, array $p) {
             return ['ok' => true, 'result' => ['status' => $u == 777 ? 'administrator' : 'member', 'user' => ['id' => $u, 'is_bot' => false, 'first_name' => 'u']]];
         case 'getChat':
             return ['ok' => false, 'description' => 'Bad Request: chat not found'];
+        case 'getChatAdministrators':
+            return ['ok' => true, 'result' => [['status' => 'creator', 'user' => ['id' => 777, 'is_bot' => false, 'first_name' => 'adm']]]];
         case 'getUserProfilePhotos':
             return ['ok' => true, 'result' => ['total_count' => 0, 'photos' => []]];
         case 'getUserGifts':
@@ -114,6 +116,18 @@ function mt_fake(): void
         }
         throw new MTError(400, 'METHOD_INVALID');
     };
+}
+
+function hook_run(array $update): ?array
+{
+    $GLOBALS['hook_body'] = null;
+    TG::$hookSink = function ($b) { $GLOBALS['hook_body'] = $b; };
+    TG::$hook = true;
+    Bot::handle($update);
+    TG::closeHook();
+    TG::$hookSink = null;
+    $b = $GLOBALS['hook_body'];
+    return $b && $b !== 'ok' ? json_decode($b, true) : null;
 }
 
 $pass = 0;
@@ -414,6 +428,25 @@ feed(msg('/gift @nobody_x', -500, 72, null, null, 'Sina'));
 check(!sent(), 'gift command throttled');
 MTProto::$fake = null;
 Config::set('API_ID', '');
+
+reset_calls();
+$h = hook_run(['update_id' => ++$GLOBALS['mid'], 'message' => msg('200+79', 9, 9)]);
+check(($h['method'] ?? '') === 'sendMessage' && str_contains($h['text'] ?? '', '279') && !sent(['sendMessage']), 'quick reply via webhook');
+reset_calls();
+$h = hook_run(['update_id' => ++$GLOBALS['mid'], 'callback_query' => ['id' => 'cbq', 'from' => ['id' => 9, 'is_bot' => false, 'first_name' => 'x'], 'data' => 'noop',
+    'message' => ['message_id' => 3, 'chat' => ['id' => 9, 'type' => 'private'], 'date' => time()]]]);
+check(($h['method'] ?? '') === 'answerCallbackQuery' && ($h['callback_query_id'] ?? '') === 'cbq', 'callback answer via webhook');
+reset_calls();
+$h = hook_run(['update_id' => ++$GLOBALS['mid'], 'message' => msg('733 درهم', 9, 9)]);
+check($h === null && sent(['sendPhoto']), 'card upload is a normal call');
+reset_calls();
+$h = hook_run(['update_id' => ++$GLOBALS['mid'], 'message' => msg('733 درهم', 9, 9)]);
+check(($h['method'] ?? '') === 'sendPhoto' && str_starts_with((string)($h['photo'] ?? ''), 'AgAC') && !sent(['sendPhoto']), 'cached card via webhook');
+Cache::forget('admins:-4400');
+reset_calls();
+feed(msg('سلام', -4400, 801));
+feed(msg('خوبی', -4400, 802));
+check(count(sent(['getChatAdministrators'])) === 1 && !sent(['getChatMember']), 'admin list cached per chat');
 
 $GLOBALS['http']['cardinfo.test'] = ['result' => ['name' => 'علی رضایی']];
 reset_calls();

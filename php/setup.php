@@ -65,3 +65,5 @@ $group = [
 echo 'commands: ' . (TG::api('setMyCommands', ['commands' => $private, 'scope' => ['type' => 'all_private_chats']]) && TG::api('setMyCommands', ['commands' => $group, 'scope' => ['type' => 'all_group_chats']]) ? 'OK' : 'FAILED') . "\n";
 $e = UI::validateEmoji();
 echo 'premium emoji: ' . ($e ? $e[0] . ' ok, ' . $e[1] . ' invalid' : 'check failed') . "\n";
+$opc = function_exists('opcache_get_status') ? @opcache_get_status(false) : false;
+echo 'opcache: ' . (!empty($opc['opcache_enabled']) ? 'ON' : 'OFF') . "\n";

@@ -122,8 +122,41 @@ final class Http
 final class TG
 {
     public static $fake = null;
+    public static $hookSink = null;
+    public static bool $hook = false;
     public static ?string $lastError = null;
     private static $ch = null;
+    const QUICK = ['sendMessage', 'sendPhoto', 'answerCallbackQuery', 'sendChatAction', 'editMessageText', 'editMessageReplyMarkup'];
+
+    public static function closeHook(?array $call = null): void
+    {
+        if (!self::$hook) {
+            return;
+        }
+        self::$hook = false;
+        $body = $call !== null ? json_encode($call, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : 'ok';
+        if (self::$hookSink) {
+            (self::$hookSink)($body);
+            return;
+        }
+        if (!headers_sent()) {
+            http_response_code(200);
+            header('Content-Type: ' . ($call !== null ? 'application/json' : 'text/plain'));
+            header('Content-Length: ' . strlen($body));
+            header('Connection: close');
+        }
+        echo $body;
+        if (function_exists('fastcgi_finish_request')) {
+            fastcgi_finish_request();
+        } elseif (function_exists('litespeed_finish_request')) {
+            litespeed_finish_request();
+        } else {
+            while (ob_get_level() > 0) {
+                ob_end_flush();
+            }
+            flush();
+        }
+    }
     const SKIP = ['not modified', 'not found', 'rights', 'replied message', 'too long', "can't be edited", 'chat_write_forbidden', 'blocked', 'kicked'];
 
     private static function hasPremium(array $p): bool
@@ -235,6 +268,22 @@ final class TG
             }
             unset($row);
         }
+        $quick = !empty($p['__quick']);
+        unset($p['__quick']);
+        if ($quick && self::$hook && in_array($method, self::QUICK, true)) {
+            $simple = true;
+            foreach ($p as $v) {
+                if (is_array($v) && isset($v['__bytes'])) {
+                    $simple = false;
+                }
+            }
+            if ($simple) {
+                self::closeHook(['method' => $method] + array_filter($p, fn($v) => $v !== null));
+                self::$lastError = null;
+                return true;
+            }
+        }
+        self::closeHook();
         $r = self::raw($method, $p);
         if (empty($r['ok'])) {
             $desc = strtolower((string)($r['description'] ?? ''));
@@ -288,7 +337,7 @@ final class TG
 
     public static function answer(string $id, ?string $text = null, bool $alert = false): void
     {
-        self::api('answerCallbackQuery', ['callback_query_id' => $id, 'text' => $text, 'show_alert' => $alert]);
+        self::api('answerCallbackQuery', ['callback_query_id' => $id, 'text' => $text, 'show_alert' => $alert ?: null, '__quick' => true]);
     }
 
     public static function photo(int|string $chat, $photo, ?string $caption = null, ?array $markup = null, array $extra = [])
