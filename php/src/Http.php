@@ -139,6 +139,9 @@ final class TG
             (self::$hookSink)($body);
             return;
         }
+        while (ob_get_level() > 0) {
+            ob_end_clean();
+        }
         if (!headers_sent()) {
             http_response_code(200);
             header('Content-Type: ' . ($call !== null ? 'application/json' : 'text/plain'));

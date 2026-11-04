@@ -7,6 +7,9 @@ Options -Indexes
     <Files "setup.php">
         Require all granted
     </Files>
+    <Files "check.php">
+        Require all granted
+    </Files>
 </IfModule>
 <IfModule !mod_authz_core.c>
     Order deny,allow
@@ -15,6 +18,9 @@ Options -Indexes
         Allow from all
     </Files>
     <Files "setup.php">
+        Allow from all
+    </Files>
+    <Files "check.php">
         Allow from all
     </Files>
 </IfModule>

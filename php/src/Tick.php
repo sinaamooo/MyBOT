@@ -1,0 +1,53 @@
+<?php
+
+final class Tick
+{
+    public static function run(): bool
+    {
+        $lock = @fopen(sys_get_temp_dir() . '/mybot_cron_' . md5(Config::$root) . '.lock', 'c');
+        if (!$lock || !flock($lock, LOCK_EX | LOCK_NB)) {
+            return false;
+        }
+        try {
+            DB::kvSet('last_tick', time());
+            Bot::processDeletes();
+            try {
+                Whales::run();
+            } catch (Throwable $e) {
+                error_log('tick whales: ' . $e->getMessage());
+            }
+            try {
+                Market::refresh([], true, true);
+                Convert::prerender();
+            } catch (Throwable $e) {
+                error_log('tick market: ' . $e->getMessage());
+            }
+            try {
+                if (!FileCache::has('gift_dataset', 540)) {
+                    FileCache::forget();
+                    Gifts::dataset();
+                    Gifts::floorsDaysAgo();
+                }
+            } catch (Throwable $e) {
+                error_log('tick gifts: ' . $e->getMessage());
+            }
+            if (time() - (int)DB::kvGet('emoji_checked_at', 0) > 86400) {
+                UI::validateEmoji();
+            }
+            if (time() - (int)DB::kvGet('last_cleanup', 0) > 6 * 3600) {
+                DB::cleanup();
+                DB::kvSet('last_cleanup', time());
+            }
+            Bot::processDeletes();
+        } finally {
+            flock($lock, LOCK_UN);
+            fclose($lock);
+        }
+        return true;
+    }
+
+    public static function due(int $every = 60): bool
+    {
+        return time() - (int)DB::kvGet('last_tick', 0) >= $every && !Cache::throttled('tick_try', $every);
+    }
+}
