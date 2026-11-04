@@ -451,6 +451,7 @@ final class Extras
             return;
         }
         Bot::send($m, UI::t('arz_board', ['lines' => implode("\n", $lines), 'source' => $market ? 'tgju.org' : 'نرخ جهانی × تتر', 'time' => Fmt::now()]));
+        Tools::react($m);
     }
 
     private static function err(int $code): string

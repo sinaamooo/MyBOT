@@ -21,6 +21,7 @@ final class Tools
             return;
         }
         Bot::reply($m, UI::t('market', ['lines' => implode("\n", $lines), 'usdt_toman' => $rate ? Fmt::toman($rate) : null, 'time' => Fmt::now()]));
+        self::react($m);
     }
 
     public static function answerAmount(array $m, float $amount, string $unit, bool $silent): bool
@@ -56,9 +57,11 @@ final class Tools
         }
         if (!empty($fid)) {
             Bot::reply($m, $a['text'], false, $fid);
+            self::react($m);
             return;
         }
         $sent = Bot::send($m, $a['text'], false, $photo ?: null);
+        self::react($m);
         if ($fk && !empty($sent['photo'])) {
             $big = end($sent['photo']);
             if (!empty($big['file_id'])) {
@@ -67,14 +70,38 @@ final class Tools
         }
     }
 
+    public static function react(array $m): void
+    {
+        if (empty($m['message_id']) || !empty($m['from']['is_bot'])) {
+            return;
+        }
+        $chat = $m['chat']['id'];
+        $list = array_values(array_unique(array_filter([Config::get('PRICE_REACTION', '🩵'), '❤'])));
+        $start = (int)(Cache::get('react_idx:' . $chat) ?? 0);
+        for ($i = $start; $i < count($list); $i++) {
+            if (TG::api('setMessageReaction', ['chat_id' => $chat, 'message_id' => $m['message_id'], 'reaction' => [['type' => 'emoji', 'emoji' => $list[$i]]]]) !== null) {
+                if ($i !== $start) {
+                    Cache::set('react_idx:' . $chat, $i, 86400);
+                }
+                return;
+            }
+            if (!str_contains(strtolower((string)TG::$lastError), 'reaction')) {
+                return;
+            }
+        }
+        Cache::set('react_idx:' . $chat, count($list), 3600);
+    }
+
     public static function premium(array $m): void
     {
         Bot::reply($m, Convert::premiumText() ?? UI::t('price_unavailable'));
+        self::react($m);
     }
 
     public static function starsBoard(array $m): void
     {
         Bot::reply($m, Convert::starsText() ?? UI::t('price_unavailable'));
+        self::react($m);
     }
 
     public static function price(array $m, string $args): void

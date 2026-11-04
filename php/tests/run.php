@@ -54,6 +54,11 @@ TG::$fake = function (string $method, array $p) {
             return ['ok' => false, 'description' => 'Bad Request: chat not found'];
         case 'getChatAdministrators':
             return ['ok' => true, 'result' => [['status' => 'creator', 'user' => ['id' => 777, 'is_bot' => false, 'first_name' => 'adm']]]];
+        case 'setMessageReaction':
+            if (($p['reaction'][0]['emoji'] ?? '') === '🩵' && !empty($GLOBALS['reject_blue'])) {
+                return ['ok' => false, 'description' => 'Bad Request: REACTION_INVALID'];
+            }
+            return ['ok' => true, 'result' => true];
         case 'getUserProfilePhotos':
             return ['ok' => true, 'result' => ['total_count' => 0, 'photos' => []]];
         case 'getUserGifts':
@@ -513,6 +518,23 @@ cb('gn:c:' . $mg['id'], 501, -7100);
 check(abs(Diamonds::points(501) - ($b0 - 100 + $mg2['reward'])) < 0.001 && Games::load($mg['id'])['status'] === 'cashed', 'mine cashout');
 cb('gn:p:' . $mg['id'] . ':' . $safe[2], 777, -7100);
 check(str_contains(json_encode(end($GLOBALS['calls']), JSON_UNESCAPED_UNICODE), 'مال تو نیست'), 'mine not yours');
+
+reset_calls();
+feed(msg('600 درهم', -8800, 61));
+$rx = array_values(array_filter($GLOBALS['calls'], fn($c) => $c[0] === 'setMessageReaction'));
+$sidx = array_search('sendPhoto', array_column($GLOBALS['calls'], 0), true);
+$ridx = array_search('setMessageReaction', array_column($GLOBALS['calls'], 0), true);
+check($rx && $rx[0][1]['reaction'][0]['emoji'] === '🩵' && $sidx !== false && $ridx > $sidx, 'blue heart reaction after price reply');
+$GLOBALS['reject_blue'] = true;
+reset_calls();
+feed(msg('601 درهم', -8801, 61));
+$rx = array_values(array_filter($GLOBALS['calls'], fn($c) => $c[0] === 'setMessageReaction'));
+check(count($rx) === 2 && $rx[1][1]['reaction'][0]['emoji'] === '❤', 'reaction falls back to red heart');
+reset_calls();
+feed(msg('602 درهم', -8801, 61));
+$rx = array_values(array_filter($GLOBALS['calls'], fn($c) => $c[0] === 'setMessageReaction'));
+check(count($rx) === 1 && $rx[0][1]['reaction'][0]['emoji'] === '❤', 'fallback remembered per chat');
+$GLOBALS['reject_blue'] = false;
 
 $GLOBALS['http']['cardinfo.test'] = ['result' => ['name' => 'علی رضایی']];
 reset_calls();
