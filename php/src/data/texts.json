@@ -390,5 +390,193 @@
  "stars_line": {
   "text": "⭐️    <b>{stars}</b> استارز  <code>{toman}</code> تومان",
   "desc": "هر خط استارز ({stars} {toman})"
+ },
+ "dm_win": {
+  "text": "🔷 <b>الماس!</b> {name}\n<blockquote>⚡️    +{reward} الماس\n💰    موجودی: {points}\n🏅    سطح: {level}</blockquote>\n🏆 <b>لول آپ!</b> به سطح {new_level} رسیدی!",
+  "desc": "الماس زدن ({name} {reward} {points} {level} {total} {new_level})"
+ },
+ "dm_wait": {
+  "text": "⏳ {name}، هنوز زود است!\n⌛️ {m} دقیقه و {s} ثانیه دیگر می‌توانی الماس بزنی.",
+  "desc": "زمان انتظار الماس ({name} {m} {s})"
+ },
+ "dm_me": {
+  "text": "🔷 <b>{name}</b>\n<blockquote>💎    الماس: <b>{points}</b>\n🏅    سطح: <b>{level}</b>\n🔄    تعداد الماس زدن: <b>{total}</b>\n📈    تا سطح بعد: <b>{left}</b></blockquote>",
+  "desc": "الماس من ({name} {points} {level} {total} {left})"
+ },
+ "dm_me_none": {
+  "text": "🔷 هنوز الماسی نزده‌ای. در گروه بنویس <code>الماس</code>",
+  "desc": "هنوز الماس ندارد"
+ },
+ "dm_top": {
+  "text": "🏆 <b>برترین‌های الماس</b>\n<blockquote>{lines}</blockquote>",
+  "desc": "برترین‌ها ({lines})"
+ },
+ "dm_top_line": {
+  "text": "{rank}. {name}  <b>{points}</b> الماس  (سطح {level})",
+  "desc": "هر خط برترین‌ها ({rank} {name} {points} {level})"
+ },
+ "dm_top_none": {
+  "text": "🔷 هنوز کسی الماس نزده است.",
+  "desc": "برترین خالی"
+ },
+ "dm_jail_hit": {
+  "text": "🚨 {name} به دام افتاد و باید بره زندان!\n👥 {need} نفر از اعضا باید تاییدش کنن.",
+  "desc": "شروع زندان ({name} {need})"
+ },
+ "dm_jail_prog": {
+  "text": "🚨 {name} به دام افتاد و باید بره زندان!\n✅ {got} از {need} نفر تایید کردن.",
+  "desc": "پیشرفت زندان ({name} {got} {need})"
+ },
+ "dm_jail_done": {
+  "text": "🔒 {name} به زندان افتاد!\n⏳ به مدت {dur} نمی‌تواند الماس بزند.",
+  "desc": "زندانی شد ({name} {dur})"
+ },
+ "dm_jail_self": {
+  "text": "نمی‌تونی خودتو بفرستی زندان",
+  "desc": "زندان خود"
+ },
+ "dm_jail_twice": {
+  "text": "قبلا تایید کرده بودی.",
+  "desc": "تایید تکراری"
+ },
+ "dm_jail_wait": {
+  "text": "⛔️ {name}، الان زندانی‌ای!\n⏳ {m} دقیقه و {s} ثانیه دیگر آزاد می‌شوی.",
+  "desc": "در زندان ({name} {m} {s})"
+ },
+ "gm_group_only": {
+  "text": "🎯 بازی‌ها فقط داخل گروه کار می‌کنند.",
+  "desc": "بازی فقط گروه"
+ },
+ "gm_dooz_how": {
+  "text": "🎯 <code>دوز 100</code>  شرط بین {min} تا {max} الماس",
+  "desc": "راهنمای دوز ({min} {max})"
+ },
+ "gm_mine_how": {
+  "text": "⚡️ <code>مین 100</code>  ورودی بین {min} تا {max} الماس",
+  "desc": "راهنمای مین ({min} {max})"
+ },
+ "gm_dooz_open": {
+  "text": "🎯 <b>دوز {stake} الماسی</b>\n<blockquote>👤    سازنده: {host}\n🏆    جایزه برنده: <b>{prize}</b> الماس\n📋    مالیات: <b>{tax}</b> الماس</blockquote>\nنفر دوم که روی پیوستن بزند، صفحه دوز باز می‌شود.",
+  "desc": "دوز باز ({stake} {host} {prize} {tax})"
+ },
+ "gm_dooz_turn": {
+  "text": "🎯 <b>دوز {stake} الماسی</b>\n<blockquote>{p1}\n{p2}\n🏆    جایزه: <b>{prize}</b> الماس</blockquote>\n⏳ نوبت: {turn}",
+  "desc": "صفحه دوز ({stake} {p1} {p2} {prize} {turn})"
+ },
+ "gm_dooz_win": {
+  "text": "🏆 <b>نتیجه بازی مشخص شد</b>\n<blockquote>👑    برنده: {wname}\n❌    بازنده: {lname}\n💎    جایزه: <b>{prize}</b> الماس</blockquote>",
+  "desc": "برنده دوز ({wname} {lname} {prize})"
+ },
+ "gm_dooz_draw": {
+  "text": "⚖️ <b>مساوی شد</b>\nشرط هر دو نفر برگشت.",
+  "desc": "دوز مساوی"
+ },
+ "gm_cancelled": {
+  "text": "❌ <b>بازی لغو شد</b>\nشرط برگشت.",
+  "desc": "لغو دوز"
+ },
+ "gm_expired": {
+  "text": "⏳ <b>کسی وارد نشد</b>\nشرط به سازنده برگشت.",
+  "desc": "انقضای دوز"
+ },
+ "gm_idle": {
+  "text": "⏳ <b>بازی نیمه‌کاره ماند</b>\nشرط هر دو نفر برگشت.",
+  "desc": "دوز نیمه‌کاره"
+ },
+ "gm_low": {
+  "text": "❌ الماس کافی نداری.\n💎 موجودی تو: <b>{points}</b> · لازم: <b>{need}</b>",
+  "desc": "الماس کم ({points} {need})"
+ },
+ "gm_bad_stake": {
+  "text": "❌ شرط باید بین <b>{min}</b> و <b>{max}</b> الماس باشد.",
+  "desc": "شرط نامعتبر ({min} {max})"
+ },
+ "gm_open_max": {
+  "text": "⛔️ شما <b>{n}</b> بازی باز دارید.",
+  "desc": "بازی باز زیاد ({n})"
+ },
+ "gm_not_yours": {
+  "text": "این بازی مال تو نیست.",
+  "desc": "بازی مال تو نیست"
+ },
+ "gm_not_turn": {
+  "text": "نوبت تو نیست.",
+  "desc": "نوبت تو نیست"
+ },
+ "gm_taken": {
+  "text": "این خانه پر است.",
+  "desc": "خانه پر"
+ },
+ "gm_gone": {
+  "text": "این بازی تمام شده.",
+  "desc": "بازی تمام شده"
+ },
+ "gm_already": {
+  "text": "تو خودت داخل این بازی هستی، منتظر حریف بمان.",
+  "desc": "داخل بازی هستی"
+ },
+ "gm_bal_pop": {
+  "text": "💎 موجودی {name}: {points} الماس",
+  "desc": "پاپ‌آپ موجودی ({name} {points})"
+ },
+ "gm_mine_preview": {
+  "text": "⚡️ <b>MINE FIELD</b>\n🎯 یک میدان ۳×۳: هشت الماس، یک مین.\n<blockquote>💰    ورودی: <code>{entry}</code>\n💎    خانه امن: جایزه بیشتر\n🔥    مین: بازی تمام</blockquote>\nروی «پیوستن» بزن.",
+  "desc": "پیش‌نمایش مین ({entry})"
+ },
+ "gm_mine_active": {
+  "text": "⚡️ <b>MINE FIELD</b>\n<blockquote>👤    {name}\n🏅    مرحله: <b>{picks}</b> از ۸\n💰    ورودی: <code>{entry}</code>\n💎    جایزه: <b>{reward}</b>\n📈    ضریب: <b>{mult}×</b>\n🛡    حفاظت: {shield}</blockquote>\n{progress}\n🎯 خانه بعدی: <b>+{next}</b>",
+  "desc": "بازی مین ({name} {picks} {progress} {entry} {reward} {mult} {shield} {next})"
+ },
+ "gm_shield_on": {
+  "text": "فعال",
+  "desc": "سپر فعال"
+ },
+ "gm_shield_off": {
+  "text": "{n} خانه دیگر",
+  "desc": "سپر غیرفعال ({n})"
+ },
+ "gm_mine_lost": {
+  "text": "🔥 <b>GAME OVER</b>\nروی مین زدی.\n<blockquote>🎯    خانه‌های امن: <b>{picks}</b>\n💸    از دست رفت: <b>{entry}</b></blockquote>",
+  "desc": "باخت مین ({picks} {entry})"
+ },
+ "gm_mine_protected": {
+  "text": "🛡 <b>سپر فعال شد!</b>\n🔥 روی مین زدی، بعد از <b>{picks}</b> خانه امن.\n<blockquote>💸    ورودی و جایزه این دور برنگشت\n🎯    خانه‌های امن: <b>{picks}</b></blockquote>",
+  "desc": "مین با سپر ({picks})"
+ },
+ "gm_mine_cashout": {
+  "text": "🏆 <b>نقد کردی!</b>\n<blockquote>💎    جایزه: <b>+{reward}</b>\n👛    موجودی: <b>{wallet}</b></blockquote>",
+  "desc": "نقد کردن مین ({reward} {wallet})"
+ },
+ "gm_mine_expired": {
+  "text": "⏳ <b>بازی منقضی شد</b>",
+  "desc": "انقضای مین"
+ },
+ "gm_mine_cancelled": {
+  "text": "❌ بازی لغو شد. چیزی از شما کم نشد.",
+  "desc": "لغو مین"
+ },
+ "gm_mine_low": {
+  "text": "❌ الماس کافی نداری.\n<blockquote>💎    لازم: <b>{need}</b>\n👛    موجودی تو: <b>{wallet}</b></blockquote>",
+  "desc": "الماس کم برای مین ({need} {wallet})"
+ },
+ "gm_mine_pop_low": {
+  "text": "الماس کافی نداری، {need} الماس لازم است.",
+  "desc": "پاپ‌آپ الماس کم ({need})"
+ },
+ "gm_mine_bad": {
+  "text": "❌ مبلغ باید بین {min} تا {max} باشد.",
+  "desc": "مبلغ مین نامعتبر ({min} {max})"
+ },
+ "gm_mine_busy": {
+  "text": "⏳ یک بازی باز داری.",
+  "desc": "مین باز داری"
+ },
+ "gm_mine_already": {
+  "text": "این خانه قبلا انتخاب شده.",
+  "desc": "خانه تکراری"
+ },
+ "gm_mine_need_join": {
+  "text": "اول روی «پیوستن» بزن.",
+  "desc": "اول پیوستن"
  }
 }

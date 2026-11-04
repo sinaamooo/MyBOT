@@ -651,6 +651,9 @@ final class TextRouter
             }
             return;
         }
+        if ($on('games') && Games::text($m)) {
+            return;
+        }
         if (($l = Gifts::parseLink($text)) && $on('gifts')) {
             GiftsH::link($m, ...$l);
             return;

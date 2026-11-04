@@ -107,6 +107,7 @@ final class Admin
             [UI::raw('🔍 جستجوی کاربر', 'adm:find')],
             [UI::raw('⛔️ مسدود / آزاد', 'adm:ban', 'danger'), UI::raw('⛔️ حذف کاربر', 'adm:del', 'danger')],
             [UI::raw('📨 پیام به کاربر', 'adm:pm'), UI::raw('📢 ارسال همگانی', 'adm:bcmenu')],
+            [UI::raw('💎 الماس کاربر', 'adm:dmadj', 'primary'), UI::raw('🏆 برترین‌های الماس', 'adm:dmtop')],
             [UI::raw('🔗 دکمه‌های زیر پیام‌ها', 'adm:startbtn', 'success')],
         ]);
     }
@@ -392,6 +393,13 @@ final class Admin
                 TG::answer($cq['id']);
                 self::startView($chat, $cq);
                 return;
+            case 'dmadj':
+                self::wait($cq, 'dmadj', "💎 کاربر و مقدار را بفرستید:\n<code>@username +100</code> برای افزایش\n<code>@username -100</code> برای کم کردن\nبه‌جای یوزرنیم، آیدی عددی هم قبول است.");
+                return;
+            case 'dmtop':
+                TG::answer($cq['id']);
+                self::editOrSend($cq, Diamonds::topText(), UI::kb([self::back()]));
+                return;
             case 'xbadd':
                 self::wait($cq, 'xbadd', "👥 متن و لینک دکمه را در دو خط بفرستید:\n<code>💎 کانال دوم</code>\n<code>https://t.me/yourchannel</code>\n\nایموجی اول متن خودکار پریمیوم می‌شود.");
                 return;
@@ -665,6 +673,30 @@ final class Admin
                 State::clear($uid);
                 TG::send($chat, '✅ ذخیره شد.');
                 self::startView($chat);
+                return;
+            case 'dmadj':
+                $raw = trim(str_replace(['−', 'ـ', '–', '—', '٬', ','], ['-', '-', '-', '-', '', ''], Fmt::en($text)));
+                if (!preg_match('/^(@?[A-Za-z0-9_]{3,32}|\d+)\s*([+-])\s*(\d+(?:\.\d+)?)$/u', $raw, $mm) && !preg_match('/^([+-])\s*(\d+(?:\.\d+)?)\s+(@?[A-Za-z0-9_]{3,32}|\d+)$/u', $raw, $mm2)) {
+                    TG::send($chat, '⚠️ مثال: <code>@username +100</code> یا <code>@username -50</code>');
+                    return;
+                }
+                if (isset($mm2)) {
+                    $mm = [0, $mm2[3], $mm2[1], $mm2[2]];
+                }
+                $who = $mm[1];
+                $id = ctype_digit($who) ? (int)$who : null;
+                if ($id === null) {
+                    $row = DB::userByUsername($who) ?? DB::one('SELECT id FROM diamonds WHERE LOWER(username)=? LIMIT 1', [strtolower(ltrim($who, '@'))]);
+                    $id = $row ? (int)$row['id'] : null;
+                }
+                if (!$id) {
+                    TG::send($chat, '⚠️ این کاربر در دیتابیس ربات نیست. آیدی عددی‌اش را بفرستید.');
+                    return;
+                }
+                $delta = (float)$mm[3] * ($mm[2] === '-' ? -1 : 1);
+                $bal = Diamonds::adjust($id, $delta);
+                State::clear($uid);
+                TG::send($chat, ($delta >= 0 ? '✅ ' . Fmt::int($delta) . ' الماس اضافه شد' : '✅ ' . Fmt::int(-$delta) . ' الماس کم شد') . "\n👤 کاربر: <code>$id</code>\n💎 موجودی جدید: <b>" . Fmt::int($bal) . '</b>', self::homeKb());
                 return;
             case 'xbadd':
                 $lines = array_values(array_filter(array_map('trim', preg_split('/\R/u', $text))));

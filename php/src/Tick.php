@@ -12,6 +12,11 @@ final class Tick
             DB::kvSet('last_tick', time());
             Bot::processDeletes();
             try {
+                Games::tick();
+            } catch (Throwable $e) {
+                error_log('tick games: ' . $e->getMessage());
+            }
+            try {
                 Market::refresh([], true, true);
                 Convert::prerender();
             } catch (Throwable $e) {

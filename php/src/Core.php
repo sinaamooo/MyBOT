@@ -86,7 +86,7 @@ final class DB
         self::$pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
         self::$pdo->exec('PRAGMA busy_timeout=8000');
         self::$pdo->exec('PRAGMA synchronous=NORMAL');
-        if ((int)self::$pdo->query('PRAGMA user_version')->fetchColumn() < 3) {
+        if ((int)self::$pdo->query('PRAGMA user_version')->fetchColumn() < 4) {
             self::$pdo->exec('PRAGMA journal_mode=WAL');
             self::$pdo->exec(<<<SQL
 CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT NOT NULL);
@@ -111,8 +111,15 @@ CREATE TABLE IF NOT EXISTS msglog (user_id INTEGER, chat_id INTEGER, hash TEXT, 
 CREATE INDEX IF NOT EXISTS idx_msglog ON msglog(user_id, ts);
 CREATE TABLE IF NOT EXISTS names (user_id INTEGER PRIMARY KEY, name TEXT, ts INTEGER);
 CREATE TABLE IF NOT EXISTS delete_queue (chat_id INTEGER, message_id INTEGER, at INTEGER);
+CREATE TABLE IF NOT EXISTS diamonds (id INTEGER PRIMARY KEY, points REAL NOT NULL DEFAULT 0, total INTEGER NOT NULL DEFAULT 0, last INTEGER NOT NULL DEFAULT 0, jailed_until INTEGER NOT NULL DEFAULT 0, name TEXT, username TEXT, joined INTEGER);
+CREATE INDEX IF NOT EXISTS idx_diamonds_points ON diamonds(points DESC);
+CREATE INDEX IF NOT EXISTS idx_diamonds_username ON diamonds(username);
+CREATE TABLE IF NOT EXISTS games (id TEXT PRIMARY KEY, kind TEXT, status TEXT, host INTEGER, chat INTEGER, created INTEGER, data TEXT);
+CREATE INDEX IF NOT EXISTS idx_games_status ON games(status, created);
+CREATE INDEX IF NOT EXISTS idx_games_host ON games(host, kind, status);
+CREATE TABLE IF NOT EXISTS jails (id TEXT PRIMARY KEY, chat INTEGER, target INTEGER, name TEXT, msg INTEGER, confirmed TEXT, created INTEGER);
 SQL);
-            self::$pdo->exec('PRAGMA user_version=3');
+            self::$pdo->exec('PRAGMA user_version=4');
         }
         self::$kv = [];
         foreach (self::$pdo->query('SELECT k, v FROM kv') as $row) {

@@ -133,5 +133,40 @@
   "text": "👑 مشاهده گیفت",
   "style": "primary",
   "desc": "دکمه مشاهده گیفت"
+ },
+ "btn_jail": {
+  "text": "🔒 بفرستش زندان",
+  "style": "danger",
+  "desc": "دکمه زندان الماس"
+ },
+ "btn_gm_join": {
+  "text": "✅ پیوستن",
+  "style": "success",
+  "desc": "دکمه پیوستن به بازی"
+ },
+ "btn_gm_cancel": {
+  "text": "❌ لغو",
+  "style": "danger",
+  "desc": "دکمه لغو بازی"
+ },
+ "btn_gm_wbal": {
+  "text": "💎 موجودی برنده",
+  "style": "success",
+  "desc": "دکمه موجودی برنده"
+ },
+ "btn_gm_lbal": {
+  "text": "💸 موجودی بازنده",
+  "style": "danger",
+  "desc": "دکمه موجودی بازنده"
+ },
+ "btn_mine_field": {
+  "text": "⚡️ MINE FIELD",
+  "style": null,
+  "desc": "سربرگ مین"
+ },
+ "btn_mine_cash": {
+  "text": "💰 برداشت جایزه",
+  "style": "success",
+  "desc": "دکمه برداشت مین"
  }
 }

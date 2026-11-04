@@ -26,7 +26,7 @@ final class Bot
         'fj:' => ['Bot', 'forceJoinCheck'], 'unmute:' => ['Bot', 'unmuteCb'], 'tr:' => ['Tools', 'translateCb'], 'gs:' => ['Groups', 'toggle'],
         'scam:' => ['Scam', 'buttons'], 'scamadm:' => ['Scam', 'decision'], 'adm:' => ['Admin', 'callback'], 'wl:' => ['Tools', 'walletButton'],
         'tt:' => ['Tools', 'transfers'], 'tp:' => ['Tools', 'transfers'], 'tj:' => ['Tools', 'tokensFile'], 'is:' => ['Extras', 'story'],
-        'ih:' => ['Extras', 'highlights'], 'hi:' => ['Extras', 'highlightItems'],
+        'ih:' => ['Extras', 'highlights'], 'hi:' => ['Extras', 'highlightItems'], 'gd:' => ['Games', 'doozCb'], 'gn:' => ['Games', 'mineCb'], 'gj:' => ['Diamonds', 'jailCb'],
     ];
 
     public static function handle(array $u): void
