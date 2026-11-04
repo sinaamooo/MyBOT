@@ -12,11 +12,6 @@ final class Tick
             DB::kvSet('last_tick', time());
             Bot::processDeletes();
             try {
-                Whales::run();
-            } catch (Throwable $e) {
-                error_log('tick whales: ' . $e->getMessage());
-            }
-            try {
                 Market::refresh([], true, true);
                 Convert::prerender();
             } catch (Throwable $e) {

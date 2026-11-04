@@ -2,7 +2,7 @@
 
 final class Tools
 {
-    const MARKET = [['💰', 'BTC'], ['💎', 'ETH'], ['💠', 'TON'], ['🔴', 'TRX'], ['🪙', 'BNB'], ['🌟', 'SOL'], ['🐸', 'DOGE'], ['🔲', 'NOT']];
+    const MARKET = [['💰', 'BTC'], ['💎', 'ETH'], ['💠', 'TON'], ['🔴', 'TRX'], ['🪙', 'BNB'], ['🌟', 'SOL'], ['🐸', 'DOGE'], ['🔲', 'NOT'], ['💵', 'USDT']];
 
     public static function market(array $m): void
     {
@@ -13,7 +13,7 @@ final class Tools
             if (!$q) {
                 continue;
             }
-            $lines[] = UI::fill(UI::template('market_line'), ['icon' => $icon, 'symbol' => $sym, 'usd' => Fmt::usd($q['price']),
+            $lines[] = UI::fill(UI::template('market_line'), ['icon' => UI::badge($sym, $icon), 'symbol' => $sym, 'usd' => Fmt::usd($q['price']),
                 'toman' => $rate ? Fmt::toman($q['price'] * $rate) : '—', 'change' => $sym !== 'USDT' ? Fmt::badge($q['change']) : '']);
         }
         if (!$lines) {
@@ -333,7 +333,7 @@ final class Tools
         $level = null;
         if (!empty($info['rating'])) {
             $r = $info['rating'];
-            $level = '⭐️ ' . $r['level'] . (!empty($r['next_level_rating']) ? ' (' . Fmt::int($r['rating'] ?? 0) . '/' . Fmt::int($r['next_level_rating']) . ')' : '');
+            $level = '⭐️   ' . $r['level'] . (!empty($r['next_level_rating']) ? ' (' . Fmt::int($r['rating'] ?? 0) . '/' . Fmt::int($r['next_level_rating']) . ')' : '');
         }
         $bd = null;
         if (!empty($info['birthdate'])) {
@@ -343,7 +343,7 @@ final class Tools
         $xp = (int)($row['xp'] ?? 0);
         $text = UI::t('account', [
             'name' => UI::mention($t), 'id' => $t['id'], 'username' => UI::uname($t['username'] ?? null),
-            'premium' => !empty($t['is_premium']) ? '✅ دارد' : '❌ ندارد', 'level' => $level,
+            'premium' => !empty($t['is_premium']) ? '✅   دارد' : '❌   ندارد', 'level' => $level,
             'created' => Fmt::jalaliLong(Account::created((int)$t['id'])), 'dc' => $dc ? "DC$dc • " . (Account::DC[$dc] ?? '') : null,
             'lang' => !empty($t['language_code']) ? strtoupper($t['language_code']) : null, 'birthdate' => $bd,
             'bio' => !empty($info['bio']) ? UI::esc($info['bio']) : null, 'gifts' => $gifts ? Fmt::int($gifts['total_count'] ?? 0) : null,

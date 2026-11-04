@@ -50,18 +50,14 @@ $ok = TG::api('setWebhook', [
 echo 'bot: @' . $me['username'] . "\n";
 echo 'webhook: ' . ($ok ? 'OK' : 'FAILED ' . TG::$lastError) . " -> $url\n";
 $private = [
-    ['command' => 'start', 'description' => 'شروع'], ['command' => 'help', 'description' => 'راهنما'], ['command' => 'p', 'description' => 'قیمت ارزها'],
     ['command' => 'gift', 'description' => 'گیفت‌های من / @username'], ['command' => 'account', 'description' => 'اطلاعات اکانت'],
-    ['command' => 'emoji', 'description' => 'کد ایموجی پریمیوم'], ['command' => 'scam', 'description' => 'گزارش کلاهبردار'],
-    ['command' => 'check', 'description' => 'استعلام کلاهبردار'], ['command' => 'wallet', 'description' => 'چکر ولت / هش'],
-    ['command' => 'arz', 'description' => 'نرخ ارز بازار آزاد'], ['command' => 'card', 'description' => 'استعلام کارت / شبا'],
-    ['command' => 'phone', 'description' => 'چکر شماره تلگرام'], ['command' => 'insta', 'description' => 'اینستاگرام'],
+    ['command' => 'emoji', 'description' => 'کد ایموجی پریمیوم'],
 ];
 $group = [
-    ['command' => 'p', 'description' => 'قیمت ارزها'], ['command' => 'gift', 'description' => 'گیفت‌های کاربر'], ['command' => 'account', 'description' => 'اطلاعات اکانت'],
-    ['command' => 'emoji', 'description' => 'کد ایموجی پریمیوم'], ['command' => 'scam', 'description' => 'گزارش کلاهبردار'], ['command' => 'check', 'description' => 'استعلام کلاهبردار'],
-    ['command' => 'arz', 'description' => 'نرخ ارز بازار آزاد'], ['command' => 'settings', 'description' => 'تنظیمات گروه (ادمین)'], ['command' => 'help', 'description' => 'راهنما'],
+    ['command' => 'gift', 'description' => 'گیفت‌های کاربر'], ['command' => 'account', 'description' => 'اطلاعات اکانت'],
+    ['command' => 'emoji', 'description' => 'کد ایموجی پریمیوم'], ['command' => 'panel', 'description' => 'تنظیمات گروه (ادمین)'],
 ];
+TG::api('deleteMyCommands', []);
 echo 'commands: ' . (TG::api('setMyCommands', ['commands' => $private, 'scope' => ['type' => 'all_private_chats']]) && TG::api('setMyCommands', ['commands' => $group, 'scope' => ['type' => 'all_group_chats']]) ? 'OK' : 'FAILED') . "\n";
 $e = UI::validateEmoji();
 echo 'premium emoji: ' . ($e ? $e[0] . ' ok, ' . $e[1] . ' invalid' : 'check failed') . "\n";

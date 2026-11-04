@@ -375,6 +375,9 @@ final class Bot
             $args = trim($mm[3] ?? '');
             if (isset(self::COMMANDS[$cmd])) {
                 [$cls, $fn] = self::COMMANDS[$cmd];
+                if ($cls === 'Admin' && $fn === 'panel' && !$priv) {
+                    [$cls, $fn] = ['Groups', 'settings'];
+                }
                 if ($cls === 'Admin' && !(Config::isAdmin($uid) && $priv)) {
                     return;
                 }

@@ -451,6 +451,18 @@ DB::touchUser(['id' => 4242, 'first_name' => 's'], true, true);
 DB::touchUser(['id' => 4242, 'first_name' => 's']);
 check((int)DB::user(4242)['started'] === 1, 'started flag survives later updates');
 
+cb('adm:xbadd', 999, 999);
+feed(msg("💎 کانال دوم\nhttps://t.me/second", 999, 999));
+reset_calls();
+feed(msg('/start', 6, 6));
+$bs = buttons(sent(['sendMessage'])[0]);
+check((bool)array_filter($bs, fn($b) => ($b['url'] ?? '') === 'https://t.me/second' && str_contains($b['text'] ?? '', 'کانال دوم')), 'extra footer button');
+cb('adm:xbdel:0', 999, 999);
+check(!(Settings::get('extra_buttons') ?: []), 'extra button removed');
+reset_calls();
+feed(msg('/panel', -4400, 777));
+check(str_contains((string)last_text(), 'تنظیمات گروه'), 'panel in group opens group settings');
+
 $GLOBALS['http']['cardinfo.test'] = ['result' => ['name' => 'علی رضایی']];
 reset_calls();
 feed(msg('6037-9975-9950-3209', -600, 80));

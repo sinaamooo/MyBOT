@@ -72,7 +72,6 @@ final class Admin
     ];
     const NUMBERS = [
         'usdt_toman_manual' => 'نرخ دستی تتر (تومان، 0 = خودکار)', 'star_usd' => 'قیمت هر استار (دلار)',
-        'whale_min_usd' => 'حداقل مبلغ هشدار جابجایی ($)', 'whale_btc_min' => 'حداقل BTC برای هشدار',
         'self_mute_minutes' => 'مدت سکوت سلف (دقیقه، 0 = دائمی)', 'tabchi_mute_minutes' => 'مدت سکوت تبچی (دقیقه، 0 = دائمی)',
     ];
     const STRINGS = ['channel_url' => 'لینک کانال ربات', 'channel_title' => 'نام کانال ربات'];
@@ -108,7 +107,7 @@ final class Admin
             [UI::raw('🔍 جستجوی کاربر', 'adm:find')],
             [UI::raw('⛔️ مسدود / آزاد', 'adm:ban', 'danger'), UI::raw('⛔️ حذف کاربر', 'adm:del', 'danger')],
             [UI::raw('📨 پیام به کاربر', 'adm:pm'), UI::raw('📢 ارسال همگانی', 'adm:bcmenu')],
-            [UI::raw('🔗 دکمه‌های استارت', 'adm:startbtn', 'success')],
+            [UI::raw('🔗 دکمه‌های زیر پیام‌ها', 'adm:startbtn', 'success')],
         ]);
     }
 
@@ -135,10 +134,20 @@ final class Admin
         $def = Config::data('buttons');
         $t = fn($k) => UI::esc(($conf[$k]['text'] ?? '') !== '' ? $conf[$k]['text'] : $def[$k]['text']);
         $url = UI::channelUrl();
-        $text = "🔗 <b>دکمه‌های زیر پیام استارت</b>\n<blockquote>👥     دکمه افزودن به گروه: <code>" . $t('btn_add_group') . "</code>\n📢     دکمه کانال: <code>" . $t('btn_channel')
+        $text = "🔗 <b>دکمه‌های زیر پیام‌ها</b>\n<blockquote>👥     دکمه افزودن به گروه: <code>" . $t('btn_add_group') . "</code>\n📢     دکمه کانال: <code>" . $t('btn_channel')
             . "</code>\n🔗     لینک کانال: " . ($url !== '' ? UI::esc($url) : '— ثبت نشده —') . '</blockquote>';
-        $kb = UI::kb([[UI::raw('🔗 لینک کانال اصلی', 'adm:sbval:channel_url', 'primary')],
-            [UI::raw('📋 متن دکمه افزودن', 'adm:sbtext:btn_add_group'), UI::raw('📋 متن دکمه کانال', 'adm:sbtext:btn_channel')], self::back()]);
+        $extra = Settings::get('extra_buttons') ?: [];
+        foreach ($extra as $i => $b) {
+            $text .= "\n" . ($i + 1) . '. ' . UI::esc($b['text']) . ' — ' . UI::esc($b['url']);
+        }
+        $rows = [[UI::raw('🔗 لینک کانال اصلی', 'adm:sbval:channel_url', 'primary')],
+            [UI::raw('📋 متن دکمه افزودن', 'adm:sbtext:btn_add_group'), UI::raw('📋 متن دکمه کانال', 'adm:sbtext:btn_channel')],
+            [UI::raw('👥 افزودن دکمه جدید', 'adm:xbadd', 'success')]];
+        foreach ($extra as $i => $b) {
+            $rows[] = [UI::raw('❌ حذف دکمه ' . ($i + 1), "adm:xbdel:$i", 'danger')];
+        }
+        $rows[] = self::back();
+        $kb = UI::kb($rows);
         $cq ? self::editOrSend($cq, $text, $kb) : TG::send($chat, $text, $kb);
     }
 
@@ -381,6 +390,16 @@ final class Admin
                 return;
             case 'startbtn':
                 TG::answer($cq['id']);
+                self::startView($chat, $cq);
+                return;
+            case 'xbadd':
+                self::wait($cq, 'xbadd', "👥 متن و لینک دکمه را در دو خط بفرستید:\n<code>💎 کانال دوم</code>\n<code>https://t.me/yourchannel</code>\n\nایموجی اول متن خودکار پریمیوم می‌شود.");
+                return;
+            case 'xbdel':
+                $list = Settings::get('extra_buttons') ?: [];
+                array_splice($list, (int)($p[1] ?? -1), 1);
+                Settings::set('extra_buttons', array_values($list));
+                TG::answer($cq['id'], 'حذف شد');
                 self::startView($chat, $cq);
                 return;
             case 'sbval':
@@ -645,6 +664,24 @@ final class Admin
                 Settings::set('channel_url', $url);
                 State::clear($uid);
                 TG::send($chat, '✅ ذخیره شد.');
+                self::startView($chat);
+                return;
+            case 'xbadd':
+                $lines = array_values(array_filter(array_map('trim', preg_split('/\R/u', $text))));
+                $label = $lines[0] ?? '';
+                $url = $lines[1] ?? '';
+                if (str_starts_with($url, '@')) {
+                    $url = 'https://t.me/' . substr($url, 1);
+                }
+                if ($label === '' || !preg_match('#^(https?|tg)://\S+$#i', $url)) {
+                    TG::send($chat, '⚠️ متن در خط اول و لینک (https://...) در خط دوم.');
+                    return;
+                }
+                $list = Settings::get('extra_buttons') ?: [];
+                $list[] = ['text' => mb_substr($label, 0, 64), 'url' => $url];
+                Settings::set('extra_buttons', array_slice($list, 0, 8));
+                State::clear($uid);
+                TG::send($chat, '✅ دکمه اضافه شد.');
                 self::startView($chat);
                 return;
             case 'sbtext':

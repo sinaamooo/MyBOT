@@ -141,6 +141,12 @@ final class UI
         return [count($ids) - count($bad), count($bad)];
     }
 
+    public static function badge(string $sym, string $fallback = '🪙'): string
+    {
+        $id = Config::data('badges')[strtoupper($sym)] ?? null;
+        return $id ? '<tg-emoji emoji-id="' . $id . '">' . $fallback . '</tg-emoji>' : $fallback;
+    }
+
     public static function resetEmoji(): void
     {
         self::$rx = null;
@@ -272,6 +278,7 @@ final class UI
 
     public static function footerRows(): array
     {
+        $rows = [];
         $row = [];
         $u = TG::username();
         if ($u !== '') {
@@ -280,7 +287,15 @@ final class UI
         if (($c = self::channelUrl()) !== '') {
             $row[] = self::button('btn_channel', ['url' => $c]);
         }
-        return $row ? [$row] : [];
+        if ($row) {
+            $rows[] = $row;
+        }
+        foreach (Settings::get('extra_buttons') ?: [] as $b) {
+            if (!empty($b['text']) && !empty($b['url'])) {
+                $rows[] = [self::iconize(['text' => (string)$b['text'], 'url' => (string)$b['url']] + (!empty($b['style']) ? ['style' => $b['style']] : []))];
+            }
+        }
+        return $rows;
     }
 
     public static function footer(array $extra = []): ?array
