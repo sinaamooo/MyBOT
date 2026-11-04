@@ -75,6 +75,37 @@ final class Bot
         TG::send($chat, $text, $markup, $extra);
     }
 
+    public static function ask(array $m, string $cmd, string $key, string $placeholder): void
+    {
+        Cache::set('ask:' . $m['chat']['id'] . ':' . ($m['from']['id'] ?? 0), $cmd, 600);
+        $extra = ['__quick' => true];
+        if (!self::isPrivate($m) && isset($m['message_id'])) {
+            $extra['reply_parameters'] = self::replyParams($m);
+        }
+        TG::send($m['chat']['id'], UI::t($key), ['force_reply' => true, 'selective' => true, 'input_field_placeholder' => $placeholder], $extra);
+    }
+
+    private static function answered(array $m, string $text): bool
+    {
+        $r = $m['reply_to_message'] ?? null;
+        if (!$r || $text === '' && empty($m['entities']) && empty($m['sticker']) || (int)($r['from']['id'] ?? 0) !== TG::botId()) {
+            return false;
+        }
+        $k = 'ask:' . $m['chat']['id'] . ':' . ($m['from']['id'] ?? 0);
+        $cmd = Cache::get($k);
+        if (!$cmd) {
+            return false;
+        }
+        Cache::forget($k);
+        unset($m['reply_to_message']);
+        if ($cmd === 'gift') {
+            GiftsH::cmd($m, $text);
+        } else {
+            Tools::emoji($m);
+        }
+        return true;
+    }
+
     public static function send(array $m, string $text, $markup = false, ?string $photo = null, bool $reply = true, ?string $preview = null): ?array
     {
         if ($markup === false) {
@@ -366,6 +397,9 @@ final class Bot
                 return;
             }
         }
+        if ($uid && ($text === '' || $text[0] !== '/') && isset($m['reply_to_message']) && self::answered($m, $text)) {
+            return;
+        }
         if ($text !== '' && $text[0] === '/' && preg_match('/^\/([^\s@]+)(?:@(\S+))?(?:\s+(.*))?$/su', $text, $mm)) {
             $cmd = mb_strtolower($mm[1]);
             $target = $mm[2] ?? '';
@@ -550,6 +584,31 @@ final class Bot
 
 final class Start
 {
+    const COMMANDS_V = 4;
+
+    public static function registerCommands(): bool
+    {
+        $private = [
+            ['command' => 'gift', 'description' => 'گیفت‌های کاربر'], ['command' => 'account', 'description' => 'اطلاعات اکانت'],
+            ['command' => 'emoji', 'description' => 'کد ایموجی پریمیوم'],
+        ];
+        $group = [
+            ['command' => 'gift', 'description' => 'گیفت‌های کاربر'], ['command' => 'account', 'description' => 'اطلاعات اکانت'],
+            ['command' => 'emoji', 'description' => 'کد ایموجی پریمیوم'], ['command' => 'panel', 'description' => 'تنظیمات گروه (ادمین)'],
+        ];
+        foreach (['default', 'all_private_chats', 'all_group_chats', 'all_chat_administrators'] as $scope) {
+            foreach ([null, 'fa', 'en'] as $lang) {
+                TG::api('deleteMyCommands', ['scope' => ['type' => $scope], 'language_code' => $lang]);
+            }
+        }
+        $ok = TG::api('setMyCommands', ['commands' => $private, 'scope' => ['type' => 'all_private_chats']]) !== null
+            && TG::api('setMyCommands', ['commands' => $group, 'scope' => ['type' => 'all_group_chats']]) !== null;
+        if ($ok) {
+            DB::kvSet('commands_v', self::COMMANDS_V);
+        }
+        return $ok;
+    }
+
     public static function start(array $m, string $args): void
     {
         if (!Bot::isPrivate($m)) {

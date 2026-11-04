@@ -46,6 +46,9 @@ final class GiftsH
         if (preg_match('/^-?\d+$/', $arg)) {
             return ['kind' => (int)$arg < 0 ? 'chat' : 'user', 'id' => (int)$arg, 'name' => $arg, 'username' => null];
         }
+        if (in_array(mb_strtolower($arg), ['من', 'me'], true)) {
+            return ['kind' => 'user', 'id' => $me['id'], 'name' => UI::fullName($me), 'username' => $me['username'] ?? null];
+        }
         $arg = str_replace(['https://t.me/', 't.me/'], '', $arg);
         if (!empty($me['username']) && strcasecmp(ltrim($arg, '@'), $me['username']) === 0) {
             return ['kind' => 'user', 'id' => $me['id'], 'name' => UI::fullName($me), 'username' => $me['username']];
@@ -57,6 +60,10 @@ final class GiftsH
     {
         if ($links = Gifts::findLinks($args)) {
             self::link($m, ...$links[0]);
+            return;
+        }
+        if ($args === '' && empty($m['reply_to_message']['from'])) {
+            Bot::ask($m, 'gift', 'gift_ask', '@username');
             return;
         }
         if (Cache::throttled('giftcmd:' . ($m['from']['id'] ?? 0), 8)) {

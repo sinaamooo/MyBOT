@@ -76,12 +76,17 @@ final class Tools
             return;
         }
         $chat = $m['chat']['id'];
-        $list = array_values(array_unique(array_filter([Config::get('PRICE_REACTION', '🩵'), '❤'])));
-        $start = (int)(Cache::get('react_idx:' . $chat) ?? 0);
+        $list = [];
+        foreach (array_filter(array_map('trim', explode(',', Config::get('PRICE_REACTION', '🩵')))) as $r) {
+            $list[] = ctype_digit($r) ? ['type' => 'custom_emoji', 'custom_emoji_id' => $r] : ['type' => 'emoji', 'emoji' => $r];
+        }
+        $list[] = ['type' => 'emoji', 'emoji' => '🐳'];
+        $key = 'react:' . $chat . ':' . md5(json_encode($list));
+        $start = (int)(Cache::get($key) ?? 0);
         for ($i = $start; $i < count($list); $i++) {
-            if (TG::api('setMessageReaction', ['chat_id' => $chat, 'message_id' => $m['message_id'], 'reaction' => [['type' => 'emoji', 'emoji' => $list[$i]]]]) !== null) {
+            if (TG::api('setMessageReaction', ['chat_id' => $chat, 'message_id' => $m['message_id'], 'reaction' => [$list[$i]]]) !== null) {
                 if ($i !== $start) {
-                    Cache::set('react_idx:' . $chat, $i, 86400);
+                    Cache::set($key, $i, 86400);
                 }
                 return;
             }
@@ -89,7 +94,7 @@ final class Tools
                 return;
             }
         }
-        Cache::set('react_idx:' . $chat, count($list), 3600);
+        Cache::set($key, count($list), 3600);
     }
 
     public static function premium(array $m): void
@@ -329,6 +334,10 @@ final class Tools
             }
         }
         $items = array_slice($items, 0, 25, true);
+        if (!$items && empty($m['reply_to_message']) && trim($args) === '' && preg_match('/^\//', $m['text'] ?? '')) {
+            Bot::ask($m, 'emoji', 'emoji_ask', 'ایموجی پریمیوم');
+            return;
+        }
         if (!$items) {
             Bot::reply($m, UI::t('emoji_none'));
             return;

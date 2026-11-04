@@ -411,6 +411,10 @@ $uniq = fn($base, $slug, $n, $model, $bd) => ['type' => 'unique', 'send_date' =>
 $GLOBALS['user_gifts'] = ['total_count' => 2, 'gifts' => [$uniq('Toy Bear', 'ToyBear', 55, 'Wizard', 'Amber'), $uniq('Plush Pepe', 'PlushPepe', 7, 'Cozy Galaxy', 'Black')]];
 reset_calls();
 feed(msg('/gift', -500, 70, null, null, 'Sina'));
+$ask = sent(['sendMessage']);
+check(!sent(['sendPhoto']) && ($ask[0][1]['reply_markup']['force_reply'] ?? false) === true && ($ask[0][1]['reply_markup']['selective'] ?? false) === true, 'bare /gift asks with force reply');
+reset_calls();
+feed(msg('من', -500, 70, ['message_id' => 1, 'date' => time(), 'chat' => ['id' => -500, 'type' => 'supergroup'], 'from' => BOT, 'text' => 'x'], null, 'Sina'));
 $ph = sent(['sendPhoto']);
 $cap = $ph[0][1]['caption'] ?? '';
 check(str_contains($cap, 'https://t.me/nft/ToyBear-55') && str_contains($cap, 'https://t.me/nft/PlushPepe-7'), 'gift links in caption');
@@ -529,12 +533,18 @@ $GLOBALS['reject_blue'] = true;
 reset_calls();
 feed(msg('601 درهم', -8801, 61));
 $rx = array_values(array_filter($GLOBALS['calls'], fn($c) => $c[0] === 'setMessageReaction'));
-check(count($rx) === 2 && $rx[1][1]['reaction'][0]['emoji'] === '❤', 'reaction falls back to red heart');
+check(count($rx) === 2 && $rx[1][1]['reaction'][0]['emoji'] === '🐳', 'reaction falls back to blue whale');
 reset_calls();
 feed(msg('602 درهم', -8801, 61));
 $rx = array_values(array_filter($GLOBALS['calls'], fn($c) => $c[0] === 'setMessageReaction'));
-check(count($rx) === 1 && $rx[0][1]['reaction'][0]['emoji'] === '❤', 'fallback remembered per chat');
+check(count($rx) === 1 && $rx[0][1]['reaction'][0]['emoji'] === '🐳', 'fallback remembered per chat');
 $GLOBALS['reject_blue'] = false;
+
+check(str_contains(UI::emojiMap("<blockquote>👤    سازنده: 🔴 @ali</blockquote>"), 'سازنده: 🔴 @ali'), 'only first emoji in a quote line is premium');
+reset_calls();
+Start::registerCommands();
+$cmds = array_values(array_filter($GLOBALS['calls'], fn($c) => $c[0] === 'setMyCommands'));
+check(count($cmds) === 2 && array_column($cmds[1][1]['commands'], 'command') === ['gift', 'account', 'emoji', 'panel'] && (int)DB::kvGet('commands_v') === Start::COMMANDS_V, 'command menu registered');
 
 $GLOBALS['http']['cardinfo.test'] = ['result' => ['name' => 'علی رضایی']];
 reset_calls();
@@ -685,5 +695,18 @@ feed(msg('سلام قیمت دلار چنده', -1400, 401));
 check(!array_filter($GLOBALS['calls'], fn($c) => $c[0] === 'restrictChatMember'), 'normal user not muted');
 
 @unlink($dbFile);
+reset_calls();
+feed(msg('/emoji', 5, 5));
+$ask = sent(['sendMessage']);
+check(($ask[0][1]['reply_markup']['force_reply'] ?? false) === true, 'bare /emoji asks with force reply');
+reset_calls();
+feed(msg('😎', 5, 5, ['message_id' => 2, 'date' => time(), 'chat' => ['id' => 5, 'type' => 'private'], 'from' => BOT, 'text' => 'x', 'entities' => [['type' => 'custom_emoji', 'offset' => 0, 'length' => 1, 'custom_emoji_id' => '111']]],
+    [['type' => 'custom_emoji', 'offset' => 0, 'length' => 2, 'custom_emoji_id' => '5368324170671202286']]));
+$t = (string)last_text();
+check(str_contains($t, '5368324170671202286') && !str_contains($t, '>111<'), 'emoji reply to prompt returns code');
+reset_calls();
+feed(msg('سلام', 5, 5, ['message_id' => 3, 'date' => time(), 'chat' => ['id' => 5, 'type' => 'private'], 'from' => BOT, 'text' => 'x']));
+check(!str_contains((string)last_text(), 'ایموجی پریمیومی'), 'prompt answered only once');
+
 echo "passed: $pass, failed: $fail\n";
 exit($fail ? 1 : 0);

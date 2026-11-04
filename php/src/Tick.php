@@ -10,6 +10,9 @@ final class Tick
         }
         try {
             DB::kvSet('last_tick', time());
+            if ((int)DB::kvGet('commands_v', 0) < Start::COMMANDS_V) {
+                Start::registerCommands();
+            }
             Bot::processDeletes();
             try {
                 Games::tick();

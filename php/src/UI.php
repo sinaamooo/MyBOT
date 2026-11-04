@@ -169,11 +169,24 @@ final class UI
         }
         $chunks = preg_split('/(<[^>]+>)/u', $text, -1, PREG_SPLIT_DELIM_CAPTURE);
         $skip = 0;
+        $quote = 0;
+        $used = false;
         $out = '';
         foreach ($chunks as $c) {
             if ($c !== '' && $c[0] === '<' && str_ends_with($c, '>')) {
-                if (preg_match('/^<\/?\s*([a-zA-Z][a-zA-Z0-9-]*)/', $c, $nm) && in_array(strtolower($nm[1]), ['tg-emoji', 'code', 'pre', 'a'], true)) {
-                    $skip = max(0, $skip + (str_starts_with($c, '</') ? -1 : 1));
+                if (preg_match('/^<(\/?)\s*([a-zA-Z][a-zA-Z0-9-]*)/', $c, $nm)) {
+                    $tag = strtolower($nm[2]);
+                    $close = $nm[1] === '/';
+                    if (in_array($tag, ['tg-emoji', 'code', 'pre', 'a'], true)) {
+                        $skip = max(0, $skip + ($close ? -1 : 1));
+                    }
+                    if ($tag === 'blockquote') {
+                        $quote = max(0, $quote + ($close ? -1 : 1));
+                        $used = false;
+                    }
+                    if ($tag === 'tg-emoji' && !$close && $quote) {
+                        $used = true;
+                    }
                 }
                 $out .= $c;
                 continue;
@@ -182,7 +195,15 @@ final class UI
                 $out .= $c;
                 continue;
             }
-            $out .= preg_replace_callback($rx, function ($m) use ($lookup) {
+            $out .= preg_replace_callback('/\n|' . substr($rx, 1, -2) . '/u', function ($m) use ($lookup, $quote, &$used) {
+                if ($m[0] === "\n") {
+                    $used = false;
+                    return $m[0];
+                }
+                if ($quote && $used) {
+                    return $m[0];
+                }
+                $used = true;
                 $id = $lookup[str_replace("\u{FE0F}", '', $m[0])] ?? '';
                 return '<tg-emoji emoji-id="' . $id . '">' . $m[0] . '</tg-emoji>';
             }, $c);
