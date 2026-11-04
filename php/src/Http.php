@@ -134,11 +134,16 @@ final class TG
             return;
         }
         self::$hook = false;
-        $body = $call !== null ? json_encode($call, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : 'ok';
+        $body = $call !== null ? (string)json_encode($call, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE) : 'ok';
+        if ($body === '') {
+            $body = 'ok';
+            $call = null;
+        }
         if (self::$hookSink) {
             (self::$hookSink)($body);
             return;
         }
+        @file_put_contents(Config::$root . '/data/last_update.txt', date('Y-m-d H:i:s') . ' reply=' . ($call['method'] ?? 'api') . "\n");
         while (ob_get_level() > 0) {
             ob_end_clean();
         }
@@ -273,7 +278,7 @@ final class TG
         }
         $quick = !empty($p['__quick']);
         unset($p['__quick']);
-        if ($quick && self::$hook && in_array($method, self::QUICK, true)) {
+        if ($quick && self::$hook && Config::get('QUICK_REPLY', '1') !== '0' && in_array($method, self::QUICK, true)) {
             $simple = true;
             foreach ($p as $v) {
                 if (is_array($v) && isset($v['__bytes'])) {

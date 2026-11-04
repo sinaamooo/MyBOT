@@ -61,6 +61,11 @@ if (!empty($env['BOT_TOKEN']) && function_exists('curl_init')) {
         echo 'send to admin (premium emoji): ' . (!empty($s['ok']) ? 'OK' : 'FAIL ' . (isset($s['description']) ? $s['description'] : '')) . "\n";
     }
 }
+if (is_file($data . '/last_update.txt')) {
+    echo 'last update handled: ' . trim(file_get_contents($data . '/last_update.txt')) . "\n";
+} else {
+    echo "last update handled: none yet\n";
+}
 $log = $data . '/php-error.log';
 if (is_file($log)) {
     echo "\n--- last errors ---\n";
