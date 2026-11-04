@@ -313,6 +313,46 @@ final class TG
         return $r['result'];
     }
 
+    public static function multi(array $calls): array
+    {
+        $out = [];
+        if (self::$fake) {
+            foreach ($calls as $k => [$m, $p]) {
+                $out[$k] = self::api($m, $p);
+            }
+            return $out;
+        }
+        self::closeHook();
+        $mh = curl_multi_init();
+        $hs = [];
+        $proxy = Config::get('TELEGRAM_PROXY') ?: Config::get('PROXY');
+        foreach ($calls as $k => [$m, $p]) {
+            $ch = curl_init('https://api.telegram.org/bot' . Config::get('BOT_TOKEN') . '/' . $m);
+            $opts = [CURLOPT_RETURNTRANSFER => true, CURLOPT_POST => true, CURLOPT_POSTFIELDS => json_encode($p, JSON_UNESCAPED_UNICODE),
+                CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'Expect:'], CURLOPT_TIMEOUT => 15, CURLOPT_CONNECTTIMEOUT => 8];
+            if ($proxy !== '') {
+                $opts[CURLOPT_PROXY] = str_starts_with($proxy, 'socks5://') ? 'socks5h://' . substr($proxy, 9) : $proxy;
+            }
+            curl_setopt_array($ch, $opts);
+            curl_multi_add_handle($mh, $ch);
+            $hs[$k] = $ch;
+        }
+        do {
+            $st = curl_multi_exec($mh, $running);
+            if ($running) {
+                curl_multi_select($mh, 0.2);
+            }
+        } while ($running && $st === CURLM_OK);
+        foreach ($hs as $k => $ch) {
+            $d = json_decode((string)curl_multi_getcontent($ch), true);
+            $out[$k] = !empty($d['ok']) ? $d['result'] : null;
+            curl_multi_remove_handle($mh, $ch);
+            curl_close($ch);
+        }
+        curl_multi_close($mh);
+        return $out;
+    }
+
     public static function me(): array
     {
         return Cache::remember(self::meKey(), 86400, fn() => self::api('getMe') ?? []);

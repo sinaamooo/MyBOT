@@ -324,9 +324,8 @@ final class Tools
                 $t = $mem['user'];
             }
         }
-        $info = TG::api('getChat', ['chat_id' => $t['id']]);
-        $photos = TG::api('getUserProfilePhotos', ['user_id' => $t['id'], 'limit' => 1]);
-        $gifts = TG::api('getUserGifts', ['user_id' => $t['id'], 'limit' => 1]);
+        ['info' => $info, 'photos' => $photos, 'gifts' => $gifts] = TG::multi(['info' => ['getChat', ['chat_id' => $t['id']]],
+            'photos' => ['getUserProfilePhotos', ['user_id' => $t['id'], 'limit' => 1]], 'gifts' => ['getUserGifts', ['user_id' => $t['id'], 'limit' => 1]]]);
         $row = DB::user($t['id']) ?? [];
         $photo = !empty($photos['total_count']) ? end($photos['photos'][0])['file_id'] : null;
         $dc = $photo ? Account::dc($photo) : null;
