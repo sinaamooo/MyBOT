@@ -544,7 +544,7 @@ check(str_contains(UI::emojiMap("<blockquote>👤    سازنده: 🔴 @ali</bl
 reset_calls();
 Start::registerCommands();
 $cmds = array_values(array_filter($GLOBALS['calls'], fn($c) => $c[0] === 'setMyCommands'));
-check(count($cmds) === 2 && array_column($cmds[1][1]['commands'], 'command') === ['gift', 'account', 'emoji', 'panel'] && (int)DB::kvGet('commands_v') === Start::COMMANDS_V, 'command menu registered');
+check(count($cmds) === 3 && array_column($cmds[2][1]['commands'], 'command') === ['account', 'emoji'] && array_column($cmds[0][1]['commands'], 'command') === ['account', 'emoji'] && (int)DB::kvGet('commands_v') === Start::COMMANDS_V, 'command menu registered');
 
 $GLOBALS['http']['cardinfo.test'] = ['result' => ['name' => 'علی رضایی']];
 reset_calls();

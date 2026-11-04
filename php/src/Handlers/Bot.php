@@ -584,25 +584,19 @@ final class Bot
 
 final class Start
 {
-    const COMMANDS_V = 4;
+    const COMMANDS_V = 5;
 
     public static function registerCommands(): bool
     {
-        $private = [
-            ['command' => 'gift', 'description' => 'گیفت‌های کاربر'], ['command' => 'account', 'description' => 'اطلاعات اکانت'],
-            ['command' => 'emoji', 'description' => 'کد ایموجی پریمیوم'],
-        ];
-        $group = [
-            ['command' => 'gift', 'description' => 'گیفت‌های کاربر'], ['command' => 'account', 'description' => 'اطلاعات اکانت'],
-            ['command' => 'emoji', 'description' => 'کد ایموجی پریمیوم'], ['command' => 'panel', 'description' => 'تنظیمات گروه (ادمین)'],
-        ];
+        $list = [['command' => 'account', 'description' => 'اطلاعات اکانت'], ['command' => 'emoji', 'description' => 'کد ایموجی پریمیوم']];
         foreach (['default', 'all_private_chats', 'all_group_chats', 'all_chat_administrators'] as $scope) {
             foreach ([null, 'fa', 'en'] as $lang) {
                 TG::api('deleteMyCommands', ['scope' => ['type' => $scope], 'language_code' => $lang]);
             }
         }
-        $ok = TG::api('setMyCommands', ['commands' => $private, 'scope' => ['type' => 'all_private_chats']]) !== null
-            && TG::api('setMyCommands', ['commands' => $group, 'scope' => ['type' => 'all_group_chats']]) !== null;
+        $ok = TG::api('setMyCommands', ['commands' => $list]) !== null
+            && TG::api('setMyCommands', ['commands' => $list, 'scope' => ['type' => 'all_private_chats']]) !== null
+            && TG::api('setMyCommands', ['commands' => $list, 'scope' => ['type' => 'all_group_chats']]) !== null;
         if ($ok) {
             DB::kvSet('commands_v', self::COMMANDS_V);
         }

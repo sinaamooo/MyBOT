@@ -49,6 +49,9 @@ $ok = TG::api('setWebhook', [
 ]);
 echo 'bot: @' . $me['username'] . "\n";
 echo 'webhook: ' . ($ok ? 'OK' : 'FAILED ' . TG::$lastError) . " -> $url\n";
+if (function_exists('opcache_reset')) {
+    @opcache_reset();
+}
 echo 'commands: ' . (Start::registerCommands() ? 'OK' : 'FAILED') . "\n";
 $e = UI::validateEmoji();
 echo 'premium emoji: ' . ($e ? $e[0] . ' ok, ' . $e[1] . ' invalid' : 'check failed') . "\n";

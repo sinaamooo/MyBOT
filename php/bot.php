@@ -26,6 +26,9 @@ if (!is_array($update) || !isset($update['update_id']) || Cache::throttled('upd:
 }
 Bot::handle($update);
 TG::closeHook();
+if ((int)DB::kvGet('commands_v', 0) < Start::COMMANDS_V) {
+    Start::registerCommands();
+}
 if (Tick::due()) {
     Tick::run();
 }
