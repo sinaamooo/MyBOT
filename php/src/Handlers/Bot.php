@@ -3,22 +3,8 @@
 final class Bot
 {
     const COMMANDS = [
-        'start' => ['Start', 'start'], 'lang' => ['Start', 'language'], 'language' => ['Start', 'language'], 'زبان' => ['Start', 'language'], 'help' => ['Start', 'help'], 'راهنما' => ['Start', 'help'],
-        'p' => ['Tools', 'price'], 'price' => ['Tools', 'price'], 'قیمت' => ['Tools', 'price'], 'nerkh' => ['Tools', 'price'],
-        'wallet' => ['Tools', 'walletCmd'], 'w' => ['Tools', 'walletCmd'], 'tx' => ['Tools', 'walletCmd'], 'hash' => ['Tools', 'walletCmd'], 'check_wallet' => ['Tools', 'walletCmd'],
-        'uid' => ['Tools', 'uid'], 'id' => ['Tools', 'uid'],
-        'emoji' => ['Tools', 'emoji'], 'emojiid' => ['Tools', 'emoji'],
-        'account' => ['Tools', 'account'], 'acc' => ['Tools', 'account'], 'me' => ['Tools', 'account'], 'info' => ['Tools', 'account'],
-        'calc' => ['Tools', 'calcCmd'], 'c' => ['Tools', 'calcCmd'], 'hesab' => ['Tools', 'calcCmd'],
-        'tr' => ['Tools', 'askTranslate'], 'translate' => ['Tools', 'askTranslate'],
-        'gift' => ['GiftsH', 'cmd'], 'gifts' => ['GiftsH', 'cmd'], 'گیفت' => ['GiftsH', 'cmd'],
-        'scam' => ['Scam', 'cmd'], 'report' => ['Scam', 'cmd'], 'کلاهبردار' => ['Scam', 'cmd'],
-        'check' => ['Scam', 'check'], 'estelam' => ['Scam', 'check'], 'استعلام' => ['Scam', 'check'],
-        'settings' => ['Groups', 'settings'], 'تنظیمات' => ['Groups', 'settings'],
-        'panel' => ['Admin', 'panel'], 'admin' => ['Admin', 'panel'], 'پنل' => ['Admin', 'panel'], 'emojis' => ['Admin', 'emojiStatus'], 'ایموجی‌ها' => ['Admin', 'emojiStatus'],
-        'unscam' => ['Admin', 'unscam'], 'setrate' => ['Admin', 'setRate'],
-        'arz' => ['Extras', 'arz'], 'ارز' => ['Extras', 'arz'], 'dollar' => ['Extras', 'arz'],
-        'insta' => ['Extras', 'insta'], 'instagram' => ['Extras', 'insta'], 'اینستا' => ['Extras', 'insta'],
+        'start' => ['Start', 'start'], 'help' => ['Start', 'help'], 'gift' => ['GiftsH', 'cmd'], 'account' => ['Tools', 'account'], 'emoji' => ['Tools', 'emoji'],
+        'panel' => ['Admin', 'panel'], 'check' => ['Scam', 'check'], 'scam' => ['Scam', 'cmd'],
     ];
     const CALLBACKS = [
         'fj:' => ['Bot', 'forceJoinCheck'], 'unmute:' => ['Bot', 'unmuteCb'], 'tr:' => ['Tools', 'translateCb'], 'gs:' => ['Groups', 'toggle'], 'ul:' => ['Start', 'langCb'],
@@ -428,14 +414,7 @@ final class Bot
                 if ($cls === 'Admin' && !(Config::isAdmin($uid) && $priv)) {
                     return;
                 }
-                if ($cls === 'Groups' && $priv) {
-                    return;
-                }
                 $cls::$fn($m, $args);
-                return;
-            }
-            if ($priv || Settings::on((int)$m['chat']['id'], 'conversions')) {
-                TextRouter::slash($m, $text);
             }
             return;
         }
@@ -648,13 +627,6 @@ final class Start
         }
         Lang::use($chat);
         TG::send($chat, UI::t('start_private', ['name' => UI::esc($u['first_name'] ?? ''), 'bot_username' => TG::username()]), UI::footer(), ['__quick' => true]);
-    }
-
-    public static function language(array $m, string $args): void
-    {
-        if (Bot::isPrivate($m)) {
-            TG::send($m['chat']['id'], UI::t('lang_choose'), Groups::langKb((int)$m['chat']['id'], 'ul:'), ['__quick' => true]);
-        }
     }
 
     public static function langCb(array $cq, string $l): void

@@ -61,7 +61,7 @@ final class Admin
     const STYLES = ['primary' => 'آبی', 'success' => 'سبز', 'danger' => 'قرمز', 'none' => 'پیش‌فرض'];
     const SECTIONS = [
         'main' => ['🏠', 'عمومی', ['start_private', 'help', 'bot_added', 'bot_promoted', 'error', 'loading', 'bot_off', 'banned', 'not_your_button', 'expired', 'admin_message']],
-        'price' => ['💱', 'قیمت و تبدیل', ['conv_crypto', 'conv_toman', 'conv_fiat', 'conv_gold', 'conv_stars', 'conv_pair', 'market', 'market_line', 'arz_board', 'arz_line', 'premium_prices', 'premium_line', 'stars_prices', 'stars_line', 'currency_not_found', 'price_unavailable']],
+        'price' => ['💱', 'قیمت و تبدیل', ['conv_crypto', 'conv_toman', 'conv_fiat', 'conv_gold', 'conv_stars', 'conv_pair', 'market', 'market_line', 'premium_prices', 'premium_line', 'stars_prices', 'stars_line', 'currency_not_found', 'price_unavailable']],
         'wallet' => ['👛', 'ولت و هش', ['wallet_checking', 'wallet_header', 'wallet_chain', 'wallet_footer', 'wallet_not_found', 'tx_checking', 'tx_result', 'tx_not_found', 'tron_transfers', 'tron_transfer_item', 'tron_transfers_empty', 'whale_alert']],
         'gift' => ['👑', 'گیفت', ['gift_link', 'gift_user_caption', 'gift_profit', 'gift_loss', 'gift_since_last', 'gift_user_none', 'gift_user_unknown', 'gift_not_found']],
         'guard' => ['🛡', 'گروه و امنیت', ['force_join_private', 'force_join_group', 'force_join_ok', 'force_join_not_yet', 'self_warn', 'self_muted', 'tabchi_muted', 'unmuted', 'group_settings', 'only_group_admins']],
@@ -239,22 +239,6 @@ final class Admin
         }
         TG::send($m['chat']['id'], '✅ <b>' . count($pairs) . " ایموجی تنظیم شد</b>\n\n" . implode("\n", array_slice($lines, 0, 50)));
         return true;
-    }
-
-    public static function emojiStatus(array $m, string $args = ''): void
-    {
-        $chat = $m['chat']['id'];
-        $have = [];
-        $miss = [];
-        foreach (self::usedEmojis() as $e) {
-            ($id = UI::emojiId($e)) ? $have[] = '<code>' . UI::esc($e) . '</code> ← <tg-emoji emoji-id="' . $id . '">' . UI::esc($e) . '</tg-emoji>' : $miss[] = $e;
-        }
-        foreach (array_chunk($have, 40) as $chunk) {
-            TG::send($chat, implode("\n", $chunk));
-        }
-        TG::send($chat, '🎨 <b>ایموجی‌های ربات</b>' . "\n\n✅ پریمیوم: <b>" . count($have) . '</b>' . "\n❌ بدون پریمیوم: <b>" . count($miss) . '</b>'
-            . ($miss ? "\n<blockquote expandable><code>" . UI::esc(implode(' ', $miss)) . '</code></blockquote>' : '')
-            . "\n\n✏️ برای تنظیم: ایموجی معمولی و بعدش ایموجی پریمیوم دلخواه را کنار هم بفرستید، مثلا:\n<code>🎨</code> + پریمیوم   <code>🖼</code> + پریمیوم\nچند جفت در یک پیام هم قبول است.");
     }
 
     public static function emojiPack(array $m, string $name): void
@@ -436,7 +420,7 @@ final class Admin
                 $pend = DB::listScams('pending', 15);
                 $appr = DB::listScams('approved', 15);
                 $fmt = fn($r) => '#' . $r['id'] . ' — ' . UI::esc($r['target_username'] ?: (string)$r['target_id']);
-                $lines = array_merge(['🚨 <b>گزارش‌های در انتظار</b>'], $pend ? array_map($fmt, $pend) : ['—'], ['', '⛔️ <b>کلاهبرداران تایید شده</b>'], $appr ? array_map($fmt, $appr) : ['—'], ['', '💬 لغو تایید: <code>/unscam ID</code>']);
+                $lines = array_merge(['🚨 <b>گزارش‌های در انتظار</b>'], $pend ? array_map($fmt, $pend) : ['—'], ['', '⛔️ <b>کلاهبرداران تایید شده</b>'], $appr ? array_map($fmt, $appr) : ['—']);
                 $rows = array_map(fn($r) => [UI::raw('✅ #' . $r['id'], 'scamadm:approve:' . $r['id'], 'success'), UI::raw('❌ #' . $r['id'], 'scamadm:reject:' . $r['id'], 'danger')], array_slice($pend, 0, 8));
                 $rows[] = self::back();
                 TG::answer($cq['id']);
@@ -982,27 +966,5 @@ final class Admin
         State::clear($m['from']['id']);
         TG::send($chat, '✅ کانال «' . UI::esc($c['title'] ?? '') . '» اضافه شد.' . ($isAdmin ? '' : "\n⚠️ ربات در این کانال ادمین نیست! حتما ادمینش کنید."));
         self::fjView($chat);
-    }
-
-    public static function unscam(array $m, string $args): void
-    {
-        if (!ctype_digit(trim($args))) {
-            TG::send($m['chat']['id'], '/unscam ID');
-            return;
-        }
-        DB::updateScam((int)$args, ['status' => 'revoked']);
-        TG::send($m['chat']['id'], '✅ لغو شد.');
-    }
-
-    public static function setRate(array $m, string $args): void
-    {
-        $raw = trim(str_replace(',', '', Fmt::en($args)));
-        if (!is_numeric($raw)) {
-            TG::send($m['chat']['id'], '/setrate 0  (0 = خودکار)');
-            return;
-        }
-        Settings::set('usdt_toman_manual', (float)$raw);
-        Cache::forget('usdt_toman');
-        TG::send($m['chat']['id'], '✅ ذخیره شد.');
     }
 }

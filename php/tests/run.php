@@ -366,9 +366,14 @@ reset_calls();
 cb("scamadm:approve:$sid", 999, 999);
 check(DB::scam($sid)['status'] === 'approved', 'scam approved');
 check(array_filter($GLOBALS['calls'], fn($c) => $c[0] === 'sendMessage' && $c[1]['chat_id'] == -300 && str_contains($c[1]['text'], 'کلاهبردار')), 'scam broadcast');
+$ed = array_values(array_filter($GLOBALS['calls'], fn($c) => $c[0] === 'editMessageText' && $c[1]['chat_id'] == 999));
+check($ed && in_array("scamadm:revoke:$sid", array_column(buttons($ed[0]), 'callback_data'), true), 'approved scam message has revoke button');
 reset_calls();
 feed(msg('/check', -300, 64, $scammer));
 check(str_contains(last_text(), 'لیست کلاهبرداران'), 'scam check');
+cb("scamadm:revoke:$sid", 999, 999);
+check(DB::scam($sid)['status'] === 'revoked', 'admin revokes an approved scam with the button');
+DB::updateScam($sid, ['status' => 'approved']);
 
 reset_calls();
 feed(msg('/panel', 999, 999));
@@ -402,7 +407,7 @@ Cache::forget('usdt_toman');
 Settings::set('emoji_map', []);
 
 reset_calls();
-feed(msg('/settings', -400, 777));
+feed(msg('/panel', -400, 777));
 check(str_contains(last_text(), 'تنظیمات گروه'), 'group settings');
 cb('gs:calculator', 777, -400);
 reset_calls();
@@ -762,14 +767,8 @@ reset_calls();
 feed(msg("33\nسلام", 999, 999));
 check(array_filter($GLOBALS['calls'], fn($c) => $c[0] === 'sendMessage' && $c[1]['chat_id'] == 33 && str_contains($c[1]['text'], 'سلام')), 'admin pm');
 
-foreach (['/500 درهم' => 'درهم امارات', '/درهم 500' => 'درهم امارات', '/درهم' => 'درهم امارات', '/aed 500' => 'درهم امارات', '/aed@TestBot 500' => 'درهم امارات', '/۱۰۰۰ لیر' => 'لیر ترکیه', '/eur' => 'یورو'] as $q => $needle) {
-    reset_calls();
-    feed(msg($q, -950, 97));
-    $p = sent(['sendPhoto']);
-    check($p && str_contains($p[0][1]['caption'], $needle), "slash fiat $q");
-}
 reset_calls();
-feed(msg('/eur', -950, 97));
+feed(msg('1 eur', -950, 97));
 $p = sent(['sendPhoto']);
 check($p && str_starts_with($p[0][1]['caption'], '<tg-emoji emoji-id="5143540580424354040">') && str_contains($p[0][1]['caption'], '<tg-emoji emoji-id="5143224307622610764">'), 'fiat currency badge and dollar flag');
 reset_calls();
@@ -777,10 +776,15 @@ feed(msg('500000 ریال', 98, 98));
 $p = sent(['sendPhoto']);
 check($p && str_contains($p[0][1]['caption'], '5143575421199059367') && str_contains($p[0][1]['caption'], '5143159333357357518'), 'rial badge and usdt badge');
 reset_calls();
-foreach (['/10 تتر', '/500000 تومان', '/btc', '/randomcommand', '/aed@OtherBot 5'] as $q) {
+foreach (['/10 تتر', '/500000 تومان', '/btc', '/randomcommand', '/aed@OtherBot 5', '/500 درهم', '/درهم 500', '/aed 500', '/eur', '/arz', '/dollar', '/p btc', '/price ton', '/قیمت تون',
+    '/wallet TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t', '/tx abc', '/uid', '/calc 2+2', '/tr', '/lang', '/زبان', '/settings', '/تنظیمات', '/insta @x', '/راهنما', '/acc', '/me'] as $q) {
     feed(msg($q));
+    feed(msg($q, -950, 97));
 }
-check(!sent(), 'slash only fiat');
+foreach (['/emojis', '/unscam 1', '/setrate 1', '/admin', '/پنل'] as $q) {
+    feed(msg($q, 999, 999));
+}
+check(!sent(), 'only gift, account, help, emoji, panel, check and scam commands remain');
 
 reset_calls();
 $GLOBALS['user_gifts'] = ['total_count' => 0, 'gifts' => []];
@@ -913,9 +917,6 @@ reset_calls();
 $pairText = "🎨 X 🖼 Y";
 feed(msg($pairText, 999, 999, null, [['type' => 'custom_emoji', 'offset' => 3, 'length' => 1, 'custom_emoji_id' => '5300000000000000001'], ['type' => 'custom_emoji', 'offset' => 8, 'length' => 1, 'custom_emoji_id' => '5300000000000000002']]));
 check(UI::emojiId('🎨') === '5300000000000000001' && UI::emojiId('🖼') === '5300000000000000002' && str_contains((string)last_text(), '2 ایموجی تنظیم شد'), 'admin sets emojis by plain+premium pairs');
-reset_calls();
-feed(msg('/emojis', 999, 999));
-check(str_contains(json_encode($GLOBALS['calls'], JSON_UNESCAPED_UNICODE), 'بدون پریمیوم'), 'emoji status list');
 $plain = UI::emojiMap("🧪 تست\n<blockquote>🎨    مدل: X\n🦄    یونیکورن</blockquote>");
 check(!str_contains($plain, '🧪') && !str_contains($plain, '🦄') && str_contains($plain, '5300000000000000001') && str_contains($plain, "<blockquote><tg-emoji") && str_contains($plain, "\nیونیکورن"), 'unmapped plain emojis are removed');
 $kb = UI::iconize(['text' => '🦄 دکمه', 'callback_data' => 'x']);
@@ -1016,7 +1017,7 @@ $pc = sent(['sendPhoto']) ?: sent(['sendMessage']);
 check($pc && str_contains((string)($pc[0][1]['caption'] ?? $pc[0][1]['text'] ?? ''), '91.1111'), 'euro to lira with price prefix');
 check(!str_contains((string)($pc[0][1]['caption'] ?? $pc[0][1]['text'] ?? ''), '<b>'), 'price replies without bold');
 $miss = [];
-foreach (['btc', 'قیمت تون', '10 تتر', '500 لیر دلار', '500000 تومان', '500 درهم', 'نرخ ارز', 'قیمت پریمیوم', '/arz', 'استارز', 'پریمیوم', '698*789'] as $i => $ex) {
+foreach (['btc', 'قیمت تون', '10 تتر', '500 لیر دلار', '500000 تومان', '500 درهم', 'نرخ ارز', 'قیمت پریمیوم', 'استارز', 'پریمیوم', '698*789'] as $i => $ex) {
     reset_calls();
     feed(msg($ex, -4600, 830 + $i));
     if (!sent(['sendMessage', 'sendPhoto'])) {
@@ -1027,7 +1028,8 @@ check(!$miss && Currencies::bareAsset('طلا') === ['gold', 'GOLD18'] && Curren
 reset_calls();
 feed(msg('/help', -4600, 850));
 $hp = (string)last_text();
-check(substr_count($hp, '<blockquote>') === 27 && !str_contains($hp, 'شبا') && !str_contains($hp, 'شماره') && str_contains($hp, 'دوز') && str_contains($hp, 'اینستاگرام') && str_contains($hp, '/lang') && str_contains($hp, '/arz'), 'help lists every feature');
+check(substr_count($hp, '<blockquote>') === 23 && !str_contains($hp, 'شبا') && !str_contains($hp, 'شماره') && str_contains($hp, 'دوز') && str_contains($hp, 'اینستاگرام')
+    && !preg_match('~/(lang|arz|panel|settings|insta|p )~', $hp) && !str_contains($hp, 'محافظ گروه'), 'help lists every feature');
 $spotFile = Config::$root . '/data/spot.json';
 $spotPrev = is_file($spotFile) ? file_get_contents($spotFile) : null;
 SpotDir::reset(['at' => 0, 's' => []]);

@@ -129,26 +129,6 @@ final class Tools
         self::react($m);
     }
 
-    public static function price(array $m, string $args): void
-    {
-        if ($args === '') {
-            self::market($m);
-            return;
-        }
-        $p = Parse::amount($args);
-        $p ? self::answerAmount($m, $p[0], $p[1], false) : self::answerAmount($m, 1, $args, false);
-    }
-
-    public static function walletCmd(array $m, string $args): void
-    {
-        $f = Chain::extract($args, false);
-        if (!$f) {
-            Bot::reply($m, UI::t('help'));
-            return;
-        }
-        self::runChecker($m, $f[0], $f[1]);
-    }
-
     public static function runChecker(array $m, string $kind, string $token, ?int $owner = null): void
     {
         $owner = $owner ?? ($m['from']['id'] ?? 0);
@@ -425,14 +405,6 @@ final class Tools
         $shown = str_replace(['**', '*', '/'], ['^', '×', '÷'], $expr);
         Bot::reply($m, UI::t('calc_result', ['expr' => UI::esc($shown), 'result' => Calc::format($v)]), null);
         return true;
-    }
-
-    public static function calcCmd(array $m, string $args): void
-    {
-        $e = Parse::expression($args);
-        if (!$e || !self::answerCalc($m, $e)) {
-            Bot::reply($m, UI::t('calc_result', ['expr' => UI::esc($args), 'result' => '؟']), null);
-        }
     }
 
     public static function askTranslate(array $m, string $args = ''): void

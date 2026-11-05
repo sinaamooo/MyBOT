@@ -4,11 +4,11 @@
   "desc": "پیام استارت در پیوی"
  },
  "help": {
-  "text": "📖 <b>راهنمای ربات</b>\n\n<blockquote>💱    <b>قیمت ارز دیجیتال:</b> <code>btc</code> ، <code>قیمت تون</code> ، <code>/p eth</code></blockquote>\n<blockquote>💵    <b>تبدیل:</b> <code>10 تتر</code> ، <code>500 تون</code> ، <code>2.5 btc</code></blockquote>\n<blockquote>💸    <b>تبدیل ارز به ارز:</b> <code>500 لیر دلار</code> ، <code>500 تتر تون</code> ، <code>2 یورو به لیر</code></blockquote>\n<blockquote>💰    <b>تومان:</b> <code>500000 تومان</code> ، <code>2 میلیون تومن</code> ، <code>10m ریال</code></blockquote>\n<blockquote>🌍    <b>ارز کشورها:</b> <code>500 درهم</code> ، <code>100 یورو</code> ، <code>50 usd</code> ، <code>1000 لیر</code></blockquote>\n<blockquote>📊    <b>بازار کریپتو:</b> <code>نرخ ارز</code> ، <code>بازار</code></blockquote>\n<blockquote>💠    <b>نرخ ارزهای کشورها:</b> <code>/arz</code></blockquote>\n<blockquote>🏅    <b>طلا و سکه:</b> <code>طلا</code> ، <code>سکه</code> ، <code>2 سکه</code></blockquote>\n<blockquote>⭐️    <b>استارز:</b> <code>استارز</code> ، <code>1000 استارز</code></blockquote>\n<blockquote>💫    <b>پریمیوم:</b> <code>پریمیوم</code></blockquote>\n<blockquote>👛    <b>چکر ولت:</b> آدرس کیف پول را بفرستید (BTC, ETH, BSC, TRON, TON, SOL, ...)</blockquote>\n<blockquote>🔗    <b>چکر هش:</b> هش تراکنش را بفرستید</blockquote>\n<blockquote>🎁    <b>گیفت:</b> لینک <code>t.me/nft/...</code> یا <code>/gift @username</code></blockquote>\n<blockquote>📸    <b>اینستاگرام:</b> لینک پست و ریلز یا <code>/insta @username</code></blockquote>\n<blockquote>📝    <b>ترجمه:</b> روی پیام ریپلای و <code>ترجمه</code></blockquote>\n<blockquote>🧮    <b>ماشین حساب:</b> <code>698*789</code> ، <code>797÷788</code></blockquote>\n<blockquote>🆔    <b>آیدی عددی:</b> ریپلای و <code>UID</code></blockquote>\n<blockquote>😀    <b>ایموجی:</b> <code>/emoji</code> + ایموجی پریمیوم یا ریپلای</blockquote>\n<blockquote>💎    <b>الماس:</b> <code>الماس</code> ، <code>حساب</code> ، <code>برترین ها</code> (در گروه)</blockquote>\n<blockquote>🎮    <b>دوز:</b> <code>دوز 100</code> (در گروه)</blockquote>\n<blockquote>💣    <b>مین:</b> <code>مین 100</code> (در گروه)</blockquote>\n<blockquote>🚨    <b>گزارش کلاهبردار:</b> <code>/scam @username</code></blockquote>\n<blockquote>🔍    <b>استعلام کلاهبردار:</b> <code>/check @username</code></blockquote>\n<blockquote>👤    <b>اکانت:</b> <code>/account</code></blockquote>\n<blockquote>🗣    <b>زبان ربات:</b> <code>/lang</code> (در پیوی ربات)</blockquote>\n<blockquote>🛡    <b>محافظ گروه:</b> عضویت اجباری ، ضد سلف ، ضد تبچی ، ضد کلاهبرداری</blockquote>\n<blockquote>⚙️    <b>تنظیمات گروه:</b> <code>/panel</code> (ادمین گروه)</blockquote>",
+  "text": "📖 <b>راهنمای ربات</b>\n\n<blockquote>💱    <b>قیمت ارز دیجیتال:</b> <code>btc</code> ، <code>قیمت تون</code></blockquote>\n<blockquote>💵    <b>تبدیل:</b> <code>10 تتر</code> ، <code>500 تون</code> ، <code>2.5 btc</code></blockquote>\n<blockquote>💸    <b>تبدیل ارز به ارز:</b> <code>500 لیر دلار</code> ، <code>500 تتر تون</code> ، <code>2 یورو به لیر</code></blockquote>\n<blockquote>💰    <b>تومان:</b> <code>500000 تومان</code> ، <code>2 میلیون تومن</code> ، <code>10m ریال</code></blockquote>\n<blockquote>🌍    <b>ارز کشورها:</b> <code>500 درهم</code> ، <code>100 یورو</code> ، <code>50 usd</code> ، <code>1000 لیر</code></blockquote>\n<blockquote>📊    <b>بازار کریپتو:</b> <code>نرخ ارز</code> ، <code>بازار</code></blockquote>\n<blockquote>🏅    <b>طلا و سکه:</b> <code>طلا</code> ، <code>سکه</code> ، <code>2 سکه</code></blockquote>\n<blockquote>⭐️    <b>استارز:</b> <code>استارز</code> ، <code>1000 استارز</code></blockquote>\n<blockquote>💫    <b>پریمیوم:</b> <code>پریمیوم</code></blockquote>\n<blockquote>👛    <b>چکر ولت:</b> آدرس کیف پول را بفرستید (BTC, ETH, BSC, TRON, TON, SOL, ...)</blockquote>\n<blockquote>🔗    <b>چکر هش:</b> هش تراکنش را بفرستید</blockquote>\n<blockquote>🎁    <b>گیفت:</b> لینک <code>t.me/nft/...</code> یا <code>/gift @username</code></blockquote>\n<blockquote>📸    <b>اینستاگرام:</b> لینک پست و ریلز</blockquote>\n<blockquote>📝    <b>ترجمه:</b> روی پیام ریپلای و <code>ترجمه</code></blockquote>\n<blockquote>🧮    <b>ماشین حساب:</b> <code>698*789</code> ، <code>797÷788</code></blockquote>\n<blockquote>🆔    <b>آیدی عددی:</b> ریپلای و <code>UID</code></blockquote>\n<blockquote>😀    <b>ایموجی:</b> <code>/emoji</code> + ایموجی پریمیوم یا ریپلای</blockquote>\n<blockquote>💎    <b>الماس:</b> <code>الماس</code> ، <code>حساب</code> ، <code>برترین ها</code> (در گروه)</blockquote>\n<blockquote>🎮    <b>دوز:</b> <code>دوز 100</code> (در گروه)</blockquote>\n<blockquote>💣    <b>مین:</b> <code>مین 100</code> (در گروه)</blockquote>\n<blockquote>🚨    <b>گزارش کلاهبردار:</b> <code>/scam @username</code></blockquote>\n<blockquote>🔍    <b>استعلام کلاهبردار:</b> <code>/check @username</code></blockquote>\n<blockquote>👤    <b>اکانت:</b> <code>/account</code></blockquote>",
   "desc": "راهنما"
  },
  "bot_added": {
-  "text": "🎉 <b>ربات با موفقیت به گروه اضافه شد!</b>\n⚠️ برای فعال شدن همه قابلیت‌ها (ضد سلف، ضد تبچی، عضویت اجباری و ...) من رو <b>ادمین کامل</b> کنید.\n⚙️ تنظیمات: <code>/settings</code>",
+  "text": "🎉 <b>ربات با موفقیت به گروه اضافه شد!</b>\n⚠️ برای فعال شدن همه قابلیت‌ها (ضد سلف، ضد تبچی، عضویت اجباری و ...) من رو <b>ادمین کامل</b> کنید.\n⚙️ تنظیمات: <code>/panel</code>",
   "desc": "پیام اضافه شدن ربات به گروه"
  },
  "error": {
@@ -123,14 +123,6 @@
   "text": "⌛️ این دکمه منقضی شده است، دوباره درخواست دهید.",
   "desc": "دکمه منقضی (پاپ‌آپ)"
  },
- "arz_board": {
-  "text": "💱 <b>نرخ ارز بازار آزاد</b>\n\n<blockquote>{lines}</blockquote>\n🗓 {time}",
-  "desc": "تابلوی نرخ ارز بازار آزاد ({lines} {source} {time})"
- },
- "arz_line": {
-  "text": "{icon}    {name}  <code>{toman}</code> ت  {change}",
-  "desc": "هر خط نرخ ارز ({flag} {name} {toman} {change})"
- },
  "insta_loading": {
   "text": "⏳ در حال دریافت اطلاعات از اینستاگرام...",
   "desc": "در حال دریافت اینستاگرام"
@@ -180,7 +172,7 @@
   "desc": "کاربر مسدود"
  },
  "bot_promoted": {
-  "text": "🎉 <b>ربات در این گروه ادمین شد!</b>\n🔗 برای استعلام هش کافیه هش یا لینک تراکنش رو بفرستی\n👛 برای استعلام ولت: <code>wallet آدرس</code>\n💱 برای قیمت: <code>10 تتر</code>\n⚙️ تنظیمات گروه: /settings",
+  "text": "🎉 <b>ربات در این گروه ادمین شد!</b>\n🔗 برای استعلام هش کافیه هش یا لینک تراکنش رو بفرستی\n👛 برای استعلام ولت: <code>wallet آدرس</code>\n💱 برای قیمت: <code>10 تتر</code>\n⚙️ تنظیمات گروه: /panel",
   "desc": "پیام ادمین شدن ربات در گروه"
  },
  "admin_message": {

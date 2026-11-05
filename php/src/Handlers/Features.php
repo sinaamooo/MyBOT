@@ -360,6 +360,16 @@ final class Scam
             TG::answer($cq['id'], '❌', true);
             return;
         }
+        if ($action === 'revoke') {
+            if ($r['status'] === 'approved') {
+                DB::updateScam((int)$id, ['status' => 'revoked']);
+                TG::answer($cq['id'], '✅');
+                TG::edit($cq['message']['chat']['id'], $cq['message']['message_id'], UI::esc($cq['message']['text'] ?? '') . "\n\n<b>♻️ تایید لغو شد</b>", null);
+            } else {
+                TG::answer($cq['id'], 'status: ' . $r['status'], true);
+            }
+            return;
+        }
         if ($r['status'] !== 'pending') {
             TG::answer($cq['id'], 'status: ' . $r['status'], true);
             return;
@@ -368,7 +378,7 @@ final class Scam
         DB::updateScam((int)$id, ['status' => $ok ? 'approved' : 'rejected', 'decided_at' => time(), 'decided_by' => $cq['from']['id']]);
         TG::answer($cq['id'], '✅');
         $status = $ok ? '✅ تایید شد و در گروه‌ها اعلام می‌شود' : '❌ رد شد';
-        TG::edit($cq['message']['chat']['id'], $cq['message']['message_id'], UI::esc($cq['message']['text'] ?? '') . "\n\n<b>$status</b>");
+        TG::edit($cq['message']['chat']['id'], $cq['message']['message_id'], UI::esc($cq['message']['text'] ?? '') . "\n\n<b>$status</b>", $ok ? UI::kb([[UI::raw('♻️ لغو تایید', "scamadm:revoke:$id", 'danger')]]) : null);
         TG::send($r['reporter_id'], UI::t($ok ? 'scam_approved_user' : 'scam_rejected_user', ['id' => $r['id']]));
         if ($ok) {
             self::broadcast($r);
@@ -413,47 +423,6 @@ final class Scam
 
 final class Extras
 {
-    const ARZ = ['USD', 'EUR', 'GBP', 'AED', 'TRY', 'CNY', 'IQD', 'AFN', 'CAD', 'AUD', 'RUB', 'SAR', 'KWD', 'OMR', 'QAR', 'CHF', 'JPY', 'INR', 'AMD', 'GEL', 'AZN'];
-
-    private static function arzIcon(string $code, string $cc): string
-    {
-        $flag = Currencies::flag($cc);
-        if (isset(Config::data('badges')[$code])) {
-            return UI::badge($code, $flag ?: '🪙');
-        }
-        return $flag !== '' && $flag !== '🏳' ? $flag : '🪙';
-    }
-
-    public static function arz(array $m, string $args = ''): void
-    {
-        $lines = [];
-        $market = false;
-        foreach (self::ARZ as $code) {
-            $f = Currencies::fiat($code);
-            $px = Market::fiatToman($code);
-            if (!$px) {
-                $rates = Tgju::rates();
-                $usdt = Prices::usdtToman();
-                $cross = Prices::fiatRates();
-                $ct = ($usdt && !empty($cross[$code])) ? $usdt / $cross[$code] : null;
-                $v = $rates ? Tgju::toman($code, $ct) : null;
-                $px = ($v ?? $ct) ? ['toman' => $v ?? $ct, 'change' => null, 'source' => $v ? 'market' : 'cross'] : null;
-            }
-            if (!$px) {
-                continue;
-            }
-            $market = $market || $px['source'] === 'market';
-            $lines[] = UI::fill(UI::template('arz_line'), ['icon' => self::arzIcon($code, (string)$f['cc']), 'flag' => Currencies::flag($f['cc']), 'name' => Currencies::fiatName($code), 'toman' => Fmt::toman($px['toman']),
-                'change' => $px['change'] !== null ? Fmt::badge($px['change']) : '']);
-        }
-        if (!$lines) {
-            Bot::send($m, UI::t('price_unavailable'));
-            return;
-        }
-        Bot::send($m, UI::t('arz_board', ['lines' => implode("\n", $lines), 'source' => $market ? 'tgju.org' : UI::l('نرخ جهانی × تتر'), 'time' => Fmt::now()]));
-        Tools::react($m);
-    }
-
     private static function err(int $code): string
     {
         return [451 => 'insta_private', 452 => 'insta_no_story', 453 => 'insta_no_highlight'][$code] ?? 'insta_not_found';
@@ -584,17 +553,6 @@ final class Extras
         Bot::send($m, $text, UI::footer($rows));
     }
 
-    public static function insta(array $m, string $args): void
-    {
-        if ($l = Instagram::link($args)) {
-            self::instaLink($m, $l);
-        } elseif (preg_match('/^@?([A-Za-z0-9_.]{1,30})$/', trim($args), $mm)) {
-            self::instaProfile($m, $mm[1]);
-        } else {
-            Bot::send($m, UI::t('insta_not_found'), null);
-        }
-    }
-
     private static function own(array $cq, ?array $d): bool
     {
         $err = !$d ? 'expired' : ((!empty($d['owner']) && $d['owner'] !== $cq['from']['id']) ? 'not_your_button' : null);
@@ -661,30 +619,6 @@ final class TextRouter
 {
     const UID = ['uid', 'آیدی عددی', 'ایدی عددی', 'آیدی', 'ایدی', 'id', 'ایدیش', 'آیدیش', 'айди'];
     const TR = ['ترجمه', 'ترجمه کن', 'translate', 'tr', 'ترجمش کن', 'ترجمه شود', 'перевод', 'перевести'];
-
-    public static function slash(array $m, string $text): bool
-    {
-        if (!preg_match('/^\/(\S+?)(?:@\w+)?(?:\s+(.*))?$/su', $text, $mm)) {
-            return false;
-        }
-        $body = trim($mm[1] . ' ' . ($mm[2] ?? ''));
-        if (mb_strlen($body) > 60) {
-            return false;
-        }
-        $p = Parse::amount($body);
-        if ($p) {
-            [$amount, $unit] = $p;
-        } elseif (Currencies::resolve($body)) {
-            [$amount, $unit] = [1, $body];
-        } else {
-            return false;
-        }
-        $r = Currencies::resolve($unit);
-        if (!$r || $r[0] !== 'fiat') {
-            return false;
-        }
-        return Tools::answerAmount($m, $amount, $unit, !Bot::isPrivate($m));
-    }
 
     public static function route(array $m): void
     {
