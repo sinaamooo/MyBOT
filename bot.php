@@ -1,7 +1,7 @@
 <?php
 /**
  * ربات ساخت پک ایموجی پریمیوم (وب‌هوک، بدون دیتابیس)
- * ایموجی‌ها را بفرست ← ربات پک می‌سازد ← لینک پک را می‌دهد.
+ * ایموجی‌ها را بفرست یا فوروارد کن ← «✅ ساخت پک» ← همه در یک پک (تا ۲۰۰ تا) + لینک
  */
 
 // ===================== تنظیمات =====================
@@ -13,6 +13,7 @@ const FFMPEG        = 'ffmpeg'; // برای گیف/ویدیو (اختیاری)
 // ===================================================
 
 const MAX_EMOJI = 200;
+const CHUNK_SECONDS = 20; // هر درخواست حداکثر این‌قدر کار می‌کند، بعد خودش ادامه را صدا می‌زند
 
 error_reporting(E_ALL);
 ini_set('display_errors', '0');
@@ -36,6 +37,29 @@ function secret()
     return substr(hash('sha256', BOT_TOKEN), 0, 32);
 }
 
+function selfUrl()
+{
+    return 'https://' . $_SERVER['HTTP_HOST'] . strtok($_SERVER['REQUEST_URI'], '?');
+}
+
+/** جواب فوری به درخواست و ادامه‌ی کار در پس‌زمینه */
+function finishRequest()
+{
+    ignore_user_abort(true);
+    @set_time_limit(0);
+    while (ob_get_level()) {
+        ob_end_clean();
+    }
+    header('Content-Length: 0');
+    header('Connection: close');
+    flush();
+    if (function_exists('fastcgi_finish_request')) {
+        fastcgi_finish_request();
+    } elseif (function_exists('litespeed_finish_request')) {
+        litespeed_finish_request();
+    }
+}
+
 // ---------- نصب وب‌هوک و عیب‌یابی: bot.php?install=SECRET ----------
 if (isset($_GET['install'])) {
     header('Content-Type: text/plain; charset=utf-8');
@@ -43,9 +67,10 @@ if (isset($_GET['install'])) {
         exit('wrong key');
     }
     $ok = function ($b) { return $b ? '✅' : '❌'; };
-    $url = 'https://' . $_SERVER['HTTP_HOST'] . strtok($_SERVER['REQUEST_URI'], '?');
+    $url = selfUrl();
+    @file_put_contents(DATA_DIR . '/self_url.txt', $url);
     echo "PHP " . PHP_VERSION . ' ' . $ok(version_compare(PHP_VERSION, '7.1', '>=')) . "\n";
-    echo 'cURL ' . $ok(function_exists('curl_init')) . ' | GD ' . $ok(function_exists('imagecreatefromstring')) . ' | mbstring ' . $ok(function_exists('mb_substr')) . "\n";
+    echo 'cURL ' . $ok(function_exists('curl_init')) . ' | GD ' . $ok(function_exists('imagecreatefromstring')) . "\n";
     echo 'Data folder writable ' . $ok(is_writable(DATA_DIR)) . ' ' . DATA_DIR . "\n";
     echo 'ffmpeg (gif/video) ' . $ok(hasFfmpeg()) . "\n\n";
 
@@ -66,6 +91,26 @@ if (isset($_GET['install'])) {
     exit;
 }
 
+// ---------- ادامه‌ی ساخت پک (ربات خودش این را صدا می‌زند) ----------
+if (isset($_GET['run'])) {
+    if (!hash_equals(secret(), (string) $_GET['run'])) {
+        exit;
+    }
+    $uid = (int) ($_GET['uid'] ?? 0);
+    $delay = min(55, max(0, (int) ($_GET['delay'] ?? 0)));
+    finishRequest();
+    if ($delay) {
+        sleep($delay);
+    }
+    try {
+        lockUser($uid);
+        runBuild($uid);
+    } catch (Throwable $e) {
+        error_log($e->getMessage() . ' @' . $e->getLine());
+    }
+    exit;
+}
+
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit('OK');
 }
@@ -77,21 +122,10 @@ $update = json_decode((string) file_get_contents('php://input'), true);
 if (!is_array($update)) {
     exit;
 }
-
-// جواب سریع به تلگرام و ادامه‌ی کار در پس‌زمینه
-ignore_user_abort(true);
-@set_time_limit(0);
-while (ob_get_level()) {
-    ob_end_clean();
+if (@file_get_contents(DATA_DIR . '/self_url.txt') !== selfUrl()) {
+    @file_put_contents(DATA_DIR . '/self_url.txt', selfUrl());
 }
-header('Content-Length: 0');
-header('Connection: close');
-flush();
-if (function_exists('fastcgi_finish_request')) {
-    fastcgi_finish_request();
-} elseif (function_exists('litespeed_finish_request')) {
-    litespeed_finish_request();
-}
+finishRequest();
 
 try {
     handle($update);
@@ -106,19 +140,47 @@ function handle(array $u): void
     if (isset($u['callback_query'])) {
         $q = $u['callback_query'];
         $uid = (int) $q['from']['id'];
-        tg('answerCallbackQuery', ['callback_query_id' => $q['id']]);
         if (!allowed($uid)) {
+            tg('answerCallbackQuery', ['callback_query_id' => $q['id'], 'text' => '🔒 این ربات خصوصی است.']);
             return;
         }
         lockUser($uid);
-        if ($q['data'] === 'new') {
+        $st = loadState($uid);
+        $data = (string) $q['data'];
+        $toast = '';
+
+        if ($data === 'new') {
             startNew($uid);
-        } elseif ($q['data'] === 'auto') {
-            $st = loadState($uid);
+        } elseif ($data === 'auto') {
             if (($st['step'] ?? '') === 'link') {
-                setLinkName($uid, $st, 'emoji_' . substr(str_shuffle('abcdefghijkmnpqrstuvwxyz23456789'), 0, 6), true);
+                setLinkName($uid, $st, randomName(), true);
             }
+        } elseif ($data === 'build') {
+            if (!empty($st['building'])) {
+                $toast = '⏳ در حال ساخت است...';
+            } elseif (empty($st['queue'])) {
+                $toast = 'اول ایموجی‌ها را بفرست یا فوروارد کن.';
+            } elseif (empty($st['pack']) && empty($st['name'])) {
+                askTitle($uid, $st);
+            } else {
+                tg('answerCallbackQuery', ['callback_query_id' => $q['id']]);
+                startBuild($uid, $st);
+                return;
+            }
+        } elseif ($data === 'go') {
+            if (!empty($st['building'])) {
+                tg('answerCallbackQuery', ['callback_query_id' => $q['id'], 'text' => '▶️ ادامه...']);
+                runBuild($uid);
+                return;
+            }
+        } elseif ($data === 'clear') {
+            $st['queue'] = [];
+            $st['seen'] = [];
+            $st['over'] = 0;
+            saveState($uid, $st);
+            edit($uid, (int) $q['message']['message_id'], '🗑 لیست ایموجی‌های دریافت‌شده پاک شد.');
         }
+        tg('answerCallbackQuery', ['callback_query_id' => $q['id'], 'text' => $toast]);
         return;
     }
 
@@ -135,13 +197,11 @@ function handle(array $u): void
 
     $text = trim((string) ($m['text'] ?? ''));
     $st = loadState($uid);
-    $hasEmoji = hasContent($m);
 
     if (preg_match('~^/start~', $text)) {
-        send($uid, "سلام 👋\n\nایموجی‌های پریمیومت را بفرست تا برایت <b>پک ایموجی</b> بسازم و لینکش را بدهم ✨\n\n"
-            . "• چند ایموجی را می‌توانی در یک پیام بفرستی\n"
-            . "• استیکر، عکس و گیف هم قبول است\n"
-            . "• هر پک تا ۲۰۰ ایموجی\n\n"
+        send($uid, "سلام 👋\n\nایموجی‌های پریمیومت را <b>بفرست یا فوروارد کن</b> (هر چند پیام که بخواهی)، بعد روی «✅ ساخت پک» بزن تا همه را در <b>یک پک</b> بگذارم و لینکش را بدهم ✨\n\n"
+            . "• هر پک تا ۲۰۰ ایموجی\n"
+            . "• استیکر، عکس و گیف هم قبول است\n\n"
             . "🆕 /new — ساخت پک جدید\n"
             . "✏️ /name — تغییر اسم پک فعلی (مثال: <code>/name پک من</code>)\n"
             . "🔗 /link — لینک پک فعلی");
@@ -172,18 +232,13 @@ function handle(array $u): void
     }
 
     $step = $st['step'] ?? '';
+    $hasEmoji = hasContent($m);
 
-    // مرحله‌ی اسم پک
-    if ($step === 'title' || $step === 'link') {
-        if ($hasEmoji) {
-            $st['pending'][] = $m;
-            saveState($uid, $st);
-            send($uid, $step === 'title' ? '📝 اول <b>اسم پک</b> را بفرست، بعد ایموجی‌ها اضافه می‌شوند.' : '🔗 اول <b>اسم انگلیسی لینک</b> را بفرست یا «🎲 خودکار» را بزن.', $step === 'link' ? autoKb() : null);
-            return;
-        }
-        if ($text === '' || $text[0] === '/') {
-            return;
-        }
+    if ($hasEmoji) {
+        collect($uid, $st, $m);
+        return;
+    }
+    if (($step === 'title' || $step === 'link') && $text !== '' && $text[0] !== '/') {
         if ($step === 'title') {
             $st['title'] = cut(preg_replace('/\s+/u', ' ', $text), 64);
             $st['step'] = 'link';
@@ -191,198 +246,442 @@ function handle(array $u): void
             send($uid, "🔗 حالا یک <b>اسم انگلیسی</b> برای لینک پک بفرست (فقط حروف انگلیسی، عدد و _)\n\n"
                 . "مثال: <code>sina_emoji</code>\n"
                 . 'لینک: <code>t.me/addemoji/sina_emoji_by_' . h(botUsername()) . "</code>\n\n"
-                . 'یا «🎲 خودکار» را بزن.', autoKb());
-            return;
+                . 'یا «🎲 خودکار» را بزن.', [[['text' => '🎲 خودکار', 'callback_data' => 'auto']]]);
+        } else {
+            setLinkName($uid, $st, $text, false);
         }
-        setLinkName($uid, $st, $text, false);
         return;
     }
+    send($uid, '❗️ ایموجی پریمیوم، استیکر، عکس یا گیف بفرست یا فوروارد کن.');
+}
 
-    if (!$hasEmoji) {
-        send($uid, '❗️ ایموجی پریمیوم، استیکر، عکس یا گیف بفرست.');
+/** جمع کردن ایموجی‌های پیام در صف (بدون ساختن؛ ساخت با دکمه‌ی «✅ ساخت پک») */
+function collect(int $uid, array $st, array $m): void
+{
+    try {
+        $items = quickItems($m);
+    } catch (Throwable $e) {
+        send($uid, '❗️ ' . h($e->getMessage()));
         return;
     }
-    if (empty($st['pack']) && empty($st['name'])) {
-        // هنوز پکی نیست: اول اسم بپرس، ایموجی‌ها نگه داشته می‌شوند
-        $st = ['step' => 'title', 'pending' => [$m]];
+    $queue = $st['queue'] ?? [];
+    $seen = array_flip($st['seen'] ?? []);
+    $room = MAX_EMOJI - (int) ($st['count'] ?? 0) - count($queue);
+    $new = 0;
+    foreach ($items as $it) {
+        if ($it['t'] === 'ce') {
+            if (isset($seen[$it['id']])) {
+                continue; // تکراری
+            }
+            $seen[$it['id']] = 1;
+        }
+        if ($room <= 0) {
+            $st['over'] = ($st['over'] ?? 0) + 1;
+            continue;
+        }
+        $it['o'] = (int) $m['message_id'] * 1000 + $new; // برای حفظ ترتیب پیام‌ها
+        $queue[] = $it;
+        $room--;
+        $new++;
+    }
+    $st['queue'] = $queue;
+    $st['seen'] = array_keys($seen);
+    if (!empty($st['building'])) {
+        $st['total'] = ($st['total'] ?? 0) + $new; // ساخت در جریان است؛ این‌ها هم اضافه می‌شوند
         saveState($uid, $st);
-        send($uid, "📝 یک <b>اسم</b> برای پک بفرست:\n\nمثال: <code>ایموجی‌های سینا</code>");
         return;
     }
-    processMessages($uid, $st, [$m]);
+    if (!empty($st['status'])) {
+        tg('deleteMessage', ['chat_id' => $uid, 'message_id' => $st['status']]);
+    }
+    $n = count($queue);
+    $text = "📥 <b>$n</b> ایموجی دریافت شد.";
+    if (!empty($st['pack'])) {
+        $text .= "\n📦 پک فعلی: «" . h($st['title']) . '» (' . (int) $st['count'] . ' ایموجی)';
+    }
+    if (!empty($st['over'])) {
+        $text .= "\n⚠️ پک فقط ۲۰۰ جا دارد؛ {$st['over']} ایموجی اضافه‌تر کنار گذاشته شد.";
+    }
+    $text .= "\n\nبقیه را هم بفرست یا فوروارد کن.\nوقتی تمام شد روی «✅ ساخت پک» بزن 👇";
+    $r = send($uid, $text, [
+        [['text' => empty($st['pack']) ? '✅ ساخت پک' : '✅ افزودن به پک', 'callback_data' => 'build']],
+        [['text' => '🗑 پاک کردن لیست', 'callback_data' => 'clear']],
+    ]);
+    $st['status'] = $r['message_id'] ?? 0;
+    saveState($uid, $st);
 }
 
 function startNew(int $uid): void
 {
-    saveState($uid, ['step' => 'title', 'pending' => []]);
+    $old = loadState($uid);
+    // ایموجی‌هایی که قبل از /new فرستاده شده‌اند حفظ می‌شوند
+    $st = ['step' => 'title', 'queue' => empty($old['building']) ? ($old['queue'] ?? []) : [], 'count' => 0];
+    $st['seen'] = [];
+    foreach ($st['queue'] as $it) {
+        if ($it['t'] === 'ce') {
+            $st['seen'][] = $it['id'];
+        }
+    }
+    saveState($uid, $st);
     send($uid, "🆕 <b>پک جدید</b>\n\n📝 یک اسم برای پک بفرست:\n\nمثال: <code>ایموجی‌های سینا</code>");
 }
 
-function autoKb(): array
+function askTitle(int $uid, array $st): void
 {
-    return [[['text' => '🎲 خودکار', 'callback_data' => 'auto']]];
+    $st['step'] = 'title';
+    saveState($uid, $st);
+    send($uid, "📝 یک <b>اسم</b> برای پک بفرست:\n\nمثال: <code>ایموجی‌های سینا</code>");
+}
+
+function randomName()
+{
+    return 'emoji_' . substr(str_shuffle('abcdefghijkmnpqrstuvwxyz23456789'), 0, 7);
 }
 
 function setLinkName(int $uid, array $st, string $text, bool $auto): void
 {
+    $kb = [[['text' => '🎲 خودکار', 'callback_data' => 'auto']]];
     $base = preg_replace('~^(https?://)?t\.me/addemoji/~i', '', trim($text));
     $base = preg_replace('/_by_' . preg_quote(botUsername(), '/') . '$/i', '', $base);
     $base = rtrim($base, '_');
     if (!preg_match('/^[A-Za-z][A-Za-z0-9_]*$/', $base) || strpos($base, '__') !== false) {
-        send($uid, "❗️ فقط حروف انگلیسی، عدد و _ (اولش حرف باشد). دوباره بفرست:", autoKb());
+        send($uid, "❗️ فقط حروف انگلیسی، عدد و _ (اولش حرف باشد). دوباره بفرست:", $kb);
         return;
     }
     $name = $base . '_by_' . botUsername();
     if (strlen($name) > 64) {
-        send($uid, '❗️ اسم خیلی طولانی است. کوتاه‌ترش کن:', autoKb());
+        send($uid, '❗️ اسم خیلی طولانی است. کوتاه‌ترش کن:', $kb);
         return;
     }
     if (tg('getStickerSet', ['name' => $name])) {
         if ($auto) {
-            setLinkName($uid, $st, 'emoji_' . substr(str_shuffle('abcdefghijkmnpqrstuvwxyz23456789'), 0, 7), true);
+            setLinkName($uid, $st, randomName(), true);
             return;
         }
-        send($uid, '❗️ این اسم قبلاً گرفته شده. یک اسم دیگر بفرست:', autoKb());
+        send($uid, '❗️ این اسم قبلاً گرفته شده. یک اسم دیگر بفرست:', $kb);
         return;
     }
-    $pending = $st['pending'] ?? [];
-    $st = ['name' => $name, 'title' => $st['title'] ?? 'Emoji Pack', 'count' => 0];
+    $st = ['name' => $name, 'title' => $st['title'] ?? 'Emoji Pack', 'count' => 0, 'queue' => $st['queue'] ?? [], 'seen' => $st['seen'] ?? []];
     saveState($uid, $st);
-    if ($pending) {
-        processMessages($uid, $st, $pending);
+    if ($st['queue']) {
+        startBuild($uid, $st);
     } else {
-        send($uid, '✅ اسم ثبت شد: «' . h($st['title']) . "»\n\nحالا ایموجی‌ها را بفرست.");
+        send($uid, '✅ اسم ثبت شد: «' . h($st['title']) . "»\n\nحالا ایموجی‌ها را بفرست یا فوروارد کن، بعد «✅ ساخت پک» را بزن.");
     }
 }
 
-/** افزودن ایموجی‌های چند پیام به پک کاربر (اگر پک نیست ساخته می‌شود) */
-function processMessages(int $uid, array $st, array $messages): void
+// ===================== ساخت پک (تکه‌تکه، با ادامه‌ی خودکار) =====================
+
+function startBuild(int $uid, array $st): void
 {
-    $items = [];
-    $errors = [];
-    foreach ($messages as $m) {
-        try {
-            $items = array_merge($items, extractItems($m));
-        } catch (Throwable $e) {
-            $errors[] = $e->getMessage();
+    if (!empty($st['status'])) {
+        tg('deleteMessage', ['chat_id' => $uid, 'message_id' => $st['status']]);
+    }
+    usort($st['queue'], function ($a, $b) {
+        return ($a['o'] ?? 0) <=> ($b['o'] ?? 0);
+    });
+    $st['dup'] = 0;
+    $st['before'] = (int) ($st['count'] ?? 0);
+    if (!empty($st['pack'])) {
+        $set = tg('getStickerSet', ['name' => $st['pack']]);
+        if ($set) {
+            // ایموجی‌هایی که از قبل در پک هستند دوباره اضافه نشوند
+            $inPack = [];
+            foreach ($set['stickers'] as $s) {
+                $inPack[(string) ($s['custom_emoji_id'] ?? '')] = true;
+            }
+            $n = count($st['queue']);
+            $st['queue'] = array_values(array_filter($st['queue'], function ($it) use ($inPack) {
+                return $it['t'] !== 'ce' || !isset($inPack[$it['id']]);
+            }));
+            $st['dup'] = $n - count($st['queue']);
+            $st['before'] = count($set['stickers']);
         }
     }
-    if (!$items) {
-        send($uid, '❗️ ' . h($errors ? $errors[0] : 'ایموجی پریمیوم، استیکر، عکس یا گیف بفرست.'));
+    $st['count'] = $st['before'];
+    $st['building'] = true;
+    $st['ok'] = 0;
+    $st['done'] = 0;
+    $st['total'] = count($st['queue']);
+    $st['errors'] = [];
+    $st['added'] = [];
+    $st['verified'] = false;
+    $r = send($uid, progressText($st), goKb());
+    $st['status'] = $r['message_id'] ?? 0;
+    saveState($uid, $st);
+    runBuild($uid);
+}
+
+function progressText(array $st, string $extra = ''): string
+{
+    return '⏳ در حال ساخت پک «' . h($st['title'] ?? '') . "»...\n\n"
+        . '✅ ' . (int) ($st['done'] ?? 0) . ' از ' . (int) ($st['total'] ?? 0)
+        . ($extra !== '' ? "\n\n" . $extra : '')
+        . "\n\nاگر چند دقیقه تغییری نکرد، «▶️ ادامه» را بزن.";
+}
+
+function goKb(): array
+{
+    return [[['text' => '▶️ ادامه', 'callback_data' => 'go']]];
+}
+
+/** یک تکه از کار ساخت را انجام می‌دهد؛ اگر کار ماند، خودش ادامه را صدا می‌زند */
+function runBuild(int $uid): void
+{
+    $st = loadState($uid);
+    if (empty($st['building'])) {
         return;
     }
-
-    $wait = send($uid, '⏳ در حال ساخت... 0 از ' . count($items));
-    $waitId = $wait['message_id'] ?? 0;
-    $before = empty($st['pack']) ? 0 : realCount($st['pack']);
-    if ($before === null) {
-        $before = (int) ($st['count'] ?? 0);
-    }
-    $st['count'] = $before;
-    $added = [];
-    $full = false;
+    $start = time();
     $lastEdit = time();
+    $status = (int) ($st['status'] ?? 0);
+    $map = [];
+    $full = false;
 
-    foreach ($items as $i => $it) {
-        if (($st['count'] ?? 0) >= MAX_EMOJI) {
+    while (!empty($st['queue']) && time() - $start < CHUNK_SECONDS) {
+        if ((int) $st['count'] >= MAX_EMOJI) {
             $full = true;
             break;
         }
-        try {
-            addOne($uid, $st, toInputSticker($it, $uid), !empty($it['repaint']));
-            $added[] = $it;
-        } catch (Throwable $e) {
-            $err = errorText($e->getMessage());
-            $errors[] = $err;
-            if (stripos($e->getMessage(), 'STICKERS_TOO_MUCH') !== false) {
-                $full = true;
-                break;
-            }
-            if (empty($st['pack']) && stripos($e->getMessage(), 'name') !== false) {
-                $st['step'] = 'link';
-                $st['pending'] = $messages;
-                unset($st['name']);
+        if (!$map) {
+            $map = resolveEmojis($st['queue']);
+            if ($map === null) {
+                edit($uid, $status, progressText($st, '⚠️ ارتباط با تلگرام برقرار نشد.'), goKb());
                 saveState($uid, $st);
-                send($uid, '❗️ ' . h($err) . "\nیک اسم انگلیسی دیگر برای لینک بفرست:", autoKb());
+                continueLater($uid, 10);
                 return;
             }
         }
-        if ($waitId && time() - $lastEdit >= 3) {
+        $creating = empty($st['pack']);
+        $take = 1;
+        try {
+            if ($creating) {
+                // ساخت پک با حداکثر ۵۰ ایموجی در یک درخواست
+                [$inputs, $take, $repaint] = firstBatch($st['queue'], $map, $uid, empty($st['single']) ? 50 : 1);
+                tgOrFail('createNewStickerSet', [
+                    'user_id' => $uid, 'name' => $st['name'], 'title' => $st['title'],
+                    'stickers' => $inputs, 'sticker_type' => 'custom_emoji', 'needs_repainting' => $repaint,
+                ]);
+                $st['pack'] = $st['name'];
+                $added = $take;
+            } else {
+                tgOrFail('addStickerToSet', ['user_id' => $uid, 'name' => $st['pack'], 'sticker' => itemInput($st['queue'][0], $map, $uid)]);
+                $added = 1;
+            }
+            for ($i = 0; $i < $take; $i++) {
+                $it = $st['queue'][$i];
+                if ($it['t'] === 'ce' && isset($map[$it['id']])) {
+                    $st['added'][$it['id']] = $map[$it['id']]['file_unique_id'];
+                }
+            }
+            $st['ok'] += $added;
+            $st['count'] += $added;
+        } catch (Throwable $e) {
+            $msg = $e->getMessage();
+            if (preg_match('/retry after (\d+)/i', $msg, $mm)) {
+                saveState($uid, $st);
+                edit($uid, $status, progressText($st, "⏳ تلگرام موقتاً محدودیت گذاشته؛ حدود {$mm[1]} ثانیه دیگر خودکار ادامه می‌دهد."), goKb());
+                continueLater($uid, (int) $mm[1] + 1);
+                return;
+            }
+            if (stripos($msg, 'STICKERS_TOO_MUCH') !== false) {
+                $full = true;
+                break;
+            }
+            if ($creating && stripos($msg, 'name') !== false) {
+                $st['building'] = false;
+                $st['step'] = 'link';
+                unset($st['name']);
+                saveState($uid, $st);
+                edit($uid, $status, '❗️ ' . h(errorText($msg)) . "\nیک اسم انگلیسی دیگر برای لینک بفرست:", [[['text' => '🎲 خودکار', 'callback_data' => 'auto']]]);
+                return;
+            }
+            if ($creating && $take > 1) {
+                $st['single'] = true; // ساخت دسته‌ای نشد؛ تک‌تک امتحان کن
+                continue;
+            }
+            $st['errors'][] = errorText($msg);
+            $take = 1;
+        }
+        $st['queue'] = array_values(array_slice($st['queue'], $take));
+        $st['done'] += $take;
+        saveState($uid, $st);
+        if ($status && time() - $lastEdit >= 3) {
             $lastEdit = time();
-            edit($uid, $waitId, '⏳ در حال ساخت... ' . ($i + 1) . ' از ' . count($items));
+            edit($uid, $status, progressText($st), goKb());
         }
     }
 
-    // بررسی با خود تلگرام: اگر ایموجی کپی‌شده‌ای واقعاً اضافه نشده بود، فایلش را دوباره آپلود کن
-    if (!empty($st['pack']) && $added) {
+    if (!empty($st['queue']) && !$full) {
+        saveState($uid, $st);
+        edit($uid, $status, progressText($st), goKb());
+        continueLater($uid);
+        return;
+    }
+
+    // بررسی با خود تلگرام: اگر ایموجی‌ای واقعاً اضافه نشده بود، فایلش دوباره آپلود شود
+    if (!$full && empty($st['verified']) && !empty($st['pack'])) {
+        $st['verified'] = true;
         $set = tg('getStickerSet', ['name' => $st['pack']]);
         if ($set) {
             $real = count($set['stickers']);
-            $missing = $before + count($added) - $real;
-            if ($missing > 0) {
+            $short = (int) $st['before'] + (int) $st['ok'] - $real;
+            $st['count'] = $real;
+            if ($short > 0) {
                 $have = [];
                 foreach ($set['stickers'] as $s) {
                     $have[$s['file_unique_id']] = true;
                 }
-                foreach ($added as $it) {
-                    if ($missing <= 0 || $real >= MAX_EMOJI) {
+                foreach ($st['added'] as $id => $uniq) {
+                    if ($short <= 0) {
                         break;
                     }
-                    if ($it['kind'] !== 'copy' || isset($have[$it['unique_id']])) {
-                        continue;
-                    }
-                    try {
-                        $ext = ['static' => 'webp', 'animated' => 'tgs', 'video' => 'webm'][$it['format']];
-                        $input = upload($uid, download($it['file_id']), $it['format'], $ext, [$it['emoji'] ?: DEFAULT_EMOJI]);
-                        tgOrFail('addStickerToSet', ['user_id' => $uid, 'name' => $st['pack'], 'sticker' => $input]);
-                        $missing--;
-                        $real++;
-                    } catch (Throwable $e) {
-                        $errors[] = errorText($e->getMessage());
+                    if (!isset($have[$uniq])) {
+                        $st['queue'][] = ['t' => 're', 'id' => (string) $id];
+                        $st['total']++;
+                        $st['ok']--;
+                        $short--;
                     }
                 }
-                $real = realCount($st['pack']) ?? $real;
             }
-            $st['count'] = $real;
-            saveState($uid, $st);
+            if (!empty($st['queue'])) {
+                saveState($uid, $st);
+                edit($uid, $status, progressText($st), goKb());
+                continueLater($uid);
+                return;
+            }
         }
     }
 
-    $link = empty($st['pack']) ? null : 'https://t.me/addemoji/' . $st['pack'];
-    $newCount = (int) ($st['count'] ?? 0);
-    $diff = $newCount - $before;
-    $msg = $diff > 0 ? "✅ <b>$diff</b> ایموجی اضافه شد." : '❌ ایموجی‌ای اضافه نشد.';
-    foreach (array_slice(array_unique($errors), 0, 3) as $er) {
-        $msg .= "\n⚠️ " . h($er);
-    }
-    if ($link) {
-        $msg .= "\n\n📦 <b>" . h($st['title']) . "</b>\n🔢 تعداد ایموجی‌ها: <b>$newCount</b> از " . MAX_EMOJI . "\n🔗 $link";
-        $msg .= ($full || $newCount >= MAX_EMOJI)
-            ? "\n\n⚠️ پک پر شد. برای ادامه /new را بزن."
-            : "\n\nبرای افزودن، باز هم ایموجی بفرست.";
-    }
-    $kb = $link ? [[['text' => '📦 دیدن و افزودن پک', 'url' => $link]], [['text' => '🆕 پک جدید', 'callback_data' => 'new']]] : null;
-    if ($waitId) {
-        tg('deleteMessage', ['chat_id' => $uid, 'message_id' => $waitId]);
-    }
-    send($uid, $msg, $kb);
+    finishBuild($uid, $st, $full);
 }
 
-/** افزودن یک ایموجی؛ اگر پک هنوز ساخته نشده، با همین ایموجی ساخته می‌شود */
-function addOne(int $uid, array &$st, array $input, bool $repaint): void
+function finishBuild(int $uid, array $st, bool $full): void
 {
-    if (empty($st['pack'])) {
-        tgOrFail('createNewStickerSet', [
-            'user_id' => $uid, 'name' => $st['name'], 'title' => $st['title'],
-            'stickers' => [$input], 'sticker_type' => 'custom_emoji', 'needs_repainting' => $repaint,
-        ]);
-        $st['pack'] = $st['name'];
-        $st['count'] = 1;
-    } else {
-        tgOrFail('addStickerToSet', ['user_id' => $uid, 'name' => $st['pack'], 'sticker' => $input]);
-        $st['count'] = ($st['count'] ?? 0) + 1;
+    $real = empty($st['pack']) ? 0 : realCount($st['pack']);
+    if ($real !== null) {
+        $st['count'] = $real;
     }
+    $diff = (int) $st['count'] - (int) $st['before'];
+    $errors = array_count_values($st['errors'] ?? []);
+    $left = count($st['queue'] ?? []);
+
+    $dup = (int) ($st['dup'] ?? 0);
+    foreach (['building', 'ok', 'done', 'total', 'errors', 'added', 'verified', 'before', 'single', 'dup'] as $k) {
+        unset($st[$k]);
+    }
+    $st['over'] = 0;
+    if (!$full) {
+        $st['queue'] = [];
+    }
+    $st['seen'] = [];
+    $status = (int) ($st['status'] ?? 0);
+    $st['status'] = 0;
     saveState($uid, $st);
+    if ($status) {
+        tg('deleteMessage', ['chat_id' => $uid, 'message_id' => $status]);
+    }
+
+    if (empty($st['pack'])) {
+        $msg = "❌ پک ساخته نشد.";
+        foreach (array_slice($errors, 0, 3, true) as $e => $n) {
+            $msg .= "\n⚠️ " . h($e);
+        }
+        send($uid, $msg . "\n\nدوباره ایموجی بفرست و «✅ ساخت پک» را بزن.");
+        return;
+    }
+    $link = 'https://t.me/addemoji/' . $st['pack'];
+    $msg = $diff > 0 ? "🎉 <b>$diff</b> ایموجی به پک اضافه شد." : '❌ ایموجی جدیدی اضافه نشد.';
+    if ($dup) {
+        $msg .= "\nℹ️ $dup ایموجی از قبل در پک بود.";
+    }
+    foreach (array_slice($errors, 0, 3, true) as $e => $n) {
+        $msg .= "\n⚠️ " . h($e) . ($n > 1 ? " ($n بار)" : '');
+    }
+    $msg .= "\n\n📦 <b>" . h($st['title']) . "</b>\n🔢 تعداد ایموجی‌ها: <b>{$st['count']}</b> از " . MAX_EMOJI . "\n🔗 $link";
+    $msg .= ($full || $st['count'] >= MAX_EMOJI)
+        ? "\n\n⚠️ پک پر شد." . ($left ? " $left ایموجی باقی ماند؛ /new را بزن تا در پک دوم ساخته شود." : '')
+        : "\n\nبرای افزودن، باز هم ایموجی بفرست و «✅ افزودن به پک» را بزن.";
+    send($uid, $msg, [[['text' => '📦 دیدن و افزودن پک', 'url' => $link]], [['text' => '🆕 پک جدید', 'callback_data' => 'new']]]);
+}
+
+/** صدا زدن دوباره‌ی همین فایل برای ادامه‌ی کار در یک درخواست تازه */
+function continueLater(int $uid, int $delay = 0): void
+{
+    $url = (string) @file_get_contents(DATA_DIR . '/self_url.txt');
+    if ($url === '') {
+        return;
+    }
+    $ch = curl_init($url . '?run=' . secret() . '&uid=' . $uid . '&delay=' . $delay);
+    curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 5, CURLOPT_CONNECTTIMEOUT => 5, CURLOPT_NOSIGNAL => 1]);
+    curl_exec($ch);
+    curl_close($ch);
+}
+
+/** اطلاعات ایموجی‌های پریمیوم صف (حداکثر ۲۰۰ تا در یک درخواست) */
+function resolveEmojis(array $queue)
+{
+    $ids = [];
+    foreach ($queue as $it) {
+        if ($it['t'] !== 'file' && count($ids) < 200) {
+            $ids[] = $it['id'];
+        }
+    }
+    if (!$ids) {
+        return ['_' => null];
+    }
+    $list = tg('getCustomEmojiStickers', ['custom_emoji_ids' => array_values(array_unique($ids))]);
+    if (!is_array($list)) {
+        return null;
+    }
+    $map = ['_' => null];
+    foreach ($list as $s) {
+        $map[$s['custom_emoji_id']] = $s;
+    }
+    return $map;
+}
+
+/** ایموجی‌های اول صف برای ساخت پک (فقط ایموجی‌های پریمیوم پشت سر هم) */
+function firstBatch(array $queue, array $map, int $uid, int $max): array
+{
+    $inputs = [];
+    $repaint = false;
+    foreach ($queue as $it) {
+        if (count($inputs) >= $max || $it['t'] !== 'ce' || !isset($map[$it['id']])) {
+            break;
+        }
+        if (!$inputs) {
+            $repaint = !empty($map[$it['id']]['needs_repainting']);
+        }
+        $inputs[] = itemInput($it, $map, $uid);
+    }
+    if (!$inputs) {
+        return [[itemInput($queue[0], $map, $uid)], 1, false];
+    }
+    return [$inputs, count($inputs), $repaint];
+}
+
+/** تبدیل یک آیتم صف به InputSticker */
+function itemInput(array $it, array $map, int $uid): array
+{
+    if ($it['t'] === 'file') {
+        return toInputSticker($it, $uid);
+    }
+    $s = $map[$it['id']] ?? null;
+    if (!$s) {
+        $one = tg('getCustomEmojiStickers', ['custom_emoji_ids' => [$it['id']]]);
+        $s = $one[0] ?? null;
+    }
+    if (!$s) {
+        throw new Exception('ایموجی پیدا نشد.');
+    }
+    $format = !empty($s['is_animated']) ? 'animated' : (!empty($s['is_video']) ? 'video' : 'static');
+    $emoji = [$s['emoji'] ?? DEFAULT_EMOJI];
+    if ($it['t'] === 're') { // آپلود دوباره‌ی فایل
+        $ext = ['static' => 'webp', 'animated' => 'tgs', 'video' => 'webm'][$format];
+        return upload($uid, download($s['file_id']), $format, $ext, $emoji);
+    }
+    return ['sticker' => $s['file_id'], 'format' => $format, 'emoji_list' => $emoji];
 }
 
 function realCount(string $pack)
@@ -398,7 +697,7 @@ function hasContent(array $m): bool
             return true;
         }
     }
-    foreach ($m['entities'] ?? [] as $e) {
+    foreach (array_merge($m['entities'] ?? [], $m['caption_entities'] ?? []) as $e) {
         if ($e['type'] === 'custom_emoji') {
             return true;
         }
@@ -411,7 +710,7 @@ function lockUser(int $uid): void
     static $lock = null;
     $lock = @fopen(DATA_DIR . "/$uid.lock", 'c');
     if ($lock) {
-        flock($lock, LOCK_EX); // پیام‌های همزمان یکی‌یکی پردازش شوند
+        flock($lock, LOCK_EX); // درخواست‌های همزمان یک کاربر یکی‌یکی پردازش شوند
     }
 }
 
@@ -420,20 +719,20 @@ function allowed(int $uid): bool
     return PUBLIC_BOT || $uid === ADMIN_ID;
 }
 
-/** پیدا کردن ایموجی‌ها/رسانه‌های داخل پیام */
-function extractItems(array $m): array
+/** پیدا کردن ایموجی‌ها/رسانه‌های پیام (بدون تماس با تلگرام) */
+function quickItems(array $m): array
 {
     $em = captionEmoji((string) ($m['caption'] ?? ''));
     $file = function ($kind, array $f, $emoji, $thumb = null) {
-        return ['kind' => $kind, 'file_id' => $f['file_id'], 'emoji' => $emoji, 'thumb' => $thumb];
+        return ['t' => 'file', 'kind' => $kind, 'file_id' => $f['file_id'], 'emoji' => $emoji, 'thumb' => $thumb];
     };
 
     if (isset($m['sticker'])) {
         $s = $m['sticker'];
-        $e = $em ?? ($s['emoji'] ?? null);
-        if (($s['type'] ?? '') === 'custom_emoji') {
-            return [copyItem($s)];
+        if (($s['type'] ?? '') === 'custom_emoji' && !empty($s['custom_emoji_id'])) {
+            return [['t' => 'ce', 'id' => (string) $s['custom_emoji_id']]];
         }
+        $e = $em ?? ($s['emoji'] ?? null);
         if (!empty($s['is_animated'])) {
             return [$file('tgs', $s, $e)];
         }
@@ -466,49 +765,20 @@ function extractItems(array $m): array
         throw new Exception('این نوع فایل پشتیبانی نمی‌شود.');
     }
 
-    // ایموجی‌های پریمیوم داخل متن
-    $ids = [];
-    foreach ($m['entities'] ?? [] as $e) {
-        if ($e['type'] === 'custom_emoji') {
-            $ids[] = $e['custom_emoji_id'];
-        }
-    }
-    $ids = array_slice(array_values(array_unique($ids)), 0, MAX_EMOJI);
-    if (!$ids) {
-        return [];
-    }
-    $byId = [];
-    foreach (tg('getCustomEmojiStickers', ['custom_emoji_ids' => $ids]) ?: [] as $s) {
-        $byId[$s['custom_emoji_id']] = $s;
-    }
+    // ایموجی‌های پریمیوم داخل متن (به ترتیب)
     $items = [];
-    foreach ($ids as $id) {
-        if (isset($byId[$id])) {
-            $items[] = copyItem($byId[$id]);
+    foreach (array_merge($m['entities'] ?? [], $m['caption_entities'] ?? []) as $e) {
+        if ($e['type'] === 'custom_emoji' && !empty($e['custom_emoji_id'])) {
+            $items[] = ['t' => 'ce', 'id' => (string) $e['custom_emoji_id']];
         }
     }
     return $items;
 }
 
-function copyItem(array $s): array
-{
-    return [
-        'kind' => 'copy',
-        'file_id' => $s['file_id'],
-        'unique_id' => $s['file_unique_id'] ?? '',
-        'format' => !empty($s['is_animated']) ? 'animated' : (!empty($s['is_video']) ? 'video' : 'static'),
-        'emoji' => $s['emoji'] ?? null,
-        'repaint' => !empty($s['needs_repainting']),
-    ];
-}
-
-/** تبدیل هر آیتم به InputSticker */
+/** تبدیل عکس/استیکر/گیف به InputSticker */
 function toInputSticker(array $it, int $uid): array
 {
     $emoji = [$it['emoji'] ?: DEFAULT_EMOJI];
-    if ($it['kind'] === 'copy') {
-        return ['sticker' => $it['file_id'], 'format' => $it['format'], 'emoji_list' => $emoji];
-    }
     if ($it['kind'] === 'video') {
         if (hasFfmpeg()) {
             return upload($uid, videoToWebm(download($it['file_id'])), 'video', 'webm', $emoji);
@@ -675,7 +945,7 @@ function tg($method, array $params = [])
             return $res['result'];
         }
         $wait = (int) ($res['parameters']['retry_after'] ?? 0);
-        if ($wait > 0 && $wait <= 30) {
+        if ($wait > 0 && $wait <= 10) {
             sleep($wait + 1);
             continue;
         }
@@ -703,9 +973,16 @@ function send(int $chat, string $text, ?array $kb = null): ?array
     return tg('sendMessage', $p);
 }
 
-function edit(int $chat, int $mid, string $text): void
+function edit(int $chat, int $mid, string $text, ?array $kb = null): void
 {
-    tg('editMessageText', ['chat_id' => $chat, 'message_id' => $mid, 'text' => $text, 'parse_mode' => 'HTML']);
+    if (!$mid) {
+        return;
+    }
+    $p = ['chat_id' => $chat, 'message_id' => $mid, 'text' => $text, 'parse_mode' => 'HTML'];
+    if ($kb) {
+        $p['reply_markup'] = ['inline_keyboard' => $kb];
+    }
+    tg('editMessageText', $p);
 }
 
 function download(string $fileId): string
