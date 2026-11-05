@@ -34,6 +34,9 @@ final class Bot
         $c = $u['message']['chat']['id'] ?? $u['edited_message']['chat']['id'] ?? $u['callback_query']['message']['chat']['id'] ?? $u['my_chat_member']['chat']['id'] ?? $u['chat_member']['chat']['id'] ?? 0;
         UI::$lang = 'fa';
         try {
+            if ($c < 0 && ($gc = $u['message']['chat'] ?? $u['callback_query']['message']['chat'] ?? null)) {
+                Lang::adopt($gc);
+            }
             Lang::use($c);
             if (isset($u['message'])) {
                 self::message($u['message']);
@@ -558,8 +561,8 @@ final class Bot
             return;
         }
         $by = (int)($e['from']['id'] ?? 0);
-        if (!Lang::chosen((int)$chat['id']) && $by > 0 && Lang::chosen($by)) {
-            Lang::set((int)$chat['id'], Lang::of($by));
+        if ($by > 0 && empty($e['from']['is_bot']) && ($key === 'bot_added' || Lang::owner((int)$chat['id']) <= 0)) {
+            Lang::own((int)$chat['id'], $by);
         }
         Lang::use($chat['id']);
         TG::send($chat['id'], UI::t($key), UI::footer());

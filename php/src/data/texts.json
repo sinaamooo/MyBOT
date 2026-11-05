@@ -48,7 +48,7 @@
   "desc": "تبدیل استارز ({amount} {toman} {usd} {ton} {trx} {star_usd} {time})"
  },
  "conv_pair": {
-  "text": "{icon} <b>{amount} {from}</b> = <b>{result} {to}</b>\n\n<blockquote>{dorange_icon}    نرخ: <code>1 {from_code} = {rate} {to_code}</code>\n{dpeach_icon}    ارزش دلاری: <code>{usd}</code> $\n{dblue_icon}    ارزش تومانی: <code>{toman}</code></blockquote>\n🗓 {time}",
+  "text": "{icon} <b>{amount} {from}</b> = <b>{result} {to}</b>\n\n<blockquote>{dorange_icon}    نرخ: <code>\u200e1 {from_code} = {rate} {to_code}</code>\n{dpeach_icon}    ارزش دلاری: <code>{usd}</code> $\n{dblue_icon}    ارزش تومانی: <code>{toman}</code></blockquote>\n🗓 {time}",
   "desc": "تبدیل ارز به ارز ({amount} {from} {result} {to} {from_code} {to_code} {rate} {usd} {toman} {time})"
  },
  "conv_fiat": {
@@ -160,7 +160,7 @@
   "desc": "تعداد مدیا ({count})"
  },
  "insta_media_caption": {
-  "text": "🎬 <b>{title}</b>\n\n👤  پیج: <b>{owner}</b>\n<blockquote>❤️    لایک: <code>{likes}</code></blockquote>\n<blockquote>💬    کامنت: <code>{comments}</code></blockquote>\n👁  بازدید: <code>{views}</code>\n⏱  مدت: <code>{duration}</code>\n🖼  تعداد: <code>{count}</code>\n🗓  تاریخ: {date}\n<blockquote expandable>📝    {text}</blockquote>\n🤖 @{bot}",
+  "text": "👤  پیج: <b>{owner}</b>\n\n<blockquote>❤️    لایک: <code>{likes}</code></blockquote>\n<blockquote>💬    کامنت: <code>{comments}</code></blockquote>\n👁  بازدید: <code>{views}</code>\n⏱  مدت: <code>{duration}</code>\n🖼  تعداد: <code>{count}</code>\n🗓  تاریخ: {date}\n<blockquote expandable>📝    {text}</blockquote>\n🤖 @{bot}",
   "desc": "کپشن پست و ریلز اینستاگرام"
  },
  "insta_not_found": {
@@ -400,7 +400,7 @@
   "desc": "هر خط استارز ({stars} {toman})"
  },
  "dm_win": {
-  "text": "💎 <b>الماس!</b> {name}\n\n✨  <b>{reward}</b> الماس دریافت کردید\n<blockquote>💰    موجودی: {points}\n🏅    سطح: {level}</blockquote>\n🆙 <b>لول آپ!</b> به سطح {new_level} رسیدی!",
+  "text": "💎 <b>الماس!</b> {name}\n✨  <b>{reward}</b> الماس دریافت کردید\n\n<blockquote>💰    موجودی: {points}</blockquote>\n<blockquote>🏅    سطح: {level}</blockquote>\n🆙 <b>لول آپ!</b> به سطح {new_level} رسیدی!",
   "desc": "الماس زدن ({name} {reward} {points} {level} {total} {new_level})"
  },
  "dm_wait": {
@@ -464,7 +464,7 @@
   "desc": "راهنمای مین ({min} {max})"
  },
  "gm_dooz_open": {
-  "text": "🎮 <b>دوز {stake} الماسی</b>\n\n👤  سازنده: {host}\n<blockquote>🏆    جایزه برنده: <b>{prize}</b> الماس</blockquote>\n<blockquote>🧾    مالیات: <b>{tax}</b> الماس</blockquote>\nنفر دوم که روی پیوستن بزند، صفحه دوز باز می‌شود.",
+  "text": "🎮 <b>دوز {stake} الماسی</b>\n\n👤  سازنده: {host}\n\n<blockquote>🏆    جایزه برنده: <b>{prize}</b> الماس</blockquote>\n<blockquote>🧾    مالیات: <b>{tax}</b> الماس</blockquote>\nنفر دوم که روی پیوستن بزند، صفحه دوز باز می‌شود.",
   "desc": "دوز باز ({stake} {host} {prize} {tax})"
  },
  "gm_dooz_turn": {
@@ -528,7 +528,7 @@
   "desc": "پاپ‌آپ موجودی ({name} {points})"
  },
  "gm_mine_preview": {
-  "text": "💣 <b>MINE FIELD</b>\n🔲 یک میدان ۳×۳: هشت الماس، یک مین.\n<blockquote>💰    ورودی: <code>{entry}</code>\n💎    خانه امن: جایزه بیشتر\n💥    مین: بازی تمام</blockquote>\nروی «پیوستن» بزن.",
+  "text": "💣 <b>MINE FIELD</b>\n🔲 یک میدان ۳×۳: هشت الماس، یک مین.\n\n<blockquote>💰    ورودی: <code>{entry}</code></blockquote>\n<blockquote>💎    خانه امن: جایزه بیشتر</blockquote>\n<blockquote>💥    مین: بازی تمام</blockquote>\nروی «پیوستن» بزن.",
   "desc": "پیش‌نمایش مین ({entry})"
  },
  "gm_mine_active": {

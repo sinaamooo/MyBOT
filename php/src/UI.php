@@ -608,6 +608,12 @@ final class Lang
 {
     const ALL = ['fa', 'en', 'ru'];
     private static array $memo = [];
+    private static array $set = [];
+
+    private static function s(int $c): array
+    {
+        return self::$set[$c] ??= DB::chatSettings($c);
+    }
 
     public static function of($chat): string
     {
@@ -616,7 +622,9 @@ final class Lang
             return 'fa';
         }
         if (!isset(self::$memo[$c])) {
-            $l = (string)(DB::chatSettings($c)['lang'] ?? 'fa');
+            $s = self::s($c);
+            $o = (int)($s['owner'] ?? 0);
+            $l = (string)($c < 0 && $o > 0 && isset(self::s($o)['lang']) ? self::s($o)['lang'] : ($s['lang'] ?? 'fa'));
             self::$memo[$c] = in_array($l, self::ALL, true) ? $l : 'fa';
         }
         return self::$memo[$c];
@@ -624,13 +632,51 @@ final class Lang
 
     public static function chosen(int $chat): bool
     {
-        return isset(DB::chatSettings($chat)['lang']);
+        return isset(self::s($chat)['lang']);
     }
 
     public static function set(int $chat, string $l): void
     {
         DB::setChatSetting($chat, 'lang', $l);
-        self::$memo[$chat] = $l;
+        self::$memo = [];
+        self::$set = [];
+    }
+
+    public static function owner(int $chat): int
+    {
+        return (int)(self::s($chat)['owner'] ?? 0);
+    }
+
+    public static function own(int $chat, int $user): void
+    {
+        DB::setChatSetting($chat, 'owner', $user);
+        unset(self::$memo[$chat], self::$set[$chat]);
+    }
+
+    public static function adopt(array $c): void
+    {
+        $chat = (int)($c['id'] ?? 0);
+        if ($chat >= 0 || array_key_exists('owner', self::s($chat))) {
+            return;
+        }
+        Cache::get("own:$chat", $hit);
+        if ($hit) {
+            return;
+        }
+        Cache::set("own:$chat", 1, 3600);
+        $r = TG::api('getChatAdministrators', ['chat_id' => $chat]);
+        if (!is_array($r)) {
+            return;
+        }
+        $o = 0;
+        foreach ($r as $a) {
+            if (($a['status'] ?? '') === 'creator' && empty($a['user']['is_bot'])) {
+                $o = (int)($a['user']['id'] ?? 0);
+            }
+        }
+        Cache::set("admins:$chat", array_values(array_filter(array_map(fn($a) => (int)($a['user']['id'] ?? 0), $r))), 600);
+        DB::seenChat($c);
+        self::own($chat, $o);
     }
 
     public static function use($chat): void

@@ -539,7 +539,7 @@ final class Games
     private static function pname(array $p): string
     {
         $dot = ($p['mark'] ?? 1) === 1 ? '🔴' : '🟢';
-        return $dot . '    ' . (!empty($p['uname']) ? '@' . UI::esc($p['uname']) : UI::esc($p['name'] ?? (string)$p['id']));
+        return $dot . ' ' . (!empty($p['uname']) ? '@' . UI::esc($p['uname']) : UI::esc($p['name'] ?? (string)$p['id']));
     }
 
     private static function prize(float $stake): array

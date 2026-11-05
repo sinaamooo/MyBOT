@@ -120,7 +120,7 @@
   "text": "⏳ Пожалуйста, подождите\n🖼 Фото и видео: {count}"
  },
  "insta_media_caption": {
-  "text": "🎬 <b>{title}</b>\n\n👤 Страница: <b>{owner}</b>\n<blockquote>❤️ Лайки: <code>{likes}</code></blockquote>\n<blockquote>💬 Комментарии: <code>{comments}</code></blockquote>\n👁 Просмотры: <code>{views}</code>\n⏱ Длительность: <code>{duration}</code>\n🖼 Файлов: <code>{count}</code>\n🗓 Дата: {date}\n<blockquote expandable>📝 {text}</blockquote>\n🤖 @{bot}"
+  "text": "👤 Страница: <b>{owner}</b>\n\n<blockquote>❤️ Лайки: <code>{likes}</code></blockquote>\n<blockquote>💬 Комментарии: <code>{comments}</code></blockquote>\n👁 Просмотры: <code>{views}</code>\n⏱ Длительность: <code>{duration}</code>\n🖼 Файлов: <code>{count}</code>\n🗓 Дата: {date}\n<blockquote expandable>📝 {text}</blockquote>\n🤖 @{bot}"
  },
  "insta_not_found": {
   "text": "⛔️ Не удалось получить этот пост.\n💬 Пост должен быть публичным; попробуйте ещё раз через минуту."
@@ -300,7 +300,7 @@
   "text": "⭐️ <b>{stars}</b> звёзд  <code>{toman}</code> томан"
  },
  "dm_win": {
-  "text": "💎 <b>Алмаз!</b> {name}\n\n✨ Вы получили <b>{reward}</b> алмазов\n<blockquote>💰 Баланс: {points}\n🏅 Уровень: {level}</blockquote>\n🆙 <b>Новый уровень!</b> Вы достигли уровня {new_level}!"
+  "text": "💎 <b>Алмаз!</b> {name}\n✨ Вы получили <b>{reward}</b> алмазов\n\n<blockquote>💰 Баланс: {points}</blockquote>\n<blockquote>🏅 Уровень: {level}</blockquote>\n🆙 <b>Новый уровень!</b> Вы достигли уровня {new_level}!"
  },
  "dm_wait": {
   "text": "⏳ {name}, ещё рано!\n⌛️ Добывать алмазы можно будет через {m} мин {s} сек."
@@ -348,7 +348,7 @@
   "text": "💣 <code>mine 100</code>  вход от {min} до {max} алмазов"
  },
  "gm_dooz_open": {
-  "text": "🎮 <b>Крестики-нолики на {stake} алмазов</b>\n\n👤 Создатель: {host}\n<blockquote>🏆 Приз победителю: <b>{prize}</b> алмазов</blockquote>\n<blockquote>🧾 Налог: <b>{tax}</b> алмазов</blockquote>\nПоле откроется, когда второй игрок нажмёт «Присоединиться»."
+  "text": "🎮 <b>Крестики-нолики на {stake} алмазов</b>\n\n👤 Создатель: {host}\n\n<blockquote>🏆 Приз победителю: <b>{prize}</b> алмазов</blockquote>\n<blockquote>🧾 Налог: <b>{tax}</b> алмазов</blockquote>\nПоле откроется, когда второй игрок нажмёт «Присоединиться»."
  },
  "gm_dooz_turn": {
   "text": "🎮 <b>Крестики-нолики на {stake} алмазов</b>\n\n<blockquote>{p1}\n{p2}\n🏆 Приз: <b>{prize}</b> алмазов</blockquote>\n👉 Ход: {turn}"
@@ -396,7 +396,7 @@
   "text": "💎 Баланс {name}: {points} алмазов"
  },
  "gm_mine_preview": {
-  "text": "💣 <b>MINE FIELD</b>\n🔲 Поле 3×3: восемь алмазов, одна мина.\n<blockquote>💰 Вход: <code>{entry}</code>\n💎 Безопасная клетка: больше приз\n💥 Мина: конец игры</blockquote>\nНажмите «Присоединиться»."
+  "text": "💣 <b>MINE FIELD</b>\n🔲 Поле 3×3: восемь алмазов, одна мина.\n\n<blockquote>💰 Вход: <code>{entry}</code></blockquote>\n<blockquote>💎 Безопасная клетка: больше приз</blockquote>\n<blockquote>💥 Мина: конец игры</blockquote>\nНажмите «Присоединиться»."
  },
  "gm_mine_active": {
   "text": "💣 <b>MINE FIELD</b>\n\n<blockquote>👤 {name}\n🔢 Шаг: <b>{picks}</b> из 8\n💰 Вход: <code>{entry}</code>\n💎 Приз: <b>{reward}</b>\n✖️ Множитель: <b>{mult}×</b>\n🛡 Щит: {shield}</blockquote>\n{progress}\n🎯 Следующая клетка: <b>+{next}</b>"
