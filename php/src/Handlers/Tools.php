@@ -82,17 +82,22 @@ final class Tools
         }
     }
 
-    public static function react(array $m): void
+    const REACTIONS = ['price' => ['💱', '⚡'], 'wallet' => ['🔰', '👌'], 'hash' => ['🔍', '👀'], 'board' => ['🏆']];
+
+    public static function react(array $m, string $kind = 'price'): void
     {
         if (empty($m['message_id']) || !empty($m['from']['is_bot'])) {
             return;
         }
         $chat = $m['chat']['id'];
+        $want = $kind === 'price' ? Config::get('PRICE_REACTION') : '';
         $list = [];
-        foreach (array_filter(array_map('trim', explode(',', Config::get('PRICE_REACTION', '🩵')))) as $r) {
-            $list[] = ctype_digit($r) ? ['type' => 'custom_emoji', 'custom_emoji_id' => $r] : ['type' => 'emoji', 'emoji' => $r];
+        foreach (array_merge(array_filter(array_map('trim', explode(',', $want))), self::REACTIONS[$kind] ?? self::REACTIONS['price'], ['🐳']) as $r) {
+            $item = ctype_digit($r) ? ['type' => 'custom_emoji', 'custom_emoji_id' => $r] : ['type' => 'emoji', 'emoji' => $r];
+            if (!in_array($item, $list, true)) {
+                $list[] = $item;
+            }
         }
-        $list[] = ['type' => 'emoji', 'emoji' => '🐳'];
         $key = 'react:' . $chat . ':' . md5(json_encode($list));
         $start = (int)(Cache::get($key) ?? 0);
         for ($i = $start; $i < count($list); $i++) {
@@ -218,6 +223,7 @@ final class Tools
             }
         }
         Bot::send($m, $text, UI::footer($rows));
+        self::react($m, 'wallet');
     }
 
     public static function sendTx(array $m, array $tx, int $owner): void
@@ -242,6 +248,7 @@ final class Tools
             }
         }
         Bot::send($m, $text, UI::footer($row ? [$row] : []));
+        self::react($m, 'hash');
     }
 
     private static function owned(array $cq, ?array $d): ?string

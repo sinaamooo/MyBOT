@@ -397,7 +397,7 @@ final class TG
         if (($p['parse_mode'] ?? '') === 'HTML') {
             foreach (['text', 'caption'] as $k) {
                 if (isset($p[$k]) && is_string($p[$k])) {
-                    $p[$k] = UI::align(UI::emojiMap(UI::quoteGaps($p[$k])), $k === 'caption' ? 4 : 2, $k === 'caption');
+                    $p[$k] = UI::align(UI::emojiMap(UI::quoteGaps($p[$k])), $k === 'caption' ? 4 : 3, $k === 'caption');
                 }
             }
         }

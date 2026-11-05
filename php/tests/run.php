@@ -59,7 +59,7 @@ TG::$fake = function (string $method, array $p) {
         case 'getChatAdministrators':
             return ['ok' => true, 'result' => [['status' => 'creator', 'user' => ['id' => 777, 'is_bot' => false, 'first_name' => 'adm']]]];
         case 'setMessageReaction':
-            if (($p['reaction'][0]['emoji'] ?? '') === '🩵' && !empty($GLOBALS['reject_blue'])) {
+            if (in_array($p['reaction'][0]['emoji'] ?? '', ['💱', '🔰', '🔍'], true) || (($p['reaction'][0]['emoji'] ?? '') === '⚡' && !empty($GLOBALS['reject_blue']))) {
                 return ['ok' => false, 'description' => 'Bad Request: REACTION_INVALID'];
             }
             return ['ok' => true, 'result' => true];
@@ -523,6 +523,7 @@ foreach (['لیدربورد', 'لیدر بورد', 'لیدر‌بورد', 'تا�
     reset_calls();
     feed(msg($w, -7100, 501, null, null, 'Ali'));
     check((bool)sent(['sendPhoto']), "leaderboard word $w");
+    check(($GLOBALS['calls'][0][0] ?? '') === 'setMessageReaction' ? true : (bool)array_filter($GLOBALS['calls'], fn($c) => $c[0] === 'setMessageReaction' && ($c[1]['reaction'][0]['emoji'] ?? '') === '🏆'), "leaderboard reaction 🏆 for $w");
 }
 reset_calls();
 feed(msg('حساب', -7100, 502, null, null, 'Reza'));
@@ -573,12 +574,12 @@ feed(msg('600 درهم', -8800, 61));
 $rx = array_values(array_filter($GLOBALS['calls'], fn($c) => $c[0] === 'setMessageReaction'));
 $sidx = array_search('sendPhoto', array_column($GLOBALS['calls'], 0), true);
 $ridx = array_search('setMessageReaction', array_column($GLOBALS['calls'], 0), true);
-check($rx && $rx[0][1]['reaction'][0]['emoji'] === '🩵' && $sidx !== false && $ridx > $sidx, 'blue heart reaction after price reply');
+check($rx && $rx[0][1]['reaction'][0]['emoji'] === '💱' && end($rx)[1]['reaction'][0]['emoji'] === '⚡' && $sidx !== false && $ridx > $sidx, 'price reaction tries 💱 then closest allowed');
 $GLOBALS['reject_blue'] = true;
 reset_calls();
 feed(msg('601 درهم', -8801, 61));
 $rx = array_values(array_filter($GLOBALS['calls'], fn($c) => $c[0] === 'setMessageReaction'));
-check(count($rx) === 2 && $rx[1][1]['reaction'][0]['emoji'] === '🐳', 'reaction falls back to blue whale');
+check(count($rx) === 3 && $rx[2][1]['reaction'][0]['emoji'] === '🐳', 'reaction falls back to blue whale');
 reset_calls();
 feed(msg('602 درهم', -8801, 61));
 $rx = array_values(array_filter($GLOBALS['calls'], fn($c) => $c[0] === 'setMessageReaction'));
@@ -625,6 +626,8 @@ reset_calls();
 feed(msg(str_repeat('e', 64), -700, 90));
 $txm = array_values(array_filter(sent(['sendMessage']), fn($c) => str_contains($c[1]['text'], 'هش تراکنش')))[0] ?? null;
 check($txm && str_contains($txm[1]['text'], '5 TRX') && str_contains($txm[1]['text'], 'COIN'), 'tron tx');
+$rxh = array_column(array_column(array_column(array_values(array_filter($GLOBALS['calls'], fn($c) => $c[0] === 'setMessageReaction')), 1), 'reaction'), 0);
+check(array_column($rxh, 'emoji') === ['🔍', '👀'], 'hash reaction tries 🔍 then 👀');
 $wb = array_values(array_filter(buttons($txm ?? [0, []]), fn($b) => str_starts_with($b['callback_data'] ?? '', 'wl:')));
 check(count($wb) === 2, 'tx wallet buttons');
 reset_calls();
@@ -683,6 +686,8 @@ $GLOBALS['http']['publicnode.com'] = function ($r) {
 reset_calls();
 feed(msg('0xdAC17F958D2ee523a2206206994597C13D831ec7'));
 check(str_contains((string)last_text(), 'Ethereum') && str_contains((string)last_text(), '4,000'), 'evm wallet');
+$rxw = array_column(array_column(array_column(array_values(array_filter($GLOBALS['calls'], fn($c) => $c[0] === 'setMessageReaction')), 1), 'reaction'), 0);
+check(array_slice(array_column($rxw, 'emoji'), -2) === ['🔰', '👌'], 'wallet reaction tries 🔰 then 👌');
 
 $GLOBALS['http']['mempool.space/api/tx/'] = fn($r) => ['txid' => str_repeat('c', 64), 'status' => ['confirmed' => true, 'block_height' => 100, 'block_time' => 1700000000], 'fee' => 1000,
     'vin' => [['prevout' => ['scriptpubkey_address' => 'bc1qsender', 'value' => 300000000]]], 'vout' => [['scriptpubkey_address' => 'bc1qrecv', 'value' => 250000000]]];
@@ -871,6 +876,7 @@ $D = '<tg-emoji emoji-id="5143130625795951140">x</tg-emoji>';
 $al = UI::align($E(1) . " <b>عنوان</b>\n" . $E(2) . "<code>UQB1</code>\n<blockquote>" . $E(3) . "    NFT: 5\n" . $D . "        موجودی: 1\n" . $E(9) . " الماس: 1</blockquote>\n" . $E(5) . "   1405/08/14");
 check($al === $E(1) . " <b>عنوان</b>\n" . $E(2) . " <code>UQB1</code>\n<blockquote>" . $E(3) . " NFT: 5\n" . $D . "  موجودی: 1\n" . $E(9) . "    الماس: 1</blockquote>\n\u{200E}" . $E(5) . " 1405/08/14"
     && UI::align('<blockquote>' . $D . ' موجودی: 1</blockquote>', 4) === '<blockquote>' . $D . '    موجودی: 1</blockquote>'
+    && UI::align('<blockquote>' . $D . ' موجودی: 1</blockquote>', 3) === '<blockquote>' . $D . '   موجودی: 1</blockquote>'
     && UI::align('<blockquote>' . $E(6) . '    <b>370,185</b></blockquote>') === '<blockquote>' . $E(6) . ' <b>370,185</b></blockquote>'
     && UI::align("\u{200F}" . $E(7) . '   <b>800 POL</b>') === "\u{200F}" . $E(7) . ' <b>800 POL</b>' && UI::align($E(8) . '    @HashpriceBot') === $E(8) . ' @HashpriceBot'
     && UI::align('<b>hello</b> ' . $E(1)) === '<b>hello</b> ' . $E(1), 'emoji spacing: dots 2 and icons 4 in message quotes, 4 in caption quotes, 1 elsewhere');
