@@ -257,8 +257,8 @@ final class Diamonds
 
     public static function board(array $m): void
     {
-        self::boardReply($m);
         Tools::react($m, 'board');
+        self::boardReply($m);
     }
 
     private static function boardReply(array $m): void

@@ -17,6 +17,7 @@ final class Bot
     {
         $c = $u['message']['chat']['id'] ?? $u['edited_message']['chat']['id'] ?? $u['callback_query']['message']['chat']['id'] ?? $u['my_chat_member']['chat']['id'] ?? $u['chat_member']['chat']['id'] ?? 0;
         UI::$lang = 'fa';
+        $t0 = microtime(true);
         try {
             if ($c < 0 && ($gc = $u['message']['chat'] ?? $u['callback_query']['message']['chat'] ?? null)) {
                 Lang::adopt($gc);
@@ -35,6 +36,12 @@ final class Bot
             }
         } catch (Throwable $e) {
             error_log('update failed: ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
+        }
+        $ms = (int)round((microtime(true) - $t0) * 1000);
+        if ($ms >= 1500) {
+            $txt = (string)($u['message']['text'] ?? $u['message']['caption'] ?? '');
+            $what = isset($u['callback_query']) ? 'cb:' . strtok((string)($u['callback_query']['data'] ?? ''), ':') : (str_starts_with($txt, '/') ? strtok($txt, " @\n") : (isset($u['message']) ? 'text' : 'other'));
+            Perf::line('slow ' . ($c < 0 ? 'group' : 'private') . ' ' . $what, $ms);
         }
     }
 

@@ -26,16 +26,22 @@ final class Http
                 $headers[] = "$k: $v";
             }
         }
+        $headers[] = 'Expect:';
+        $t = max(0.5, (float)($r['timeout'] ?? 12));
         $ch = curl_init($url);
         $opts = [
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_FOLLOWLOCATION => $r['follow'] ?? true,
             CURLOPT_MAXREDIRS => 4,
-            CURLOPT_TIMEOUT => (int)($r['timeout'] ?? 12),
-            CURLOPT_CONNECTTIMEOUT => 8,
+            CURLOPT_NOSIGNAL => true,
+            CURLOPT_TIMEOUT_MS => (int)($t * 1000),
+            CURLOPT_CONNECTTIMEOUT_MS => (int)(min($t, 5) * 1000),
             CURLOPT_ENCODING => '',
             CURLOPT_CUSTOMREQUEST => $method,
         ];
+        if ($sh = self::share()) {
+            $opts[CURLOPT_SHARE] = $sh;
+        }
         if (array_key_exists('json', $r)) {
             $opts[CURLOPT_POSTFIELDS] = json_encode($r['json'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
             $headers[] = 'Content-Type: application/json';
@@ -60,6 +66,22 @@ final class Http
         }
         curl_setopt_array($ch, $opts);
         return [$ch, $url];
+    }
+
+    private static $share = null;
+
+    private static function share()
+    {
+        if (self::$share === null) {
+            self::$share = false;
+            if (function_exists('curl_share_init')) {
+                $s = curl_share_init();
+                curl_share_setopt($s, CURLSHOPT_SHARE, CURL_LOCK_DATA_DNS);
+                curl_share_setopt($s, CURLSHOPT_SHARE, CURL_LOCK_DATA_SSL_SESSION);
+                self::$share = $s;
+            }
+        }
+        return self::$share ?: null;
     }
 
     private static function takeHeaders($ch): array
@@ -244,7 +266,7 @@ final class TG
     public static bool $hook = false;
     public static ?string $lastError = null;
     private static $ch = null;
-    const QUICK = ['sendMessage', 'sendPhoto', 'answerCallbackQuery', 'sendChatAction', 'editMessageText', 'editMessageReplyMarkup'];
+    const QUICK = ['sendMessage', 'sendPhoto', 'answerCallbackQuery', 'sendChatAction', 'editMessageText', 'editMessageReplyMarkup', 'setMessageReaction'];
 
     public static function closeHook(?array $call = null): void
     {

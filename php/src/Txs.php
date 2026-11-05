@@ -31,11 +31,11 @@ final class Txs
         });
     }
 
-    public static function evmReqs(string $h, int $timeout = 6): array
+    public static function evmReqs(string $h, int $timeout = 4): array
     {
         $reqs = [];
         foreach (Chain::evm() as $i => $c) {
-            foreach (array_slice($c['rpcs'], 0, 2) as $j => $u) {
+            foreach (array_slice($c['rpcs'], 0, 3) as $j => $u) {
                 $reqs["evm|$i|$j"] = Chain::rpcReq($u, 'eth_getTransactionByHash', [$h], $timeout);
             }
         }
@@ -44,7 +44,7 @@ final class Txs
 
     public static function evm(string $h): ?array
     {
-        $hit = Http::race(self::evmReqs($h), fn($k, $d) => !empty($d['result']) && is_array($d['result']) ? $d['result'] : null, 7);
+        $hit = Http::race(self::evmReqs($h), fn($k, $d) => !empty($d['result']) && is_array($d['result']) ? $d['result'] : null, 5);
         return $hit ? self::evmTx(Chain::evm()[(int)explode('|', $hit[0])[1]], $h, $hit[1]) : null;
     }
 
@@ -55,7 +55,7 @@ final class Txs
         if ($block !== null) {
             $calls[] = ['eth_getBlockByNumber', ['0x' . dechex($block), false]];
         }
-        $got = Chain::batch($c['rpcs'], $calls, 6);
+        $got = Chain::batch($c['rpcs'], $calls, 4);
         [$receipt, $head] = $got;
         $blk = $got[2] ?? null;
         $status = self::PENDING;
@@ -149,7 +149,7 @@ final class Txs
 
     public static function tronscanReq(string $h): array
     {
-        return ['url' => 'https://apilist.tronscanapi.com/api/transaction-info', 'params' => ['hash' => $h], 'headers' => Chain::tronscanHeaders(), 'timeout' => 8];
+        return ['url' => 'https://apilist.tronscanapi.com/api/transaction-info', 'params' => ['hash' => $h], 'headers' => Chain::tronscanHeaders(), 'timeout' => 5];
     }
 
     public static function tronscanParse($info, string $h): ?array
@@ -202,7 +202,7 @@ final class Txs
 
     public static function tronGridReq(string $h): array
     {
-        return ['url' => 'https://api.trongrid.io/wallet/gettransactionbyid', 'method' => 'POST', 'json' => ['value' => $h], 'headers' => Chain::tronHeaders(), 'timeout' => 8];
+        return ['url' => 'https://api.trongrid.io/wallet/gettransactionbyid', 'method' => 'POST', 'json' => ['value' => $h], 'headers' => Chain::tronHeaders(), 'timeout' => 5];
     }
 
     public static function tronGrid(string $h): ?array
@@ -213,7 +213,7 @@ final class Txs
 
     private static function tronGridTx(string $h, array $tx): array
     {
-        $info = Http::postJson('https://api.trongrid.io/wallet/gettransactioninfobyid', ['value' => $h], ['headers' => Chain::tronHeaders(), 'timeout' => 8]) ?: [];
+        $info = Http::postJson('https://api.trongrid.io/wallet/gettransactioninfobyid', ['value' => $h], ['headers' => Chain::tronHeaders(), 'timeout' => 5]) ?: [];
         $c = $tx['raw_data']['contract'][0] ?? [];
         $v = $c['parameter']['value'] ?? [];
         $amount = null;
@@ -251,7 +251,7 @@ final class Txs
     public static function tron(string $h): ?array
     {
         $hit = Http::race(['scan' => self::tronscanReq($h), 'grid' => self::tronGridReq($h)],
-            fn($k, $d) => $k === 'scan' ? self::tronscanParse($d, $h) : (is_array($d) && !empty($d['txID']) ? self::tronGridTx($h, $d) : null), 9);
+            fn($k, $d) => $k === 'scan' ? self::tronscanParse($d, $h) : (is_array($d) && !empty($d['txID']) ? self::tronGridTx($h, $d) : null), 6);
         return $hit ? $hit[1] : null;
     }
 
@@ -303,16 +303,16 @@ final class Txs
         $reqs = [];
         foreach (self::tonVariants($h) as $i => $v) {
             if (strlen($v) === 64 && ctype_xdigit($v)) {
-                $reqs["ev|$v"] = ['url' => "https://tonapi.io/v2/events/$v", 'headers' => Chain::tonapiHeaders(), 'timeout' => 8];
+                $reqs["ev|$v"] = ['url' => "https://tonapi.io/v2/events/$v", 'headers' => Chain::tonapiHeaders(), 'timeout' => 5];
             }
-            $reqs["tc|$i"] = ['url' => 'https://toncenter.com/api/v3/transactions', 'params' => ['hash' => $v, 'limit' => 1] + Chain::toncenterParams(), 'timeout' => 8];
+            $reqs["tc|$i"] = ['url' => 'https://toncenter.com/api/v3/transactions', 'params' => ['hash' => $v, 'limit' => 1] + Chain::toncenterParams(), 'timeout' => 5];
         }
         $hit = Http::race($reqs, function ($k, $d) use ($h) {
             if (str_starts_with($k, 'ev|')) {
                 return self::tonEventParse($d, $h, substr($k, 3));
             }
             return self::toncenterParse($d, $h);
-        }, 9);
+        }, 6);
         return $hit ? $hit[1] : null;
     }
 
@@ -418,19 +418,19 @@ final class Txs
         $reqs = [
             'tron' => self::tronscanReq($lower),
             'grid' => self::tronGridReq($lower),
-            'btc' => ['url' => "https://mempool.space/api/tx/$lower", 'timeout' => 8],
-            'ltc' => ['url' => "https://litecoinspace.org/api/tx/$lower", 'timeout' => 8],
-            'doge' => ['url' => "https://api.blockcypher.com/v1/doge/main/txs/$lower", 'timeout' => 8],
-            'dash' => ['url' => "https://api.blockcypher.com/v1/dash/main/txs/$lower", 'timeout' => 8],
-            'xrp' => ['url' => Chain::rpcs('xrp_rpcs')[0], 'method' => 'POST', 'json' => ['method' => 'tx', 'params' => [['transaction' => strtoupper($h), 'binary' => false]]], 'timeout' => 8],
-            'ton' => ['url' => "https://tonapi.io/v2/events/$lower", 'headers' => Chain::tonapiHeaders(), 'timeout' => 8],
+            'btc' => ['url' => "https://mempool.space/api/tx/$lower", 'timeout' => 5],
+            'ltc' => ['url' => "https://litecoinspace.org/api/tx/$lower", 'timeout' => 5],
+            'doge' => ['url' => "https://api.blockcypher.com/v1/doge/main/txs/$lower", 'timeout' => 5],
+            'dash' => ['url' => "https://api.blockcypher.com/v1/dash/main/txs/$lower", 'timeout' => 5],
+            'xrp' => ['url' => Chain::rpcs('xrp_rpcs')[0], 'method' => 'POST', 'json' => ['method' => 'tx', 'params' => [['transaction' => strtoupper($h), 'binary' => false]]], 'timeout' => 5],
+            'ton' => ['url' => "https://tonapi.io/v2/events/$lower", 'headers' => Chain::tonapiHeaders(), 'timeout' => 5],
         ] + self::evmReqs('0x' . $lower);
         $hit = Http::race($reqs, function ($k, $d) use ($parse) {
             if (str_starts_with($k, 'evm|')) {
                 return !empty($d['result']) && is_array($d['result']) ? $d['result'] : null;
             }
             return ($parse[$k])($d);
-        }, 9);
+        }, 6);
         if (!$hit) {
             return null;
         }

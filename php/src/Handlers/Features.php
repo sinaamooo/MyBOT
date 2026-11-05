@@ -212,7 +212,7 @@ final class GiftsH
         $sent = TG::photo($m['chat']['id'], $png, $caption, UI::footer(), $extra);
         $ph = $sent['photo'] ?? [];
         if ($ph && !empty(end($ph)['file_id'])) {
-            Cache::set($ck, ['f' => end($ph)['file_id'], 'c' => $caption], 300);
+            Cache::set($ck, ['f' => end($ph)['file_id'], 'c' => $caption], 1800);
         }
         Perf::mark('sent');
         Perf::flush('gift');

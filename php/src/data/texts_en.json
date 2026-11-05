@@ -72,7 +72,7 @@
   "text": "🔍 Searching for the transaction on all networks..."
  },
  "tx_result": {
-  "text": "🧾 <b>Transaction hash result</b>\n\n<blockquote>{dblue_icon} Network: <b>{network}</b></blockquote>\n<blockquote>{status_icon} Status: {status}\n{dorange_icon} Amount: <code>{amount}</code></blockquote>\n<blockquote>{dgreen_icon} USD value: <code>{usd}</code> $\n{dpeach_icon} Toman value: <code>{toman}</code></blockquote>\n{dolive_icon} Token: {token}\n{dbrown_icon} Contract / token ID: <code>{contract}</code>\n{dnavy_icon} From: <code>{sender}</code>\n{dblue_icon} To: <code>{receiver}</code>\n{dred_icon} Fee: <code>{fee}</code>\n<blockquote>{dbrown_icon} Block: <code>{block}</code>\n{dgreen_icon} Confirmations: <code>{confirmations}</code></blockquote>\n{dnavy_icon} Time: {time}\n#️⃣ <code>{hash}</code>\n<blockquote>🔎 <a href=\"{explorer}\">View in explorer</a></blockquote>"
+  "text": "🧾 <b>Transaction hash result</b>\n\n<blockquote>{dblue_icon} Network: <b>{network}</b></blockquote>\n<blockquote>{status_icon} Status: {status}\n{dorange_icon} Amount: <code>{amount}</code></blockquote>\n<blockquote>{dgreen_icon} USD value: <code>{usd}</code> $\n{dpeach_icon} Toman value: <code>{toman}</code></blockquote>\n{dolive_icon} Token: {token}\n{dnavy_icon} From: <code>{sender}</code>\n{dblue_icon} To: <code>{receiver}</code>\n{dred_icon} Fee: <code>{fee}</code>\n<blockquote>{dbrown_icon} Block: <code>{block}</code>\n{dgreen_icon} Confirmations: <code>{confirmations}</code></blockquote>\n{dnavy_icon} Time: {time}\n#️⃣ <code>{hash}</code>\n<blockquote>🔎 <a href=\"{explorer}\">View in explorer</a></blockquote>"
  },
  "tx_not_found": {
   "text": "❌ This hash was not found on any supported network.\n#️⃣ <code>{hash}</code>"

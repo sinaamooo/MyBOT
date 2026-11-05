@@ -617,6 +617,16 @@ final class Perf
         }
         $line = date('m-d H:i:s') . " $tag " . implode(' ', self::$marks) . ' total=' . (int)round((microtime(true) - self::$t0) * 1000) . "ms\n";
         self::$t0 = 0.0;
+        self::write($line);
+    }
+
+    public static function line(string $tag, int $ms): void
+    {
+        self::write(date('m-d H:i:s') . " $tag total={$ms}ms\n");
+    }
+
+    private static function write(string $line): void
+    {
         if (TG::$fake) {
             return;
         }

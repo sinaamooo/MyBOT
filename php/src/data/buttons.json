@@ -89,13 +89,8 @@
   "style": null,
   "desc": "دکمه اکسپلورر"
  },
- "btn_sender_wallet": {
-  "text": "📤 اطلاعات ولت مبدا",
-  "style": "primary",
-  "desc": "دکمه ولت مبدا زیر هش"
- },
  "btn_receiver_wallet": {
-  "text": "📥 اطلاعات ولت مقصد",
+  "text": "👤 اطلاعات ولت مقصد",
   "style": "primary",
   "desc": "دکمه ولت مقصد زیر هش"
  },

@@ -72,7 +72,7 @@
   "text": "🔍 Ищу транзакцию во всех сетях..."
  },
  "tx_result": {
-  "text": "🧾 <b>Результат проверки хеша</b>\n\n<blockquote>{dblue_icon} Сеть: <b>{network}</b></blockquote>\n<blockquote>{status_icon} Статус: {status}\n{dorange_icon} Сумма: <code>{amount}</code></blockquote>\n<blockquote>{dgreen_icon} В долларах: <code>{usd}</code> $\n{dpeach_icon} В томанах: <code>{toman}</code></blockquote>\n{dolive_icon} Токен: {token}\n{dbrown_icon} Контракт / ID токена: <code>{contract}</code>\n{dnavy_icon} От: <code>{sender}</code>\n{dblue_icon} Кому: <code>{receiver}</code>\n{dred_icon} Комиссия: <code>{fee}</code>\n<blockquote>{dbrown_icon} Блок: <code>{block}</code>\n{dgreen_icon} Подтверждений: <code>{confirmations}</code></blockquote>\n{dnavy_icon} Время: {time}\n#️⃣ <code>{hash}</code>\n<blockquote>🔎 <a href=\"{explorer}\">Открыть в обозревателе</a></blockquote>"
+  "text": "🧾 <b>Результат проверки хеша</b>\n\n<blockquote>{dblue_icon} Сеть: <b>{network}</b></blockquote>\n<blockquote>{status_icon} Статус: {status}\n{dorange_icon} Сумма: <code>{amount}</code></blockquote>\n<blockquote>{dgreen_icon} В долларах: <code>{usd}</code> $\n{dpeach_icon} В томанах: <code>{toman}</code></blockquote>\n{dolive_icon} Токен: {token}\n{dnavy_icon} От: <code>{sender}</code>\n{dblue_icon} Кому: <code>{receiver}</code>\n{dred_icon} Комиссия: <code>{fee}</code>\n<blockquote>{dbrown_icon} Блок: <code>{block}</code>\n{dgreen_icon} Подтверждений: <code>{confirmations}</code></blockquote>\n{dnavy_icon} Время: {time}\n#️⃣ <code>{hash}</code>\n<blockquote>🔎 <a href=\"{explorer}\">Открыть в обозревателе</a></blockquote>"
  },
  "tx_not_found": {
   "text": "❌ Этот хеш не найден ни в одной поддерживаемой сети.\n#️⃣ <code>{hash}</code>"

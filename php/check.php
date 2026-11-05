@@ -74,7 +74,7 @@ $perf = $data . '/perf.log';
 if (is_file($perf)) {
     echo "\n--- timings (ms) ---\n";
     $lines = file($perf, FILE_IGNORE_NEW_LINES);
-    echo implode("\n", array_slice($lines, -15)) . "\n";
+    echo implode("\n", array_slice($lines, -30)) . "\n";
 }
 $log = $data . '/php-error.log';
 if (is_file($log)) {

@@ -6,6 +6,7 @@ final class Tools
 
     public static function market(array $m): void
     {
+        self::react($m);
         $rate = Prices::usdtToman();
         $lines = [];
         foreach (self::MARKET as [$icon, $sym]) {
@@ -21,7 +22,6 @@ final class Tools
             return;
         }
         Bot::reply($m, UI::t('market', ['lines' => implode("\n", $lines), 'usdt_icon' => UI::badge('USDT', '💵'), 'usdt_toman' => $rate ? Fmt::toman($rate) : null, 'time' => Fmt::now()]));
-        self::react($m);
     }
 
     public static function answerAmount(array $m, float $amount, string $unit, bool $silent, ?bool $guess = null): bool
@@ -59,6 +59,7 @@ final class Tools
         if (!empty($a['key']) && UI::$lang !== 'fa') {
             $a['key'] .= '|' . UI::$lang;
         }
+        self::react($m);
         $photo = null;
         $fk = !empty($a['key']) ? 'fid:' . md5(Config::get('BOT_TOKEN') . '|' . $a['key']) : null;
         if ($fk && ($fid = Cache::get($fk))) {
@@ -72,11 +73,9 @@ final class Tools
         }
         if (!empty($fid)) {
             Bot::reply($m, $a['text'], false, $fid);
-            self::react($m);
             return;
         }
         $sent = Bot::send($m, $a['text'], false, $photo ?: null);
-        self::react($m);
         if ($fk && !empty($sent['photo'])) {
             $big = end($sent['photo']);
             if (!empty($big['file_id'])) {
@@ -102,12 +101,14 @@ final class Tools
             }
         }
         $key = 'react:' . $chat . ':' . md5(json_encode($list));
-        $start = (int)(Cache::get($key) ?? 0);
+        $start = (int)(Cache::get($key, $known) ?? 0);
+        if ($known && $start < count($list)) {
+            TG::api('setMessageReaction', ['chat_id' => $chat, 'message_id' => $m['message_id'], 'reaction' => [$list[$start]], '__quick' => true]);
+            return;
+        }
         for ($i = $start; $i < count($list); $i++) {
             if (TG::api('setMessageReaction', ['chat_id' => $chat, 'message_id' => $m['message_id'], 'reaction' => [$list[$i]]]) !== null) {
-                if ($i !== $start) {
-                    Cache::set($key, $i, 86400);
-                }
+                Cache::set($key, $i, 21600);
                 return;
             }
             if (!str_contains(strtolower((string)TG::$lastError), 'reaction')) {
@@ -119,25 +120,27 @@ final class Tools
 
     public static function premium(array $m): void
     {
-        Bot::reply($m, Convert::premiumText() ?? UI::t('price_unavailable'));
         self::react($m);
+        Bot::reply($m, Convert::premiumText() ?? UI::t('price_unavailable'));
     }
 
     public static function starsBoard(array $m): void
     {
-        Bot::reply($m, Convert::starsText() ?? UI::t('price_unavailable'));
         self::react($m);
+        Bot::reply($m, Convert::starsText() ?? UI::t('price_unavailable'));
     }
 
     public static function runChecker(array $m, string $kind, string $token, ?int $owner = null): void
     {
         $owner = $owner ?? ($m['from']['id'] ?? 0);
         $isHash = in_array($kind, Chain::HASH_KINDS, true);
-        TG::api('sendChatAction', ['chat_id' => $m['chat']['id'], 'action' => 'typing', '__quick' => true]);
         Perf::start();
+        self::react($m, $isHash ? 'hash' : 'wallet');
+        Perf::mark('react');
         try {
             if ($isHash) {
                 $tx = Txs::check($kind, $token);
+                Perf::mark('lookup');
                 if ($tx) {
                     self::sendTx($m, $tx, $owner);
                     return;
@@ -150,6 +153,7 @@ final class Tools
                 return;
             }
             $w = Wallets::check($kind, $token);
+            Perf::mark('lookup');
             if (!$w && $kind === 'sol' && in_array(strlen($token), [43, 44], true) && ($tx = Txs::check('sol', $token))) {
                 self::sendTx($m, $tx, $owner);
                 return;
@@ -206,7 +210,7 @@ final class Tools
             }
         }
         Bot::send($m, $text, UI::footer($rows));
-        self::react($m, 'wallet');
+        Perf::mark('sent');
     }
 
     public static function sendTx(array $m, array $tx, int $owner): void
@@ -217,21 +221,20 @@ final class Tools
             'network' => UI::esc($tx['network']), 'status' => UI::lx(UI::stripEmoji($tx['status'])) ?: null, 'status_icon' => self::statusDot(UI::stripEmoji($tx['status'])), 'amount' => $amount,
             'usd' => $tx['usd'] ? Fmt::usd($tx['usd']) : null, 'toman' => $tx['usd'] && $rate ? Fmt::toman($tx['usd'] * $rate) : null,
             'token' => $tx['token_type'] ? UI::esc(($tx['token_name'] ?: $tx['symbol']) . ' (' . $tx['token_type'] . ')') : null,
-            'contract' => $tx['contract'] ? UI::esc($tx['contract']) : null,
             'sender' => $tx['sender'] ? UI::esc($tx['sender']) : null, 'receiver' => $tx['receiver'] ? UI::esc($tx['receiver']) : null,
             'fee' => $tx['fee'] ? UI::esc($tx['fee']) : null, 'block' => $tx['block'],
             'confirmations' => is_int($tx['confirmations']) ? Fmt::int($tx['confirmations']) : ($tx['confirmations'] ?: null),
             'time' => $tx['timestamp'] ? Fmt::jalali((int)$tx['timestamp']) : null, 'hash' => UI::esc($tx['hash']), 'explorer' => UI::attr($tx['explorer']),
         ]);
         $row = [];
-        foreach ([[$tx['sender'], 'btn_sender_wallet'], [$tx['receiver'], 'btn_receiver_wallet']] as [$addr, $key]) {
+        foreach ([[$tx['receiver'], 'btn_receiver_wallet']] as [$addr, $key]) {
             $f = Chain::extract(explode(' ', (string)$addr)[0], true);
             if ($f && in_array($f[0], Chain::ADDRESS_KINDS, true)) {
                 $row[] = UI::button($key, ['cb' => 'wl:' . Store::put(['addr' => $f[1], 'kind' => $f[0], 'owner' => $owner])]);
             }
         }
         Bot::send($m, $text, UI::footer($row ? [$row] : []));
-        self::react($m, 'hash');
+        Perf::mark('sent');
     }
 
     private static function owned(array $cq, ?array $d): ?string
