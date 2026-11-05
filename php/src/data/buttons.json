@@ -25,27 +25,27 @@
   "desc": "دکمه راهنما"
  },
  "lang_fa": {
-  "text": "🇮🇷 𝗳𝗮",
+  "text": "🇮🇷 𝗙𝗔",
   "style": "primary",
   "desc": "زبان فارسی"
  },
  "lang_en": {
-  "text": "🇬🇧 𝗲𝗻",
+  "text": "🇬🇧 𝗘𝗡",
   "style": "primary",
   "desc": "زبان انگلیسی"
  },
  "lang_ru": {
-  "text": "🇷🇺 𝗿𝘂",
+  "text": "🇷🇺 𝗥𝗨",
   "style": "primary",
   "desc": "زبان روسی"
  },
  "lang_zh": {
-  "text": "🇨🇳 𝘇𝗵",
+  "text": "🇨🇳 𝗭𝗛",
   "style": "success",
   "desc": "زبان چینی"
  },
  "lang_ar": {
-  "text": "🇸🇦 𝗮𝗿",
+  "text": "🇸🇦 𝗔𝗥",
   "style": "success",
   "desc": "زبان عربی"
  },

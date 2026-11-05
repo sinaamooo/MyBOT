@@ -390,11 +390,31 @@ final class UI
 
     public static function quoteGaps(string $html): string
     {
+        $html = preg_replace('/<\/blockquote>\n{2,}/', "</blockquote>\n", $html);
         $first = strpos($html, '<blockquote');
         if ($first === false || strpos($html, '<blockquote', $first + 1) === false) {
             return $html;
         }
         return substr($html, 0, $first + 1) . preg_replace('/\n{2,}(?=<blockquote)/', "\n", substr($html, $first + 1));
+    }
+
+    public static function align(string $html): string
+    {
+        if (!str_contains($html, '<tg-emoji') || !preg_match('/\p{Arabic}/u', preg_replace('/<[^>]*>/', '', $html))) {
+            return $html;
+        }
+        $depth = 0;
+        $lines = explode("\n", $html);
+        foreach ($lines as &$line) {
+            if (preg_match('/^((?:<(?!tg-emoji|\/)[a-z][^>]*>)*)\x{200F}?(<tg-emoji[^>]*>.*?<\/tg-emoji>)[ \t]*/u', $line, $m)) {
+                $quote = $depth > 0 || str_contains($m[1], '<blockquote');
+                $rest = substr($line, strlen($m[0]));
+                $line = $m[1] . "\u{200F}" . $m[2] . ($rest !== '' && !str_starts_with($rest, '</blockquote') ? str_repeat(' ', $quote ? 4 : 1) : '') . $rest;
+            }
+            $depth = max(0, $depth + preg_match_all('/<blockquote/', $line) - substr_count($line, '</blockquote>'));
+        }
+        unset($line);
+        return implode("\n", $lines);
     }
 
     public static function stripPremium(string $text): string

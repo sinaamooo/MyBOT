@@ -305,7 +305,7 @@ $prompt = sent(['sendMessage'])[0];
 check(array_map('count', $prompt[1]['reply_markup']['inline_keyboard']) === [3, 2], 'translate 3+2');
 $tk = $prompt[1]['reply_markup']['inline_keyboard'];
 check(array_column($tk[0], 'style') === ['primary', 'primary', 'primary'] && array_column($tk[1], 'style') === ['success', 'success']
-    && $tk[0][0]['icon_custom_emoji_id'] === '5143448346001671955' && $tk[1][1]['icon_custom_emoji_id'] === '5143404335471790574' && $tk[0][0]['text'] === '𝗳𝗮' && $tk[0][1]['text'] === '𝗲𝗻' && $tk[1][0]['text'] === '𝘇𝗵' && ($tk[1][0]['icon_custom_emoji_id'] ?? '') === '5294068833277990704', 'translate flag + bold code buttons');
+    && $tk[0][0]['icon_custom_emoji_id'] === '5143448346001671955' && $tk[1][1]['icon_custom_emoji_id'] === '5143404335471790574' && $tk[0][0]['text'] === '𝗙𝗔' && $tk[0][1]['text'] === '𝗘𝗡' && $tk[1][0]['text'] === '𝗭𝗛' && ($tk[1][0]['icon_custom_emoji_id'] ?? '') === '5294068833277990704', 'translate flag + bold code buttons');
 $pmid = $GLOBALS['mid'] - 0;
 $row = DB::one('SELECT message_id FROM translations ORDER BY created_at DESC LIMIT 1');
 reset_calls();
@@ -761,7 +761,7 @@ foreach (['/500 درهم' => 'درهم امارات', '/درهم 500' => 'دره
 reset_calls();
 feed(msg('/eur', -950, 97));
 $p = sent(['sendPhoto']);
-check($p && str_starts_with($p[0][1]['caption'], '<tg-emoji emoji-id="5143540580424354040">') && str_contains($p[0][1]['caption'], '<tg-emoji emoji-id="5143224307622610764">'), 'fiat currency badge and dollar flag');
+check($p && str_starts_with($p[0][1]['caption'], "\u{200F}" . '<tg-emoji emoji-id="5143540580424354040">') && str_contains($p[0][1]['caption'], '<tg-emoji emoji-id="5143224307622610764">'), 'fiat currency badge and dollar flag');
 reset_calls();
 feed(msg('500000 ریال', 98, 98));
 $p = sent(['sendPhoto']);
@@ -853,8 +853,12 @@ Settings::set('emoji_map', $prevMap);
 Config::set('KASHIDA', '1');
 check(UI::stretch('لینک') === 'لـیـنـک' && UI::stretch('دارد') === 'دارد' && UI::kashida('🔗 لینک <code>آدرس</code> {name}') === '🔗 لـیـنـک <code>آدرس</code> {name}', 'kashida stretch');
 Config::set('KASHIDA', '0');
-check(UI::quoteGaps("سر\n\n<blockquote>a</blockquote>\n\nجمع\n\n<blockquote>b</blockquote>\n<blockquote>c</blockquote>") === "سر\n\n<blockquote>a</blockquote>\n\nجمع\n<blockquote>b</blockquote>\n<blockquote>c</blockquote>"
+check(UI::quoteGaps("سر\n\n<blockquote>a</blockquote>\n\nجمع\n\n<blockquote>b</blockquote>\n<blockquote>c</blockquote>") === "سر\n\n<blockquote>a</blockquote>\nجمع\n<blockquote>b</blockquote>\n<blockquote>c</blockquote>"
     && UI::quoteGaps("سر\n\n<blockquote>a</blockquote>") === "سر\n\n<blockquote>a</blockquote>", 'only first quote keeps blank line above');
+$E = fn($id) => '<tg-emoji emoji-id="' . $id . '">x</tg-emoji>';
+$al = UI::align($E(1) . " <b>عنوان</b>\n" . $E(2) . "<code>UQB1</code>\n<blockquote>" . $E(3) . " NFT: 5\n" . $E(4) . "        موجودی: 1</blockquote>\n" . $E(5) . "   1405/08/14");
+check($al === "\u{200F}" . $E(1) . " <b>عنوان</b>\n\u{200F}" . $E(2) . " <code>UQB1</code>\n<blockquote>\u{200F}" . $E(3) . "    NFT: 5\n\u{200F}" . $E(4) . "    موجودی: 1</blockquote>\n\u{200F}" . $E(5) . " 1405/08/14"
+    && UI::align('<b>hello</b> ' . $E(1)) === '<b>hello</b> ' . $E(1), 'emoji lines right-aligned with exact spacing');
 $dm2 = Settings::get('emoji_map');
 Settings::set('emoji_invalid', []);
 Settings::set('emoji_map', ['🇮🇷' => '5143448346001671955']);
