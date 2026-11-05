@@ -610,13 +610,13 @@ final class Bot
 
 final class Start
 {
-    const COMMANDS_V = 6;
+    const COMMANDS_V = 7;
 
     public static function registerCommands(): bool
     {
-        $list = [['command' => 'gift', 'description' => 'قیمت گیفت و کلکسیون گیفت'], ['command' => 'account', 'description' => 'اطلاعات اکانت'], ['command' => 'emoji', 'description' => 'کد ایموجی پریمیوم']];
+        $list = [['command' => 'gift', 'description' => 'قیمت گیفت و کلکسیون گیفت'], ['command' => 'account', 'description' => 'اطلاعات اکانت'], ['command' => 'emoji', 'description' => 'کد ایموجی پریمیوم'], ['command' => 'help', 'description' => 'راهنمای ربات']];
         foreach (['default', 'all_private_chats', 'all_group_chats', 'all_chat_administrators'] as $scope) {
-            foreach ([null, 'fa', 'en'] as $lang) {
+            foreach ([null, 'fa', 'en', 'ru'] as $lang) {
                 TG::api('deleteMyCommands', ['scope' => ['type' => $scope], 'language_code' => $lang]);
             }
         }

@@ -53,7 +53,7 @@ echo 'webhook: ' . ($ok ? 'OK' : 'FAILED ' . TG::$lastError) . " -> $url\n";
 if (function_exists('opcache_reset')) {
     @opcache_reset();
 }
-echo 'commands: ' . (Start::registerCommands() ? 'OK (/gift /account /emoji)' : 'FAILED') . "\n";
+echo 'commands: ' . (Start::registerCommands() ? 'OK (/gift /account /emoji /help)' : 'FAILED') . "\n";
 $e = UI::validateEmoji();
 echo 'premium emoji: ' . ($e ? $e[0] . ' ok, ' . $e[1] . ' invalid, ' . $e[2] . ' matched by pack emoji' : 'check failed') . "\n";
 $n = SpotDir::refresh();
