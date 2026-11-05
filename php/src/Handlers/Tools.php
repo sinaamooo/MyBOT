@@ -239,6 +239,8 @@ final class Tools
         self::runChecker($cq['message'], $d['kind'], $d['addr'], $cq['from']['id']);
     }
 
+    const TX_PAGE = 3;
+
     public static function transfers(array $cq, string $arg): void
     {
         [$key, $page] = array_pad(explode(':', $arg), 2, '1');
@@ -248,49 +250,40 @@ final class Tools
             TG::answer($cq['id'], UI::plain($err), true);
             return;
         }
-        $page = max(1, (int)$page);
-        $fp = $page === 1 ? [] : Cache::get("tfp:$key:$page");
-        if ($page > 1 && !is_array($fp)) {
-            TG::answer($cq['id'], UI::plain('expired'), true);
-            return;
-        }
-        $res = Wallets::tronTransfers($d['addr'], $page, 10, $fp);
-        if (!$res) {
+        $all = Wallets::tronHistory($d['addr']);
+        if ($all === null) {
             TG::answer($cq['id'], UI::plain('price_unavailable'), true);
             return;
         }
-        if (!$res['items'] && $page === 1) {
+        if (!$all) {
             TG::answer($cq['id'], UI::plain('tron_transfers_empty'), true);
             return;
         }
+        $pages = (int)ceil(count($all) / self::TX_PAGE);
+        $page = min(max(1, (int)$page), $pages);
         TG::answer($cq['id']);
-        if ($res['more']) {
-            Cache::set("tfp:$key:" . ($page + 1), $res['next'], 86400);
-        }
         $items = [];
-        foreach ($res['items'] as $it) {
+        foreach (array_slice($all, ($page - 1) * self::TX_PAGE, self::TX_PAGE) as $it) {
             $in = ($it['to'] ?? '') === $d['addr'];
             $items[] = UI::fill(UI::template('tron_transfer_item'), ['direction' => $in ? '📥' : '📤', 'kind' => $in ? 'دریافت' : 'ارسال',
                 'amount' => Fmt::num($it['amount']), 'symbol' => UI::esc($it['symbol']), 'time' => $it['ts'] ? Fmt::jalali($it['ts']) : '—',
                 'side' => $in ? 'از' : 'به', 'party' => UI::esc((string)($in ? $it['from'] : $it['to'])), 'hash' => UI::esc($it['hash'] ?? '')]);
         }
-        $text = UI::t('tron_transfers', ['address' => UI::esc($d['addr']), 'page' => $page, 'items' => implode("\n", $items)]);
-        if (mb_strlen($text) > 4000) {
-            $text = mb_substr($text, 0, mb_strrpos(mb_substr($text, 0, 3990), '</blockquote>') + 13);
-        }
+        $text = UI::t('tron_transfers', ['address' => UI::esc($d['addr']), 'page' => $page, 'pages' => $pages, 'items' => implode("\n", $items)]);
         $nav = [];
+        if ($page < $pages) {
+            $nav[] = UI::button('btn_next', ['cb' => "tp:$key:" . ($page + 1)]);
+        }
         if ($page > 1) {
             $nav[] = UI::button('btn_prev', ['cb' => "tp:$key:" . ($page - 1)]);
         }
-        if ($res['more']) {
-            $nav[] = UI::button('btn_next', ['cb' => "tp:$key:" . ($page + 1)]);
-        }
         $kb = $nav ? UI::kb([$nav]) : null;
         $chat = $cq['message']['chat']['id'];
-        if ($edit && TG::edit($chat, $cq['message']['message_id'], $text, $kb) !== null) {
+        if ($edit) {
+            TG::edit($chat, $cq['message']['message_id'], $text, $kb, ['__quick' => true]);
             return;
         }
-        TG::send($chat, $text, $kb);
+        TG::send($chat, $text, $kb, ['__quick' => true]);
     }
 
     public static function uid(array $m, string $args = ''): void

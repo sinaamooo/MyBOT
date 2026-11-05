@@ -514,34 +514,29 @@ final class Wallets
         return ['total' => $d['total'] ?? count($tokens), 'wallet' => $a, 'token' => $tokens];
     }
 
-    public static function tronTransfers(string $a, int $page = 1, int $per = 10, array $fp = []): ?array
+    public static function tronHistory(string $a, int $limit = 50): ?array
     {
-        $fp += ['t' => null, 'x' => null];
+        $hit = Cache::get('th:' . $a, $found);
+        if ($found && is_array($hit)) {
+            return $hit;
+        }
         $h = Chain::tronHeaders();
         $base = "https://api.trongrid.io/v1/accounts/$a";
-        $reqs = [];
-        if ($fp['t'] !== false) {
-            $reqs['t'] = ['url' => "$base/transactions/trc20", 'params' => ['limit' => $per, 'only_confirmed' => 'true'] + ($fp['t'] ? ['fingerprint' => $fp['t']] : []), 'headers' => $h, 'timeout' => 10];
-        }
-        if ($fp['x'] !== false) {
-            $reqs['x'] = ['url' => "$base/transactions", 'params' => ['limit' => $per, 'only_confirmed' => 'true', 'search_internal' => 'false'] + ($fp['x'] ? ['fingerprint' => $fp['x']] : []), 'headers' => $h, 'timeout' => 10];
-        }
-        if ($page === 1) {
-            $reqs['s'] = ['url' => 'https://apilist.tronscanapi.com/api/new/token_trc20/transfers', 'params' => ['limit' => $per, 'start' => 0, 'relatedAddress' => $a], 'headers' => Chain::tronscanHeaders(), 'timeout' => 10];
-        }
-        $res = $reqs ? Http::multiJson($reqs) : [];
+        $res = Http::multiJson([
+            't' => ['url' => "$base/transactions/trc20", 'params' => ['limit' => $limit, 'only_confirmed' => 'true'], 'headers' => $h, 'timeout' => 10],
+            'x' => ['url' => "$base/transactions", 'params' => ['limit' => $limit, 'only_confirmed' => 'true', 'search_internal' => 'false'], 'headers' => $h, 'timeout' => 10],
+            's' => ['url' => 'https://apilist.tronscanapi.com/api/new/token_trc20/transfers', 'params' => ['limit' => $limit, 'start' => 0, 'relatedAddress' => $a], 'headers' => Chain::tronscanHeaders(), 'timeout' => 10],
+        ]);
         $items = [];
-        $next = ['t' => false, 'x' => false];
         $ok = false;
         $addr = fn($v) => is_string($v) && strlen($v) === 42 && str_starts_with($v, '41') ? Chain::tronB58($v) : $v;
         if (!empty($res['t']['success'])) {
             $ok = true;
             foreach ($res['t']['data'] ?? [] as $it) {
                 $dec = (int)($it['token_info']['decimals'] ?? 0);
-                $items[] = ['amount' => is_numeric($it['value'] ?? null) ? $it['value'] / 10 ** $dec : 0, 'symbol' => $it['token_info']['symbol'] ?? 'TRC20',
+                $items[] = ['amount' => is_numeric($it['value'] ?? null) ? $it['value'] / 10 ** $dec : 0, 'symbol' => (string)($it['token_info']['symbol'] ?? 'TRC20'),
                     'from' => $it['from'] ?? null, 'to' => $it['to'] ?? null, 'ts' => intdiv((int)($it['block_timestamp'] ?? 0), 1000), 'hash' => $it['transaction_id'] ?? null];
             }
-            $next['t'] = count($res['t']['data'] ?? []) >= $per ? ($res['t']['meta']['fingerprint'] ?? false) : false;
         }
         if (!empty($res['x']['success'])) {
             $ok = true;
@@ -554,13 +549,12 @@ final class Wallets
                 $items[] = ['amount' => ($v['amount'] ?? 0) / 1e6, 'symbol' => 'TRX', 'from' => $addr($v['owner_address'] ?? null), 'to' => $addr($v['to_address'] ?? null),
                     'ts' => intdiv((int)($it['block_timestamp'] ?? $it['raw_data']['timestamp'] ?? 0), 1000), 'hash' => $it['txID'] ?? null];
             }
-            $next['x'] = count($res['x']['data'] ?? []) >= $per ? ($res['x']['meta']['fingerprint'] ?? false) : false;
         }
         if (!$ok && is_array($res['s'] ?? null) && isset($res['s']['token_transfers'])) {
             $ok = true;
             foreach ($res['s']['token_transfers'] as $it) {
                 $dec = (int)($it['tokenInfo']['tokenDecimal'] ?? 0);
-                $items[] = ['amount' => is_numeric($it['quant'] ?? null) ? $it['quant'] / 10 ** $dec : 0, 'symbol' => $it['tokenInfo']['tokenAbbr'] ?? 'TRC20',
+                $items[] = ['amount' => is_numeric($it['quant'] ?? null) ? $it['quant'] / 10 ** $dec : 0, 'symbol' => (string)($it['tokenInfo']['tokenAbbr'] ?? 'TRC20'),
                     'from' => $it['from_address'] ?? null, 'to' => $it['to_address'] ?? null, 'ts' => intdiv((int)($it['block_ts'] ?? 0), 1000), 'hash' => $it['transaction_id'] ?? null];
             }
         }
@@ -568,7 +562,9 @@ final class Wallets
             return null;
         }
         usort($items, fn($x, $y) => $y['ts'] <=> $x['ts']);
-        return ['items' => $items, 'page' => $page, 'next' => $next, 'more' => $next['t'] !== false || $next['x'] !== false];
+        $items = array_slice($items, 0, 2 * $limit);
+        Cache::set('th:' . $a, $items, 300);
+        return $items;
     }
 
     public static function tron(string $a): array

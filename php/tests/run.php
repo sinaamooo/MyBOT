@@ -599,6 +599,7 @@ reset_calls();
 cb($ex[0]['callback_data'], 90, -700);
 check(str_contains((string)last_text(), 'تراکنش‌های ولت') && str_contains((string)last_text(), 'USDT'), 'tron history via tronscan fallback');
 unset($GLOBALS['http']['api.trongrid.io/v1/accounts'], $GLOBALS['http']['/transactions']);
+DB::q("DELETE FROM cache WHERE k LIKE 'th:%'");
 $hx = '41' . str_repeat('ab', 20);
 $GLOBALS['http']['/transactions/trc20'] = fn($r) => ['success' => true, 'data' => array_fill(0, 10, ['transaction_id' => 'aa11', 'token_info' => ['symbol' => 'USDT', 'decimals' => 6], 'block_timestamp' => 1700000000000, 'from' => 'TFrom', 'to' => 'TJRabPrwbZy45sbavfcjinPJC18kjpRTv8', 'value' => '2500000']), 'meta' => ['fingerprint' => empty($r['params']['fingerprint']) ? 'FP2' : null]];
 $GLOBALS['http']['/transactions'] = ['success' => true, 'data' => [['txID' => 'bb22', 'block_timestamp' => 1700000500000, 'raw_data' => ['contract' => [['type' => 'TransferContract', 'parameter' => ['value' => ['amount' => 3000000, 'owner_address' => '41' . bin2hex(Chain::b58decode('TJRabPrwbZy45sbavfcjinPJC18kjpRTv8') ? substr(Chain::b58decode('TJRabPrwbZy45sbavfcjinPJC18kjpRTv8'), 1, 20) : ''), 'to_address' => $hx]]]]]]], 'meta' => []];
@@ -607,10 +608,14 @@ reset_calls();
 cb($ex[0]['callback_data'], 90, -700);
 $ht = (string)last_text();
 $nb = array_values(array_filter(buttons(end($GLOBALS['calls'])), fn($b) => str_starts_with($b['callback_data'] ?? '', 'tp:')));
-check(str_contains($ht, '2.5 USDT') && str_contains($ht, '3 TRX') && str_contains($ht, Chain::tronB58($hx)) && count($nb) === 1, 'tron history trongrid with trx and next page');
+check(str_contains($ht, '2.5 USDT') && str_contains($ht, '3 TRX') && str_contains($ht, Chain::tronB58($hx)) && count($nb) === 1 && substr_count($ht, '<blockquote>') === 3
+    && str_contains($ht, 'صفحه <b>1</b> از <b>4</b>') && ($nb[0]['style'] ?? '') === 'success', 'tron history 3 per page with green next');
+$n0 = count($GLOBALS['http_log'] ?? []);
 reset_calls();
-cb($nb[0]['callback_data'], 90, -700);
-check(str_contains((string)last_text(), 'صفحه: <b>2</b>') || str_contains(json_encode($GLOBALS['calls'], JSON_UNESCAPED_UNICODE), 'صفحه: <b>2</b>'), 'tron history page 2');
+cb(str_replace('tt:', 'tp:', $nb[0]['callback_data']), 90, -700);
+$p2 = end($GLOBALS['calls']);
+$nb2 = buttons($p2);
+check($p2[0] === 'editMessageText' && str_contains($p2[1]['text'], 'صفحه <b>2</b> از <b>4</b>') && count($nb2) === 2 && ($nb2[1]['style'] ?? '') === 'danger', 'tron history page 2 with red prev');
 unset($GLOBALS['http']['/transactions/trc20'], $GLOBALS['http']['/transactions']);
 
 $GLOBALS['http']['publicnode.com'] = function ($r) {

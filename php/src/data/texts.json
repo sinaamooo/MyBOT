@@ -100,7 +100,7 @@
   "desc": "هش پیدا نشد ({hash})"
  },
  "tron_transfers": {
-  "text": "📜 <b>تراکنش‌های ولت</b>\n🗺 <code>{address}</code>\n📋 صفحه: <b>{page}</b>\n\n{items}",
+  "text": "📜 <b>تراکنش‌های ولت</b>\n🗺 <code>{address}</code>\n📋 صفحه <b>{page}</b> از <b>{pages}</b>\n\n{items}",
   "desc": "لیست تراکنش‌های TRC20 ({address} {page} {pages} {total} {items})"
  },
  "tron_transfer_item": {
