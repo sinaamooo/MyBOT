@@ -388,7 +388,7 @@ final class Tools
         $level = null;
         if (!empty($info['rating'])) {
             $r = $info['rating'];
-            $level = '⭐️   ' . $r['level'] . (!empty($r['next_level_rating']) ? ' (' . Fmt::int($r['rating'] ?? 0) . '/' . Fmt::int($r['next_level_rating']) . ')' : '');
+            $level = '⭐️  ' . $r['level'] . (!empty($r['next_level_rating']) ? ' (' . Fmt::int($r['rating'] ?? 0) . '/' . Fmt::int($r['next_level_rating']) . ')' : '');
         }
         $bd = null;
         if (!empty($info['birthdate'])) {

@@ -436,7 +436,8 @@ final class UI
                 $plain = html_entity_decode(strip_tags(preg_replace('/<tg-emoji[^>]*>.*?<\/tg-emoji>/u', '', $rest)), ENT_QUOTES, 'UTF-8');
                 $rtl = $m[2] !== '' || (preg_match('/\p{L}/u', $plain, $lm) && preg_match('/\p{Arabic}/u', $lm[0]));
                 $dot = preg_match('/emoji-id="(\d+)"/', $m[3], $em) && isset(self::DOTS[$em[1]]);
-                $gap = $rest !== '' && !str_starts_with($rest, '</blockquote') ? str_repeat(' ', $quote && $rtl ? ($dot ? $quoteGap : 4) : 1) : '';
+                $had = strlen($m[0]) - strlen(rtrim($m[0], " \t"));
+                $gap = $rest !== '' && !str_starts_with($rest, '</blockquote') ? str_repeat(' ', $quote && $rtl ? ($dot ? $quoteGap : 4) : ($rtl ? max(1, min(2, $had)) : 1)) : '';
                 $line = $m[1] . $m[2] . $m[3] . $gap . $rest;
             }
             $depth = max(0, $depth + preg_match_all('/<blockquote/', $line) - substr_count($line, '</blockquote>'));

@@ -878,7 +878,8 @@ check($al === $E(1) . " <b>عنوان</b>\n" . $E(2) . " <code>UQB1</code>\n<blo
     && UI::align('<blockquote>' . $D . ' موجودی: 1</blockquote>', 4) === '<blockquote>' . $D . '    موجودی: 1</blockquote>'
     && UI::align('<blockquote>' . $D . ' موجودی: 1</blockquote>', 3) === '<blockquote>' . $D . '   موجودی: 1</blockquote>'
     && UI::align('<blockquote>' . $E(6) . '    <b>370,185</b></blockquote>') === '<blockquote>' . $E(6) . ' <b>370,185</b></blockquote>'
-    && UI::align("\u{200F}" . $E(7) . '   <b>800 POL</b>') === "\u{200F}" . $E(7) . ' <b>800 POL</b>' && UI::align($E(8) . '    @HashpriceBot') === $E(8) . ' @HashpriceBot'
+    && UI::align("\u{200F}" . $E(7) . '   <b>800 POL</b>') === "\u{200F}" . $E(7) . '  <b>800 POL</b>' && UI::align($E(8) . '    @HashpriceBot') === $E(8) . ' @HashpriceBot'
+    && UI::align($E(1) . "    نام: x\n" . $E(2) . "  یوزرنیم\n" . $E(3) . ' لول') === $E(1) . "  نام: x\n" . $E(2) . "  یوزرنیم\n" . $E(3) . ' لول'
     && UI::align('<b>hello</b> ' . $E(1)) === '<b>hello</b> ' . $E(1), 'emoji spacing: dots 2 and icons 4 in message quotes, 4 in caption quotes, 1 elsewhere');
 $ft = UI::align("<blockquote>" . $E(1) . " a</blockquote>\n\n" . $E(2) . " رتبه‌ی شما: <b>5</b> " . $E(3));
 check($ft === "<blockquote>" . $E(1) . " a</blockquote>\n\n\u{200E}" . $E(2) . " رتبه‌ی شما: <b>5</b> " . $E(3) . "\u{200F}" && UI::align($ft) === $ft
