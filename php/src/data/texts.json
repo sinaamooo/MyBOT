@@ -160,7 +160,7 @@
   "desc": "تعداد مدیا ({count})"
  },
  "insta_media_caption": {
-  "text": "🎬 <b>{title}</b>\n\n<blockquote>👤    پیج: <b>{owner}</b>\n❤️    لایک: <code>{likes}</code>\n💬    کامنت: <code>{comments}</code>\n👁    بازدید: <code>{views}</code>\n⏱    مدت: <code>{duration}</code>\n🖼    تعداد: <code>{count}</code>\n🗓    تاریخ: {date}</blockquote>\n<blockquote expandable>📝    {text}</blockquote>\n🤖 @{bot}",
+  "text": "🎬 <b>{title}</b>\n\n👤  پیج: <b>{owner}</b>\n<blockquote>❤️    لایک: <code>{likes}</code></blockquote>\n<blockquote>💬    کامنت: <code>{comments}</code></blockquote>\n👁  بازدید: <code>{views}</code>\n⏱  مدت: <code>{duration}</code>\n🖼  تعداد: <code>{count}</code>\n🗓  تاریخ: {date}\n<blockquote expandable>📝    {text}</blockquote>\n🤖 @{bot}",
   "desc": "کپشن پست و ریلز اینستاگرام"
  },
  "insta_not_found": {

@@ -120,7 +120,7 @@
   "text": "⏳ Пожалуйста, подождите\n🖼 Фото и видео: {count}"
  },
  "insta_media_caption": {
-  "text": "🎬 <b>{title}</b>\n\n<blockquote>👤 Страница: <b>{owner}</b>\n❤️ Лайки: <code>{likes}</code>\n💬 Комментарии: <code>{comments}</code>\n👁 Просмотры: <code>{views}</code>\n⏱ Длительность: <code>{duration}</code>\n🖼 Файлов: <code>{count}</code>\n🗓 Дата: {date}</blockquote>\n<blockquote expandable>📝 {text}</blockquote>\n🤖 @{bot}"
+  "text": "🎬 <b>{title}</b>\n\n👤 Страница: <b>{owner}</b>\n<blockquote>❤️ Лайки: <code>{likes}</code></blockquote>\n<blockquote>💬 Комментарии: <code>{comments}</code></blockquote>\n👁 Просмотры: <code>{views}</code>\n⏱ Длительность: <code>{duration}</code>\n🖼 Файлов: <code>{count}</code>\n🗓 Дата: {date}\n<blockquote expandable>📝 {text}</blockquote>\n🤖 @{bot}"
  },
  "insta_not_found": {
   "text": "⛔️ Не удалось получить этот пост.\n💬 Пост должен быть публичным; попробуйте ещё раз через минуту."

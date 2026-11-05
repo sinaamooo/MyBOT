@@ -120,7 +120,7 @@
   "text": "⏳ Please wait\n🖼 Photos and videos: {count}"
  },
  "insta_media_caption": {
-  "text": "🎬 <b>{title}</b>\n\n<blockquote>👤 Page: <b>{owner}</b>\n❤️ Likes: <code>{likes}</code>\n💬 Comments: <code>{comments}</code>\n👁 Views: <code>{views}</code>\n⏱ Duration: <code>{duration}</code>\n🖼 Items: <code>{count}</code>\n🗓 Date: {date}</blockquote>\n<blockquote expandable>📝 {text}</blockquote>\n🤖 @{bot}"
+  "text": "🎬 <b>{title}</b>\n\n👤 Page: <b>{owner}</b>\n<blockquote>❤️ Likes: <code>{likes}</code></blockquote>\n<blockquote>💬 Comments: <code>{comments}</code></blockquote>\n👁 Views: <code>{views}</code>\n⏱ Duration: <code>{duration}</code>\n🖼 Items: <code>{count}</code>\n🗓 Date: {date}\n<blockquote expandable>📝 {text}</blockquote>\n🤖 @{bot}"
  },
  "insta_not_found": {
   "text": "⛔️ Couldn't fetch this post.\n💬 The post must be public; try again in a moment."
