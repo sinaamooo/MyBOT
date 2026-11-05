@@ -110,9 +110,14 @@ function handle(array $u): void
         if (!allowed($uid)) {
             return;
         }
+        lockUser($uid);
         if ($q['data'] === 'new') {
-            saveState($uid, []);
-            send($uid, "🆕 پک جدید شروع شد.\nحالا ایموجی‌ها را بفرست.\n\n(برای اسم دلخواه: <code>/new اسم پک</code>)");
+            startNew($uid);
+        } elseif ($q['data'] === 'auto') {
+            $st = loadState($uid);
+            if (($st['step'] ?? '') === 'link') {
+                setLinkName($uid, $st, 'emoji_' . substr(str_shuffle('abcdefghijkmnpqrstuvwxyz23456789'), 0, 6), true);
+            }
         }
         return;
     }
@@ -126,84 +131,288 @@ function handle(array $u): void
         send($uid, '🔒 این ربات خصوصی است.');
         return;
     }
-
-    $lock = @fopen(DATA_DIR . "/$uid.lock", 'c');
-    if ($lock) {
-        flock($lock, LOCK_EX); // پیام‌های همزمان (آلبوم) یکی‌یکی پردازش شوند
-    }
+    lockUser($uid);
 
     $text = trim((string) ($m['text'] ?? ''));
+    $st = loadState($uid);
+    $hasEmoji = hasContent($m);
+
     if (preg_match('~^/start~', $text)) {
         send($uid, "سلام 👋\n\nایموجی‌های پریمیومت را بفرست تا برایت <b>پک ایموجی</b> بسازم و لینکش را بدهم ✨\n\n"
             . "• چند ایموجی را می‌توانی در یک پیام بفرستی\n"
-            . "• استیکر، عکس و گیف هم قبول است\n\n"
-            . "🆕 /new — شروع پک جدید (مثال: <code>/new پک من</code>)\n"
+            . "• استیکر، عکس و گیف هم قبول است\n"
+            . "• هر پک تا ۲۰۰ ایموجی\n\n"
+            . "🆕 /new — ساخت پک جدید\n"
+            . "✏️ /name — تغییر اسم پک فعلی (مثال: <code>/name پک من</code>)\n"
             . "🔗 /link — لینک پک فعلی");
         return;
     }
-    if (preg_match('~^/new(?:@\w+)?\s*(.*)$~su', $text, $mm)) {
-        $title = cut(trim($mm[1]), 64);
-        saveState($uid, $title !== '' ? ['title' => $title] : []);
-        send($uid, '🆕 پک جدید' . ($title !== '' ? ' «' . h($title) . '»' : '') . " شروع شد.\nحالا ایموجی‌ها را بفرست.");
+    if (preg_match('~^/new~', $text)) {
+        startNew($uid);
         return;
     }
     if (preg_match('~^/link~', $text)) {
-        $st = loadState($uid);
         send($uid, empty($st['pack']) ? 'هنوز پکی نساختی. ایموجی‌ها را بفرست.' : '🔗 https://t.me/addemoji/' . $st['pack']);
         return;
     }
-
-    try {
-        $items = extractItems($m);
-    } catch (Throwable $e) {
-        send($uid, '❗️ ' . h($e->getMessage()));
+    if (preg_match('~^/name(?:@\w+)?\s*(.*)$~su', $text, $mm)) {
+        $title = cut(trim($mm[1]), 64);
+        if (empty($st['pack'])) {
+            send($uid, 'هنوز پکی نساختی.');
+        } elseif ($title === '') {
+            send($uid, "اسم جدید را جلوی دستور بنویس:\n<code>/name پک من</code>");
+        } elseif (tg('setStickerSetTitle', ['name' => $st['pack'], 'title' => $title])) {
+            $st['title'] = $title;
+            saveState($uid, $st);
+            send($uid, '✅ اسم پک شد: «' . h($title) . '»');
+        } else {
+            send($uid, '❗️ ' . h(errorText($GLOBALS['tg_error'])));
+        }
         return;
     }
-    if (!$items) {
+
+    $step = $st['step'] ?? '';
+
+    // مرحله‌ی اسم پک
+    if ($step === 'title' || $step === 'link') {
+        if ($hasEmoji) {
+            $st['pending'][] = $m;
+            saveState($uid, $st);
+            send($uid, $step === 'title' ? '📝 اول <b>اسم پک</b> را بفرست، بعد ایموجی‌ها اضافه می‌شوند.' : '🔗 اول <b>اسم انگلیسی لینک</b> را بفرست یا «🎲 خودکار» را بزن.', $step === 'link' ? autoKb() : null);
+            return;
+        }
+        if ($text === '' || $text[0] === '/') {
+            return;
+        }
+        if ($step === 'title') {
+            $st['title'] = cut(preg_replace('/\s+/u', ' ', $text), 64);
+            $st['step'] = 'link';
+            saveState($uid, $st);
+            send($uid, "🔗 حالا یک <b>اسم انگلیسی</b> برای لینک پک بفرست (فقط حروف انگلیسی، عدد و _)\n\n"
+                . "مثال: <code>sina_emoji</code>\n"
+                . 'لینک: <code>t.me/addemoji/sina_emoji_by_' . h(botUsername()) . "</code>\n\n"
+                . 'یا «🎲 خودکار» را بزن.', autoKb());
+            return;
+        }
+        setLinkName($uid, $st, $text, false);
+        return;
+    }
+
+    if (!$hasEmoji) {
         send($uid, '❗️ ایموجی پریمیوم، استیکر، عکس یا گیف بفرست.');
         return;
     }
+    if (empty($st['pack']) && empty($st['name'])) {
+        // هنوز پکی نیست: اول اسم بپرس، ایموجی‌ها نگه داشته می‌شوند
+        $st = ['step' => 'title', 'pending' => [$m]];
+        saveState($uid, $st);
+        send($uid, "📝 یک <b>اسم</b> برای پک بفرست:\n\nمثال: <code>ایموجی‌های سینا</code>");
+        return;
+    }
+    processMessages($uid, $st, [$m]);
+}
 
-    $wait = send($uid, '⏳ در حال ساخت...');
-    $st = loadState($uid);
-    $added = 0;
+function startNew(int $uid): void
+{
+    saveState($uid, ['step' => 'title', 'pending' => []]);
+    send($uid, "🆕 <b>پک جدید</b>\n\n📝 یک اسم برای پک بفرست:\n\nمثال: <code>ایموجی‌های سینا</code>");
+}
+
+function autoKb(): array
+{
+    return [[['text' => '🎲 خودکار', 'callback_data' => 'auto']]];
+}
+
+function setLinkName(int $uid, array $st, string $text, bool $auto): void
+{
+    $base = preg_replace('~^(https?://)?t\.me/addemoji/~i', '', trim($text));
+    $base = preg_replace('/_by_' . preg_quote(botUsername(), '/') . '$/i', '', $base);
+    $base = rtrim($base, '_');
+    if (!preg_match('/^[A-Za-z][A-Za-z0-9_]*$/', $base) || strpos($base, '__') !== false) {
+        send($uid, "❗️ فقط حروف انگلیسی، عدد و _ (اولش حرف باشد). دوباره بفرست:", autoKb());
+        return;
+    }
+    $name = $base . '_by_' . botUsername();
+    if (strlen($name) > 64) {
+        send($uid, '❗️ اسم خیلی طولانی است. کوتاه‌ترش کن:', autoKb());
+        return;
+    }
+    if (tg('getStickerSet', ['name' => $name])) {
+        if ($auto) {
+            setLinkName($uid, $st, 'emoji_' . substr(str_shuffle('abcdefghijkmnpqrstuvwxyz23456789'), 0, 7), true);
+            return;
+        }
+        send($uid, '❗️ این اسم قبلاً گرفته شده. یک اسم دیگر بفرست:', autoKb());
+        return;
+    }
+    $pending = $st['pending'] ?? [];
+    $st = ['name' => $name, 'title' => $st['title'] ?? 'Emoji Pack', 'count' => 0];
+    saveState($uid, $st);
+    if ($pending) {
+        processMessages($uid, $st, $pending);
+    } else {
+        send($uid, '✅ اسم ثبت شد: «' . h($st['title']) . "»\n\nحالا ایموجی‌ها را بفرست.");
+    }
+}
+
+/** افزودن ایموجی‌های چند پیام به پک کاربر (اگر پک نیست ساخته می‌شود) */
+function processMessages(int $uid, array $st, array $messages): void
+{
+    $items = [];
     $errors = [];
-    foreach ($items as $it) {
+    foreach ($messages as $m) {
         try {
-            $input = toInputSticker($it, $uid);
-            if (empty($st['pack']) || ($st['count'] ?? 0) >= MAX_EMOJI) {
-                $name = 'e' . base_convert((string) $uid, 10, 36) . '_' . base_convert((string) (int) (microtime(true) * 1000), 10, 36) . '_by_' . botUsername();
-                $title = $st['title'] ?? ('پک ایموجی ' . cut((string) ($m['from']['first_name'] ?? ''), 40));
-                tgOrFail('createNewStickerSet', [
-                    'user_id' => $uid, 'name' => $name, 'title' => $title,
-                    'stickers' => [$input], 'sticker_type' => 'custom_emoji',
-                    'needs_repainting' => !empty($it['repaint']),
-                ]);
-                $st = ['pack' => $name, 'title' => $title, 'count' => 1];
-            } else {
-                tgOrFail('addStickerToSet', ['user_id' => $uid, 'name' => $st['pack'], 'sticker' => $input]);
-                $st['count']++;
-            }
-            saveState($uid, $st);
-            $added++;
+            $items = array_merge($items, extractItems($m));
         } catch (Throwable $e) {
-            $errors[] = errorText($e->getMessage());
+            $errors[] = $e->getMessage();
+        }
+    }
+    if (!$items) {
+        send($uid, '❗️ ' . h($errors ? $errors[0] : 'ایموجی پریمیوم، استیکر، عکس یا گیف بفرست.'));
+        return;
+    }
+
+    $wait = send($uid, '⏳ در حال ساخت... 0 از ' . count($items));
+    $waitId = $wait['message_id'] ?? 0;
+    $before = empty($st['pack']) ? 0 : realCount($st['pack']);
+    if ($before === null) {
+        $before = (int) ($st['count'] ?? 0);
+    }
+    $st['count'] = $before;
+    $added = [];
+    $full = false;
+    $lastEdit = time();
+
+    foreach ($items as $i => $it) {
+        if (($st['count'] ?? 0) >= MAX_EMOJI) {
+            $full = true;
+            break;
+        }
+        try {
+            addOne($uid, $st, toInputSticker($it, $uid), !empty($it['repaint']));
+            $added[] = $it;
+        } catch (Throwable $e) {
+            $err = errorText($e->getMessage());
+            $errors[] = $err;
+            if (stripos($e->getMessage(), 'STICKERS_TOO_MUCH') !== false) {
+                $full = true;
+                break;
+            }
+            if (empty($st['pack']) && stripos($e->getMessage(), 'name') !== false) {
+                $st['step'] = 'link';
+                $st['pending'] = $messages;
+                unset($st['name']);
+                saveState($uid, $st);
+                send($uid, '❗️ ' . h($err) . "\nیک اسم انگلیسی دیگر برای لینک بفرست:", autoKb());
+                return;
+            }
+        }
+        if ($waitId && time() - $lastEdit >= 3) {
+            $lastEdit = time();
+            edit($uid, $waitId, '⏳ در حال ساخت... ' . ($i + 1) . ' از ' . count($items));
+        }
+    }
+
+    // بررسی با خود تلگرام: اگر ایموجی کپی‌شده‌ای واقعاً اضافه نشده بود، فایلش را دوباره آپلود کن
+    if (!empty($st['pack']) && $added) {
+        $set = tg('getStickerSet', ['name' => $st['pack']]);
+        if ($set) {
+            $real = count($set['stickers']);
+            $missing = $before + count($added) - $real;
+            if ($missing > 0) {
+                $have = [];
+                foreach ($set['stickers'] as $s) {
+                    $have[$s['file_unique_id']] = true;
+                }
+                foreach ($added as $it) {
+                    if ($missing <= 0 || $real >= MAX_EMOJI) {
+                        break;
+                    }
+                    if ($it['kind'] !== 'copy' || isset($have[$it['unique_id']])) {
+                        continue;
+                    }
+                    try {
+                        $ext = ['static' => 'webp', 'animated' => 'tgs', 'video' => 'webm'][$it['format']];
+                        $input = upload($uid, download($it['file_id']), $it['format'], $ext, [$it['emoji'] ?: DEFAULT_EMOJI]);
+                        tgOrFail('addStickerToSet', ['user_id' => $uid, 'name' => $st['pack'], 'sticker' => $input]);
+                        $missing--;
+                        $real++;
+                    } catch (Throwable $e) {
+                        $errors[] = errorText($e->getMessage());
+                    }
+                }
+                $real = realCount($st['pack']) ?? $real;
+            }
+            $st['count'] = $real;
+            saveState($uid, $st);
         }
     }
 
     $link = empty($st['pack']) ? null : 'https://t.me/addemoji/' . $st['pack'];
-    $msg = $added ? "✅ <b>$added</b> ایموجی اضافه شد." : '❌ ایموجی‌ای اضافه نشد.';
+    $newCount = (int) ($st['count'] ?? 0);
+    $diff = $newCount - $before;
+    $msg = $diff > 0 ? "✅ <b>$diff</b> ایموجی اضافه شد." : '❌ ایموجی‌ای اضافه نشد.';
     foreach (array_slice(array_unique($errors), 0, 3) as $er) {
         $msg .= "\n⚠️ " . h($er);
     }
     if ($link) {
-        $msg .= "\n\n📦 تعداد ایموجی‌های پک: " . $st['count'] . "\n🔗 $link\n\nبرای افزودن، باز هم ایموجی بفرست.";
+        $msg .= "\n\n📦 <b>" . h($st['title']) . "</b>\n🔢 تعداد ایموجی‌ها: <b>$newCount</b> از " . MAX_EMOJI . "\n🔗 $link";
+        $msg .= ($full || $newCount >= MAX_EMOJI)
+            ? "\n\n⚠️ پک پر شد. برای ادامه /new را بزن."
+            : "\n\nبرای افزودن، باز هم ایموجی بفرست.";
     }
     $kb = $link ? [[['text' => '📦 دیدن و افزودن پک', 'url' => $link]], [['text' => '🆕 پک جدید', 'callback_data' => 'new']]] : null;
-    if ($wait) {
-        tg('deleteMessage', ['chat_id' => $uid, 'message_id' => $wait['message_id']]);
+    if ($waitId) {
+        tg('deleteMessage', ['chat_id' => $uid, 'message_id' => $waitId]);
     }
     send($uid, $msg, $kb);
+}
+
+/** افزودن یک ایموجی؛ اگر پک هنوز ساخته نشده، با همین ایموجی ساخته می‌شود */
+function addOne(int $uid, array &$st, array $input, bool $repaint): void
+{
+    if (empty($st['pack'])) {
+        tgOrFail('createNewStickerSet', [
+            'user_id' => $uid, 'name' => $st['name'], 'title' => $st['title'],
+            'stickers' => [$input], 'sticker_type' => 'custom_emoji', 'needs_repainting' => $repaint,
+        ]);
+        $st['pack'] = $st['name'];
+        $st['count'] = 1;
+    } else {
+        tgOrFail('addStickerToSet', ['user_id' => $uid, 'name' => $st['pack'], 'sticker' => $input]);
+        $st['count'] = ($st['count'] ?? 0) + 1;
+    }
+    saveState($uid, $st);
+}
+
+function realCount(string $pack)
+{
+    $set = tg('getStickerSet', ['name' => $pack]);
+    return $set ? count($set['stickers']) : null;
+}
+
+function hasContent(array $m): bool
+{
+    foreach (['sticker', 'photo', 'animation', 'video', 'video_note', 'document'] as $k) {
+        if (isset($m[$k])) {
+            return true;
+        }
+    }
+    foreach ($m['entities'] ?? [] as $e) {
+        if ($e['type'] === 'custom_emoji') {
+            return true;
+        }
+    }
+    return false;
+}
+
+function lockUser(int $uid): void
+{
+    static $lock = null;
+    $lock = @fopen(DATA_DIR . "/$uid.lock", 'c');
+    if ($lock) {
+        flock($lock, LOCK_EX); // پیام‌های همزمان یکی‌یکی پردازش شوند
+    }
 }
 
 function allowed(int $uid): bool
@@ -286,6 +495,7 @@ function copyItem(array $s): array
     return [
         'kind' => 'copy',
         'file_id' => $s['file_id'],
+        'unique_id' => $s['file_unique_id'] ?? '',
         'format' => !empty($s['is_animated']) ? 'animated' : (!empty($s['is_video']) ? 'video' : 'static'),
         'emoji' => $s['emoji'] ?? null,
         'repaint' => !empty($s['needs_repainting']),
@@ -491,6 +701,11 @@ function send(int $chat, string $text, ?array $kb = null): ?array
         $p['reply_markup'] = ['inline_keyboard' => $kb];
     }
     return tg('sendMessage', $p);
+}
+
+function edit(int $chat, int $mid, string $text): void
+{
+    tg('editMessageText', ['chat_id' => $chat, 'message_id' => $mid, 'text' => $text, 'parse_mode' => 'HTML']);
 }
 
 function download(string $fileId): string
