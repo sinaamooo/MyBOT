@@ -112,6 +112,25 @@ final class UI
         return mb_substr($t, 0, 200);
     }
 
+    const SYN = [
+        '⏱' => ['⏲', '⏳', '⌛', '🕒', '⏰'], '⌛' => ['⏳', '⏱'], '⏳' => ['⌛', '⏱'], '❤' => ['💖', '💗', '💕', '♥', '🩷', '❤‍🔥', '👍'],
+        '👁' => ['👀'], '👀' => ['👁'], '🎬' => ['🎥', '📹', '🎞', '📽'], '📸' => ['📷', '🎞'], '🖼' => ['🏞', '🌄', '📷', '🎨'],
+        '📝' => ['✏', '✍', '🖊', '📄', '📃'], '📖' => ['📚', '📘', '📕', '📗'], '🎂' => ['🎉', '🥳', '🎁'], '🟰' => ['✅', '⚖'],
+        '📭' => ['📪', '📥', '📦'], '📍' => ['📌', '🗺'], '#⃣' => ['🔑', '🔢'], '🔢' => ['#⃣', '🔟'], '🧾' => ['📋', '📃', '📄', '🗒'],
+        '🔎' => ['🔍'], '🔍' => ['🔎'], '🏦' => ['🏧', '🏛', '💳'], '📱' => ['📲', '☎', '📞'], '📞' => ['☎', '📱'], '🔇' => ['🔕', '⛔', '🚫'],
+        '🔊' => ['🔔', '📢'], '📢' => ['📣', '🔊'], '📣' => ['📢'], '🎮' => ['🕹', '🎲', '🎯'], '💣' => ['🧨', '💥'], '💥' => ['💣', '🔥'],
+        '🤑' => ['💰', '💸'], '💤' => ['😴', '⏳'], '👉' => ['➡', '⏩'], '✖' => ['❌'], '🆙' => ['⬆', '🚀', '📈'], '🪪' => ['🆔', '👤'],
+        '🗣' => ['💬', '🌐'], '🖥' => ['💻', '🌐'], '📅' => ['🗓', '📆'], '🗓' => ['📅', '📆'], '📄' => ['📃', '📋', '🗒'], '🎉' => ['🥳', '🎊', '✨'],
+        '🎨' => ['🖌'], '✨' => ['💫', '🌟', '⭐'], '💫' => ['✨', '🌟'], '🌟' => ['⭐', '✨'], '⭐' => ['🌟'], '🤖' => ['👾'], '😀' => ['😃', '😄', '🙂', '😊'],
+        '💡' => ['ℹ', '❗', '❓'], '🗂' => ['📁', '📂', '🗄'], '📎' => ['🖇', '🔗'], '🪙' => ['💰', '🟡'], '💎' => ['💠', '🔷'], '🔷' => ['💎', '💠'],
+        '👤' => ['🧑', '👨', '🙂'], '🧑' => ['👤'], '👥' => ['🫂', '👪'], '🛡' => ['🔒'], '🔒' => ['🔐', '🛡'], '✅' => ['✔', '☑'], '❌' => ['✖', '⛔'],
+        '⛔' => ['🚫', '❌'], '⚠' => ['❗', '‼'], '📊' => ['📈', '💹'], '📈' => ['💹', '📊', '🚀'], '📉' => ['🔻', '📊'], '💱' => ['💹', '🔄', '💵'],
+        '🔄' => ['♻', '🔁'], '🌍' => ['🌎', '🌏', '🌐'], '🌐' => ['🌍', '🌎', '🌏'], '💬' => ['🗨', '💭'], '🔗' => ['⛓', '📎'], '👛' => ['💼', '👝', '💳'],
+        '💰' => ['💵', '💸', '🪙'], '💵' => ['💸', '💰', '💲'], '💸' => ['💵', '💰'], '🔔' => ['📢'], '🎁' => ['🎀'], '🏆' => ['🥇', '🏅', '👑'],
+        '🏅' => ['🥇', '🎖', '🏆'], '🎖' => ['🏅'], '👑' => ['🏆'], '🔑' => ['🗝'], '🔥' => ['💥'], '⚙' => ['🛠', '🔧'], '🚨' => ['🆘', '⚠'],
+        '📋' => ['🧾', '📄'], '🎯' => ['🏹'], '🏷' => ['🔖', '🎫'], '🗄' => ['🗂', '📦'], '📜' => ['📃', '📄', '🧾'], '📥' => ['📭', '⬇'], '📤' => ['⬆'],
+    ];
+
     private static ?array $rx = null;
 
     public static function emojiTable(): array
@@ -120,40 +139,98 @@ final class UI
             return self::$rx;
         }
         $map = Settings::get('emoji_map') ?: [];
+        $auto = DB::kvGet('emoji_auto');
+        if (is_array($auto['map'] ?? null)) {
+            $map = array_merge($map, $auto['map']);
+        }
+        $map = array_merge($map, Settings::get('emoji_pack') ?: []);
         $bad = array_flip((array)(Settings::get('emoji_invalid') ?: []));
-        $keys = array_keys($map);
-        usort($keys, fn($a, $b) => mb_strlen($b) <=> mb_strlen($a));
         $lookup = [];
+        foreach ($map as $k => $id) {
+            $bare = str_replace("\u{FE0F}", '', (string)$k);
+            $id = (string)$id;
+            if ($bare !== '' && $id !== '' && !isset($bad[$id])) {
+                $lookup[$bare] = $id;
+            }
+        }
+        foreach (self::SYN as $c => $alts) {
+            if (!isset($lookup[$c])) {
+                foreach ($alts as $a) {
+                    if (isset($lookup[$a])) {
+                        $lookup[$c] = $lookup[$a];
+                        break;
+                    }
+                }
+            }
+        }
+        $keys = array_keys($lookup);
+        usort($keys, fn($a, $b) => strlen((string)$b) <=> strlen((string)$a));
         $parts = [];
         foreach ($keys as $k) {
-            $bare = str_replace("\u{FE0F}", '', (string)$k);
-            $id = (string)$map[$k];
-            if ($bare === '' || $id === '' || isset($bad[$id])) {
-                continue;
-            }
-            $lookup[$bare] = $id;
-            $parts[] = implode('', array_map(fn($c) => preg_quote($c, '/') . "\u{FE0F}?", mb_str_split($bare)));
+            $parts[] = implode('', array_map(fn($c) => preg_quote($c, '/') . "\u{FE0F}?", mb_str_split((string)$k)));
         }
         return self::$rx = [$parts ? '/' . implode('|', $parts) . '/u' : null, $lookup];
     }
 
-    public static function validateEmoji(): ?array
+    public static function stripEmoji(?string $s): string
     {
-        $ids = array_values(array_unique(array_map('strval', array_merge(array_values(Settings::get('emoji_map') ?: []), array_values(Config::data('badges'))))));
-        $valid = [];
-        foreach (array_chunk($ids, 200) as $chunk) {
+        $s = preg_replace('/[\x{1F000}-\x{1FAFF}\x{2600}-\x{27BF}\x{2B00}-\x{2BFF}\x{2190}-\x{21FF}\x{2300}-\x{23FF}\x{25A0}-\x{25FF}\x{2934}\x{2935}\x{3030}\x{303D}\x{3297}\x{3299}\x{203C}\x{2049}\x{2122}\x{2139}\x{FE0F}\x{FE0E}\x{200D}\x{20E3}\x{E0020}-\x{E007F}]/u', '', (string)$s);
+        return trim(preg_replace('/[ \t]{2,}/u', ' ', (string)$s));
+    }
+
+    public static function emojiChar(string $id): ?string
+    {
+        [, $lookup] = self::emojiTable();
+        $c = array_search($id, $lookup, true);
+        return $c === false ? null : (string)$c;
+    }
+
+    public static function emojiId(string $emoji): ?string
+    {
+        [, $lookup] = self::emojiTable();
+        return $lookup[str_replace("\u{FE0F}", '', $emoji)] ?? null;
+    }
+
+    public static function stickerAlts(array $ids): ?array
+    {
+        $alt = [];
+        foreach (array_chunk(array_values(array_unique(array_map('strval', $ids))), 200) as $chunk) {
             $r = TG::api('getCustomEmojiStickers', ['custom_emoji_ids' => $chunk]);
             if ($r === null) {
                 return null;
             }
             foreach ($r as $st) {
-                $valid[(string)($st['custom_emoji_id'] ?? '')] = true;
+                $alt[(string)($st['custom_emoji_id'] ?? '')] = str_replace("\u{FE0F}", '', (string)($st['emoji'] ?? ''));
             }
         }
-        $bad = array_values(array_filter($ids, fn($id) => !isset($valid[$id])));
+        return $alt;
+    }
+
+    public static function validateEmoji(): ?array
+    {
+        $pool = array_map('strval', Config::data('emoji_pool'));
+        $ids = array_values(array_unique(array_merge($pool, array_map('strval', array_values(Settings::get('emoji_map') ?: [])),
+            array_map('strval', array_values(Settings::get('emoji_pack') ?: [])), array_map('strval', array_values(Config::data('badges'))))));
+        $alt = self::stickerAlts($ids);
+        if ($alt === null) {
+            return null;
+        }
+        $bad = array_values(array_filter($ids, fn($id) => !isset($alt[$id])));
         Settings::set('emoji_invalid', $bad);
+        $auto = [];
+        foreach ($pool as $id) {
+            $a = $alt[$id] ?? '';
+            if ($a !== '' && !isset($auto[$a])) {
+                $auto[$a] = $id;
+            }
+        }
+        $valid = count(array_filter($pool, fn($id) => isset($alt[$id])));
+        if (count($auto) >= max(8, (int)($valid * 0.2))) {
+            DB::kvSet('emoji_auto', ['map' => $auto, 'at' => time()]);
+        }
         DB::kvSet('emoji_checked_at', time());
-        return [count($ids) - count($bad), count($bad)];
+        self::resetEmoji();
+        return [count($ids) - count($bad), count($bad), count($auto)];
     }
 
     public static function badge(string $sym, string $fallback = '🪙'): string
@@ -167,28 +244,6 @@ final class UI
     public static function resetEmoji(): void
     {
         self::$rx = null;
-    }
-
-    public static function stripEmoji(?string $s): string
-    {
-        $s = preg_replace('/[\x{1F000}-\x{1FAFF}\x{2600}-\x{27BF}\x{2B00}-\x{2BFF}\x{2190}-\x{21FF}\x{2300}-\x{23FF}\x{25A0}-\x{25FF}\x{2934}\x{2935}\x{3030}\x{303D}\x{3297}\x{3299}\x{203C}\x{2049}\x{2122}\x{2139}\x{FE0F}\x{FE0E}\x{200D}\x{20E3}\x{E0020}-\x{E007F}]/u', '', (string)$s);
-        return trim(preg_replace('/[ \t]{2,}/u', ' ', (string)$s));
-    }
-
-    public static function emojiChar(string $id): ?string
-    {
-        foreach (Settings::get('emoji_map') ?: [] as $c => $v) {
-            if ((string)$v === $id) {
-                return (string)$c;
-            }
-        }
-        return null;
-    }
-
-    public static function emojiId(string $emoji): ?string
-    {
-        [, $lookup] = self::emojiTable();
-        return $lookup[str_replace("\u{FE0F}", '', $emoji)] ?? null;
     }
 
     public static function emojiMap(string $text): string

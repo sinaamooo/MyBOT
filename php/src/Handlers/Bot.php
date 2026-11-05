@@ -400,6 +400,10 @@ final class Bot
                 return;
             }
         }
+        if ($priv && Config::isAdmin($uid) && preg_match('~(?:t\.me|telegram\.me)/(?:addemoji|addstickers)/([A-Za-z0-9_]{1,64})~i', $text, $pk)) {
+            Admin::emojiPack($m, $pk[1]);
+            return;
+        }
         if ($uid && ($text === '' || $text[0] !== '/') && isset($m['reply_to_message']) && self::answered($m, $text)) {
             return;
         }

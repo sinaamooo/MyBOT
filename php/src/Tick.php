@@ -42,7 +42,7 @@ final class Tick
             } finally {
                 FileCache::$inline = false;
             }
-            if (time() - (int)DB::kvGet('emoji_checked_at', 0) > 86400) {
+            if (time() - (int)DB::kvGet('emoji_checked_at', 0) > 86400 || !is_array(DB::kvGet('emoji_auto'))) {
                 UI::validateEmoji();
             }
             if (time() - (int)DB::kvGet('last_cleanup', 0) > 6 * 3600) {

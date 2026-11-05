@@ -20,7 +20,7 @@
   "desc": "دکمه بررسی عضویت"
  },
  "btn_help": {
-  "text": "🗄 راهنما",
+  "text": "📖 راهنما",
   "style": null,
   "desc": "دکمه راهنما"
  },
@@ -80,12 +80,12 @@
   "desc": "دکمه کپی آیدی"
  },
  "btn_unmute": {
-  "text": "📢 رفع سکوت",
+  "text": "🔊 رفع سکوت",
   "style": "success",
   "desc": "دکمه رفع سکوت (ادمین)"
  },
  "btn_explorer": {
-  "text": "🔍 اکسپلورر",
+  "text": "🔎 اکسپلورر",
   "style": null,
   "desc": "دکمه اکسپلورر"
  },
@@ -125,7 +125,7 @@
   "desc": "دکمه هایلایت اینستاگرام"
  },
  "btn_gift_open": {
-  "text": "👑 مشاهده گیفت",
+  "text": "🎁 مشاهده گیفت",
   "style": "primary",
   "desc": "دکمه مشاهده گیفت"
  },
@@ -155,7 +155,7 @@
   "desc": "دکمه موجودی بازنده"
  },
  "btn_mine_field": {
-  "text": "⚡️ MINE FIELD",
+  "text": "💣 MINE FIELD",
   "style": null,
   "desc": "سربرگ مین"
  },

@@ -446,7 +446,7 @@ final class Settings
     public static function set(string $k, $v): void
     {
         DB::kvSet($k, $v);
-        if (in_array($k, ['emoji_map', 'emoji_invalid'], true)) {
+        if (in_array($k, ['emoji_map', 'emoji_invalid', 'emoji_pack'], true)) {
             UI::resetEmoji();
         }
     }

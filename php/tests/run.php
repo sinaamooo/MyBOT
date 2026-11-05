@@ -20,6 +20,8 @@ $GLOBALS['user_gifts'] = ['total_count' => 0, 'gifts' => []];
 $GLOBALS['http'] = [];
 const BOT = ['id' => 1, 'is_bot' => true, 'first_name' => 'Bot', 'username' => 'TestBot'];
 const NON_MEMBER = -1001;
+const TESTMAP = ['👥' => '5100000000000000001', '👋' => '5100000000000000002', '👤' => '5100000000000000003', '🔴' => '5100000000000000004',
+    '✅' => '5100000000000000005', '⭐️' => '5100000000000000006', '🏷' => '5100000000000000007', '💸' => '5100000000000000008'];
 
 TG::$fake = function (string $method, array $p) {
     $GLOBALS['calls'][] = [$method, $p];
@@ -64,7 +66,11 @@ TG::$fake = function (string $method, array $p) {
         case 'getUserGifts':
             return ['ok' => true, 'result' => $GLOBALS['user_gifts']];
         case 'getCustomEmojiStickers':
-            return ['ok' => true, 'result' => []];
+            return ['ok' => true, 'result' => array_values(array_filter(array_map(fn($id) => isset($GLOBALS['alts'][$id]) ? ['custom_emoji_id' => $id, 'emoji' => $GLOBALS['alts'][$id]] : null, $p['custom_emoji_ids'])))];
+        case 'getStickerSet':
+            return $p['name'] === 'HashPack' ? ['ok' => true, 'result' => ['name' => 'HashPack', 'stickers' => [
+                ['custom_emoji_id' => '5200000000000000001', 'emoji' => '❤️'], ['custom_emoji_id' => '5200000000000000002', 'emoji' => '👁'],
+                ['custom_emoji_id' => '5200000000000000003', 'emoji' => '⏳']]]] : ['ok' => false, 'description' => 'Bad Request: STICKERSET_INVALID'];
         case 'copyMessage':
             return ['ok' => true, 'result' => ['message_id' => 1]];
         default:
@@ -323,7 +329,7 @@ feed(msg('10 تتر'));
 $sm = sent(['sendPhoto']);
 check(count($sm) === 2 && str_contains($sm[0][1]['caption'], '<tg-emoji') && !str_contains($sm[1][1]['caption'], '<tg-emoji'), 'premium fallback');
 $GLOBALS['reject_premium'] = false;
-Settings::set('emoji_map', Settings::defaults()['emoji_map']);
+Settings::set('emoji_map', Settings::defaults()['emoji_map'] + TESTMAP);
 
 Settings::set('force_channels', [['id' => NON_MEMBER, 'title' => 'Main', 'url' => 'https://t.me/main']]);
 reset_calls();
@@ -384,8 +390,8 @@ Settings::set('anti_self', true);
 reset_calls();
 feed(msg('/start', 6, 6));
 $add = array_values(array_filter(buttons(sent(['sendMessage'])[0]), fn($b) => str_contains($b['url'] ?? '', 'startgroup')))[0];
-check(($add['icon_custom_emoji_id'] ?? '') === '5143653946086143924' && !str_contains($add['text'], '👥'), 'button premium emoji');
-check(str_contains(sent(['sendMessage'])[0][1]['text'], '<tg-emoji emoji-id="5145729239923820520">'), 'text premium emoji');
+check(($add['icon_custom_emoji_id'] ?? '') === '5100000000000000001' && !str_contains($add['text'], '👥'), 'button premium emoji');
+check(str_contains(sent(['sendMessage'])[0][1]['text'], '<tg-emoji emoji-id="5100000000000000002">'), 'text premium emoji');
 cb('adm:val:usdt_toman_manual', 999, 999);
 feed(msg('۱۰۵۰۰۰', 999, 999));
 check(Settings::get('usdt_toman_manual') === 105000, 'admin numeric setting');
@@ -563,7 +569,7 @@ check(count($rx) === 1 && $rx[0][1]['reaction'][0]['emoji'] === '🐳', 'fallbac
 $GLOBALS['reject_blue'] = false;
 
 $prevMap = Settings::get('emoji_map');
-Settings::set('emoji_map', Settings::defaults()['emoji_map']);
+Settings::set('emoji_map', Settings::defaults()['emoji_map'] + TESTMAP);
 $qm = UI::emojiMap("<blockquote>👤    سازنده: 🔴 @ali\n✅    دارد ⭐️</blockquote>");
 check(substr_count($qm, '<tg-emoji') === 4 && str_contains($qm, '🔴</tg-emoji>    @ali') && str_contains($qm, '⭐️</tg-emoji></blockquote>') && str_contains($qm, '✅</tg-emoji>    دارد'), 'all quote emojis premium with 4 spaces');
 $qm2 = UI::emojiMap("<blockquote>🏷    وضعیت: ✅ <b>موفق</b>\n💸    مقدار: <code>1</code></blockquote>");
@@ -802,5 +808,29 @@ reset_calls();
 feed(msg('سلام', 5, 5, ['message_id' => 3, 'date' => time(), 'chat' => ['id' => 5, 'type' => 'private'], 'from' => BOT, 'text' => 'x']));
 check(!str_contains((string)last_text(), 'ایموجی پریمیومی'), 'prompt answered only once');
 
+$GLOBALS['alts'] = [];
+$pool = Config::data('emoji_pool');
+foreach (array_slice($pool, 0, 30) as $i => $id) {
+    $GLOBALS['alts'][$id] = ['🔥', '👁', '🎂', '🟰', '📝', '❤️', '🎬', '⌛️', '🌐', '💎'][$i % 10] . ($i >= 10 ? '' : '');
+}
+$GLOBALS['alts'][$pool[0]] = '🔥'; $GLOBALS['alts'][$pool[1]] = '👁'; $GLOBALS['alts'][$pool[2]] = '🎂'; $GLOBALS['alts'][$pool[3]] = '⌛️';
+for ($i = 4; $i < 30; $i++) { $GLOBALS['alts'][$pool[$i]] = mb_chr(0x1F600 + $i); }
+$prevMap = Settings::get('emoji_map');
+Settings::set('emoji_map', Settings::defaults()['emoji_map']);
+$v = UI::validateEmoji();
+check($v !== null && $v[2] >= 25 && UI::emojiId('🔥') === (string)$pool[0] && UI::emojiId('🎂') === (string)$pool[2], 'auto map by pack emoji');
+check(UI::emojiId('⏱') === (string)$pool[3] && UI::emojiId('⏳') === (string)$pool[3], 'synonym mapping');
+check(UI::emojiId('🧾') === null, 'no guessed mapping without pack emoji');
+reset_calls();
+feed(msg('https://t.me/addemoji/HashPack', 999, 999));
+$pk = array_values(array_filter(sent(['sendMessage']), fn($c) => str_contains($c[1]['text'], 'پک HashPack')));
+$pkb = buttons($pk[0] ?? [0, []]);
+check($pk && str_starts_with($pkb[0]['callback_data'] ?? '', 'adm:epa:'), 'emoji pack preview');
+cb($pkb[0]['callback_data'], 999, 999);
+check(UI::emojiId('❤️') === '5200000000000000001' && UI::emojiId('⏱') === '5200000000000000003', 'emoji pack applied');
+cb('adm:epr', 999, 999);
+check(UI::emojiId('❤️') === null, 'emoji pack reset');
+DB::kvSet('emoji_auto', null);
+Settings::set('emoji_map', $prevMap);
 echo "passed: $pass, failed: $fail\n";
 exit($fail ? 1 : 0);

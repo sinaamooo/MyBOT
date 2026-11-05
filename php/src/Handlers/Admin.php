@@ -179,6 +179,56 @@ final class Admin
         }
     }
 
+    public static function usedEmojis(): array
+    {
+        $rx = '/(?:\p{Regional_Indicator}{2})|(?:[\x{1F000}-\x{1FAFF}\x{2600}-\x{27BF}\x{2B00}-\x{2BFF}\x{2190}-\x{21FF}\x{2300}-\x{23FF}\x{25A0}-\x{25FF}\x{203C}\x{2049}\x{2139}#](?:\x{FE0F})?(?:\x{20E3})?)/u';
+        $out = [];
+        foreach (['texts', 'buttons'] as $f) {
+            foreach (Config::data($f) as $k => $v) {
+                preg_match_all($rx, $f === 'texts' ? UI::template($k) : (string)$v['text'], $mm);
+                foreach ($mm[0] as $e) {
+                    $e = str_replace("\u{FE0F}", '', $e);
+                    if ($e !== '#' && !(mb_strlen($e) === 2 && preg_match('/^\p{Regional_Indicator}+$/u', $e))) {
+                        $out[$e] = true;
+                    }
+                }
+            }
+        }
+        return array_keys($out);
+    }
+
+    public static function emojiPack(array $m, string $name): void
+    {
+        $chat = $m['chat']['id'];
+        $set = TG::api('getStickerSet', ['name' => $name]);
+        $pm = [];
+        foreach ($set['stickers'] ?? [] as $st) {
+            $a = str_replace("\u{FE0F}", '', (string)($st['emoji'] ?? ''));
+            if (!empty($st['custom_emoji_id']) && $a !== '' && !isset($pm[$a])) {
+                $pm[$a] = (string)$st['custom_emoji_id'];
+            }
+        }
+        if (!$pm) {
+            TG::send($chat, '❌ این پک پیدا نشد یا ایموجی پریمیوم ندارد.');
+            return;
+        }
+        $used = self::usedEmojis();
+        $hit = array_values(array_filter($used, fn($e) => isset($pm[$e])));
+        $miss = array_values(array_filter($used, fn($e) => !isset($pm[$e])));
+        $rows = [];
+        foreach (array_keys($pm) as $e) {
+            $rows[] = '<code>' . UI::esc($e) . '</code> ← <tg-emoji emoji-id="' . $pm[$e] . '">' . UI::esc($e) . '</tg-emoji>';
+        }
+        foreach (array_chunk($rows, 40) as $chunk) {
+            TG::send($chat, implode("\n", $chunk));
+        }
+        $k = Store::put(['pm' => $pm, 'name' => $name], 3600);
+        $txt = "📦 <b>پک " . UI::esc($name) . "</b>\n🔢 ایموجی‌های پک: <b>" . count($pm) . "</b>\n✅ ایموجی‌های ربات که با این پک پریمیوم می‌شوند: <b>" . count($hit) . '</b> از ' . count($used)
+            . ($miss ? "\n⚠️ در این پک نیست: " . UI::esc(implode(' ', array_slice($miss, 0, 60))) : '');
+        TG::send($chat, $txt, UI::kb([[UI::raw('✅ اعمال روی ربات', "adm:epa:$k", 'success'), UI::raw('❌ لغو', 'adm:epx', 'danger')],
+            [UI::raw('♻️ حذف پک‌های واردشده', 'adm:epr')]]));
+    }
+
     public static function callback(array $cq, string $arg): void
     {
         $p = explode(':', $arg);
@@ -186,6 +236,25 @@ final class Admin
         $chat = $cq['message']['chat']['id'];
         $uid = $cq['from']['id'];
         switch ($cmd) {
+            case 'epa':
+                $d = Store::get($p[1] ?? '');
+                if (!$d) {
+                    TG::answer($cq['id'], UI::plain('expired'), true);
+                    return;
+                }
+                Settings::set('emoji_pack', array_merge(Settings::get('emoji_pack') ?: [], $d['pm']));
+                DB::kvSet('emoji_checked_at', 0);
+                TG::answer($cq['id'], '✅ ' . count($d['pm']) . ' ایموجی اعمال شد', true);
+                TG::api('editMessageReplyMarkup', ['chat_id' => $chat, 'message_id' => $cq['message']['message_id'], 'reply_markup' => null]);
+                return;
+            case 'epx':
+                TG::answer($cq['id'], '❌');
+                TG::api('editMessageReplyMarkup', ['chat_id' => $chat, 'message_id' => $cq['message']['message_id'], 'reply_markup' => null]);
+                return;
+            case 'epr':
+                Settings::set('emoji_pack', []);
+                TG::answer($cq['id'], '♻️ پک‌های واردشده حذف شدند', true);
+                return;
             case 'home':
                 State::clear($uid);
                 TG::answer($cq['id']);
