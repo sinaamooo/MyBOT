@@ -144,6 +144,158 @@ final class Diamonds
         return UI::t('dm_top', ['lines' => implode("\n", $lines)]);
     }
 
+    public static function touch(int $chat, int $uid): void
+    {
+        static $seen = [];
+        if ($chat >= 0 || $uid <= 0 || isset($seen["$chat:$uid"])) {
+            return;
+        }
+        $seen["$chat:$uid"] = true;
+        DB::q('INSERT OR REPLACE INTO members(chat, uid, at) VALUES(?, ?, ?)', [$chat, $uid, time()]);
+    }
+
+    public static function rankOf(int $uid): array
+    {
+        $pts = self::points($uid);
+        if ($pts <= 0) {
+            return [0, 0.0];
+        }
+        return [(int)(DB::one('SELECT COUNT(*) n FROM diamonds WHERE points > ?', [$pts])['n'] ?? 0) + 1, $pts];
+    }
+
+    private static function avatars(array $ids): array
+    {
+        $dir = Config::$root . '/data/cards';
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0755, true);
+        }
+        $out = [];
+        $need = [];
+        foreach ($ids as $id) {
+            $f = "$dir/av_$id.jpg";
+            if (is_file($f) && time() - (int)@filemtime($f) < 86400) {
+                $b = (string)@file_get_contents($f);
+                $out[$id] = strlen($b) > 100 ? $b : null;
+                continue;
+            }
+            $need[$id] = ['getUserProfilePhotos', ['user_id' => $id, 'limit' => 1]];
+        }
+        if (!$need) {
+            return $out;
+        }
+        $files = [];
+        foreach (TG::multi($need) as $id => $r) {
+            $sizes = $r['photos'][0] ?? [];
+            $pick = null;
+            foreach ($sizes as $sz) {
+                if (!$pick || (($sz['width'] ?? 0) >= 160 && ($sz['width'] ?? 0) < ($pick['width'] ?? 9999))) {
+                    $pick = $sz;
+                }
+            }
+            if ($pick) {
+                $files[$id] = ['getFile', ['file_id' => $pick['file_id']]];
+            } else {
+                @file_put_contents("$dir/av_$id.jpg", '');
+                $out[$id] = null;
+            }
+        }
+        $dl = [];
+        foreach ($files ? TG::multi($files) : [] as $id => $r) {
+            if (!empty($r['file_path'])) {
+                $dl[$id] = ['url' => 'https://api.telegram.org/file/bot' . Config::get('BOT_TOKEN') . '/' . $r['file_path'], 'timeout' => 6,
+                    'proxy' => Config::get('TELEGRAM_PROXY') ?: Config::get('PROXY'), 'headers' => ['Accept' => '*/*']];
+            }
+        }
+        foreach ($dl ? Http::multi($dl) : [] as $id => $r) {
+            $b = $r['status'] === 200 ? $r['body'] : '';
+            @file_put_contents("$dir/av_$id.jpg", $b);
+            $out[$id] = strlen($b) > 100 ? $b : null;
+        }
+        return $out;
+    }
+
+    private static function tag(array $r): string
+    {
+        return !empty($r['username']) ? '@' . UI::esc($r['username']) : UI::esc(($r['name'] ?? '') !== '' ? $r['name'] : 'کاربر ' . $r['id']);
+    }
+
+    private static function lines(array $rows): string
+    {
+        $out = [];
+        foreach (array_values($rows) as $i => $r) {
+            $out[] = UI::fill(UI::template('dm_board_line'), ['medal' => ['🏆', '🏅', '🎖'][$i] ?? '🔹', 'rank' => $i + 1, 'name' => self::tag($r), 'points' => Fmt::int($r['points'])]);
+        }
+        return implode("\n", $out);
+    }
+
+    public static function board(array $m): void
+    {
+        $chat = (int)$m['chat']['id'];
+        $uid = (int)($m['from']['id'] ?? 0);
+        $priv = Bot::isPrivate($m);
+        $global = DB::all("SELECT d.id, d.points, COALESCE(NULLIF(d.name, ''), TRIM(COALESCE(u.first_name, '') || ' ' || COALESCE(u.last_name, ''))) AS name, COALESCE(NULLIF(d.username, ''), u.username) AS username FROM diamonds d LEFT JOIN users u ON u.id = d.id WHERE d.points > 0 ORDER BY d.points DESC LIMIT 3");
+        if (!$global) {
+            Bot::reply($m, UI::t('dm_top_none'), null);
+            return;
+        }
+        $group = $priv ? [] : DB::all("SELECT d.id, d.points, COALESCE(NULLIF(d.name, ''), TRIM(COALESCE(u.first_name, '') || ' ' || COALESCE(u.last_name, ''))) AS name, COALESCE(NULLIF(d.username, ''), u.username) AS username FROM members mb JOIN diamonds d ON d.id = mb.uid LEFT JOIN users u ON u.id = d.id WHERE mb.chat = ? AND d.points > 0 ORDER BY d.points DESC LIMIT 5", [$chat]);
+        [$rank, $pts] = self::rankOf($uid);
+        $me = $rank > 0 ? UI::fill(UI::template('dm_board_me'), ['rank' => Fmt::int($rank), 'points' => Fmt::int($pts)]) : UI::template('dm_board_me_none');
+        $card = PriceCard::ready();
+        $caption = UI::t('dm_board', [
+            'global' => $card ? null : UI::fill(UI::template('dm_board_global'), ['lines' => self::lines($global)]),
+            'group' => $priv ? null : ($group ? UI::fill(UI::template('dm_board_group'), ['lines' => self::lines($group)]) : UI::template('dm_board_group_none')),
+            'me' => $me,
+        ]);
+        if (!$card) {
+            Bot::reply($m, $caption);
+            return;
+        }
+        $sig = 'dmb:' . md5(json_encode(array_map(fn($r) => [$r['id'], (int)$r['points'], $r['name'], $r['username']], $global)) . TG::username());
+        $extra = !$priv ? ['reply_parameters' => Bot::replyParams($m)] : [];
+        $fid = Cache::get($sig);
+        if ($fid && TG::photo($chat, $fid, $caption, UI::footer(), $extra) !== null) {
+            return;
+        }
+        TG::api('sendChatAction', ['chat_id' => $chat, 'action' => 'upload_photo']);
+        $av = self::avatars(array_map(fn($r) => (int)$r['id'], $global));
+        foreach ($global as &$r) {
+            $r['avatar'] = $av[(int)$r['id']] ?? null;
+        }
+        unset($r);
+        $jpg = PriceCard::leaderboard($global, TG::username());
+        if (!$jpg) {
+            Bot::reply($m, $caption);
+            return;
+        }
+        $sent = TG::photo($chat, ['__bytes' => $jpg, 'name' => 'top.jpg', 'mime' => 'image/jpeg'], $caption, UI::footer(), $extra);
+        $ph = $sent['photo'] ?? [];
+        if ($ph && !empty(end($ph)['file_id'])) {
+            Cache::set($sig, end($ph)['file_id'], 3600);
+        }
+    }
+
+    public static function account(array $m): void
+    {
+        $u = $m['from'];
+        $uid = (int)$u['id'];
+        $row = self::get($uid);
+        $pts = (float)($row['points'] ?? 0);
+        $kb = UI::kb([[UI::button('btn_dm_balance', ['cb' => "gb:$uid"], ['points' => Fmt::int($pts)]),
+            UI::button('btn_dm_level', ['cb' => "gb:$uid"], ['level' => self::level($pts)])]]);
+        Bot::reply($m, UI::t('dm_account', ['name' => self::name($u)]), $kb);
+    }
+
+    public static function accountCb(array $cq, string $arg): void
+    {
+        $uid = (int)$arg;
+        $row = self::get($uid);
+        $pts = (float)($row['points'] ?? 0);
+        [$rank] = self::rankOf($uid);
+        TG::answer($cq['id'], UI::plain('dm_account_alert', ['points' => Fmt::int($pts), 'level' => self::level($pts), 'rank' => $rank ? Fmt::int($rank) : '—',
+            'total' => Fmt::int($row['total'] ?? 0)]), true);
+    }
+
     private static function jailKb(string $id): array
     {
         $b = UI::button('btn_jail', ['cb' => "gj:$id"]);
@@ -202,7 +354,8 @@ final class Games
 {
     const WORDS_DIAMOND = ['الماس'];
     const WORDS_ME = ['الماس من', 'امتیاز من', 'امتیازم', 'حساب الماس', 'موجودی', 'موجودی من'];
-    const WORDS_TOP = ['برترین‌ها', 'برترین ها', 'رتبه‌بندی', 'رتبه بندی', 'لیدربرد', 'top'];
+    const WORDS_TOP = ['برترین‌ها', 'برترین ها', 'رتبه‌بندی', 'رتبه بندی', 'لیدربرد', 'leaderboard', 'top', 'تاپ الماسی', 'تاپ الماس', 'برترین های الماسی', 'برترین‌های الماسی', 'top diamond'];
+    const WORDS_ACCOUNT = ['حساب', 'حساب من'];
     const DOOZ = ['دوز'];
     const MINE = ['مین'];
     const DOOZ_MIN = 10;
@@ -259,7 +412,11 @@ final class Games
             return true;
         }
         if (in_array($t, self::norms(self::WORDS_TOP), true)) {
-            Bot::reply($m, Diamonds::topText(), null);
+            Diamonds::board($m);
+            return true;
+        }
+        if (in_array($t, self::norms(self::WORDS_ACCOUNT), true)) {
+            Diamonds::account($m);
             return true;
         }
         if ($priv) {

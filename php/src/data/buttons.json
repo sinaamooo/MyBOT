@@ -163,5 +163,15 @@
   "text": "💰 برداشت جایزه",
   "style": "success",
   "desc": "دکمه برداشت مین"
+ },
+ "btn_dm_balance": {
+  "text": "💎 {points} الماس",
+  "style": "primary",
+  "desc": "دکمه تعداد الماس در حساب"
+ },
+ "btn_dm_level": {
+  "text": "🏅 سطح {level}",
+  "style": "success",
+  "desc": "دکمه سطح در حساب"
  }
 }

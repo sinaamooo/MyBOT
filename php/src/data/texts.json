@@ -586,5 +586,41 @@
  "insta_story_caption": {
   "text": "({index}/{count})\n👻 ارسال شده توسط: @{bot}",
   "desc": "کپشن استوری و هایلایت اینستاگرام"
+ },
+ "dm_board": {
+  "text": "🏆 <b>تاپ الماسی</b>\n\n{global}\n\n{group}\n\n{me}",
+  "desc": "پیام تاپ الماسی"
+ },
+ "dm_board_global": {
+  "text": "🌍 <b>برترین‌های کل ربات</b>\n<blockquote>{lines}</blockquote>",
+  "desc": "بخش برترین‌های کل ربات"
+ },
+ "dm_board_group": {
+  "text": "👥 <b>برترین‌های این گروه</b>\n<blockquote>{lines}</blockquote>",
+  "desc": "بخش برترین‌های گروه"
+ },
+ "dm_board_group_none": {
+  "text": "👥 هنوز کسی در این گروه الماس جمع نکرده.",
+  "desc": "گروه بدون الماس"
+ },
+ "dm_board_line": {
+  "text": "{medal}    {name} — <b>{points}</b> 💎",
+  "desc": "هر نفر در تاپ ({medal} {rank} {name} {points})"
+ },
+ "dm_board_me": {
+  "text": "📍 رتبه‌ی شما: <b>{rank}</b> — <b>{points}</b> 💎",
+  "desc": "رتبه کاربر ({rank} {points})"
+ },
+ "dm_board_me_none": {
+  "text": "📍 شما هنوز الماسی ندارید.",
+  "desc": "کاربر بدون الماس"
+ },
+ "dm_account": {
+  "text": "👛 <b>حساب الماس {name}</b>",
+  "desc": "پیام حساب ({name})"
+ },
+ "dm_account_alert": {
+  "text": "💎 الماس: {points}\n🏅 سطح: {level}\n🏆 رتبه: {rank}\n🎯 دفعات جمع‌آوری: {total}",
+  "desc": "پاپ‌آپ حساب ({points} {level} {rank} {total})"
  }
 }

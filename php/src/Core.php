@@ -86,7 +86,7 @@ final class DB
         self::$pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
         self::$pdo->exec('PRAGMA busy_timeout=8000');
         self::$pdo->exec('PRAGMA synchronous=NORMAL');
-        if ((int)self::$pdo->query('PRAGMA user_version')->fetchColumn() < 4) {
+        if ((int)self::$pdo->query('PRAGMA user_version')->fetchColumn() < 5) {
             self::$pdo->exec('PRAGMA journal_mode=WAL');
             self::$pdo->exec(<<<SQL
 CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT NOT NULL);
@@ -118,8 +118,10 @@ CREATE TABLE IF NOT EXISTS games (id TEXT PRIMARY KEY, kind TEXT, status TEXT, h
 CREATE INDEX IF NOT EXISTS idx_games_status ON games(status, created);
 CREATE INDEX IF NOT EXISTS idx_games_host ON games(host, kind, status);
 CREATE TABLE IF NOT EXISTS jails (id TEXT PRIMARY KEY, chat INTEGER, target INTEGER, name TEXT, msg INTEGER, confirmed TEXT, created INTEGER);
+CREATE TABLE IF NOT EXISTS members (chat INTEGER NOT NULL, uid INTEGER NOT NULL, at INTEGER NOT NULL, PRIMARY KEY (chat, uid));
+CREATE INDEX IF NOT EXISTS idx_members_at ON members(at);
 SQL);
-            self::$pdo->exec('PRAGMA user_version=4');
+            self::$pdo->exec('PRAGMA user_version=5');
         }
         self::$kv = [];
         foreach (self::$pdo->query('SELECT k, v FROM kv') as $row) {

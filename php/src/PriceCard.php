@@ -928,4 +928,87 @@ final class PriceCard
         imagedestroy($out);
         return $bytes;
     }
+
+    private static function gem($im, float $cx, float $cy, float $size, string $hex): void
+    {
+        $S = self::SS;
+        $h = $size / 2;
+        imagefilledpolygon($im, [
+            (int)(($cx - $h) * $S), (int)(($cy - $h * 0.35) * $S), (int)(($cx - $h * 0.55) * $S), (int)(($cy - $h) * $S),
+            (int)(($cx + $h * 0.55) * $S), (int)(($cy - $h) * $S), (int)(($cx + $h) * $S), (int)(($cy - $h * 0.35) * $S),
+            (int)($cx * $S), (int)(($cy + $h) * $S),
+        ], self::col($im, $hex));
+        imageline($im, (int)(($cx - $h) * $S), (int)(($cy - $h * 0.35) * $S), (int)(($cx + $h) * $S), (int)(($cy - $h * 0.35) * $S), self::col($im, 'FFFFFF', 0.45));
+    }
+
+    public static function leaderboard(array $top, string $bot): ?string
+    {
+        if (!self::ready() || !$top) {
+            return null;
+        }
+        $S = self::SS;
+        $im = self::base('E8B021', '12C488');
+        $white = self::col($im, 'F5F5F7');
+        [, $tr] = self::tag($im, 232, 172, 'TOP ' . min(3, count($top)), 'gold', 'l');
+        self::tag($im, $tr + 10, 172, 'LIVE', 'green', 'l');
+        $title = 'تاپ الماسی';
+        self::say($im, self::sayFit(38, $title, 966 - $tr - 120, 18), 966, 186, $white, $title, 'r');
+        $medal = [1 => ['F2B705', 'FFE08A'], 2 => ['AEB6C2', 'E3E7EE'], 3 => ['CD7F32', 'F0B584']];
+        $cols = [1 => [600, 128, 334], 2 => [844, 102, 348], 3 => [356, 102, 348]];
+        foreach ($cols as $rank => [$cx, $d, $cy]) {
+            $r = $top[$rank - 1] ?? null;
+            if (!$r) {
+                continue;
+            }
+            $one = $rank === 1;
+            self::rrect($im, ($cx - 114) * $S, ($one ? 226 : 244) * $S, ($cx + 114) * $S, 552 * $S, 26 * $S, self::col($im, 'FFFFFF', $one ? 0.05 : 0.035));
+            if ($one) {
+                $ky = $cy - $d / 2 - 18;
+                imagefilledpolygon($im, [
+                    (int)(($cx - 24) * $S), (int)(($ky + 10) * $S), (int)(($cx - 28) * $S), (int)(($ky - 12) * $S),
+                    (int)(($cx - 12) * $S), (int)(($ky - 1) * $S), (int)($cx * $S), (int)(($ky - 17) * $S),
+                    (int)(($cx + 12) * $S), (int)(($ky - 1) * $S), (int)(($cx + 28) * $S), (int)(($ky - 12) * $S),
+                    (int)(($cx + 24) * $S), (int)(($ky + 10) * $S),
+                ], self::col($im, $medal[1][0]));
+            }
+            $nm = self::clean((string)($r['name'] ?? '')) ?: (!empty($r['username']) ? '@' . $r['username'] : 'کاربر');
+            if (mb_strlen($nm) > 16) {
+                $nm = mb_substr($nm, 0, 15) . '…';
+            }
+            imagefilledellipse($im, (int)($cx * $S), (int)($cy * $S), (int)(($d + 8) * $S), (int)(($d + 8) * $S), self::col($im, $medal[$rank][0]));
+            $av = !empty($r['avatar']) ? @imagecreatefromstring($r['avatar']) : null;
+            if ($av) {
+                if (!imageistruecolor($av)) {
+                    imagepalettetotruecolor($av);
+                }
+                $disc = self::disc(self::square($av), (int)($d * $S));
+                imagecopy($im, $disc, (int)(($cx - $d / 2) * $S), (int)(($cy - $d / 2) * $S), 0, 0, imagesx($disc), imagesy($disc));
+                imagedestroy($disc);
+            } else {
+                imagefilledellipse($im, (int)($cx * $S), (int)($cy * $S), (int)($d * $S), (int)($d * $S), self::col($im, '1E1F22'));
+                $ini = mb_strtoupper(mb_substr(ltrim($nm, '@'), 0, 1));
+                self::say($im, $d * 0.38, $cx, $cy + $d * 0.14, self::col($im, $medal[$rank][1]), $ini, 'c');
+            }
+            $by = $cy + $d / 2 - 1;
+            imagefilledellipse($im, (int)($cx * $S), (int)round($by * $S), 38 * $S, 38 * $S, self::col($im, '141518'));
+            imagefilledellipse($im, (int)($cx * $S), (int)round($by * $S), 32 * $S, 32 * $S, self::col($im, $medal[$rank][0]));
+            self::put($im, self::lat(700), 16, $cx, $by + self::capH(self::lat(700), 16) / 2, self::col($im, '0B0B0C'), (string)$rank, 'c');
+            $ny = $by + 56;
+            self::say($im, self::sayFit($one ? 22 : 20, $nm, 200, 12), $cx, $ny, $white, $nm, 'c');
+            $pv = number_format((float)($r['points'] ?? 0));
+            $lat = self::lat(600);
+            $ps = self::fit($lat, $one ? 21 : 19, $pv, 160, 12);
+            $pw = self::inkW($lat, $ps, $pv);
+            $x0 = $cx - ($pw + 26) / 2;
+            self::gem($im, $x0 + 9, $ny + 38, 18, $medal[$rank][0]);
+            self::put($im, $lat, $ps, $x0 + 26, $ny + 46, self::col($im, $medal[$rank][1]), $pv);
+        }
+        $txt = mb_strtoupper(($bot !== '' ? '@' . $bot . ' · ' : '') . 'DIAMOND LEADERBOARD', 'UTF-8');
+        self::spaced($im, self::lat(600), 13.5, 600, 636, self::col($im, '8C8C92'), $txt, 2.6);
+        ob_start();
+        imagejpeg($im, null, 84);
+        $bytes = (string)ob_get_clean();
+        imagedestroy($im);
+        return $bytes;
+    }
 }

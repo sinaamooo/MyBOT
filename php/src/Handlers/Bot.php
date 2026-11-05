@@ -26,7 +26,7 @@ final class Bot
         'fj:' => ['Bot', 'forceJoinCheck'], 'unmute:' => ['Bot', 'unmuteCb'], 'tr:' => ['Tools', 'translateCb'], 'gs:' => ['Groups', 'toggle'],
         'scam:' => ['Scam', 'buttons'], 'scamadm:' => ['Scam', 'decision'], 'adm:' => ['Admin', 'callback'], 'wl:' => ['Tools', 'walletButton'],
         'tt:' => ['Tools', 'transfers'], 'tp:' => ['Tools', 'transfers'], 'is:' => ['Extras', 'story'],
-        'ih:' => ['Extras', 'highlights'], 'hi:' => ['Extras', 'highlightItems'], 'gd:' => ['Games', 'doozCb'], 'gn:' => ['Games', 'mineCb'], 'gj:' => ['Diamonds', 'jailCb'],
+        'ih:' => ['Extras', 'highlights'], 'hi:' => ['Extras', 'highlightItems'], 'gd:' => ['Games', 'doozCb'], 'gn:' => ['Games', 'mineCb'], 'gj:' => ['Diamonds', 'jailCb'], 'gb:' => ['Diamonds', 'accountCb'],
     ];
 
     public static function handle(array $u): void
@@ -381,6 +381,9 @@ final class Bot
         }
         $text = trim($m['text'] ?? $m['caption'] ?? '');
         $uid = $m['from']['id'] ?? 0;
+        if (!$priv && $uid && empty($m['from']['is_bot']) && !isset($m['sender_chat']) && Settings::on((int)$m['chat']['id'], 'games')) {
+            Diamonds::touch((int)$m['chat']['id'], (int)$uid);
+        }
         if ($priv && $uid && ($st = State::get($uid))) {
             if (($st['mode'] ?? '') === 'admin' && Config::isAdmin($uid)) {
                 if (preg_match('/^\/cancel\b/i', $text)) {
