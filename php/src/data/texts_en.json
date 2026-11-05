@@ -502,5 +502,8 @@
  },
  "mod_failed": {
   "text": "⚠️ Failed. Make the bot a full admin (restrict, ban and add admins)."
+ },
+ "mod_owner_only": {
+  "text": "⛔️ Only the bot owner can set admins and special members."
  }
 }

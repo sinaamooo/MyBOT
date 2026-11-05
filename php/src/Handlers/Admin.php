@@ -67,7 +67,7 @@ final class Admin
         'guard' => ['🛡', 'گروه و امنیت', ['force_join_private', 'force_join_group', 'force_join_ok', 'force_join_not_yet', 'self_warn', 'self_muted', 'tabchi_muted', 'unmuted', 'group_settings', 'only_group_admins']],
         'scam' => ['🚨', 'کلاهبرداری', ['scam_keyword_warn', 'scam_known', 'scam_usage', 'scam_go_private', 'scam_ask_evidence', 'scam_evidence_saved', 'scam_need_evidence', 'scam_submitted', 'scam_cancelled', 'scam_admin', 'scam_approved_user', 'scam_rejected_user', 'scam_broadcast', 'scam_check_clean', 'scam_check_found']],
         'tools' => ['🧩', 'ابزارها', ['uid', 'account', 'emoji_item', 'emoji_none', 'calc_result', 'translate_choose', 'translate_result', 'translate_not_yours', 'translate_used', 'translate_need_reply', 'translate_failed']],
-        'mod' => ['🛡', 'مدیریت گروه', ['mod_ban', 'mod_unban', 'mod_mute', 'mod_unmute', 'mod_warn', 'mod_warn_mute', 'mod_unwarn', 'mod_admin', 'mod_unadmin', 'mod_vip', 'mod_unvip', 'mod_immune', 'mod_vip_once', 'mod_failed']],
+        'mod' => ['🛡', 'مدیریت گروه', ['mod_ban', 'mod_unban', 'mod_mute', 'mod_unmute', 'mod_warn', 'mod_warn_mute', 'mod_unwarn', 'mod_admin', 'mod_unadmin', 'mod_vip', 'mod_unvip', 'mod_immune', 'mod_vip_once', 'mod_owner_only', 'mod_failed']],
         'insta' => ['🎞', 'اینستاگرام', ['insta_loading', 'insta_count', 'insta_media_caption', 'insta_story_caption', 'insta_not_found', 'insta_private', 'insta_no_story', 'insta_no_highlight', 'insta_no_key', 'insta_highlights', 'insta_info']],
     ];
     const NUMBERS = [
@@ -449,9 +449,38 @@ final class Admin
                     $nav[] = UI::raw('⬇️ بعدی', 'adm:groups:' . ($page + 1));
                 }
                 $rows[] = $nav;
+                $rows[] = [UI::raw('✨ کاربران ویژه', 'adm:vips', 'primary')];
                 $rows[] = self::back();
                 TG::answer($cq['id']);
                 self::editOrSend($cq, '👥 <b>گروه‌های ربات</b> (' . Fmt::int($total) . ")\nصفحه " . Fmt::int($page + 1) . ' از ' . Fmt::int(max(1, (int)ceil($total / self::GPAGE))), UI::kb($rows));
+                return;
+            case 'vips':
+            case 'gvip':
+                $one = $cmd === 'gvip' ? (int)($p[1] ?? 0) : null;
+                $all = Moderation::allVips();
+                if ($one !== null) {
+                    $all = isset($all[$one]) ? [$one => $all[$one]] : [];
+                }
+                $ids = array_merge([], ...array_values(array_map(fn($g) => $g['vip'], $all)));
+                $names = $ids ? Diamonds::names(array_values(array_unique($ids))) : [];
+                $lines = [];
+                $shown = 0;
+                foreach ($all as $gid => $g) {
+                    $lines[] = '👥 <b>' . UI::esc(mb_substr($g['title'], 0, 40)) . '</b> (' . Fmt::int(count($g['vip'])) . ')';
+                    $list = [];
+                    foreach ($g['vip'] as $uid) {
+                        if ($shown++ >= 80) {
+                            break 2;
+                        }
+                        $nm = $names[$uid]['name'] ?? '';
+                        $list[] = '✨    <a href="tg://user?id=' . $uid . '">' . UI::esc($nm !== '' ? $nm : (string)$uid) . '</a> <code>' . $uid . '</code>';
+                    }
+                    $lines[] = '<blockquote>' . implode("\n", $list) . '</blockquote>';
+                }
+                $title = '✨ <b>کاربران ویژه</b> (' . Fmt::int(count($ids)) . ')';
+                $back = $one !== null ? self::back("adm:grp:$one:0") : self::back('adm:groups:0');
+                TG::answer($cq['id']);
+                self::editOrSend($cq, $title . "\n\n" . ($lines ? implode("\n", $lines) : '—'), UI::kb([$back]));
                 return;
             case 'grp':
                 $gid = (int)($p[1] ?? 0);
@@ -461,7 +490,8 @@ final class Admin
                 $link = !empty($g['username']) ? 'https://t.me/' . $g['username'] : null;
                 self::editOrSend($cq, "👥 <b>" . UI::esc($g['title'] ?? (string)$gid) . "</b>\n<blockquote>🆔     آیدی: <code>$gid</code>\n👤     تعداد اعضا: <b>" . (is_int($cnt) ? Fmt::int($cnt) : '—')
                     . "</b>\n🔗     لینک: " . ($link ? UI::esc($link) : '—') . "\n🗓     اضافه شدن ربات: " . (!empty($g['added_at']) ? Fmt::jalali((int)$g['added_at']) : '—') . '</blockquote>',
-                    UI::kb([[UI::raw('⛔️ خروج ربات از گروه', "adm:gleave:$gid", 'danger')], self::back('adm:groups:' . (int)($p[2] ?? 0))]));
+                    UI::kb([[UI::raw('✨ کاربران ویژه (' . Fmt::int(count(Moderation::vips($gid))) . ')', "adm:gvip:$gid", 'primary')],
+                        [UI::raw('⛔️ خروج ربات از گروه', "adm:gleave:$gid", 'danger')], self::back('adm:groups:' . (int)($p[2] ?? 0))]));
                 return;
             case 'gleave':
                 $gid = (int)($p[1] ?? 0);

@@ -829,12 +829,13 @@ final class Moderation
         'unmute' => ['حذف سکوت', 'رفع سکوت', 'unmute', 'размут'],
         'warn' => ['اخطار', 'warn', 'варн'],
         'unwarn' => ['حذف اخطار', 'unwarn', 'снять варн'],
-        'admin' => ['تنظیم مدیر', 'set admin', 'админ'],
-        'unadmin' => ['حذف مدیر', 'remove admin', 'снять админ'],
+        'admin' => ['تنظیم مدیر', 'تنظیم ادمین', 'ادمین', 'set admin', 'админ'],
+        'unadmin' => ['حذف مدیر', 'حذف ادمین', 'remove admin', 'снять админ'],
         'vip' => ['تنظیم ویژه', 'set vip', 'вип'],
         'unvip' => ['حذف ویژه', 'remove vip', 'снять вип'],
     ];
     const VIP_CAN = ['mute', 'warn'];
+    const OWNER_ONLY = ['admin', 'unadmin', 'vip', 'unvip'];
     const PUNISH = ['ban', 'mute', 'warn'];
     const UNDO = ['ban' => 'unban', 'mute' => 'unmute', 'warn' => 'unwarn', 'admin' => 'unadmin', 'vip' => 'unvip'];
     const RIGHTS = ['can_manage_chat', 'can_delete_messages', 'can_restrict_members', 'can_invite_users', 'can_pin_messages', 'can_manage_video_chats'];
@@ -843,6 +844,18 @@ final class Moderation
     public static function vips(int $chat): array
     {
         return self::$vips[$chat] ??= array_map('intval', DB::chatSettings($chat)['vip'] ?? []);
+    }
+
+    public static function allVips(): array
+    {
+        $out = [];
+        foreach (DB::all("SELECT id, title, settings FROM chats WHERE settings LIKE '%\"vip\"%'") as $r) {
+            $v = array_values(array_unique(array_map('intval', json_decode($r['settings'] ?: '{}', true)['vip'] ?? [])));
+            if ($v) {
+                $out[(int)$r['id']] = ['title' => (string)($r['title'] ?: $r['id']), 'vip' => $v];
+            }
+        }
+        return $out;
     }
 
     public static function isVip(int $chat, int $user): bool
@@ -881,6 +894,13 @@ final class Moderation
             return false;
         }
         $chat = (int)$m['chat']['id'];
+        if (in_array($act, self::OWNER_ONLY, true) && !Config::isAdmin((int)$by['id'])) {
+            if (Bot::isChatAdmin($chat, (int)$by['id'])) {
+                Bot::reply($m, UI::t('mod_owner_only'), null);
+                return true;
+            }
+            return false;
+        }
         $admin = Bot::isChatAdmin($chat, (int)$by['id']);
         $vip = !$admin && self::isVip($chat, (int)$by['id']);
         if (!$admin && !($vip && in_array($act, self::VIP_CAN, true))) {
@@ -970,6 +990,10 @@ final class Moderation
         $uid = (int)$uid;
         if ($chat >= 0 || !in_array($act, self::UNDO, true) || !Bot::isChatAdmin($chat, (int)$cq['from']['id'])) {
             TG::answer($cq['id'], UI::plain('only_group_admins'), true);
+            return;
+        }
+        if (in_array($act, self::OWNER_ONLY, true) && !Config::isAdmin((int)$cq['from']['id'])) {
+            TG::answer($cq['id'], UI::plain('mod_owner_only'), true);
             return;
         }
         [$key, $vars] = self::run($chat, $act, $uid, false);
