@@ -825,6 +825,15 @@ check($en && str_contains($ent, 'Toman') && !preg_match('/\p{Arabic}/u', strip_t
 reset_calls();
 feed(msg('/help', -2234, 77));
 check(str_contains((string)last_text(), 'Bot guide'), 'english help');
+$miss = [];
+foreach (['price ton', '500 try usd', '2 eur to try', 'stars', 'premium', 'xo 100', 'mine 100', 'top', 'balance'] as $i => $ex) {
+    reset_calls();
+    feed(msg($ex, -2234, 860 + $i));
+    if (!sent(['sendMessage', 'sendPhoto'])) {
+        $miss[] = $ex;
+    }
+}
+check(!$miss, 'english help examples get a reply: ' . implode(' | ', $miss));
 reset_calls();
 feed(msg('/panel', -2234, 999));
 $gp = sent(['sendMessage'])[0] ?? null;
@@ -932,13 +941,14 @@ check(UI::quoteGaps("سر\n\n<blockquote>a</blockquote>\n\nجمع\n\n<blockquote
     && UI::quoteGaps("سر\n\n<blockquote>a</blockquote>") === "سر\n\n<blockquote>a</blockquote>", 'only first quote keeps blank line above');
 $E = fn($id) => '<tg-emoji emoji-id="' . $id . '">x</tg-emoji>';
 $D = '<tg-emoji emoji-id="5143130625795951140">x</tg-emoji>';
-$al = UI::align($E(1) . " <b>عنوان</b>\n" . $E(2) . "<code>UQB1</code>\n<blockquote>" . $E(3) . "    NFT: 5\n" . $D . "        موجودی: 1\n" . $E(9) . " الماس: 1</blockquote>\n" . $E(5) . "   1405/08/14");
+$al = UI::align($E(1) . " <b>عنوان</b>\n" . $E(2) . "<code>UQB1</code>\n<blockquote>" . $E(3) . "    NFT: 5\n" . $D . "    موجودی: 1\n" . $E(9) . " الماس: 1</blockquote>\n" . $E(5) . "   1405/08/14");
 check($al === $E(1) . " <b>عنوان</b>\n" . $E(2) . " <code>UQB1</code>\n<blockquote>" . $E(3) . " NFT: 5\n" . $D . "  موجودی: 1\n" . $E(9) . "    الماس: 1</blockquote>\n\u{200E}" . $E(5) . " 1405/08/14"
     && UI::align('<blockquote>' . $D . ' موجودی: 1</blockquote>', 4) === '<blockquote>' . $D . '    موجودی: 1</blockquote>'
     && UI::align('<blockquote>' . $D . ' موجودی: 1</blockquote>', 3) === '<blockquote>' . $D . '   موجودی: 1</blockquote>'
     && UI::align('<blockquote>' . $E(6) . '    <b>370,185</b></blockquote>') === '<blockquote>' . $E(6) . ' <b>370,185</b></blockquote>'
     && UI::align("\u{200F}" . $E(7) . '   <b>800 POL</b>') === "\u{200F}" . $E(7) . '  <b>800 POL</b>' && UI::align($E(8) . '    @HashpriceBot') === $E(8) . ' @HashpriceBot'
     && UI::align($E(1) . "    نام: x\n" . $E(2) . "  یوزرنیم\n" . $E(3) . ' لول') === $E(1) . "  نام: x\n" . $E(2) . "  یوزرنیم\n" . $E(3) . ' لول'
+    && UI::align('<blockquote>' . $E(6) . '     ترون: 1</blockquote>', 4, true) === '<blockquote>' . $E(6) . '     ترون: 1</blockquote>'
     && UI::align('<b>hello</b> ' . $E(1)) === '<b>hello</b> ' . $E(1), 'emoji spacing: dots 2 and icons 4 in message quotes, 4 in caption quotes, 1 elsewhere');
 $ft = UI::align("<blockquote>" . $E(1) . " a</blockquote>\n\n" . $E(2) . " رتبه‌ی شما: <b>5</b> " . $E(3));
 check($ft === "<blockquote>" . $E(1) . " a</blockquote>\n\n\u{200E}" . $E(2) . " رتبه‌ی شما: <b>5</b> " . $E(3) . "\u{200F}" && UI::align($ft) === $ft
@@ -1016,6 +1026,20 @@ reset_calls();
 feed(msg('قیمت 2 یورو به لیر', -4600, 824));
 $pc = sent(['sendPhoto']) ?: sent(['sendMessage']);
 check($pc && str_contains((string)($pc[0][1]['caption'] ?? $pc[0][1]['text'] ?? ''), '91.1111'), 'euro to lira with price prefix');
+check(!str_contains((string)($pc[0][1]['caption'] ?? $pc[0][1]['text'] ?? ''), '<b>'), 'price replies without bold');
+$miss = [];
+foreach (['btc', 'قیمت تون', '10 تتر', '500 لیر دلار', '500000 تومان', '500 درهم', 'نرخ ارز', 'قیمت پریمیوم', '/arz', 'استارز', 'پریمیوم', '698*789'] as $i => $ex) {
+    reset_calls();
+    feed(msg($ex, -4600, 830 + $i));
+    if (!sent(['sendMessage', 'sendPhoto'])) {
+        $miss[] = $ex;
+    }
+}
+check(!$miss && Currencies::bareAsset('طلا') === ['gold', 'GOLD18'] && Currencies::resolve('سکه')[0] === 'gold', 'every help example gets a reply: ' . implode(' | ', $miss));
+reset_calls();
+feed(msg('/help', -4600, 850));
+$hp = (string)last_text();
+check(substr_count($hp, '<blockquote>') === 29 && str_contains($hp, 'دوز') && str_contains($hp, 'اینستاگرام') && str_contains($hp, '/lang') && str_contains($hp, '/arz'), 'help lists every feature');
 $spotFile = Config::$root . '/data/spot.json';
 $spotPrev = is_file($spotFile) ? file_get_contents($spotFile) : null;
 SpotDir::reset(['at' => 0, 's' => []]);

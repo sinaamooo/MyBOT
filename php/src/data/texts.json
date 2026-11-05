@@ -4,7 +4,7 @@
   "desc": "پیام استارت در پیوی"
  },
  "help": {
-  "text": "📖 <b>راهنمای ربات</b>\n\n<blockquote>💱    <b>قیمت ارز:</b> <code>btc</code> ، <code>قیمت تون</code> ، <code>/p eth</code></blockquote>\n<blockquote>💵    <b>تبدیل:</b> <code>10 تتر</code> ، <code>500 تون</code> ، <code>2.5 btc</code> ، <code>1000 استارز</code></blockquote>\n<blockquote>💰    <b>تومان:</b> <code>500000 تومان</code> ، <code>2 میلیون تومن</code> ، <code>10m ریال</code></blockquote>\n<blockquote>🌍    <b>ارز کشورها:</b> <code>500 درهم</code> ، <code>100 یورو</code> ، <code>50 usd</code> ، <code>1000 لیر</code></blockquote>\n<blockquote>👛    <b>چکر ولت:</b> آدرس کیف پول را بفرستید (BTC, ETH, BSC, TRON, TON, SOL, ...)</blockquote>\n<blockquote>🔗    <b>چکر هش:</b> هش تراکنش را بفرستید</blockquote>\n<blockquote>🎁    <b>گیفت:</b> لینک <code>t.me/nft/...</code> یا <code>/gift @username</code></blockquote>\n<blockquote>🌐    <b>ترجمه:</b> روی پیام ریپلای و <code>ترجمه</code></blockquote>\n<blockquote>🧮    <b>حساب:</b> <code>698*789</code> ، <code>797÷788</code></blockquote>\n<blockquote>🆔    <b>آیدی عددی:</b> ریپلای و <code>UID</code></blockquote>\n<blockquote>😀    <b>ایموجی:</b> <code>/emoji</code> + ایموجی پریمیوم یا ریپلای</blockquote>\n<blockquote>🚨    <b>گزارش کلاهبردار:</b> <code>/scam @username</code></blockquote>\n<blockquote>🔍    <b>استعلام کلاهبردار:</b> <code>/check @username</code></blockquote>\n<blockquote>👤    <b>اکانت:</b> <code>/account</code></blockquote>\n<blockquote>⚙️    <b>تنظیمات گروه:</b> <code>/panel</code> (ادمین گروه)</blockquote>",
+  "text": "📖 <b>راهنمای ربات</b>\n\n<blockquote>💱    <b>قیمت ارز دیجیتال:</b> <code>btc</code> ، <code>قیمت تون</code> ، <code>/p eth</code></blockquote>\n<blockquote>💵    <b>تبدیل:</b> <code>10 تتر</code> ، <code>500 تون</code> ، <code>2.5 btc</code></blockquote>\n<blockquote>💸    <b>تبدیل ارز به ارز:</b> <code>500 لیر دلار</code> ، <code>500 تتر تون</code> ، <code>2 یورو به لیر</code></blockquote>\n<blockquote>💰    <b>تومان:</b> <code>500000 تومان</code> ، <code>2 میلیون تومن</code> ، <code>10m ریال</code></blockquote>\n<blockquote>🌍    <b>ارز کشورها:</b> <code>500 درهم</code> ، <code>100 یورو</code> ، <code>50 usd</code> ، <code>1000 لیر</code></blockquote>\n<blockquote>📊    <b>بازار کریپتو:</b> <code>نرخ ارز</code> ، <code>بازار</code></blockquote>\n<blockquote>💠    <b>نرخ ارزهای کشورها:</b> <code>/arz</code></blockquote>\n<blockquote>🏅    <b>طلا و سکه:</b> <code>طلا</code> ، <code>سکه</code> ، <code>2 سکه</code></blockquote>\n<blockquote>⭐️    <b>استارز:</b> <code>استارز</code> ، <code>1000 استارز</code></blockquote>\n<blockquote>💫    <b>پریمیوم:</b> <code>پریمیوم</code></blockquote>\n<blockquote>👛    <b>چکر ولت:</b> آدرس کیف پول را بفرستید (BTC, ETH, BSC, TRON, TON, SOL, ...)</blockquote>\n<blockquote>🔗    <b>چکر هش:</b> هش تراکنش را بفرستید</blockquote>\n<blockquote>🎁    <b>گیفت:</b> لینک <code>t.me/nft/...</code> یا <code>/gift @username</code></blockquote>\n<blockquote>📸    <b>اینستاگرام:</b> لینک پست و ریلز یا <code>/insta @username</code></blockquote>\n<blockquote>💳    <b>کارت و شبا:</b> شماره کارت یا شبا را بفرستید</blockquote>\n<blockquote>📞    <b>چکر شماره:</b> <code>شماره 09121234567</code></blockquote>\n<blockquote>📝    <b>ترجمه:</b> روی پیام ریپلای و <code>ترجمه</code></blockquote>\n<blockquote>🧮    <b>ماشین حساب:</b> <code>698*789</code> ، <code>797÷788</code></blockquote>\n<blockquote>🆔    <b>آیدی عددی:</b> ریپلای و <code>UID</code></blockquote>\n<blockquote>😀    <b>ایموجی:</b> <code>/emoji</code> + ایموجی پریمیوم یا ریپلای</blockquote>\n<blockquote>💎    <b>الماس:</b> <code>الماس</code> ، <code>حساب</code> ، <code>برترین ها</code> (در گروه)</blockquote>\n<blockquote>🎮    <b>دوز:</b> <code>دوز 100</code> (در گروه)</blockquote>\n<blockquote>💣    <b>مین:</b> <code>مین 100</code> (در گروه)</blockquote>\n<blockquote>🚨    <b>گزارش کلاهبردار:</b> <code>/scam @username</code></blockquote>\n<blockquote>🔍    <b>استعلام کلاهبردار:</b> <code>/check @username</code></blockquote>\n<blockquote>👤    <b>اکانت:</b> <code>/account</code></blockquote>\n<blockquote>🗣    <b>زبان ربات:</b> <code>/lang</code> (در پیوی ربات)</blockquote>\n<blockquote>🛡    <b>محافظ گروه:</b> عضویت اجباری ، ضد سلف ، ضد تبچی ، ضد کلاهبرداری</blockquote>\n<blockquote>⚙️    <b>تنظیمات گروه:</b> <code>/panel</code> (ادمین گروه)</blockquote>",
   "desc": "راهنما"
  },
  "bot_added": {
@@ -36,23 +36,23 @@
   "desc": "عدم عضویت (پاپ‌آپ)"
  },
  "conv_crypto": {
-  "text": "‏{coin_icon} <b>{amount} {title}</b> = <b>{toman}</b> تومان\n\n<blockquote>{trx_icon}    ترون: <code>{trx}</code> TRX\n{ton_icon}    تون: <code>{ton}</code> TON\n{usd_icon}    دلار: <code>{usd}</code> $\n⭐️    استارز: <code>{stars}</code> Stars</blockquote>\n🗓 {time}",
+  "text": "‏{coin_icon} {amount} {title} = {toman} تومان\n\n<blockquote>{trx_icon}     ترون: <code>{trx}</code> TRX\n{ton_icon}     تون: <code>{ton}</code> TON\n{usd_icon}     دلار: <code>{usd}</code> $\n⭐️     استارز: <code>{stars}</code> Stars</blockquote>\n🗓 {time}",
   "desc": "تبدیل ارز دیجیتال ({coin_icon} {amount} {symbol} {title} {name} {toman} {trx} {ton} {usd} {stars} {price_usd} {price_toman} {change} {time})"
  },
  "conv_toman": {
-  "text": "{icon} <b>{amount} {unit}</b>\n\n<blockquote>{usdt_icon}    تتر: <code>{usdt}</code> USDT\n{ton_icon}    تون: <code>{ton}</code> TON\n{trx_icon}    ترون: <code>{trx}</code> TRX</blockquote>\n🗓 {time}",
+  "text": "{icon} {amount} {unit}\n\n<blockquote>{usdt_icon}     تتر: <code>{usdt}</code> USDT\n{ton_icon}     تون: <code>{ton}</code> TON\n{trx_icon}     ترون: <code>{trx}</code> TRX</blockquote>\n🗓 {time}",
   "desc": "تبدیل تومان ({amount} {unit} {usdt} {ton} {trx} {usdt_rate} {time})"
  },
  "conv_stars": {
-  "text": "⭐️ <b>{amount} استارز</b> = <b>{toman}</b> تومان\n\n<blockquote>{usd_icon}    دلار: <code>{usd}</code> $\n{ton_icon}    تون: <code>{ton}</code> TON\n{trx_icon}    ترون: <code>{trx}</code> TRX</blockquote>\n🗓 {time}",
+  "text": "⭐️ {amount} استارز = {toman} تومان\n\n<blockquote>{usd_icon}     دلار: <code>{usd}</code> $\n{ton_icon}     تون: <code>{ton}</code> TON\n{trx_icon}     ترون: <code>{trx}</code> TRX</blockquote>\n🗓 {time}",
   "desc": "تبدیل استارز ({amount} {toman} {usd} {ton} {trx} {star_usd} {time})"
  },
  "conv_pair": {
-  "text": "{icon} <b>{amount} {from}</b> = <b>{result} {to}</b>\n\n<blockquote>{dorange_icon}    نرخ: <code>\u200e1 {from_code} = {rate} {to_code}</code>\n{dpeach_icon}    ارزش دلاری: <code>{usd}</code> $\n{dblue_icon}    ارزش تومانی: <code>{toman}</code></blockquote>\n🗓 {time}",
+  "text": "{icon} {amount} {from} = {result} {to}\n\n<blockquote>{dorange_icon}     نرخ: <code>\u200e1 {from_code} = {rate} {to_code}</code>\n{dpeach_icon}     ارزش دلاری: <code>{usd}</code> $\n{dblue_icon}     ارزش تومانی: <code>{toman}</code></blockquote>\n🗓 {time}",
   "desc": "تبدیل ارز به ارز ({amount} {from} {result} {to} {from_code} {to_code} {rate} {usd} {toman} {time})"
  },
  "conv_fiat": {
-  "text": "{icon} <b>{amount} {name}</b> = <b>{toman}</b> تومان\n\n<blockquote>{usd_icon}    دلار: <code>{usd}</code> $\n{ton_icon}    تون: <code>{ton}</code> TON\n{trx_icon}    ترون: <code>{trx}</code> TRX\n⭐️    استارز: <code>{stars}</code> Stars</blockquote>\n🗓 {time}",
+  "text": "{icon} {amount} {name} = {toman} تومان\n\n<blockquote>{usd_icon}     دلار: <code>{usd}</code> $\n{ton_icon}     تون: <code>{ton}</code> TON\n{trx_icon}     ترون: <code>{trx}</code> TRX\n⭐️     استارز: <code>{stars}</code> Stars</blockquote>\n🗓 {time}",
   "desc": "کپشن کارت ارز کشورها ({flag} {amount} {name} {code} {toman} {unit_toman} {usd} {ton} {trx} {stars} {time})"
  },
  "market": {
@@ -380,7 +380,7 @@
   "desc": "فقط ادمین (پاپ‌آپ)"
  },
  "conv_gold": {
-  "text": "{icon} <b>{amount} {name}</b> = <b>{toman}</b> تومان\n\n<blockquote>{usd_icon}    دلار: <code>{usd}</code> $\n📈    تغییر ۲۴ ساعته: {change}</blockquote>\n🗓 {time}",
+  "text": "{icon} {amount} {name} = {toman} تومان\n\n<blockquote>{usd_icon}     دلار: <code>{usd}</code> $\n📈     تغییر ۲۴ ساعته: {change}</blockquote>\n🗓 {time}",
   "desc": "کپشن طلا و سکه ({amount} {name} {toman} {usd} {change} {time})"
  },
  "premium_prices": {

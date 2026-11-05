@@ -3,7 +3,7 @@
   "text": "👋 Hi <b>{name}</b>, welcome!\n🤖 I'm an all-in-one crypto and group management bot.\n\n<blockquote>💱 Crypto prices and conversion: <code>10 usdt</code>\n💰 Toman conversion: <code>500000 toman</code>\n🌍 World currencies: <code>500 aed</code>\n🪙 Gold and coins: <code>gold</code>\n👛 Wallet and hash checker on all networks\n🎁 Gift prices: <code>/gift @username</code>\n🌐 Translate: reply and type <code>translate</code>\n🧮 Calculator: <code>200+79</code>\n🆔 Numeric ID: reply and type <code>UID</code>\n👤 Account info: <code>/me</code>\n🎮 Games: <code>diamond</code> , <code>xo 100</code> , <code>mine 100</code>\n🛡 Anti-self, anti-spam bot, anti-scam</blockquote>\n👥 Add me to your group and make me admin"
  },
  "help": {
-  "text": "📖 <b>Bot guide</b>\n\n<blockquote>💱 <b>Crypto price:</b> <code>btc</code> , <code>price ton</code> , <code>/p eth</code></blockquote>\n<blockquote>💵 <b>Convert:</b> <code>10 usdt</code> , <code>500 ton</code> , <code>2.5 btc</code> , <code>1000 stars</code></blockquote>\n<blockquote>💰 <b>Toman:</b> <code>500000 toman</code> , <code>2m toman</code> , <code>10m rial</code></blockquote>\n<blockquote>🌍 <b>World currencies:</b> <code>500 aed</code> , <code>100 eur</code> , <code>50 usd</code> , <code>1000 try</code></blockquote>\n<blockquote>👛 <b>Wallet checker:</b> send a wallet address (BTC, ETH, BSC, TRON, TON, SOL, ...)</blockquote>\n<blockquote>🔗 <b>Hash checker:</b> send a transaction hash</blockquote>\n<blockquote>🎁 <b>Gift:</b> link <code>t.me/nft/...</code> or <code>/gift @username</code></blockquote>\n<blockquote>🌐 <b>Translate:</b> reply to a message and type <code>translate</code></blockquote>\n<blockquote>🧮 <b>Calculator:</b> <code>698*789</code> , <code>797÷788</code></blockquote>\n<blockquote>🆔 <b>Numeric ID:</b> reply and type <code>UID</code></blockquote>\n<blockquote>😀 <b>Emoji:</b> <code>/emoji</code> + premium emoji or reply</blockquote>\n<blockquote>🚨 <b>Report a scammer:</b> <code>/scam @username</code></blockquote>\n<blockquote>🔍 <b>Check a scammer:</b> <code>/check @username</code></blockquote>\n<blockquote>👤 <b>Account:</b> <code>/account</code></blockquote>\n<blockquote>⚙️ <b>Group settings:</b> <code>/panel</code> (group admins)</blockquote>"
+  "text": "📖 <b>Bot guide</b>\n\n<blockquote>💱 <b>Crypto price:</b> <code>btc</code> , <code>price ton</code> , <code>/p eth</code></blockquote>\n<blockquote>💵 <b>Convert:</b> <code>10 usdt</code> , <code>500 ton</code> , <code>2.5 btc</code></blockquote>\n<blockquote>💸 <b>Currency to currency:</b> <code>500 try usd</code> , <code>500 usdt ton</code> , <code>2 eur to try</code></blockquote>\n<blockquote>💰 <b>Toman:</b> <code>500000 toman</code> , <code>2m toman</code> , <code>10m rial</code></blockquote>\n<blockquote>🌍 <b>World currencies:</b> <code>500 aed</code> , <code>100 eur</code> , <code>50 usd</code> , <code>1000 try</code></blockquote>\n<blockquote>💠 <b>Currency rates:</b> <code>/arz</code></blockquote>\n<blockquote>🏅 <b>Gold:</b> <code>gold</code></blockquote>\n<blockquote>⭐️ <b>Stars:</b> <code>stars</code> , <code>1000 stars</code></blockquote>\n<blockquote>💫 <b>Premium:</b> <code>premium</code></blockquote>\n<blockquote>👛 <b>Wallet checker:</b> send a wallet address (BTC, ETH, BSC, TRON, TON, SOL, ...)</blockquote>\n<blockquote>🔗 <b>Hash checker:</b> send a transaction hash</blockquote>\n<blockquote>🎁 <b>Gift:</b> link <code>t.me/nft/...</code> or <code>/gift @username</code></blockquote>\n<blockquote>📸 <b>Instagram:</b> post or reel link, or <code>/insta @username</code></blockquote>\n<blockquote>💳 <b>Card &amp; IBAN:</b> send a card number or IBAN</blockquote>\n<blockquote>📞 <b>Number checker:</b> <code>number +989121234567</code></blockquote>\n<blockquote>📝 <b>Translate:</b> reply to a message and type <code>translate</code></blockquote>\n<blockquote>🧮 <b>Calculator:</b> <code>698*789</code> , <code>797÷788</code></blockquote>\n<blockquote>🆔 <b>Numeric ID:</b> reply and type <code>UID</code></blockquote>\n<blockquote>😀 <b>Emoji:</b> <code>/emoji</code> + premium emoji or reply</blockquote>\n<blockquote>💎 <b>Diamonds:</b> <code>diamond</code> , <code>balance</code> , <code>top</code> (in groups)</blockquote>\n<blockquote>🎮 <b>Tic-tac-toe:</b> <code>xo 100</code> (in groups)</blockquote>\n<blockquote>💣 <b>Mines:</b> <code>mine 100</code> (in groups)</blockquote>\n<blockquote>🚨 <b>Report a scammer:</b> <code>/scam @username</code></blockquote>\n<blockquote>🔍 <b>Check a scammer:</b> <code>/check @username</code></blockquote>\n<blockquote>👤 <b>Account:</b> <code>/account</code></blockquote>\n<blockquote>🗣 <b>Bot language:</b> <code>/lang</code> (in the bot's private chat)</blockquote>\n<blockquote>🛡 <b>Group protection:</b> forced join , anti-self , anti-spam bot , anti-scam</blockquote>\n<blockquote>⚙️ <b>Group settings:</b> <code>/panel</code> (group admins)</blockquote>"
  },
  "bot_added": {
   "text": "🎉 <b>The bot was added to the group!</b>\n⚠️ To enable every feature (anti-self, anti-spam, forced join, ...) make me a <b>full admin</b>.\n⚙️ Settings: <code>/settings</code>"
@@ -27,19 +27,19 @@
   "text": "❌ You haven't joined all the channels yet!"
  },
  "conv_crypto": {
-  "text": "{coin_icon} <b>{amount} {title}</b> = <b>{toman}</b> Toman\n\n<blockquote>{trx_icon} Tron: <code>{trx}</code> TRX\n{ton_icon} Toncoin: <code>{ton}</code> TON\n{usd_icon} Dollar: <code>{usd}</code> $\n⭐️ Stars: <code>{stars}</code> Stars</blockquote>\n🗓 {time}"
+  "text": "{coin_icon} {amount} {title} = {toman} Toman\n\n<blockquote>{trx_icon} Tron: <code>{trx}</code> TRX\n{ton_icon} Toncoin: <code>{ton}</code> TON\n{usd_icon} Dollar: <code>{usd}</code> $\n⭐️ Stars: <code>{stars}</code> Stars</blockquote>\n🗓 {time}"
  },
  "conv_toman": {
-  "text": "{icon} <b>{amount} {unit}</b>\n\n<blockquote>{usdt_icon} Tether: <code>{usdt}</code> USDT\n{ton_icon} Toncoin: <code>{ton}</code> TON\n{trx_icon} Tron: <code>{trx}</code> TRX</blockquote>\n🗓 {time}"
+  "text": "{icon} {amount} {unit}\n\n<blockquote>{usdt_icon} Tether: <code>{usdt}</code> USDT\n{ton_icon} Toncoin: <code>{ton}</code> TON\n{trx_icon} Tron: <code>{trx}</code> TRX</blockquote>\n🗓 {time}"
  },
  "conv_stars": {
-  "text": "⭐️ <b>{amount} Stars</b> = <b>{toman}</b> Toman\n\n<blockquote>{usd_icon} Dollar: <code>{usd}</code> $\n{ton_icon} Toncoin: <code>{ton}</code> TON\n{trx_icon} Tron: <code>{trx}</code> TRX</blockquote>\n🗓 {time}"
+  "text": "⭐️ {amount} Stars = {toman} Toman\n\n<blockquote>{usd_icon} Dollar: <code>{usd}</code> $\n{ton_icon} Toncoin: <code>{ton}</code> TON\n{trx_icon} Tron: <code>{trx}</code> TRX</blockquote>\n🗓 {time}"
  },
  "conv_pair": {
-  "text": "{icon} <b>{amount} {from}</b> = <b>{result} {to}</b>\n\n<blockquote>{dorange_icon} Rate: <code>1 {from_code} = {rate} {to_code}</code>\n{dpeach_icon} USD value: <code>{usd}</code> $\n{dblue_icon} Toman value: <code>{toman}</code></blockquote>\n🗓 {time}"
+  "text": "{icon} {amount} {from} = {result} {to}\n\n<blockquote>{dorange_icon} Rate: <code>1 {from_code} = {rate} {to_code}</code>\n{dpeach_icon} USD value: <code>{usd}</code> $\n{dblue_icon} Toman value: <code>{toman}</code></blockquote>\n🗓 {time}"
  },
  "conv_fiat": {
-  "text": "{icon} <b>{amount} {name}</b> = <b>{toman}</b> Toman\n\n<blockquote>{usd_icon} Dollar: <code>{usd}</code> $\n{ton_icon} Toncoin: <code>{ton}</code> TON\n{trx_icon} Tron: <code>{trx}</code> TRX\n⭐️ Stars: <code>{stars}</code> Stars</blockquote>\n🗓 {time}"
+  "text": "{icon} {amount} {name} = {toman} Toman\n\n<blockquote>{usd_icon} Dollar: <code>{usd}</code> $\n{ton_icon} Toncoin: <code>{ton}</code> TON\n{trx_icon} Tron: <code>{trx}</code> TRX\n⭐️ Stars: <code>{stars}</code> Stars</blockquote>\n🗓 {time}"
  },
  "market": {
   "text": "📊 <b>Live market</b>\n\n<blockquote>{lines}</blockquote>\n{usdt_icon} Tether: <code>{usdt_toman}</code> Toman\n🗓 {time}"
@@ -285,7 +285,7 @@
   "text": "⛔️ Only group admins can do this."
  },
  "conv_gold": {
-  "text": "{icon} <b>{amount} {name}</b> = <b>{toman}</b> Toman\n\n<blockquote>{usd_icon} Dollar: <code>{usd}</code> $\n📈 24h change: {change}</blockquote>\n🗓 {time}"
+  "text": "{icon} {amount} {name} = {toman} Toman\n\n<blockquote>{usd_icon} Dollar: <code>{usd}</code> $\n📈 24h change: {change}</blockquote>\n🗓 {time}"
  },
  "premium_prices": {
   "text": "{icon} <b>Telegram Premium prices</b>\n\n{lines}\n🗓 {time}"

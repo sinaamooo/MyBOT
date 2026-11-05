@@ -3,7 +3,7 @@
   "text": "👋 Привет, <b>{name}</b>, добро пожаловать!\n🤖 Я универсальный бот для криптовалют и управления группами.\n\n<blockquote>💱 Курсы и конвертация криптовалют: <code>10 usdt</code>\n💰 Конвертация в томаны: <code>500000 toman</code>\n🌍 Мировые валюты: <code>500 aed</code>\n🪙 Золото и монеты: <code>gold</code>\n👛 Проверка кошельков и хешей во всех сетях\n🎁 Цены подарков: <code>/gift @username</code>\n🌐 Перевод: ответьте на сообщение и напишите <code>перевод</code>\n🧮 Калькулятор: <code>200+79</code>\n🆔 Числовой ID: ответьте и напишите <code>UID</code>\n👤 Информация об аккаунте: <code>/me</code>\n🎮 Игры: <code>алмаз</code> , <code>xo 100</code> , <code>mine 100</code>\n🛡 Анти-селф, анти-спам, анти-скам</blockquote>\n👥 Добавьте меня в группу и сделайте админом"
  },
  "help": {
-  "text": "📖 <b>Справка по боту</b>\n\n<blockquote>💱 <b>Курс криптовалюты:</b> <code>btc</code> , <code>price ton</code> , <code>/p eth</code></blockquote>\n<blockquote>💵 <b>Конвертация:</b> <code>10 usdt</code> , <code>500 ton</code> , <code>2.5 btc</code> , <code>1000 stars</code></blockquote>\n<blockquote>💰 <b>Томан:</b> <code>500000 toman</code> , <code>2m toman</code> , <code>10m rial</code></blockquote>\n<blockquote>🌍 <b>Мировые валюты:</b> <code>500 aed</code> , <code>100 eur</code> , <code>50 usd</code> , <code>1000 rub</code></blockquote>\n<blockquote>👛 <b>Проверка кошелька:</b> отправьте адрес кошелька (BTC, ETH, BSC, TRON, TON, SOL, ...)</blockquote>\n<blockquote>🔗 <b>Проверка хеша:</b> отправьте хеш транзакции</blockquote>\n<blockquote>🎁 <b>Подарки:</b> ссылка <code>t.me/nft/...</code> или <code>/gift @username</code></blockquote>\n<blockquote>🌐 <b>Перевод:</b> ответьте на сообщение и напишите <code>перевод</code></blockquote>\n<blockquote>🧮 <b>Калькулятор:</b> <code>698*789</code> , <code>797÷788</code></blockquote>\n<blockquote>🆔 <b>Числовой ID:</b> ответьте и напишите <code>UID</code></blockquote>\n<blockquote>😀 <b>Эмодзи:</b> <code>/emoji</code> + премиум-эмодзи или ответ</blockquote>\n<blockquote>🚨 <b>Сообщить о мошеннике:</b> <code>/scam @username</code></blockquote>\n<blockquote>🔍 <b>Проверить мошенника:</b> <code>/check @username</code></blockquote>\n<blockquote>👤 <b>Аккаунт:</b> <code>/account</code></blockquote>\n<blockquote>⚙️ <b>Настройки группы:</b> <code>/panel</code> (админы группы)</blockquote>"
+  "text": "📖 <b>Справка по боту</b>\n\n<blockquote>💱 <b>Курс криптовалюты:</b> <code>btc</code> , <code>price ton</code> , <code>/p eth</code></blockquote>\n<blockquote>💵 <b>Конвертация:</b> <code>10 usdt</code> , <code>500 ton</code> , <code>2.5 btc</code></blockquote>\n<blockquote>💸 <b>Валюта в валюту:</b> <code>500 try usd</code> , <code>500 usdt ton</code> , <code>2 eur to try</code></blockquote>\n<blockquote>💰 <b>Томан:</b> <code>500000 toman</code> , <code>2m toman</code> , <code>10m rial</code></blockquote>\n<blockquote>🌍 <b>Мировые валюты:</b> <code>500 aed</code> , <code>100 eur</code> , <code>50 usd</code> , <code>1000 rub</code></blockquote>\n<blockquote>💠 <b>Курсы валют:</b> <code>/arz</code></blockquote>\n<blockquote>🏅 <b>Золото:</b> <code>gold</code></blockquote>\n<blockquote>⭐️ <b>Stars:</b> <code>stars</code> , <code>1000 stars</code></blockquote>\n<blockquote>💫 <b>Премиум:</b> <code>premium</code></blockquote>\n<blockquote>👛 <b>Проверка кошелька:</b> отправьте адрес кошелька (BTC, ETH, BSC, TRON, TON, SOL, ...)</blockquote>\n<blockquote>🔗 <b>Проверка хеша:</b> отправьте хеш транзакции</blockquote>\n<blockquote>🎁 <b>Подарки:</b> ссылка <code>t.me/nft/...</code> или <code>/gift @username</code></blockquote>\n<blockquote>📸 <b>Instagram:</b> ссылка на пост или рилс, или <code>/insta @username</code></blockquote>\n<blockquote>💳 <b>Карта и IBAN:</b> отправьте номер карты или IBAN</blockquote>\n<blockquote>📞 <b>Проверка номера:</b> <code>number +989121234567</code></blockquote>\n<blockquote>📝 <b>Перевод:</b> ответьте на сообщение и напишите <code>перевод</code></blockquote>\n<blockquote>🧮 <b>Калькулятор:</b> <code>698*789</code> , <code>797÷788</code></blockquote>\n<blockquote>🆔 <b>Числовой ID:</b> ответьте и напишите <code>UID</code></blockquote>\n<blockquote>😀 <b>Эмодзи:</b> <code>/emoji</code> + премиум-эмодзи или ответ</blockquote>\n<blockquote>💎 <b>Алмазы:</b> <code>алмаз</code> , <code>баланс</code> , <code>топ</code> (в группах)</blockquote>\n<blockquote>🎮 <b>Крестики-нолики:</b> <code>крестики 100</code> (в группах)</blockquote>\n<blockquote>💣 <b>Мины:</b> <code>мины 100</code> (в группах)</blockquote>\n<blockquote>🚨 <b>Сообщить о мошеннике:</b> <code>/scam @username</code></blockquote>\n<blockquote>🔍 <b>Проверить мошенника:</b> <code>/check @username</code></blockquote>\n<blockquote>👤 <b>Аккаунт:</b> <code>/account</code></blockquote>\n<blockquote>🗣 <b>Язык бота:</b> <code>/lang</code> (в личке бота)</blockquote>\n<blockquote>🛡 <b>Защита группы:</b> обязательная подписка , анти-селф , анти-спам , анти-скам</blockquote>\n<blockquote>⚙️ <b>Настройки группы:</b> <code>/panel</code> (админы группы)</blockquote>"
  },
  "bot_added": {
   "text": "🎉 <b>Бот добавлен в группу!</b>\n⚠️ Чтобы включить все функции (анти-селф, анти-спам, обязательная подписка и ...), сделайте меня <b>полным админом</b>.\n⚙️ Настройки: <code>/settings</code>"
@@ -27,19 +27,19 @@
   "text": "❌ Вы ещё не подписались на все каналы!"
  },
  "conv_crypto": {
-  "text": "{coin_icon} <b>{amount} {title}</b> = <b>{toman}</b> томан\n\n<blockquote>{trx_icon} Трон: <code>{trx}</code> TRX\n{ton_icon} Тонкоин: <code>{ton}</code> TON\n{usd_icon} Доллар: <code>{usd}</code> $\n⭐️ Звёзды: <code>{stars}</code> Stars</blockquote>\n🗓 {time}"
+  "text": "{coin_icon} {amount} {title} = {toman} томан\n\n<blockquote>{trx_icon} Трон: <code>{trx}</code> TRX\n{ton_icon} Тонкоин: <code>{ton}</code> TON\n{usd_icon} Доллар: <code>{usd}</code> $\n⭐️ Звёзды: <code>{stars}</code> Stars</blockquote>\n🗓 {time}"
  },
  "conv_toman": {
-  "text": "{icon} <b>{amount} {unit}</b>\n\n<blockquote>{usdt_icon} Тетер: <code>{usdt}</code> USDT\n{ton_icon} Тонкоин: <code>{ton}</code> TON\n{trx_icon} Трон: <code>{trx}</code> TRX</blockquote>\n🗓 {time}"
+  "text": "{icon} {amount} {unit}\n\n<blockquote>{usdt_icon} Тетер: <code>{usdt}</code> USDT\n{ton_icon} Тонкоин: <code>{ton}</code> TON\n{trx_icon} Трон: <code>{trx}</code> TRX</blockquote>\n🗓 {time}"
  },
  "conv_stars": {
-  "text": "⭐️ <b>{amount} звёзд</b> = <b>{toman}</b> томан\n\n<blockquote>{usd_icon} Доллар: <code>{usd}</code> $\n{ton_icon} Тонкоин: <code>{ton}</code> TON\n{trx_icon} Трон: <code>{trx}</code> TRX</blockquote>\n🗓 {time}"
+  "text": "⭐️ {amount} звёзд = {toman} томан\n\n<blockquote>{usd_icon} Доллар: <code>{usd}</code> $\n{ton_icon} Тонкоин: <code>{ton}</code> TON\n{trx_icon} Трон: <code>{trx}</code> TRX</blockquote>\n🗓 {time}"
  },
  "conv_pair": {
-  "text": "{icon} <b>{amount} {from}</b> = <b>{result} {to}</b>\n\n<blockquote>{dorange_icon} Курс: <code>1 {from_code} = {rate} {to_code}</code>\n{dpeach_icon} В долларах: <code>{usd}</code> $\n{dblue_icon} В томанах: <code>{toman}</code></blockquote>\n🗓 {time}"
+  "text": "{icon} {amount} {from} = {result} {to}\n\n<blockquote>{dorange_icon} Курс: <code>1 {from_code} = {rate} {to_code}</code>\n{dpeach_icon} В долларах: <code>{usd}</code> $\n{dblue_icon} В томанах: <code>{toman}</code></blockquote>\n🗓 {time}"
  },
  "conv_fiat": {
-  "text": "{icon} <b>{amount} {name}</b> = <b>{toman}</b> томан\n\n<blockquote>{usd_icon} Доллар: <code>{usd}</code> $\n{ton_icon} Тонкоин: <code>{ton}</code> TON\n{trx_icon} Трон: <code>{trx}</code> TRX\n⭐️ Звёзды: <code>{stars}</code> Stars</blockquote>\n🗓 {time}"
+  "text": "{icon} {amount} {name} = {toman} томан\n\n<blockquote>{usd_icon} Доллар: <code>{usd}</code> $\n{ton_icon} Тонкоин: <code>{ton}</code> TON\n{trx_icon} Трон: <code>{trx}</code> TRX\n⭐️ Звёзды: <code>{stars}</code> Stars</blockquote>\n🗓 {time}"
  },
  "market": {
   "text": "📊 <b>Рынок онлайн</b>\n\n<blockquote>{lines}</blockquote>\n{usdt_icon} Тетер: <code>{usdt_toman}</code> томан\n🗓 {time}"
@@ -285,7 +285,7 @@
   "text": "⛔️ Это могут делать только админы группы."
  },
  "conv_gold": {
-  "text": "{icon} <b>{amount} {name}</b> = <b>{toman}</b> томан\n\n<blockquote>{usd_icon} Доллар: <code>{usd}</code> $\n📈 Изменение за 24ч: {change}</blockquote>\n🗓 {time}"
+  "text": "{icon} {amount} {name} = {toman} томан\n\n<blockquote>{usd_icon} Доллар: <code>{usd}</code> $\n📈 Изменение за 24ч: {change}</blockquote>\n🗓 {time}"
  },
  "premium_prices": {
   "text": "{icon} <b>Цены Telegram Premium</b>\n\n{lines}\n🗓 {time}"

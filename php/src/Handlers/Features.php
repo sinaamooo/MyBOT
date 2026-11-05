@@ -802,14 +802,6 @@ final class TextRouter
         if ($conv && ($p = Parse::amount($text)) && Tools::answerAmount($m, $p[0], $p[1], !$priv)) {
             return;
         }
-        if ($conv && preg_match('/^(?:قیمت|نرخ|price|ارزش)\s+(.+)$/iu', $text, $pm)) {
-            $t = trim($pm[1]);
-            if (($pq = Parse::pair($t)) && Tools::answerPair($m, ...$pq)) {
-                return;
-            }
-            ($s = Parse::amount($t)) ? Tools::answerAmount($m, $s[0], $s[1], !$priv, true) : Tools::answerAmount($m, 1, $t, !$priv, true);
-            return;
-        }
         if ($conv && Currencies::word($text, 'market')) {
             Tools::market($m);
             return;
@@ -820,6 +812,14 @@ final class TextRouter
         }
         if ($conv && Currencies::word($text, 'stars')) {
             Tools::starsBoard($m);
+            return;
+        }
+        if ($conv && preg_match('/^(?:قیمت|نرخ|price|ارزش)\s+(.+)$/iu', $text, $pm)) {
+            $t = trim($pm[1]);
+            if (($pq = Parse::pair($t)) && Tools::answerPair($m, ...$pq)) {
+                return;
+            }
+            ($s = Parse::amount($t)) ? Tools::answerAmount($m, $s[0], $s[1], !$priv, true) : Tools::answerAmount($m, 1, $t, !$priv, true);
             return;
         }
         if ($conv && (Currencies::knownCrypto($text) || Currencies::bareAsset($text) || ($priv && preg_match('/^[A-Za-z0-9]{2,15}$/', $text) && SpotDir::mask($text)))) {
