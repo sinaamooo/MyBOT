@@ -913,6 +913,29 @@ check(array_column(DB::all('PRAGMA table_info(users)'), 'name') === ['id', 'star
 foreach (['', '-wal', '-shm'] as $x) {
     @unlink($lean . $x);
 }
+base_http();
+check(Parse::pair('500 تتر تون') === [500.0, ['crypto', 'USDT'], ['crypto', 'TON']] && Parse::pair('800 تتر بیت کوین') === [800.0, ['crypto', 'USDT'], ['crypto', 'BTC']]
+    && Parse::pair('500 لیر دلار') === [500.0, ['fiat', 'TRY'], ['fiat', 'USD']] && Parse::pair('500 لیر به دلار') === [500.0, ['fiat', 'TRY'], ['fiat', 'USD']]
+    && Parse::pair('500 لیر چند دلار میشه؟') === [500.0, ['fiat', 'TRY'], ['fiat', 'USD']] && Parse::pair('100 دلار کانادا') === null && Parse::pair('500 تتر') === null
+    && Parse::pair('2 تا دلار') === null && Parse::pair('100 دلار خریدم') === null && Parse::pair('5000 استارز تون') === [5000.0, ['stars', 'STARS'], ['crypto', 'TON']], 'pair parsing');
+reset_calls();
+feed(msg('500 تتر تون', -4600, 821));
+$pc = sent(['sendPhoto']) ?: sent(['sendMessage']);
+$pt = (string)($pc[0][1]['caption'] ?? $pc[0][1]['text'] ?? '');
+check($pc && str_contains($pt, '166.6667') && str_contains($pt, '1 USDT = 0.3333 TON') && str_contains($pt, '1 TON = 3 USDT'), 'usdt to ton conversion');
+reset_calls();
+feed(msg('800 تتر بیت کوین', -4600, 822));
+$pc = sent(['sendPhoto']) ?: sent(['sendMessage']);
+check($pc && str_contains((string)($pc[0][1]['caption'] ?? $pc[0][1]['text'] ?? ''), '0.008'), 'usdt to btc conversion');
+reset_calls();
+feed(msg('500 لیر دلار', -4600, 823));
+$pc = sent(['sendPhoto']) ?: sent(['sendMessage']);
+$pt = (string)($pc[0][1]['caption'] ?? $pc[0][1]['text'] ?? '');
+check($pc && str_contains($pt, '12.1951') && !str_contains($pt, 'ارزش دلاری'), 'lira to dollar conversion');
+reset_calls();
+feed(msg('قیمت 2 یورو به لیر', -4600, 824));
+$pc = sent(['sendPhoto']) ?: sent(['sendMessage']);
+check($pc && str_contains((string)($pc[0][1]['caption'] ?? $pc[0][1]['text'] ?? ''), '91.1111'), 'euro to lira with price prefix');
 $spotFile = Config::$root . '/data/spot.json';
 $spotPrev = is_file($spotFile) ? file_get_contents($spotFile) : null;
 SpotDir::reset(['at' => 0, 's' => []]);

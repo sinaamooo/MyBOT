@@ -203,6 +203,38 @@ final class Parse
         return [$amount, $unit];
     }
 
+    public static function pair(string $text): ?array
+    {
+        $p = self::amount($text);
+        if (!$p) {
+            return null;
+        }
+        $rest = Currencies::normalize($p[1]);
+        $rest = trim(preg_replace('/(?:\s*(?:میشه|می شه|میشود|می شود|چقدره|چنده|[?؟]))+$/u', '', $rest));
+        if ($rest === '' || Currencies::resolve($rest)) {
+            return null;
+        }
+        $parts = preg_split('/\s+(?:به|to|in|into|=|->|→|بر حسب|برحسب|چند|چقدر)\s+/u', $rest, 2);
+        $cands = [];
+        if (count($parts) === 2) {
+            $cands[] = [trim($parts[0]), trim($parts[1])];
+        } else {
+            $w = preg_split('/\s+/u', $rest);
+            for ($i = 1; $i < count($w); $i++) {
+                $cands[] = [implode(' ', array_slice($w, 0, $i)), implode(' ', array_slice($w, $i))];
+            }
+        }
+        $ok = fn($r) => $r && $r[0] !== 'crypto_guess' && !(in_array($r[1], SpotDir::CHAT_WORDS, true) && !Currencies::knownCrypto($r[1]));
+        foreach ($cands as [$a, $b]) {
+            $ra = Currencies::resolve($a);
+            $rb = Currencies::resolve($b);
+            if ($ok($ra) && $ok($rb) && $ra !== $rb) {
+                return [$p[0], $ra, $rb];
+            }
+        }
+        return null;
+    }
+
     public static function expression(string $text): ?string
     {
         if ($text === '' || mb_strlen($text) > 120) {

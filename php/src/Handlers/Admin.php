@@ -61,7 +61,7 @@ final class Admin
     const STYLES = ['primary' => 'آبی', 'success' => 'سبز', 'danger' => 'قرمز', 'none' => 'پیش‌فرض'];
     const SECTIONS = [
         'main' => ['🏠', 'عمومی', ['start_private', 'help', 'bot_added', 'bot_promoted', 'error', 'loading', 'bot_off', 'banned', 'not_your_button', 'expired', 'admin_message']],
-        'price' => ['💱', 'قیمت و تبدیل', ['conv_crypto', 'conv_toman', 'conv_fiat', 'conv_gold', 'conv_stars', 'market', 'market_line', 'arz_board', 'arz_line', 'premium_prices', 'premium_line', 'stars_prices', 'stars_line', 'currency_not_found', 'price_unavailable']],
+        'price' => ['💱', 'قیمت و تبدیل', ['conv_crypto', 'conv_toman', 'conv_fiat', 'conv_gold', 'conv_stars', 'conv_pair', 'market', 'market_line', 'arz_board', 'arz_line', 'premium_prices', 'premium_line', 'stars_prices', 'stars_line', 'currency_not_found', 'price_unavailable']],
         'wallet' => ['👛', 'ولت و هش', ['wallet_checking', 'wallet_header', 'wallet_chain', 'wallet_footer', 'wallet_not_found', 'tx_checking', 'tx_result', 'tx_not_found', 'tron_transfers', 'tron_transfer_item', 'tron_transfers_empty', 'whale_alert']],
         'gift' => ['👑', 'گیفت', ['gift_link', 'gift_user_caption', 'gift_profit', 'gift_loss', 'gift_since_last', 'gift_user_none', 'gift_user_unknown', 'gift_not_found']],
         'guard' => ['🛡', 'گروه و امنیت', ['force_join_private', 'force_join_group', 'force_join_ok', 'force_join_not_yet', 'self_warn', 'self_muted', 'tabchi_muted', 'unmuted', 'group_settings', 'only_group_admins']],

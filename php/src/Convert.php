@@ -21,6 +21,90 @@ final class Convert
         };
     }
 
+    private static function unit(string $kind, string $code): ?array
+    {
+        $usdt = Prices::usdtToman();
+        $vsUsd = fn($c, $base) => $c !== null && $base !== null && $base > -100 ? ((1 + $c / 100) / (1 + $base / 100) - 1) * 100 : null;
+        switch ($kind) {
+            case 'crypto':
+                $q = Prices::quote($code);
+                return $q ? [(float)$q['price'], in_array($code, Prices::STABLES, true) ? 0.0 : $q['change'], $code, Currencies::cryptoName($code) ?? $code, UI::badge($code)] : null;
+            case 'toman':
+            case 'rial':
+                if (!$usdt) {
+                    return null;
+                }
+                $c = Market::usdtChange();
+                $r = $kind === 'rial' ? 10 : 1;
+                return [1 / ($usdt * $r), $c !== null && $c > -100 ? (1 / (1 + $c / 100) - 1) * 100 : null, $kind === 'rial' ? 'IRR' : 'IRT', $kind === 'rial' ? 'ریال' : 'تومان', UI::badge($kind === 'rial' ? 'IRR' : 'TOMAN', '💰')];
+            case 'stars':
+                return [Prices::starUsd(), null, 'STARS', 'استارز', '⭐️'];
+            case 'fiat':
+                $fx = Prices::fiatRates();
+                $px = Market::fiatToman($code);
+                $usd = !empty($fx[$code]) ? 1 / $fx[$code] : ($px && $usdt ? $px['toman'] / $usdt : null);
+                if (!$usd) {
+                    return null;
+                }
+                $f = Currencies::fiat($code) ?? ['fa' => $code, 'cc' => null];
+                return [$usd, $code === 'USD' ? 0.0 : $vsUsd($px['change'] ?? null, Market::usdtChange()), $code, $f['fa'], UI::badge($code, Currencies::flag($f['cc'] ?? null) ?: '💱')];
+            case 'gold':
+                $g = Market::gold($code);
+                if (!$g || ($code !== 'OUNCE' && !$usdt)) {
+                    return null;
+                }
+                $usd = $code === 'OUNCE' ? $g['toman'] : $g['toman'] / $usdt;
+                return [$usd, $code === 'OUNCE' ? $g['change'] : $vsUsd($g['change'], Market::usdtChange()), Market::GOLD[$code][2] ?? 'XAU', Market::GOLD[$code][1] ?? 'انس جهانی طلا', UI::badge('GOLD', '🏅')];
+        }
+        return null;
+    }
+
+    public static function pair(float $amount, array $from, array $to): ?array
+    {
+        if ($amount <= 0 || $amount > 1e15) {
+            return null;
+        }
+        $a = self::unit($from[0], strtoupper($from[1]));
+        $b = self::unit($to[0], strtoupper($to[1]));
+        if (!$a || !$b || $a[0] <= 0 || $b[0] <= 0) {
+            return null;
+        }
+        [$usdA, $chgA, $codeA, $nameA, $iconA] = $a;
+        [$usdB, $chgB, $codeB, $nameB] = $b;
+        $rate = $usdA / $usdB;
+        $result = $amount * $rate;
+        $usd = $amount * $usdA;
+        $usdt = Prices::usdtToman();
+        $chg = $chgA === null && $chgB === null ? 0.0 : ((1 + ($chgA ?? 0) / 100) / (1 + ($chgB ?? 0) / 100) - 1) * 100;
+        $text = UI::t('conv_pair', [
+            'icon' => $iconA,
+            'amount' => Fmt::num($amount),
+            'from' => UI::esc($nameA),
+            'to' => UI::esc($nameB),
+            'result' => Fmt::num($result),
+            'from_code' => $codeA,
+            'to_code' => $codeB,
+            'rate' => Fmt::num($rate),
+            'inverse' => Fmt::num(1 / $rate),
+            'usd' => in_array('USD', [$codeA, $codeB], true) ? null : Fmt::usd($usd),
+            'toman' => $usdt && !array_intersect([$codeA, $codeB], ['IRT', 'IRR']) ? Fmt::toman($usd * $usdt) : null,
+            'time' => Fmt::now(),
+        ]);
+        $toUnit = match ($codeB) {
+            'IRT' => 'تومان',
+            'IRR' => 'ریال',
+            'USD' => '',
+            default => $codeB,
+        };
+        $bot = self::bot();
+        $key = 'p|' . $codeA . '|' . $codeB . '|' . self::rnd($amount) . '|' . self::rnd($result) . '|' . round($chg, 2) . '|' . $bot;
+        return ['text' => $text, 'key' => $key, 'card' => fn() => PriceCard::crypto([
+            'sym' => $from[0] === 'crypto' ? $codeA : ($to[0] === 'crypto' ? $codeB : $codeA), 'title' => $codeA . '/' . $codeB,
+            'pill' => Fmt::num($amount) . ' ' . $codeA, 'value' => $result, 'prefix' => $codeB === 'USD' ? '$' : '', 'unit' => $toUnit,
+            'chg' => $chg, 'label' => '1 ' . $codeA . ' = ' . PriceCard::valueStr($rate, '') . ' ' . $codeB, 'bot' => $bot,
+        ])];
+    }
+
     private static function bot(): string
     {
         return TG::username();

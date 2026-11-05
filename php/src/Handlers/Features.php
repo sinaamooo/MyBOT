@@ -792,11 +792,17 @@ final class TextRouter
             return;
         }
         $conv = $on('conversions');
+        if ($conv && ($pq = Parse::pair($text)) && Tools::answerPair($m, ...$pq)) {
+            return;
+        }
         if ($conv && ($p = Parse::amount($text)) && Tools::answerAmount($m, $p[0], $p[1], !$priv)) {
             return;
         }
         if ($conv && preg_match('/^(?:قیمت|نرخ|price|ارزش)\s+(.+)$/iu', $text, $pm)) {
             $t = trim($pm[1]);
+            if (($pq = Parse::pair($t)) && Tools::answerPair($m, ...$pq)) {
+                return;
+            }
             ($s = Parse::amount($t)) ? Tools::answerAmount($m, $s[0], $s[1], !$priv, true) : Tools::answerAmount($m, 1, $t, !$priv, true);
             return;
         }

@@ -47,6 +47,10 @@
   "text": "⭐️ <b>{amount} استارز</b> = <b>{toman}</b> تومان\n\n<blockquote>{usd_icon}    دلار: <code>{usd}</code> $\n{ton_icon}    تون: <code>{ton}</code> TON\n{trx_icon}    ترون: <code>{trx}</code> TRX</blockquote>\n🗓 {time}",
   "desc": "تبدیل استارز ({amount} {toman} {usd} {ton} {trx} {star_usd} {time})"
  },
+ "conv_pair": {
+  "text": "{icon} <b>{amount} {from}</b> = <b>{result} {to}</b>\n\n<blockquote>{dorange_icon}    نرخ: <code>1 {from_code} = {rate} {to_code}</code>\n{dgreen_icon}    معکوس: <code>1 {to_code} = {inverse} {from_code}</code>\n{dpeach_icon}    ارزش دلاری: <code>{usd}</code> $\n{dblue_icon}    ارزش تومانی: <code>{toman}</code></blockquote>\n🗓 {time}",
+  "desc": "تبدیل ارز به ارز ({amount} {from} {result} {to} {from_code} {to_code} {rate} {inverse} {usd} {toman} {time})"
+ },
  "conv_fiat": {
   "text": "{icon} <b>{amount} {name}</b> = <b>{toman}</b> تومان\n\n<blockquote>{usd_icon}    دلار: <code>{usd}</code> $\n{ton_icon}    تون: <code>{ton}</code> TON\n{trx_icon}    ترون: <code>{trx}</code> TRX\n⭐️    استارز: <code>{stars}</code> Stars</blockquote>\n🗓 {time}",
   "desc": "کپشن کارت ارز کشورها ({flag} {amount} {name} {code} {toman} {unit_toman} {usd} {ton} {trx} {stars} {time})"

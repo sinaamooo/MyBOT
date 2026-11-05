@@ -44,6 +44,16 @@ final class Tools
         return true;
     }
 
+    public static function answerPair(array $m, float $amount, array $from, array $to): bool
+    {
+        $a = $to[0] === 'toman' ? Convert::run($amount, $from[0], $from[1]) : Convert::pair($amount, $from, $to);
+        if (!$a) {
+            return false;
+        }
+        self::sendPriced($m, $a);
+        return true;
+    }
+
     public static function sendPriced(array $m, array $a): void
     {
         $photo = null;
