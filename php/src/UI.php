@@ -41,7 +41,8 @@ final class UI
     }
 
     const ICONS = ['toman' => '🇮🇷', 'usd' => '🇺🇸', 'usdt' => '💵', 'ton' => '💠', 'trx' => '🔴', 'btc' => '🪙', 'eth' => '💎', 'sol' => '🌟',
-        'nft' => '🎞', 'premium' => '💫', 'gold' => '🏅', 'wallet' => '👛', 'irr' => '💰'];
+        'nft' => '🎞', 'premium' => '💫', 'gold' => '🏅', 'wallet' => '👛', 'irr' => '💰',
+        'dorange' => '🟠', 'dpeach' => '🟠', 'dgreen' => '🟢', 'dblue' => '🔵', 'dbrown' => '🟤', 'dolive' => '🟤', 'dred' => '🔴', 'dblack' => '⚫️', 'dnavy' => '🔵'];
 
     public static function fill(string $template, array $values = []): string
     {

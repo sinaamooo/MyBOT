@@ -163,6 +163,19 @@ final class Tools
         }
     }
 
+    private static function statusDot(?string $s): string
+    {
+        $s = (string)$s;
+        $k = match (true) {
+            $s === '' => 'DNAVY',
+            str_contains($s, 'ناموفق') || str_contains($s, 'نشده') || str_contains($s, 'شکست') => 'DRED',
+            str_contains($s, 'انتظار') || str_contains($s, 'فریز') => 'DORANGE',
+            str_contains($s, 'موفق') || str_contains($s, 'فعال') => 'DGREEN',
+            default => 'DNAVY',
+        };
+        return UI::badge($k, UI::ICONS[strtolower($k)] ?? '🔵');
+    }
+
     public static function sendWallet(array $m, string $address, array $found, int $owner): void
     {
         $rate = Prices::usdtToman();
@@ -175,7 +188,7 @@ final class Tools
                 'usd' => $r['usd'] !== null ? Fmt::usd($r['usd']) : null, 'toman' => $r['usd'] !== null && $rate ? Fmt::toman($r['usd'] * $rate) : null,
                 'txs' => is_numeric($r['txs']) ? Fmt::int($r['txs']) : ($r['txs'] ?: null),
                 'nft_icon' => UI::badge('NFT', '🎞'), 'nfts' => $r['nfts'] ? Fmt::int($r['nfts']) : null, 'created' => $r['created'] ? Fmt::jalali($r['created']) : null,
-                'status' => $r['status'] ? (UI::stripEmoji($r['status']) ?: null) : null, 'explorer' => UI::attr($r['explorer']),
+                'status' => $r['status'] ? (UI::stripEmoji($r['status']) ?: null) : null, 'status_icon' => self::statusDot($r['status'] ? UI::stripEmoji($r['status']) : null), 'explorer' => UI::attr($r['explorer']),
             ]);
         }
         $parts[] = UI::t('wallet_footer', ['total_usd' => Fmt::usd($total), 'total_toman' => $rate ? Fmt::toman($total * $rate) : null, 'time' => Fmt::now()]);
@@ -200,7 +213,7 @@ final class Tools
         $rate = Prices::usdtToman();
         $amount = $tx['amount'] !== null ? Fmt::num($tx['amount']) . ' ' . UI::esc($tx['symbol'] ?? '') : ($tx['symbol'] ? UI::esc($tx['symbol']) : null);
         $text = UI::t('tx_result', [
-            'network' => UI::esc($tx['network']), 'status' => UI::stripEmoji($tx['status']) ?: null, 'amount' => $amount,
+            'network' => UI::esc($tx['network']), 'status' => UI::stripEmoji($tx['status']) ?: null, 'status_icon' => self::statusDot(UI::stripEmoji($tx['status'])), 'amount' => $amount,
             'usd' => $tx['usd'] ? Fmt::usd($tx['usd']) : null, 'toman' => $tx['usd'] && $rate ? Fmt::toman($tx['usd'] * $rate) : null,
             'token' => $tx['token_type'] ? UI::esc(($tx['token_name'] ?: $tx['symbol']) . ' (' . $tx['token_type'] . ')') : null,
             'contract' => $tx['contract'] ? UI::esc($tx['contract']) : null,
@@ -264,7 +277,7 @@ final class Tools
         $items = [];
         foreach (array_slice($all, ($page - 1) * self::TX_PAGE, self::TX_PAGE) as $it) {
             $in = ($it['to'] ?? '') === $d['addr'];
-            $items[] = UI::fill(UI::template('tron_transfer_item'), ['direction' => $in ? '📥' : '📤', 'kind' => $in ? 'دریافت' : 'ارسال',
+            $items[] = UI::fill(UI::template('tron_transfer_item'), ['dir_icon' => $in ? UI::badge('DGREEN', '🟢') : UI::badge('DRED', '🔴'), 'direction' => $in ? '📥' : '📤', 'kind' => $in ? 'دریافت' : 'ارسال',
                 'amount' => Fmt::num($it['amount']), 'symbol' => UI::esc($it['symbol']), 'time' => $it['ts'] ? Fmt::jalali($it['ts']) : '—',
                 'side' => $in ? 'از' : 'به', 'party' => UI::esc((string)($in ? $it['from'] : $it['to'])), 'hash' => UI::esc($it['hash'] ?? '')]);
         }

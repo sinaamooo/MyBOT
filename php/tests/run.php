@@ -498,6 +498,11 @@ check($tp && str_starts_with($tp[0][1]['photo']['__bytes'] ?? '', "\xFF\xD8") &&
 reset_calls();
 feed(msg('برترین‌ها', -7100, 501, null, null, 'Ali'));
 check(($tp2 = sent(['sendPhoto'])) && is_string($tp2[0][1]['photo']) , 'leaderboard card reused by file id');
+foreach (['لیدربورد', 'لیدر بورد', 'لیدر‌بورد', 'تاپ'] as $w) {
+    reset_calls();
+    feed(msg($w, -7100, 501, null, null, 'Ali'));
+    check((bool)sent(['sendPhoto']), "leaderboard word $w");
+}
 reset_calls();
 feed(msg('حساب', -7100, 502, null, null, 'Reza'));
 $acc = sent(['sendMessage']);

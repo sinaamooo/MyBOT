@@ -354,7 +354,8 @@ final class Games
 {
     const WORDS_DIAMOND = ['الماس'];
     const WORDS_ME = ['الماس من', 'امتیاز من', 'امتیازم', 'حساب الماس', 'موجودی', 'موجودی من'];
-    const WORDS_TOP = ['برترین‌ها', 'برترین ها', 'رتبه‌بندی', 'رتبه بندی', 'لیدربرد', 'leaderboard', 'top', 'تاپ الماسی', 'تاپ الماس', 'برترین های الماسی', 'برترین‌های الماسی', 'top diamond'];
+    const WORDS_TOP = ['برترین ها', 'برترین', 'برترینها', 'رتبه بندی', 'رتبه', 'لیدربورد', 'لیدر بورد', 'لیدربرد', 'لیدر برد', 'لیدبورد', 'leaderboard', 'leader board', 'top', 'تاپ',
+        'تاپ الماسی', 'تاپ الماس', 'برترین های الماسی', 'برترین های الماس', 'top diamond', 'تاپ لیست', 'تاپلیست'];
     const WORDS_ACCOUNT = ['حساب', 'حساب من'];
     const DOOZ = ['دوز'];
     const MINE = ['مین'];
@@ -373,7 +374,8 @@ final class Games
 
     private static function norm(string $t): string
     {
-        return mb_strtolower(trim(Fmt::en($t)));
+        $t = str_replace(["\u{200C}", "\u{200F}", "\u{200E}", 'ي', 'ك'], [' ', '', '', 'ی', 'ک'], Fmt::en($t));
+        return mb_strtolower(trim(preg_replace('/\s+/u', ' ', $t)));
     }
 
     private static function amount(string $t, array $words): ?float
