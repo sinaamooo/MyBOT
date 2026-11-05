@@ -12,29 +12,58 @@ const DEFAULT_EMOJI = '⭐';
 const FFMPEG        = 'ffmpeg'; // برای گیف/ویدیو (اختیاری)
 // ===================================================
 
-const DATA_DIR = __DIR__ . '/emoji_data';
 const MAX_EMOJI = 200;
 
 error_reporting(E_ALL);
 ini_set('display_errors', '0');
-@mkdir(DATA_DIR, 0775, true);
-@file_put_contents(DATA_DIR . '/.htaccess', "Require all denied\nDeny from all\n");
+$dataDir = __DIR__ . '/emoji_data';
+if (!is_dir($dataDir)) {
+    @mkdir($dataDir, 0755, true);
+}
+if (!is_writable($dataDir)) { // اگر پوشه قابل نوشتن نبود از پوشه‌ی موقت سرور استفاده شود
+    $dataDir = rtrim(sys_get_temp_dir(), '/') . '/emoji_data_' . substr(md5(BOT_TOKEN), 0, 8);
+    @mkdir($dataDir, 0700, true);
+}
+define('DATA_DIR', $dataDir);
+if (!is_file(DATA_DIR . '/.htaccess')) {
+    @file_put_contents(DATA_DIR . '/.htaccess', "Require all denied\nDeny from all\n");
+}
+ini_set('log_errors', '1');
 ini_set('error_log', DATA_DIR . '/error.log');
 
-function secret(): string
+function secret()
 {
     return substr(hash('sha256', BOT_TOKEN), 0, 32);
 }
 
-// ---------- نصب وب‌هوک: bot.php?install=SECRET ----------
+// ---------- نصب وب‌هوک و عیب‌یابی: bot.php?install=SECRET ----------
 if (isset($_GET['install'])) {
     header('Content-Type: text/plain; charset=utf-8');
     if (!hash_equals(secret(), (string) $_GET['install'])) {
         exit('wrong key');
     }
+    $ok = function ($b) { return $b ? '✅' : '❌'; };
     $url = 'https://' . $_SERVER['HTTP_HOST'] . strtok($_SERVER['REQUEST_URI'], '?');
-    $r = tg('setWebhook', ['url' => $url, 'secret_token' => secret(), 'allowed_updates' => ['message', 'callback_query'], 'drop_pending_updates' => true]);
-    exit($r === true ? "✅ Webhook set: $url" : '❌ ' . ($GLOBALS['tg_error'] ?? 'error'));
+    echo "PHP " . PHP_VERSION . ' ' . $ok(version_compare(PHP_VERSION, '7.1', '>=')) . "\n";
+    echo 'cURL ' . $ok(function_exists('curl_init')) . ' | GD ' . $ok(function_exists('imagecreatefromstring')) . ' | mbstring ' . $ok(function_exists('mb_substr')) . "\n";
+    echo 'Data folder writable ' . $ok(is_writable(DATA_DIR)) . ' ' . DATA_DIR . "\n";
+    echo 'ffmpeg (gif/video) ' . $ok(hasFfmpeg()) . "\n\n";
+
+    $me = tg('getMe');
+    echo $me ? "Token ✅ @{$me['username']}\n" : 'Token/Connection ❌ ' . $GLOBALS['tg_error'] . "\n";
+    if ($me) {
+        @unlink(DATA_DIR . '/bot_username.txt');
+        $r = tg('setWebhook', ['url' => $url, 'secret_token' => secret(), 'allowed_updates' => ['message', 'callback_query'], 'drop_pending_updates' => true]);
+        echo $r === true ? "Webhook ✅ $url\n" : 'Webhook ❌ ' . $GLOBALS['tg_error'] . "\n";
+        $info = tg('getWebhookInfo');
+        if (is_array($info)) {
+            echo 'Webhook url: ' . $info['url'] . "\nPending updates: " . $info['pending_update_count'] . "\n";
+            if (!empty($info['last_error_message'])) {
+                echo 'Last error: ' . $info['last_error_message'] . "\n";
+            }
+        }
+    }
+    exit;
 }
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -98,8 +127,10 @@ function handle(array $u): void
         return;
     }
 
-    $lock = fopen(DATA_DIR . "/$uid.lock", 'c');
-    flock($lock, LOCK_EX); // پیام‌های همزمان (آلبوم) یکی‌یکی پردازش شوند
+    $lock = @fopen(DATA_DIR . "/$uid.lock", 'c');
+    if ($lock) {
+        flock($lock, LOCK_EX); // پیام‌های همزمان (آلبوم) یکی‌یکی پردازش شوند
+    }
 
     $text = trim((string) ($m['text'] ?? ''));
     if (preg_match('~^/start~', $text)) {
@@ -111,7 +142,7 @@ function handle(array $u): void
         return;
     }
     if (preg_match('~^/new(?:@\w+)?\s*(.*)$~su', $text, $mm)) {
-        $title = mb_substr(trim($mm[1]), 0, 64);
+        $title = cut(trim($mm[1]), 64);
         saveState($uid, $title !== '' ? ['title' => $title] : []);
         send($uid, '🆕 پک جدید' . ($title !== '' ? ' «' . h($title) . '»' : '') . " شروع شد.\nحالا ایموجی‌ها را بفرست.");
         return;
@@ -142,7 +173,7 @@ function handle(array $u): void
             $input = toInputSticker($it, $uid);
             if (empty($st['pack']) || ($st['count'] ?? 0) >= MAX_EMOJI) {
                 $name = 'e' . base_convert((string) $uid, 10, 36) . '_' . base_convert((string) (int) (microtime(true) * 1000), 10, 36) . '_by_' . botUsername();
-                $title = $st['title'] ?? ('پک ایموجی ' . mb_substr((string) ($m['from']['first_name'] ?? ''), 0, 40));
+                $title = $st['title'] ?? ('پک ایموجی ' . cut((string) ($m['from']['first_name'] ?? ''), 40));
                 tgOrFail('createNewStickerSet', [
                     'user_id' => $uid, 'name' => $name, 'title' => $title,
                     'stickers' => [$input], 'sticker_type' => 'custom_emoji',
@@ -184,7 +215,9 @@ function allowed(int $uid): bool
 function extractItems(array $m): array
 {
     $em = captionEmoji((string) ($m['caption'] ?? ''));
-    $file = fn(string $kind, array $f, ?string $emoji, ?string $thumb = null) => ['kind' => $kind, 'file_id' => $f['file_id'], 'emoji' => $emoji, 'thumb' => $thumb];
+    $file = function ($kind, array $f, $emoji, $thumb = null) {
+        return ['kind' => $kind, 'file_id' => $f['file_id'], 'emoji' => $emoji, 'thumb' => $thumb];
+    };
 
     if (isset($m['sticker'])) {
         $s = $m['sticker'];
@@ -215,10 +248,10 @@ function extractItems(array $m): array
         if ($ext === 'tgs') {
             return [$file('tgs', $d, $em)];
         }
-        if (str_starts_with($mime, 'video/') || $mime === 'image/gif') {
+        if (strpos($mime, 'video/') === 0 || $mime === 'image/gif') {
             return [$file('video', $d, $em, $d['thumbnail']['file_id'] ?? null)];
         }
-        if (str_starts_with($mime, 'image/')) {
+        if (strpos($mime, 'image/') === 0) {
             return [$file('image', $d, $em)];
         }
         throw new Exception('این نوع فایل پشتیبانی نمی‌شود.');
@@ -337,7 +370,9 @@ function scaleTgs(string $bytes): string
                 $l->parent = $nid;
             }
         }
-        $p = fn($k) => (object) ['a' => 0, 'k' => $k];
+        $p = function ($k) {
+            return (object) ['a' => 0, 'k' => $k];
+        };
         $d->layers[] = (object) ['ddd' => 0, 'ind' => $nid, 'ty' => 3, 'nm' => 'scale', 'sr' => 1,
             'ks' => (object) ['o' => $p(100), 'r' => $p(0), 'p' => $p([0, 0, 0]), 'a' => $p([0, 0, 0]), 's' => $p([$s, $s, 100])],
             'ao' => 0, 'ip' => $d->ip ?? 0, 'op' => $d->op ?? 180, 'st' => 0, 'bm' => 0];
@@ -400,8 +435,10 @@ function captionEmoji(string $text): ?string
 
 // ===================== ابزارها =====================
 
-function tg(string $method, array $params = []): mixed
+function tg($method, array $params = [])
 {
+    $res = null;
+    $GLOBALS['tg_error'] = '';
     $multipart = false;
     foreach ($params as $k => $v) {
         if ($v instanceof CURLFile) {
@@ -414,10 +451,16 @@ function tg(string $method, array $params = []): mixed
     }
     for ($try = 0; $try < 4; $try++) {
         $ch = curl_init('https://api.telegram.org/bot' . BOT_TOKEN . '/' . $method);
-        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_POST => true, CURLOPT_TIMEOUT => 120,
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_POST => true, CURLOPT_TIMEOUT => 120, CURLOPT_CONNECTTIMEOUT => 15,
             CURLOPT_POSTFIELDS => $multipart ? $params : http_build_query($params)]);
-        $res = json_decode((string) curl_exec($ch), true);
+        $body = curl_exec($ch);
+        $curlError = curl_error($ch);
         curl_close($ch);
+        if ($body === false) {
+            $GLOBALS['tg_error'] = 'Cannot connect to api.telegram.org: ' . $curlError;
+            return null;
+        }
+        $res = json_decode((string) $body, true);
         if (!empty($res['ok'])) {
             return $res['result'];
         }
@@ -432,7 +475,7 @@ function tg(string $method, array $params = []): mixed
     return null;
 }
 
-function tgOrFail(string $method, array $params): mixed
+function tgOrFail($method, array $params)
 {
     $r = tg($method, $params);
     if ($r === null) {
@@ -501,4 +544,12 @@ function errorText(string $e): string
 function h(string $s): string
 {
     return htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
+}
+
+function cut($s, $n)
+{
+    if (preg_match('/^.{0,' . (int) $n . '}/su', $s, $mm)) {
+        return $mm[0];
+    }
+    return substr($s, 0, $n);
 }
