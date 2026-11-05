@@ -859,7 +859,9 @@ check(UI::quoteGaps("سر\n\n<blockquote>a</blockquote>\n\nجمع\n\n<blockquote
     && UI::quoteGaps("سر\n\n<blockquote>a</blockquote>") === "سر\n\n<blockquote>a</blockquote>", 'only first quote keeps blank line above');
 $E = fn($id) => '<tg-emoji emoji-id="' . $id . '">x</tg-emoji>';
 $al = UI::align($E(1) . " <b>عنوان</b>\n" . $E(2) . "<code>UQB1</code>\n<blockquote>" . $E(3) . " NFT: 5\n" . $E(4) . "        موجودی: 1</blockquote>\n" . $E(5) . "   1405/08/14");
-check($al === "\u{200F}" . $E(1) . " <b>عنوان</b>\n\u{200F}" . $E(2) . " <code>UQB1</code>\n<blockquote>\u{200F}" . $E(3) . "    NFT: 5\n\u{200F}" . $E(4) . "    موجودی: 1</blockquote>\n\u{200F}" . $E(5) . " 1405/08/14"
+check($al === "\u{200F}" . $E(1) . " <b>عنوان</b>\n" . $E(2) . " <code>UQB1</code>\n<blockquote>" . $E(3) . " NFT: 5\n\u{200F}" . $E(4) . "    موجودی: 1</blockquote>\n\u{200F}" . $E(5) . " 1405/08/14"
+    && UI::align('<blockquote>' . $E(6) . '    <b>370,185</b></blockquote>') === "<blockquote>\u{200F}" . $E(6) . '    <b>370,185</b></blockquote>'
+    && UI::align($E(7) . '   TIME: 1405/08/14 – 18:21') === $E(7) . ' TIME: 1405/08/14 – 18:21' && UI::align($E(8) . ' @HashpriceBot') === $E(8) . ' @HashpriceBot'
     && UI::align('<b>hello</b> ' . $E(1)) === '<b>hello</b> ' . $E(1), 'emoji lines right-aligned with exact spacing');
 $dm2 = Settings::get('emoji_map');
 Settings::set('emoji_invalid', []);

@@ -36,23 +36,23 @@
   "desc": "عدم عضویت (پاپ‌آپ)"
  },
  "conv_crypto": {
-  "text": "‏{coin_icon} <b>{amount} {title}</b> = <b>{toman}</b> تومان\n\n<blockquote>{trx_icon}    ترون: <code>{trx}</code> TRX\n{ton_icon}    تون: <code>{ton}</code> TON\n{usd_icon}    دلار: <code>{usd}</code> $\n⭐️    استارز: <code>{stars}</code> Stars</blockquote>\n🗓 {time}",
+  "text": "‏{coin_icon} <b>{amount} {title}</b> = <b>{toman}</b> تومان\n\n<blockquote>{trx_icon}    ترون: <code>{trx}</code> TRX\n{ton_icon}    تون: <code>{ton}</code> TON\n{usd_icon}    دلار: <code>{usd}</code> $\n⭐️    استارز: <code>{stars}</code> Stars</blockquote>\n🗓 TIME: {time}",
   "desc": "تبدیل ارز دیجیتال ({coin_icon} {amount} {symbol} {title} {name} {toman} {trx} {ton} {usd} {stars} {price_usd} {price_toman} {change} {time})"
  },
  "conv_toman": {
-  "text": "{icon} <b>{amount} {unit}</b>\n\n<blockquote>{usdt_icon}    تتر: <code>{usdt}</code> USDT\n{ton_icon}    تون: <code>{ton}</code> TON\n{trx_icon}    ترون: <code>{trx}</code> TRX</blockquote>\n🗓 {time}",
+  "text": "{icon} <b>{amount} {unit}</b>\n\n<blockquote>{usdt_icon}    تتر: <code>{usdt}</code> USDT\n{ton_icon}    تون: <code>{ton}</code> TON\n{trx_icon}    ترون: <code>{trx}</code> TRX</blockquote>\n🗓 TIME: {time}",
   "desc": "تبدیل تومان ({amount} {unit} {usdt} {ton} {trx} {usdt_rate} {time})"
  },
  "conv_stars": {
-  "text": "⭐️ <b>{amount} استارز</b> = <b>{toman}</b> تومان\n\n<blockquote>{usd_icon}    دلار: <code>{usd}</code> $\n{ton_icon}    تون: <code>{ton}</code> TON\n{trx_icon}    ترون: <code>{trx}</code> TRX</blockquote>\n🗓 {time}",
+  "text": "⭐️ <b>{amount} استارز</b> = <b>{toman}</b> تومان\n\n<blockquote>{usd_icon}    دلار: <code>{usd}</code> $\n{ton_icon}    تون: <code>{ton}</code> TON\n{trx_icon}    ترون: <code>{trx}</code> TRX</blockquote>\n🗓 TIME: {time}",
   "desc": "تبدیل استارز ({amount} {toman} {usd} {ton} {trx} {star_usd} {time})"
  },
  "conv_fiat": {
-  "text": "{icon} <b>{amount} {name}</b> = <b>{toman}</b> تومان\n\n<blockquote>{usd_icon}    دلار: <code>{usd}</code> $\n{ton_icon}    تون: <code>{ton}</code> TON\n{trx_icon}    ترون: <code>{trx}</code> TRX\n⭐️    استارز: <code>{stars}</code> Stars</blockquote>\n🗓 {time}",
+  "text": "{icon} <b>{amount} {name}</b> = <b>{toman}</b> تومان\n\n<blockquote>{usd_icon}    دلار: <code>{usd}</code> $\n{ton_icon}    تون: <code>{ton}</code> TON\n{trx_icon}    ترون: <code>{trx}</code> TRX\n⭐️    استارز: <code>{stars}</code> Stars</blockquote>\n🗓 TIME: {time}",
   "desc": "کپشن کارت ارز کشورها ({flag} {amount} {name} {code} {toman} {unit_toman} {usd} {ton} {trx} {stars} {time})"
  },
  "market": {
-  "text": "📊 <b>بازار لحظه‌ای</b>\n\n<blockquote>{lines}</blockquote>\n{usdt_icon} تتر: <code>{usdt_toman}</code> تومان\n🗓 {time}",
+  "text": "📊 <b>بازار لحظه‌ای</b>\n\n<blockquote>{lines}</blockquote>\n{usdt_icon} تتر: <code>{usdt_toman}</code> تومان\n🗓 TIME: {time}",
   "desc": "تابلوی قیمت /p ({lines} {usdt_toman} {time})"
  },
  "market_line": {
@@ -80,7 +80,7 @@
   "desc": "بلوک هر شبکه در چکر ولت ({chain} {balance} {symbol} {usd} {toman} {tokens} {txs} {nfts} {status} {explorer})"
  },
  "wallet_footer": {
-  "text": "📊 <b>مجموع دارایی</b>\n\n<blockquote>{dgreen_icon}    دلار: <code>{total_usd}</code> $\n{dpeach_icon}    تومان: <code>{total_toman}</code></blockquote>\n🗓 {time}",
+  "text": "📊 <b>مجموع دارایی</b>\n\n<blockquote>{dgreen_icon}    دلار: <code>{total_usd}</code> $\n{dpeach_icon}    تومان: <code>{total_toman}</code></blockquote>\n🗓 TIME: {time}",
   "desc": "پاورقی چکر ولت ({total_usd} {total_toman} {time})"
  },
  "wallet_not_found": {
@@ -140,7 +140,7 @@
   "desc": "خطای چکر شماره"
  },
  "arz_board": {
-  "text": "💱 <b>نرخ ارز بازار آزاد</b>\n\n<blockquote>{lines}</blockquote>\n🗓 {time}",
+  "text": "💱 <b>نرخ ارز بازار آزاد</b>\n\n<blockquote>{lines}</blockquote>\n🗓 TIME: {time}",
   "desc": "تابلوی نرخ ارز بازار آزاد ({lines} {source} {time})"
  },
  "arz_line": {
@@ -364,7 +364,7 @@
   "desc": "اطلاعات اکانت ({name} {id} {username} {premium} {level} {created} {dc} {lang} {birthdate} {bio} {gifts} {bot_level} {xp} {msgs} {balance} {joined})"
  },
  "whale_alert": {
-  "text": "💸 <b>هشدار جابجایی سنگین!</b> {bar}\n\n<blockquote>💸    مقدار: <b>{amount} {symbol}</b>\n💵    ارزش: <code>{usd}</code> $\n💰    معادل: <code>{toman}</code> تومان\n🌐    شبکه: <b>{network}</b>\n📤    از: {sender}\n📥    به: {receiver}</blockquote>\n🔍 <a href=\"{link}\">مشاهده تراکنش</a> | 🗓 {time}",
+  "text": "💸 <b>هشدار جابجایی سنگین!</b> {bar}\n\n<blockquote>💸    مقدار: <b>{amount} {symbol}</b>\n💵    ارزش: <code>{usd}</code> $\n💰    معادل: <code>{toman}</code> تومان\n🌐    شبکه: <b>{network}</b>\n📤    از: {sender}\n📥    به: {receiver}</blockquote>\n🔍 <a href=\"{link}\">مشاهده تراکنش</a>\n🗓 TIME: {time}",
   "desc": "هشدار جابجایی ({bar} {amount} {symbol} {usd} {toman} {network} {sender} {receiver} {link} {time})"
  },
  "group_settings": {
@@ -376,11 +376,11 @@
   "desc": "فقط ادمین (پاپ‌آپ)"
  },
  "conv_gold": {
-  "text": "{icon} <b>{amount} {name}</b> = <b>{toman}</b> تومان\n\n<blockquote>{usd_icon}    دلار: <code>{usd}</code> $\n📈    تغییر ۲۴ ساعته: {change}</blockquote>\n🗓 {time}",
+  "text": "{icon} <b>{amount} {name}</b> = <b>{toman}</b> تومان\n\n<blockquote>{usd_icon}    دلار: <code>{usd}</code> $\n📈    تغییر ۲۴ ساعته: {change}</blockquote>\n🗓 TIME: {time}",
   "desc": "کپشن طلا و سکه ({amount} {name} {toman} {usd} {change} {time})"
  },
  "premium_prices": {
-  "text": "{icon} <b>قیمت تلگرام پریمیوم</b>\n\n<blockquote>{lines}</blockquote>\n🗓 {time}",
+  "text": "{icon} <b>قیمت تلگرام پریمیوم</b>\n\n<blockquote>{lines}</blockquote>\n🗓 TIME: {time}",
   "desc": "قیمت پریمیوم ({lines} {time})"
  },
  "premium_line": {
@@ -388,7 +388,7 @@
   "desc": "هر خط پریمیوم ({months} {toman} {ton} {usd})"
  },
  "stars_prices": {
-  "text": "⭐️ <b>قیمت استارز تلگرام</b>\n\n<blockquote>{lines}</blockquote>\n💰 هر استار: <code>{each}</code> تومان\n🗓 {time}",
+  "text": "⭐️ <b>قیمت استارز تلگرام</b>\n\n<blockquote>{lines}</blockquote>\n💰 هر استار: <code>{each}</code> تومان\n🗓 TIME: {time}",
   "desc": "قیمت بسته‌های استارز ({lines} {each} {time})"
  },
  "stars_line": {
