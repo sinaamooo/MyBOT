@@ -92,8 +92,8 @@ final class Currencies
         if (isset(self::$cryptoIdx[$u])) {
             return ['crypto', self::$cryptoIdx[$u]];
         }
-        if (preg_match('/^[a-z0-9]{2,12}$/', $u) && !ctype_digit($u)) {
-            return ['crypto_guess', strtoupper($u)];
+        if (preg_match('/^[a-z0-9]{2,15}$/', $u) && !ctype_digit($u)) {
+            return [SpotDir::mask($u) ? 'crypto' : 'crypto_guess', strtoupper($u)];
         }
         return null;
     }
@@ -150,6 +150,125 @@ final class Currencies
             $out .= mb_chr(0x1F1E6 + ord($c) - ord('a'));
         }
         return $out;
+    }
+}
+
+final class SpotDir
+{
+    const TTL = 21600;
+    const BITS = ['Binance' => 1, 'OKX' => 2, 'Bybit' => 4, 'KuCoin' => 8, 'Gate' => 16, 'MEXC' => 32];
+    const CHAT_WORDS = ['OK', 'OKAY', 'LOL', 'HI', 'HEY', 'HELLO', 'YES', 'NO', 'GO', 'ME', 'YOU', 'THE', 'AND', 'FOR', 'WIN', 'TOP', 'GOOD', 'BAD', 'NICE', 'WOW', 'BRO', 'XD', 'HA', 'HAHA'];
+
+    private static ?array $d = null;
+
+    private static function file(): string
+    {
+        return Config::$root . '/data/spot.json';
+    }
+
+    public static function reset(?array $d = null): void
+    {
+        self::$d = $d;
+    }
+
+    public static function all(): array
+    {
+        if (self::$d === null) {
+            $f = self::file();
+            self::$d = is_file($f) ? Config::compiled('spot', [$f], fn() => json_decode((string)@file_get_contents($f), true) ?: []) : [];
+        }
+        return self::$d;
+    }
+
+    public static function mask(string $sym): int
+    {
+        return (int)(self::all()['s'][strtoupper($sym)] ?? 0);
+    }
+
+    public static function count(): int
+    {
+        return count(self::all()['s'] ?? []);
+    }
+
+    public static function due(): bool
+    {
+        return time() - (int)(self::all()['at'] ?? 0) > self::TTL;
+    }
+
+    public static function refresh(): int
+    {
+        $res = Http::multiJson([
+            'Binance' => ['url' => 'https://api.binance.com/api/v3/ticker/price', 'timeout' => 20],
+            'BinanceVision' => ['url' => 'https://data-api.binance.vision/api/v3/ticker/price', 'timeout' => 20],
+            'OKX' => ['url' => 'https://www.okx.com/api/v5/public/instruments', 'params' => ['instType' => 'SPOT'], 'timeout' => 20],
+            'Bybit' => ['url' => 'https://api.bybit.com/v5/market/instruments-info', 'params' => ['category' => 'spot', 'limit' => 1000], 'timeout' => 20],
+            'KuCoin' => ['url' => 'https://api.kucoin.com/api/v2/symbols', 'timeout' => 20],
+            'Gate' => ['url' => 'https://api.gateio.ws/api/v4/spot/currency_pairs', 'timeout' => 20],
+            'MEXC' => ['url' => 'https://api.mexc.com/api/v3/ticker/price', 'timeout' => 20],
+        ]);
+        $lists = [];
+        foreach (['Binance', 'BinanceVision'] as $k) {
+            if (!isset($lists['Binance']) && is_array($res[$k] ?? null) && array_is_list($res[$k])) {
+                $lists['Binance'] = self::pairs($res[$k], fn($r) => (float)($r['price'] ?? 0) > 0 && str_ends_with((string)($r['symbol'] ?? ''), 'USDT') ? substr($r['symbol'], 0, -4) : null);
+            }
+        }
+        if (is_array($res['OKX']['data'] ?? null)) {
+            $lists['OKX'] = self::pairs($res['OKX']['data'], fn($r) => ($r['quoteCcy'] ?? '') === 'USDT' && ($r['state'] ?? 'live') === 'live' ? ($r['baseCcy'] ?? null) : null);
+        }
+        if (is_array($res['Bybit']['result']['list'] ?? null)) {
+            $lists['Bybit'] = self::pairs($res['Bybit']['result']['list'], fn($r) => ($r['quoteCoin'] ?? '') === 'USDT' && ($r['status'] ?? 'Trading') === 'Trading' ? ($r['baseCoin'] ?? null) : null);
+        }
+        if (is_array($res['KuCoin']['data'] ?? null)) {
+            $lists['KuCoin'] = self::pairs($res['KuCoin']['data'], fn($r) => ($r['quoteCurrency'] ?? '') === 'USDT' && !empty($r['enableTrading']) ? ($r['baseCurrency'] ?? null) : null);
+        }
+        if (is_array($res['Gate'] ?? null) && array_is_list($res['Gate'])) {
+            $lists['Gate'] = self::pairs($res['Gate'], fn($r) => ($r['quote'] ?? '') === 'USDT' && ($r['trade_status'] ?? 'tradable') === 'tradable' ? ($r['base'] ?? null) : null);
+        }
+        if (is_array($res['MEXC'] ?? null) && array_is_list($res['MEXC'])) {
+            $lists['MEXC'] = self::pairs($res['MEXC'], fn($r) => (float)($r['price'] ?? 0) > 0 && str_ends_with((string)($r['symbol'] ?? ''), 'USDT') ? substr($r['symbol'], 0, -4) : null);
+        }
+        if (!$lists) {
+            return 0;
+        }
+        $old = self::all()['s'] ?? [];
+        $out = [];
+        foreach (self::BITS as $ex => $bit) {
+            if (!empty($lists[$ex])) {
+                foreach ($lists[$ex] as $sym) {
+                    $out[$sym] = ($out[$sym] ?? 0) | $bit;
+                }
+                continue;
+            }
+            foreach ($old as $sym => $m) {
+                if ($m & $bit) {
+                    $out[$sym] = ($out[$sym] ?? 0) | $bit;
+                }
+            }
+        }
+        if (count($out) < 50) {
+            return 0;
+        }
+        ksort($out);
+        $d = ['at' => time(), 's' => $out];
+        $tmp = self::file() . '.' . getmypid() . '.tmp';
+        if (@file_put_contents($tmp, json_encode($d)) !== false && @rename($tmp, self::file())) {
+            self::$d = $d;
+        } else {
+            @unlink($tmp);
+        }
+        return count($out);
+    }
+
+    private static function pairs(array $rows, callable $base): array
+    {
+        $out = [];
+        foreach ($rows as $r) {
+            $b = is_array($r) ? $base($r) : null;
+            if (is_string($b) && preg_match('/^[A-Z0-9]{2,15}$/', $b = strtoupper($b))) {
+                $out[$b] = true;
+            }
+        }
+        return array_keys($out);
     }
 }
 
@@ -217,7 +336,11 @@ final class Prices
             'CryptoCompare' => ['url' => 'https://min-api.cryptocompare.com/data/pricemultifull', 'params' => ['fsyms' => $sym, 'tsyms' => 'USD'], 'timeout' => 7],
             'MEXC' => ['url' => 'https://api.mexc.com/api/v3/ticker/price', 'params' => ['symbol' => $sym . 'USDT'], 'timeout' => 6],
         ];
-        $res = Http::multiJson($reqs);
+        $mask = SpotDir::mask($sym);
+        if ($mask) {
+            $reqs = array_filter($reqs, fn($k) => ($mask & (SpotDir::BITS[$k === 'BinanceVision' ? 'Binance' : $k] ?? 0)) !== 0, ARRAY_FILTER_USE_KEY);
+        }
+        $res = Http::multiJson($reqs) + array_fill_keys(['Binance', 'BinanceVision', 'CoinGecko', 'OKX', 'Bybit', 'KuCoin', 'Gate', 'CryptoCompare', 'MEXC'], null);
         $found = [];
         $add = function ($name, $price, $change) use (&$found) {
             if ($price) {

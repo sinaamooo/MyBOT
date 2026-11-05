@@ -812,7 +812,7 @@ final class TextRouter
             Tools::starsBoard($m);
             return;
         }
-        if ($conv && (Currencies::knownCrypto($text) || Currencies::bareAsset($text))) {
+        if ($conv && (Currencies::knownCrypto($text) || Currencies::bareAsset($text) || ($priv && preg_match('/^[A-Za-z0-9]{2,15}$/', $text) && SpotDir::mask($text)))) {
             Tools::answerAmount($m, 1, $text, true);
             return;
         }

@@ -12,6 +12,7 @@ Config::set('CACHE_DIR', sys_get_temp_dir() . '/mybot_cache_' . getmypid());
 Config::set('CARDINFO_API_URL', 'http://cardinfo.test/api/');
 Config::set('PHONE_CHECK_API_URL', 'https://phone.test/check.php');
 DB::connect();
+SpotDir::reset(['at' => time(), 's' => []]);
 Market::reset([]);
 
 $GLOBALS['calls'] = [];
@@ -70,8 +71,8 @@ TG::$fake = function (string $method, array $p) {
             return ['ok' => true, 'result' => array_values(array_filter(array_map(fn($id) => isset($GLOBALS['alts'][$id]) ? ['custom_emoji_id' => $id, 'emoji' => $GLOBALS['alts'][$id]] : null, $p['custom_emoji_ids'])))];
         case 'getStickerSet':
             return $p['name'] === 'HashPack' ? ['ok' => true, 'result' => ['name' => 'HashPack', 'stickers' => [
-                ['custom_emoji_id' => '5200000000000000001', 'emoji' => '❤️'], ['custom_emoji_id' => '5200000000000000002', 'emoji' => '👁'],
-                ['custom_emoji_id' => '5200000000000000003', 'emoji' => '⏳']]]] : ['ok' => false, 'description' => 'Bad Request: STICKERSET_INVALID'];
+                ['custom_emoji_id' => '5200000000000000001', 'emoji' => '🦚'], ['custom_emoji_id' => '5200000000000000002', 'emoji' => '👁'],
+                ['custom_emoji_id' => '5200000000000000003', 'emoji' => '🦜']]]] : ['ok' => false, 'description' => 'Bad Request: STICKERSET_INVALID'];
         case 'copyMessage':
             return ['ok' => true, 'result' => ['message_id' => 1]];
         default:
@@ -821,12 +822,12 @@ $pool = Config::data('emoji_pool');
 foreach (array_slice($pool, 0, 30) as $i => $id) {
     $GLOBALS['alts'][$id] = ['🔥', '👁', '🎂', '🟰', '📝', '❤️', '🎬', '⌛️', '🌐', '💎'][$i % 10] . ($i >= 10 ? '' : '');
 }
-$GLOBALS['alts'][$pool[0]] = '🔥'; $GLOBALS['alts'][$pool[1]] = '👁'; $GLOBALS['alts'][$pool[2]] = '🎂'; $GLOBALS['alts'][$pool[3]] = '⌛️';
+$GLOBALS['alts'][$pool[0]] = '🔥'; $GLOBALS['alts'][$pool[1]] = '👁'; $GLOBALS['alts'][$pool[2]] = '🦩'; $GLOBALS['alts'][$pool[3]] = '⌛️';
 for ($i = 4; $i < 30; $i++) { $GLOBALS['alts'][$pool[$i]] = mb_chr(0x1F600 + $i); }
 $prevMap = Settings::get('emoji_map');
 Settings::set('emoji_map', []);
 $v = UI::validateEmoji();
-check($v !== null && $v[2] >= 25 && UI::emojiId('🔥') === (string)$pool[0] && UI::emojiId('🎂') === (string)$pool[2], 'auto map by pack emoji');
+check($v !== null && $v[2] >= 25 && UI::emojiId('🔥') === (string)$pool[0] && UI::emojiId('🦩') === (string)$pool[2], 'auto map by pack emoji');
 check(UI::emojiId('⏱') === (string)$pool[3] && UI::emojiId('⏳') === (string)$pool[3], 'synonym mapping');
 check(UI::emojiId('🧾') === null, 'no guessed mapping without pack emoji');
 reset_calls();
@@ -835,9 +836,9 @@ $pk = array_values(array_filter(sent(['sendMessage']), fn($c) => str_contains($c
 $pkb = buttons($pk[0] ?? [0, []]);
 check($pk && str_starts_with($pkb[0]['callback_data'] ?? '', 'adm:epa:'), 'emoji pack preview');
 cb($pkb[0]['callback_data'], 999, 999);
-check(UI::emojiId('❤️') === '5200000000000000001' && UI::emojiId('⏱') === '5200000000000000003', 'emoji pack applied');
+check(UI::emojiId('🦚') === '5200000000000000001' && UI::emojiId('🦜') === '5200000000000000003', 'emoji pack applied');
 cb('adm:epr', 999, 999);
-check(UI::emojiId('❤️') === null, 'emoji pack reset');
+check(UI::emojiId('🦚') === null, 'emoji pack reset');
 reset_calls();
 $pairText = "🎨 X 🖼 Y";
 feed(msg($pairText, 999, 999, null, [['type' => 'custom_emoji', 'offset' => 3, 'length' => 1, 'custom_emoji_id' => '5300000000000000001'], ['type' => 'custom_emoji', 'offset' => 8, 'length' => 1, 'custom_emoji_id' => '5300000000000000002']]));
@@ -909,5 +910,60 @@ check(array_column(DB::all('PRAGMA table_info(users)'), 'name') === ['id', 'star
 foreach (['', '-wal', '-shm'] as $x) {
     @unlink($lean . $x);
 }
+$spotFile = Config::$root . '/data/spot.json';
+$spotPrev = is_file($spotFile) ? file_get_contents($spotFile) : null;
+SpotDir::reset(['at' => 0, 's' => []]);
+base_http();
+$GLOBALS['http'] += [
+    'api.binance.com/api/v3/ticker/price' => [['symbol' => 'BTCUSDT', 'price' => '100000'], ['symbol' => 'ZZXBTC', 'price' => '0.1'], ['symbol' => 'DEADUSDT', 'price' => '0']],
+    'okx.com/api/v5/public/instruments' => ['code' => '0', 'data' => [['instId' => 'BTC-USDT', 'baseCcy' => 'BTC', 'quoteCcy' => 'USDT', 'state' => 'live'], ['instId' => 'OLD-USDT', 'baseCcy' => 'OLD', 'quoteCcy' => 'USDT', 'state' => 'suspend']]],
+    'api.bybit.com/v5/market/instruments-info' => ['retCode' => 0, 'result' => ['list' => [['symbol' => 'OKUSDT', 'baseCoin' => 'OK', 'quoteCoin' => 'USDT', 'status' => 'Trading']]]],
+    'api.kucoin.com/api/v2/symbols' => ['code' => '200000', 'data' => [['symbol' => 'ZZX-USDT', 'baseCurrency' => 'ZZX', 'quoteCurrency' => 'USDT', 'enableTrading' => true]]],
+    'api.gateio.ws/api/v4/spot/currency_pairs' => array_merge([['id' => 'ZZX_USDT', 'base' => 'ZZX', 'quote' => 'USDT', 'trade_status' => 'tradable']], array_map(fn($i) => ['id' => "T{$i}X_USDT", 'base' => "T{$i}X", 'quote' => 'USDT', 'trade_status' => 'tradable'], range(1, 60))),
+    'api.mexc.com/api/v3/ticker/price' => fn($r) => empty($r['params']) ? [['symbol' => 'MXONLYUSDT', 'price' => '2']] : null,
+    'api.gateio.ws/api/v4/spot/tickers' => fn($r) => ($r['params']['currency_pair'] ?? '') === 'ZZX_USDT' ? [['currency_pair' => 'ZZX_USDT', 'last' => '0.00001234', 'change_percentage' => '5.2']] : null,
+    'api.kucoin.com/api/v1/market/stats' => fn($r) => ($r['params']['symbol'] ?? '') === 'ZZX-USDT' ? ['code' => '200000', 'data' => ['last' => '0.00001236', 'changeRate' => '0.05']] : null,
+];
+$n = SpotDir::refresh();
+check($n === 64 && SpotDir::mask('ZZX') === (8 | 16) && SpotDir::mask('BTC') === (1 | 2) && SpotDir::mask('OLD') === 0 && SpotDir::mask('DEAD') === 0 && SpotDir::mask('MXONLY') === 32
+    && is_file($spotFile), 'spot directory from exchange lists');
+check(Currencies::resolve('zzx') === ['crypto', 'ZZX'] && Currencies::resolve('qqq9') === ['crypto_guess', 'QQQ9'], 'listed spot coin resolves as crypto');
+$hits = [];
+$prevFake = Http::$fake;
+Http::$fake = function (array $r) use (&$hits, $prevFake) {
+    if (preg_match('/"(?:ZZX|OK)[-_]?USDT"|"(?:zzx|ok)"/i', json_encode($r['params'] ?? []))) {
+        $hits[] = parse_url($r['url'], PHP_URL_HOST);
+    }
+    return $prevFake($r);
+};
+reset_calls();
+feed(msg('1000 zzx', -4500, 811));
+$zz = sent(['sendPhoto']) ?: sent(['sendMessage']);
+$cap = (string)($zz[0][1]['caption'] ?? $zz[0][1]['text'] ?? '');
+check($zz && str_contains($cap, '1,000 ZZX') && str_contains($cap, '1,236') && $hits === ['api.kucoin.com', 'api.gateio.ws'], 'group spot coin priced only from its exchanges');
+$hits = [];
+reset_calls();
+feed(msg('ok 571', -4500, 812));
+check(!sent(['sendMessage']) && !sent(['sendPhoto']) && !$hits, 'chat word ticker ignored in groups');
+reset_calls();
+feed(msg('zzx', 4501, 4501));
+check((bool)(sent(['sendPhoto']) ?: sent(['sendMessage'])), 'bare spot coin answered in private');
+Http::$fake = $prevFake;
+$GLOBALS['http'] = [];
+check(SpotDir::refresh() === 0 && SpotDir::mask('ZZX') === (8 | 16), 'spot directory kept when exchanges fail');
+@unlink($spotFile);
+if ($spotPrev !== null) {
+    file_put_contents($spotFile, $spotPrev);
+}
+foreach (glob(Config::$root . '/data/compiled/spot-*.php') ?: [] as $f) {
+    @unlink($f);
+}
+SpotDir::reset(['at' => time(), 's' => []]);
+$own = DB::kvHas('emoji_map') ? DB::kvGet('emoji_map') : [];
+Settings::set('emoji_invalid', []);
+Settings::set('emoji_map', ['🎨' => '5300000000000000009']);
+$fileId = Settings::defaults()['emoji_map']['🧮'] ?? null;
+check($fileId && UI::emojiId('🧮') === (string)$fileId && UI::emojiId('🎨') === '5300000000000000009', 'file emoji map stays active next to panel pairs');
+Settings::set('emoji_map', $own);
 echo "passed: $pass, failed: $fail\n";
 exit($fail ? 1 : 0);

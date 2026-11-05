@@ -232,7 +232,8 @@ final class Admin
         if (!$pairs) {
             return false;
         }
-        Settings::set('emoji_map', array_merge(Settings::get('emoji_map') ?: [], $pairs));
+        $own = DB::kvHas('emoji_map') ? DB::kvGet('emoji_map') : [];
+        Settings::set('emoji_map', array_merge(is_array($own) ? $own : [], $pairs));
         $lines = [];
         foreach ($pairs as $c => $id) {
             $lines[] = '<code>' . UI::esc($c) . '</code> ← <tg-emoji emoji-id="' . $id . '">' . UI::esc($c) . '</tg-emoji>';

@@ -172,13 +172,19 @@ final class UI
 
     private static ?array $rx = null;
 
+    public static function manualMap(): array
+    {
+        $db = DB::kvHas('emoji_map') ? DB::kvGet('emoji_map') : [];
+        return array_merge(Settings::defaults()['emoji_map'] ?? [], is_array($db) ? $db : []);
+    }
+
     public static function emojiTable(): array
     {
         if (self::$rx !== null) {
             return self::$rx;
         }
         $auto = DB::kvGet('emoji_auto');
-        $map = array_merge(is_array($auto['map'] ?? null) ? $auto['map'] : [], Settings::get('emoji_pack') ?: [], Settings::get('emoji_map') ?: []);
+        $map = array_merge(is_array($auto['map'] ?? null) ? $auto['map'] : [], Settings::get('emoji_pack') ?: [], self::manualMap());
         $bad = array_flip((array)(Settings::get('emoji_invalid') ?: []));
         $lookup = [];
         foreach ($map as $k => $id) {
@@ -244,7 +250,7 @@ final class UI
     public static function validateEmoji(): ?array
     {
         $pool = array_map('strval', Config::data('emoji_pool'));
-        $ids = array_values(array_unique(array_merge($pool, array_map('strval', array_values(Settings::get('emoji_map') ?: [])),
+        $ids = array_values(array_unique(array_merge($pool, array_map('strval', array_values(self::manualMap())),
             array_map('strval', array_values(Settings::get('emoji_pack') ?: [])), array_map('strval', array_values(Config::data('badges'))))));
         $alt = self::stickerAlts($ids);
         if ($alt === null) {

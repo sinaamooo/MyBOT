@@ -27,7 +27,9 @@ final class Tools
     public static function answerAmount(array $m, float $amount, string $unit, bool $silent, ?bool $guess = null): bool
     {
         $r = Currencies::resolve($unit);
-        if (!$r || ($r[0] === 'crypto_guess' && !($guess ?? !$silent) && !Market::coin($r[1]))) {
+        $loose = !($guess ?? !$silent);
+        if (!$r || ($r[0] === 'crypto_guess' && $loose && !Market::coin($r[1]))
+            || ($r[0] === 'crypto' && $loose && in_array($r[1], SpotDir::CHAT_WORDS, true) && !Currencies::knownCrypto($r[1]))) {
             return false;
         }
         $a = Convert::run($amount, $r[0], $r[1]);

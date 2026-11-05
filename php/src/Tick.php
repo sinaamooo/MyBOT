@@ -49,6 +49,13 @@ final class Tick
             if ($left() && (time() - (int)DB::kvGet('emoji_checked_at', 0) > 86400 || !is_array(DB::kvGet('emoji_auto')))) {
                 UI::validateEmoji();
             }
+            if ($left() && SpotDir::due() && !Cache::throttled('spot_try', 1800)) {
+                try {
+                    SpotDir::refresh();
+                } catch (Throwable $e) {
+                    error_log('tick spot: ' . $e->getMessage());
+                }
+            }
             if (time() - (int)DB::kvGet('last_cleanup', 0) > 6 * 3600) {
                 DB::cleanup();
                 DB::kvSet('last_cleanup', time());

@@ -175,6 +175,13 @@ SQL);
             self::$pdo->exec("DELETE FROM cache WHERE k LIKE 'fid:%' OR k LIKE 'gpc:%'");
             self::kvSet('schema_v', 3);
         }
+        if ((int)(self::$kv['schema_v'] ?? 0) < 4) {
+            if (is_array(self::$kv['emoji_map'] ?? null)) {
+                $file = Settings::defaults()['emoji_map'] ?? [];
+                self::kvSet('emoji_map', array_filter(self::$kv['emoji_map'], fn($id, $e) => (string)($file[$e] ?? '') !== (string)$id, ARRAY_FILTER_USE_BOTH));
+            }
+            self::kvSet('schema_v', 4);
+        }
     }
 
     private static function lean(): void
