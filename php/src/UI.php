@@ -242,15 +242,26 @@ final class UI
         self::$rx = null;
     }
 
+    const EMO = '(?:\p{Regional_Indicator}{2}|[#*0-9]\x{FE0F}?\x{20E3}|[\x{1F000}-\x{1FAFF}\x{2600}-\x{27BF}\x{2B00}-\x{2BFF}\x{2300}-\x{23FF}\x{25A0}-\x{25FF}\x{203C}\x{2049}\x{2139}\x{24C2}\x{3030}\x{303D}\x{3297}\x{3299}](?:\x{FE0F})?(?:\x{200D}[\x{1F000}-\x{1FAFF}\x{2600}-\x{27BF}](?:\x{FE0F})?)*)';
+
+    public static bool $strip = true;
+
+    private static function dropPlain(string $c, array $lookup): string
+    {
+        if (!self::$strip) {
+            return $c;
+        }
+        return preg_replace_callback('/(' . self::EMO . ')[ \t]*/u', function ($m) use ($lookup) {
+            return isset($lookup[str_replace("\u{FE0F}", '', $m[1])]) ? $m[0] : '';
+        }, $c);
+    }
+
     public static function emojiMap(string $text): string
     {
         if ($text === '') {
             return $text;
         }
         [$rx, $lookup] = self::emojiTable();
-        if (!$rx) {
-            return $text;
-        }
         $chunks = preg_split('/(<[^>]+>)/u', $text, -1, PREG_SPLIT_DELIM_CAPTURE);
         $skip = 0;
         $quote = 0;
@@ -276,6 +287,11 @@ final class UI
                 continue;
             }
             if ($skip) {
+                $out .= $c;
+                continue;
+            }
+            $c = self::dropPlain($c, $lookup);
+            if (!$rx) {
                 $out .= $c;
                 continue;
             }
@@ -324,6 +340,11 @@ final class UI
         if ($lead !== '' && ($id = self::emojiId($lead))) {
             $b['text'] = $rest;
             $b['icon_custom_emoji_id'] = $id;
+        } elseif ($lead !== '' && self::$strip && preg_match('/^' . self::EMO . '$/u', $lead)) {
+            $b['text'] = $rest;
+        } elseif ($lead === '' && ($id = self::emojiId(trim((string)$b['text'])))) {
+            $b['text'] = "\u{3164}";
+            $b['icon_custom_emoji_id'] = $id;
         }
         return $b;
     }
@@ -363,6 +384,8 @@ final class UI
             $emoji = self::emojiId($lead);
         }
         if ($emoji && $lead !== '') {
+            $text = $rest;
+        } elseif (!$emoji && $lead !== '' && self::$strip && preg_match('/^' . self::EMO . '$/u', $lead)) {
             $text = $rest;
         } elseif (!$emoji && ($solo = self::emojiId(trim($text)))) {
             $emoji = $solo;

@@ -197,6 +197,67 @@ final class Admin
         return array_keys($out);
     }
 
+    private static function u16len(string $s): int
+    {
+        return intdiv(strlen(mb_convert_encoding($s, 'UTF-16LE', 'UTF-8')), 2);
+    }
+
+    public static function emojiPairs(array $m): bool
+    {
+        $text = (string)($m['text'] ?? '');
+        $ents = array_values(array_filter($m['entities'] ?? [], fn($e) => ($e['type'] ?? '') === 'custom_emoji' && !empty($e['custom_emoji_id'])));
+        if (!$ents || $text === '' || $text[0] === '/') {
+            return false;
+        }
+        $u16 = mb_convert_encoding($text, 'UTF-16LE', 'UTF-8');
+        $cover = array_map(fn($e) => [(int)$e['offset'], (int)$e['offset'] + (int)$e['length']], $ents);
+        $rx = '/((?:\p{Regional_Indicator}{2})|(?:[\x{1F000}-\x{1FAFF}\x{2600}-\x{27BF}\x{2B00}-\x{2BFF}\x{2190}-\x{21FF}\x{2300}-\x{23FF}\x{25A0}-\x{25FF}\x{203C}\x{2049}\x{2139}#*0-9](?:\x{FE0F})?(?:\x{20E3})?(?:\x{200D}[\x{1F000}-\x{1FAFF}\x{2600}-\x{27BF}](?:\x{FE0F})?)*))[\s=:←→\-]*$/u';
+        $pairs = [];
+        foreach ($ents as $e) {
+            $before = mb_convert_encoding(substr($u16, 0, (int)$e['offset'] * 2), 'UTF-8', 'UTF-16LE');
+            if (!preg_match($rx, $before, $mm, PREG_OFFSET_CAPTURE)) {
+                continue;
+            }
+            $start = self::u16len(substr($before, 0, $mm[1][1]));
+            $end = $start + self::u16len($mm[1][0]);
+            $inside = false;
+            foreach ($cover as [$a, $b]) {
+                if ($start < $b && $end > $a) {
+                    $inside = true;
+                }
+            }
+            if (!$inside) {
+                $pairs[str_replace("\u{FE0F}", '', $mm[1][0])] = (string)$e['custom_emoji_id'];
+            }
+        }
+        if (!$pairs) {
+            return false;
+        }
+        Settings::set('emoji_map', array_merge(Settings::get('emoji_map') ?: [], $pairs));
+        $lines = [];
+        foreach ($pairs as $c => $id) {
+            $lines[] = '<code>' . UI::esc($c) . '</code> ← <tg-emoji emoji-id="' . $id . '">' . UI::esc($c) . '</tg-emoji>';
+        }
+        TG::send($m['chat']['id'], '✅ <b>' . count($pairs) . " ایموجی تنظیم شد</b>\n\n" . implode("\n", array_slice($lines, 0, 50)));
+        return true;
+    }
+
+    public static function emojiStatus(array $m, string $args = ''): void
+    {
+        $chat = $m['chat']['id'];
+        $have = [];
+        $miss = [];
+        foreach (self::usedEmojis() as $e) {
+            ($id = UI::emojiId($e)) ? $have[] = '<code>' . UI::esc($e) . '</code> ← <tg-emoji emoji-id="' . $id . '">' . UI::esc($e) . '</tg-emoji>' : $miss[] = $e;
+        }
+        foreach (array_chunk($have, 40) as $chunk) {
+            TG::send($chat, implode("\n", $chunk));
+        }
+        TG::send($chat, '🎨 <b>ایموجی‌های ربات</b>' . "\n\n✅ پریمیوم: <b>" . count($have) . '</b>' . "\n❌ بدون پریمیوم: <b>" . count($miss) . '</b>'
+            . ($miss ? "\n<blockquote expandable><code>" . UI::esc(implode(' ', $miss)) . '</code></blockquote>' : '')
+            . "\n\n✏️ برای تنظیم: ایموجی معمولی و بعدش ایموجی پریمیوم دلخواه را کنار هم بفرستید، مثلا:\n<code>🎨</code> + پریمیوم   <code>🖼</code> + پریمیوم\nچند جفت در یک پیام هم قبول است.");
+    }
+
     public static function emojiPack(array $m, string $name): void
     {
         $chat = $m['chat']['id'];
@@ -224,7 +285,7 @@ final class Admin
         }
         $k = Store::put(['pm' => $pm, 'name' => $name], 3600);
         $txt = "📦 <b>پک " . UI::esc($name) . "</b>\n🔢 ایموجی‌های پک: <b>" . count($pm) . "</b>\n✅ ایموجی‌های ربات که با این پک پریمیوم می‌شوند: <b>" . count($hit) . '</b> از ' . count($used)
-            . ($miss ? "\n⚠️ در این پک نیست: " . UI::esc(implode(' ', array_slice($miss, 0, 60))) : '');
+            . ($miss ? "\n⚠️ در این پک نیست: <code>" . UI::esc(implode(' ', array_slice($miss, 0, 60))) . '</code>' : '');
         TG::send($chat, $txt, UI::kb([[UI::raw('✅ اعمال روی ربات', "adm:epa:$k", 'success'), UI::raw('❌ لغو', 'adm:epx', 'danger')],
             [UI::raw('♻️ حذف پک‌های واردشده', 'adm:epr')]]));
     }

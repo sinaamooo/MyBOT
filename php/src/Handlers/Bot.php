@@ -15,7 +15,7 @@ final class Bot
         'scam' => ['Scam', 'cmd'], 'report' => ['Scam', 'cmd'], 'کلاهبردار' => ['Scam', 'cmd'],
         'check' => ['Scam', 'check'], 'estelam' => ['Scam', 'check'], 'استعلام' => ['Scam', 'check'],
         'settings' => ['Groups', 'settings'], 'تنظیمات' => ['Groups', 'settings'],
-        'panel' => ['Admin', 'panel'], 'admin' => ['Admin', 'panel'], 'پنل' => ['Admin', 'panel'],
+        'panel' => ['Admin', 'panel'], 'admin' => ['Admin', 'panel'], 'پنل' => ['Admin', 'panel'], 'emojis' => ['Admin', 'emojiStatus'], 'ایموجی‌ها' => ['Admin', 'emojiStatus'],
         'unscam' => ['Admin', 'unscam'], 'addbalance' => ['Admin', 'addBalance'], 'setrate' => ['Admin', 'setRate'],
         'card' => ['Extras', 'card'], 'cart' => ['Extras', 'card'], 'kart' => ['Extras', 'card'], 'کارت' => ['Extras', 'card'],
         'phone' => ['Extras', 'phone'], 'number' => ['Extras', 'phone'], 'shomare' => ['Extras', 'phone'], 'شماره' => ['Extras', 'phone'],
@@ -402,6 +402,9 @@ final class Bot
         }
         if ($priv && Config::isAdmin($uid) && preg_match('~(?:t\.me|telegram\.me)/(?:addemoji|addstickers)/([A-Za-z0-9_]{1,64})~i', $text, $pk)) {
             Admin::emojiPack($m, $pk[1]);
+            return;
+        }
+        if ($priv && Config::isAdmin($uid) && !State::get($uid) && !empty($m['entities']) && Admin::emojiPairs($m)) {
             return;
         }
         if ($uid && ($text === '' || $text[0] !== '/') && isset($m['reply_to_message']) && self::answered($m, $text)) {

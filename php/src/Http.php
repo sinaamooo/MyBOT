@@ -307,6 +307,9 @@ final class TG
             }
             unset($row);
         }
+        if ($method === 'answerCallbackQuery' && isset($p['text']) && is_string($p['text'])) {
+            $p['text'] = UI::stripEmoji($p['text']) ?: null;
+        }
         $quick = !empty($p['__quick']);
         unset($p['__quick']);
         if ($quick && self::$hook && Config::get('QUICK_REPLY', '1') !== '0' && in_array($method, self::QUICK, true)) {
