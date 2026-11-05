@@ -131,6 +131,14 @@ SQL);
             unset(self::$kv['emoji_map']);
             self::kvSet('schema_v', 2);
         }
+        if ((int)(self::$kv['schema_v'] ?? 0) < 3) {
+            foreach (['emoji_map', 'emoji_invalid', 'emoji_checked_at'] as $k) {
+                self::$pdo->prepare('DELETE FROM kv WHERE k = ?')->execute([$k]);
+                unset(self::$kv[$k]);
+            }
+            self::$pdo->exec("DELETE FROM cache WHERE k LIKE 'fid:%' OR k LIKE 'gpc:%'");
+            self::kvSet('schema_v', 3);
+        }
     }
 
     public static function pdo(): PDO

@@ -36,19 +36,19 @@
   "desc": "عدم عضویت (پاپ‌آپ)"
  },
  "conv_crypto": {
-  "text": "‏{coin_icon} <b>{amount} {title}</b> = <b>{toman}</b> تومان\n\n<blockquote>🔴    ترون: <code>{trx}</code> TRX\n💠    تون: <code>{ton}</code> TON\n💲    دلار: <code>{usd}</code> $\n⭐️    استارز: <code>{stars}</code> Stars</blockquote>\n🗓 {time}",
+  "text": "‏{coin_icon} <b>{amount} {title}</b> = <b>{toman}</b> تومان\n\n<blockquote>{trx_icon}    ترون: <code>{trx}</code> TRX\n{ton_icon}    تون: <code>{ton}</code> TON\n{usd_icon}    دلار: <code>{usd}</code> $\n⭐️    استارز: <code>{stars}</code> Stars</blockquote>\n🗓 {time}",
   "desc": "تبدیل ارز دیجیتال ({coin_icon} {amount} {symbol} {title} {name} {toman} {trx} {ton} {usd} {stars} {price_usd} {price_toman} {change} {time})"
  },
  "conv_toman": {
-  "text": "{icon} <b>{amount} {unit}</b>\n\n<blockquote>{usdt_icon}    تتر: <code>{usdt}</code> USDT\n💠    تون: <code>{ton}</code> TON\n🔴    ترون: <code>{trx}</code> TRX</blockquote>\n🗓 {time}",
+  "text": "{icon} <b>{amount} {unit}</b>\n\n<blockquote>{usdt_icon}    تتر: <code>{usdt}</code> USDT\n{ton_icon}    تون: <code>{ton}</code> TON\n{trx_icon}    ترون: <code>{trx}</code> TRX</blockquote>\n🗓 {time}",
   "desc": "تبدیل تومان ({amount} {unit} {usdt} {ton} {trx} {usdt_rate} {time})"
  },
  "conv_stars": {
-  "text": "⭐️ <b>{amount} استارز</b> = <b>{toman}</b> تومان\n\n<blockquote>💵    دلار: <code>{usd}</code> $\n💠    تون: <code>{ton}</code> TON\n🔴    ترون: <code>{trx}</code> TRX</blockquote>\n🗓 {time}",
+  "text": "⭐️ <b>{amount} استارز</b> = <b>{toman}</b> تومان\n\n<blockquote>{usd_icon}    دلار: <code>{usd}</code> $\n{ton_icon}    تون: <code>{ton}</code> TON\n{trx_icon}    ترون: <code>{trx}</code> TRX</blockquote>\n🗓 {time}",
   "desc": "تبدیل استارز ({amount} {toman} {usd} {ton} {trx} {star_usd} {time})"
  },
  "conv_fiat": {
-  "text": "{icon} <b>{amount} {name}</b> = <b>{toman}</b> تومان\n\n<blockquote>💵    دلار: <code>{usd}</code> $\n💠    تون: <code>{ton}</code> TON\n🔴    ترون: <code>{trx}</code> TRX\n⭐️    استارز: <code>{stars}</code> Stars</blockquote>\n🗓 {time}",
+  "text": "{icon} <b>{amount} {name}</b> = <b>{toman}</b> تومان\n\n<blockquote>{usd_icon}    دلار: <code>{usd}</code> $\n{ton_icon}    تون: <code>{ton}</code> TON\n{trx_icon}    ترون: <code>{trx}</code> TRX\n⭐️    استارز: <code>{stars}</code> Stars</blockquote>\n🗓 {time}",
   "desc": "کپشن کارت ارز کشورها ({flag} {amount} {name} {code} {toman} {unit_toman} {usd} {ton} {trx} {stars} {time})"
  },
  "market": {
@@ -76,11 +76,11 @@
   "desc": "سربرگ چکر ولت ({address} {count})"
  },
  "wallet_chain": {
-  "text": "{chain_icon} <b>{chain}</b>\n<blockquote>💰    موجودی: <code>{balance}</code> {symbol}\n💵    ارزش دلاری: <code>{usd}</code> $\n🇮🇷    ارزش تومانی: <code>{toman}</code> تومان\n🪙    توکن‌ها:\n{tokens}\n💱    تعداد تراکنش: <code>{txs}</code>\n{nft_icon}    NFT: <code>{nfts}</code>\n⌛️    تاریخ ساخت ولت: {created}\n🏷    وضعیت: {status}\n🔗    <a href=\"{explorer}\">مشاهده در اکسپلورر</a></blockquote>",
+  "text": "{chain_icon} <b>{chain}</b>\n<blockquote>💰    موجودی: <code>{balance}</code> {symbol}\n{usd_icon}    ارزش دلاری: <code>{usd}</code> $\n{toman_icon}    ارزش تومانی: <code>{toman}</code>\n💱    تعداد تراکنش: <code>{txs}</code>\n{nft_icon}    NFT: <code>{nfts}</code>\n⌛️    تاریخ ساخت ولت: {created}\n🏷    وضعیت: {status}\n🔗    <a href=\"{explorer}\">مشاهده در اکسپلورر</a></blockquote>",
   "desc": "بلوک هر شبکه در چکر ولت ({chain} {balance} {symbol} {usd} {toman} {tokens} {txs} {nfts} {status} {explorer})"
  },
  "wallet_footer": {
-  "text": "📊 <b>مجموع دارایی</b>\n<blockquote>💵    دلار: <code>{total_usd}</code> $\n🇮🇷    تومان: <code>{total_toman}</code> تومان</blockquote>\n🗓 {time}",
+  "text": "📊 <b>مجموع دارایی</b>\n<blockquote>{usd_icon}    دلار: <code>{total_usd}</code> $\n{toman_icon}    تومان: <code>{total_toman}</code></blockquote>\n🗓 {time}",
   "desc": "پاورقی چکر ولت ({total_usd} {total_toman} {time})"
  },
  "wallet_not_found": {
@@ -92,7 +92,7 @@
   "desc": "در حال چک هش"
  },
  "tx_result": {
-  "text": "🔗 <b>نتیجه چکر هش تراکنش</b>\n<blockquote>🌐    شبکه: <b>{network}</b>\n🏷    وضعیت: {status}\n💸    مقدار: <code>{amount}</code>\n💵    ارزش دلاری: <code>{usd}</code> $\n🇮🇷    ارزش تومانی: <code>{toman}</code> تومان\n🪙    توکن: {token}\n📋    کانترکت / آیدی توکن: <code>{contract}</code>\n📤    از: <code>{sender}</code>\n📥    به: <code>{receiver}</code>\n🔥    کارمزد: <code>{fee}</code>\n🗄    بلاک: <code>{block}</code>\n✅    تاییدها: <code>{confirmations}</code>\n🗓    زمان: {time}</blockquote>\n🔑 <code>{hash}</code>\n🔍 <a href=\"{explorer}\">مشاهده در اکسپلورر</a>",
+  "text": "🔗 <b>نتیجه چکر هش تراکنش</b>\n<blockquote>🌐    شبکه: <b>{network}</b>\n🏷    وضعیت: {status}\n💸    مقدار: <code>{amount}</code>\n{usd_icon}    ارزش دلاری: <code>{usd}</code> $\n{toman_icon}    ارزش تومانی: <code>{toman}</code>\n🪙    توکن: {token}\n📋    کانترکت / آیدی توکن: <code>{contract}</code>\n📤    از: <code>{sender}</code>\n📥    به: <code>{receiver}</code>\n🔥    کارمزد: <code>{fee}</code>\n🗄    بلاک: <code>{block}</code>\n✅    تاییدها: <code>{confirmations}</code>\n🗓    زمان: {time}</blockquote>\n🔑 <code>{hash}</code>\n🔍 <a href=\"{explorer}\">مشاهده در اکسپلورر</a>",
   "desc": "نتیجه چک هش ({network} {status} {amount} {usd} {toman} {sender} {receiver} {fee} {block} {confirmations} {time} {hash} {explorer})"
  },
  "tx_not_found": {
@@ -204,11 +204,11 @@
   "desc": "پیام مدیر به کاربر ({text})"
  },
  "gift_link": {
-  "text": "🎁 <b>{name} #{number}</b>\n<blockquote>🧙    مدل: <b>{model}</b> {model_rarity}\n🧩    بک‌دراپ: <b>{backdrop}</b> {backdrop_rarity}\n💫    سیمبل: <b>{symbol}</b> {symbol_rarity}\n👤    مالک: {owner}\n🗄    تعداد: {quantity}</blockquote>\n<blockquote>📉    کف کالکشن: <code>{floor_ton}</code> TON\n👑    کف مدل: <code>{model_floor}</code> TON\n🥧    کف بک‌دراپ: <code>{backdrop_floor}</code> TON\n🔹    کف سیمبل: <code>{symbol_floor}</code> TON</blockquote>\n🏷 <b>ارزش تخمینی:</b>\n💎 <code>{est_ton}</code> TON\n💵 <code>{est_usd}</code> $\n💰 <code>{est_toman}</code> تومان\n⭐️ <code>{est_stars}</code> Stars\n🔗 {link}",
+  "text": "🎁 <b>{name} #{number}</b>\n<blockquote>🧙    مدل: <b>{model}</b> {model_rarity}\n🧩    بک‌دراپ: <b>{backdrop}</b> {backdrop_rarity}\n💫    سیمبل: <b>{symbol}</b> {symbol_rarity}\n👤    مالک: {owner}\n🗄    تعداد: {quantity}</blockquote>\n<blockquote>📉    کف کالکشن: <code>{floor_ton}</code> TON\n👑    کف مدل: <code>{model_floor}</code> TON\n🥧    کف بک‌دراپ: <code>{backdrop_floor}</code> TON\n🔹    کف سیمبل: <code>{symbol_floor}</code> TON</blockquote>\n🏷 <b>ارزش تخمینی:</b>\n{ton_icon} <code>{est_ton}</code> TON\n{usd_icon} <code>{est_usd}</code> $\n{toman_icon} <code>{est_toman}</code> تومان\n⭐️ <code>{est_stars}</code> Stars\n🔗 {link}",
   "desc": "قیمت لینک گیفت ({name} {number} {model} {model_rarity} {backdrop} {backdrop_rarity} {symbol} {symbol_rarity} {owner} {quantity} {floor_ton} {model_floor} {backdrop_floor} {symbol_floor} {est_ton} {est_usd} {est_toman} {est_stars} {link})"
  },
  "gift_user_caption": {
-  "text": "👑 <b>کلکسیون گیفت {name}</b>\n🗄 تعداد: <b>{count}</b> (یونیک: {unique_count})\n💎 ارزش کل: <code>{total_ton}</code> TON\n💵 <code>{total_usd}</code> $ | 💰 <code>{total_toman}</code> ت\n{pl_line}\n{change_line}\n{links}",
+  "text": "👑 <b>کلکسیون گیفت {name}</b>\n🗄 تعداد: <b>{count}</b> (یونیک: {unique_count})\n{ton_icon} ارزش کل: <code>{total_ton}</code> TON\n{usd_icon} <code>{total_usd}</code> $\n{toman_icon} <code>{total_toman}</code> تومان\n{pl_line}\n{change_line}\n{links}",
   "desc": "کپشن کارت گیفت‌های کاربر ({name} {count} {unique_count} {total_ton} {total_usd} {total_toman} {pl_line} {change_line} {links})"
  },
  "gift_profit": {
@@ -376,7 +376,7 @@
   "desc": "فقط ادمین (پاپ‌آپ)"
  },
  "conv_gold": {
-  "text": "{icon} <b>{amount} {name}</b> = <b>{toman}</b> تومان\n\n<blockquote>💵    دلار: <code>{usd}</code> $\n📈    تغییر ۲۴ ساعته: {change}</blockquote>\n🗓 {time}",
+  "text": "{icon} <b>{amount} {name}</b> = <b>{toman}</b> تومان\n\n<blockquote>{usd_icon}    دلار: <code>{usd}</code> $\n📈    تغییر ۲۴ ساعته: {change}</blockquote>\n🗓 {time}",
   "desc": "کپشن طلا و سکه ({amount} {name} {toman} {usd} {change} {time})"
  },
  "premium_prices": {

@@ -171,11 +171,9 @@ final class Tools
         $total = 0.0;
         foreach ($found as $r) {
             $total += Wallets::totalUsd($r);
-            $tokens = implode("\n", array_map(fn($t) => UI::badge((string)$t['symbol'], '🔹') . '    <code>' . Fmt::num($t['amount']) . '</code> ' . UI::esc($t['symbol']) . ($t['usd'] ? '  ≈ <code>' . Fmt::usd($t['usd']) . '</code> $' : ''), array_slice($r['tokens'], 0, 12)));
             $parts[] = UI::t('wallet_chain', [
                 'chain_icon' => UI::badge($r['symbol'], '🔷'), 'chain' => UI::esc($r['chain']), 'balance' => Fmt::num($r['balance']), 'symbol' => $r['symbol'],
                 'usd' => $r['usd'] !== null ? Fmt::usd($r['usd']) : null, 'toman' => $r['usd'] !== null && $rate ? Fmt::toman($r['usd'] * $rate) : null,
-                'tokens' => $tokens !== '' ? $tokens : null,
                 'txs' => is_numeric($r['txs']) ? Fmt::int($r['txs']) : ($r['txs'] ?: null),
                 'nft_icon' => UI::badge('NFT', '🎞'), 'nfts' => $r['nfts'] ? Fmt::int($r['nfts']) : null, 'created' => $r['created'] ? Fmt::jalali($r['created']) : null,
                 'status' => $r['status'], 'explorer' => UI::attr($r['explorer']),

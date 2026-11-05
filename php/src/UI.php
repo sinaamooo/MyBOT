@@ -40,8 +40,18 @@ final class UI
         return [array_column($opened, 1), $closing];
     }
 
+    const ICONS = ['toman' => '🇮🇷', 'usd' => '🇺🇸', 'usdt' => '💵', 'ton' => '💠', 'trx' => '🔴', 'btc' => '🪙', 'eth' => '💎', 'sol' => '🌟',
+        'nft' => '🎞', 'premium' => '💫', 'gold' => '🏅', 'wallet' => '👛', 'irr' => '💰'];
+
     public static function fill(string $template, array $values = []): string
     {
+        if (str_contains($template, '_icon}') && preg_match_all('/\{([a-z]+)_icon\}/', $template, $im)) {
+            foreach (array_unique($im[1]) as $k) {
+                if (!array_key_exists($k . '_icon', $values) && isset(self::ICONS[$k])) {
+                    $values[$k . '_icon'] = self::badge(strtoupper($k), self::ICONS[$k]);
+                }
+            }
+        }
         $out = [];
         $carry = '';
         foreach (explode("\n", $template) as $line) {
@@ -124,7 +134,7 @@ final class UI
 
     public static function validateEmoji(): ?array
     {
-        $ids = array_values(array_unique(array_map('strval', Settings::get('emoji_map') ?: [])));
+        $ids = array_values(array_unique(array_map('strval', array_merge(array_values(Settings::get('emoji_map') ?: []), array_values(Config::data('badges'))))));
         $valid = [];
         foreach (array_chunk($ids, 200) as $chunk) {
             $r = TG::api('getCustomEmojiStickers', ['custom_emoji_ids' => $chunk]);
@@ -143,8 +153,10 @@ final class UI
 
     public static function badge(string $sym, string $fallback = '🪙'): string
     {
+        static $bad = null;
+        $bad ??= array_flip(array_map('strval', (array)(Settings::get('emoji_invalid') ?: [])));
         $id = Config::data('badges')[strtoupper($sym)] ?? null;
-        return $id ? '<tg-emoji emoji-id="' . $id . '">' . $fallback . '</tg-emoji>' : $fallback;
+        return $id && !isset($bad[$id]) ? '<tg-emoji emoji-id="' . $id . '">' . $fallback . '</tg-emoji>' : $fallback;
     }
 
     public static function resetEmoji(): void
@@ -172,7 +184,7 @@ final class UI
         $quote = 0;
         $used = false;
         $out = '';
-        foreach ($chunks as $c) {
+        foreach ($chunks as $ci => $c) {
             if ($c !== '' && $c[0] === '<' && str_ends_with($c, '>')) {
                 if (preg_match('/^<(\/?)\s*([a-zA-Z][a-zA-Z0-9-]*)/', $c, $nm)) {
                     $tag = strtolower($nm[2]);
@@ -195,14 +207,34 @@ final class UI
                 $out .= $c;
                 continue;
             }
-            $out .= preg_replace_callback('/\n|' . substr($rx, 1, -2) . '/u', function ($m) use ($lookup, $quote, &$used, $c) {
+            $follow = '';
+            for ($j = $ci + 1; $j < count($chunks); $j++) {
+                if ($chunks[$j] === '') {
+                    continue;
+                }
+                if ($chunks[$j][0] === '<') {
+                    if (preg_match('~^</?(blockquote)\b~i', $chunks[$j])) {
+                        break;
+                    }
+                    continue;
+                }
+                $follow = $chunks[$j];
+                break;
+            }
+            $out .= preg_replace_callback('/\n|' . substr($rx, 1, -2) . '/u', function ($m) use ($lookup, $quote, &$used, $c, $follow) {
                 [$e, $at] = $m[0];
                 if ($e === "\n") {
                     $used = false;
                     return $e;
                 }
-                $next = substr($c, $at + strlen($e), 1);
-                $pad = $quote && $used && $next !== '' && $next !== "\n" ? ' ' : '';
+                $after = substr($c, $at + strlen($e));
+                $sp = strspn($after, ' ');
+                $next = substr($after, $sp, 1);
+                if ($next === '') {
+                    $sp += strspn($follow, ' ');
+                    $next = substr($follow, strspn($follow, ' '), 1);
+                }
+                $pad = ($quote && $next !== '' && $next !== "\n") ? str_repeat(' ', max(0, 4 - $sp)) : '';
                 $used = true;
                 $id = $lookup[str_replace("\u{FE0F}", '', $e)] ?? '';
                 return '<tg-emoji emoji-id="' . $id . '">' . $e . '</tg-emoji>' . $pad;
@@ -260,6 +292,9 @@ final class UI
         }
         if ($emoji && $lead !== '') {
             $text = $rest;
+        } elseif (!$emoji && ($solo = self::emojiId(trim($text)))) {
+            $emoji = $solo;
+            $text = "\u{3164}";
         }
         $b = ['text' => $text];
         if (!empty($o['url'])) {

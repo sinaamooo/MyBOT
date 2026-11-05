@@ -107,7 +107,7 @@ final class Convert
         $chg = Market::usdtChange();
         $inv = $chg !== null && $chg > -100 ? (1 / (1 + $chg / 100) - 1) * 100 : 0.0;
         $text = UI::t('conv_toman', [
-            'icon' => $tag === 'IRR' ? UI::badge('IRR', '💰') : '💰',
+            'icon' => UI::badge($tag === 'IRR' ? 'IRR' : 'TOMAN', '💰'),
             'usdt_icon' => UI::badge('USDT', '💵'),
             'amount' => Fmt::toman($shown),
             'unit' => $tag === 'IRR' ? 'ریال' : 'تومان',
@@ -165,7 +165,7 @@ final class Convert
         $toman = $px ? $amount * $px['toman'] : null;
         $isUsd = $code === 'USD';
         $text = UI::t('conv_fiat', [
-            'icon' => UI::badge($code, '💱'),
+            'icon' => UI::badge($code, Currencies::flag($f['cc']) ?: '💱'),
             'flag' => Currencies::flag($f['cc']),
             'amount' => Fmt::num($amount),
             'name' => $f['fa'],

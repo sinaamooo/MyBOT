@@ -455,20 +455,14 @@ final class Extras
         $n ? self::answerPhone($m, $n) : Bot::send($m, UI::t('phone_invalid'), null);
     }
 
-    const PHONE_ICON = ['🟢' => '🟢', '⚪' => '✔️', '🟡' => '⏳', '🔴' => '🔴', '⚫' => '⛔️', '🟣' => '❌', '🔵' => '🔵'];
-    const ARZ_FAMILY = ['CAD' => 'USD', 'AUD' => 'USD', 'OMR' => 'IRR', 'QAR' => 'IRR'];
-
+    const PHONE_ICON = ['🟢' => '🟢', '⚪' => '✅', '🟡' => '⏳', '🔴' => '🔴', '⚫' => '⛔️', '🟣' => '❌', '🔵' => '🔵'];
     private static function arzIcon(string $code, string $cc): string
     {
-        $b = Config::data('badges');
-        if (isset($b[$code])) {
-            return UI::badge($code);
-        }
-        if (isset(self::ARZ_FAMILY[$code])) {
-            return UI::badge(self::ARZ_FAMILY[$code]);
-        }
         $flag = Currencies::flag($cc);
-        return UI::emojiId($flag) ? $flag : '🪙';
+        if (isset(Config::data('badges')[$code])) {
+            return UI::badge($code, $flag ?: '🪙');
+        }
+        return $flag !== '' && $flag !== '🏳' ? $flag : '🪙';
     }
 
     public static function arz(array $m, string $args = ''): void

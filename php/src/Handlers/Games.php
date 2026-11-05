@@ -647,7 +647,7 @@ final class Games
         $entry = (float)$g['entry'];
         $reward = (float)$g['reward'];
         $next = $picks < 8 ? max(0, self::mineReward($entry, $picks + 1) - $reward) : 0;
-        return UI::t('gm_mine_active', ['name' => UI::esc($g['name']), 'picks' => $picks, 'progress' => str_repeat('🟩', $picks) . str_repeat('🔲', 8 - $picks),
+        return UI::t('gm_mine_active', ['name' => UI::esc($g['name']), 'picks' => $picks, 'progress' => str_repeat('🟢', $picks) . str_repeat('🔲', 8 - $picks),
             'entry' => Fmt::int($entry), 'reward' => Fmt::int($reward), 'mult' => $entry > 0 ? round($reward / $entry, 2) : 0,
             'shield' => $picks >= self::MINE_PROTECT ? UI::plain('gm_shield_on') : UI::plain('gm_shield_off', ['n' => self::MINE_PROTECT - $picks]), 'next' => Fmt::int($next)]);
     }

@@ -25,27 +25,27 @@
   "desc": "دکمه راهنما"
  },
  "lang_fa": {
-  "text": "🇮🇷 فارسی",
+  "text": "🇮🇷",
   "style": "primary",
   "desc": "زبان فارسی"
  },
  "lang_en": {
-  "text": "🇬🇧 انگلیسی",
+  "text": "🇬🇧",
   "style": "primary",
   "desc": "زبان انگلیسی"
  },
  "lang_ru": {
-  "text": "🇷🇺 روسی",
+  "text": "🇷🇺",
   "style": "primary",
   "desc": "زبان روسی"
  },
  "lang_zh": {
-  "text": "🇨🇳 چینی",
+  "text": "🇨🇳",
   "style": "success",
   "desc": "زبان چینی"
  },
  "lang_ar": {
-  "text": "🇸🇦 عربی",
+  "text": "🇸🇦",
   "style": "success",
   "desc": "زبان عربی"
  },
@@ -105,13 +105,13 @@
   "desc": "دکمه تراکنش‌های ولت ترون"
  },
  "btn_prev": {
-  "text": "قبلی",
-  "style": null,
+  "text": "➡️ قبلی",
+  "style": "danger",
   "desc": "دکمه صفحه قبل"
  },
  "btn_next": {
-  "text": "بعدی",
-  "style": null,
+  "text": "⬅️ بعدی",
+  "style": "success",
   "desc": "دکمه صفحه بعد"
  },
  "btn_insta_story": {
