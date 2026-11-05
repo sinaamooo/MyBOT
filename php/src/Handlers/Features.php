@@ -521,7 +521,9 @@ final class Extras
     private static function instaCaption(array $x, int $count): string
     {
         $dur = isset($x['duration']) && $x['duration'] > 0 ? sprintf('%d:%02d', intdiv((int)round($x['duration']), 60), (int)round($x['duration']) % 60) : null;
-        $text = trim(preg_replace('/\s+/u', ' ', (string)($x['text'] ?? '')));
+        $text = UI::stripEmoji((string)($x['text'] ?? ''));
+        $text = preg_replace('/(?:[-_=~•*.·|]\s*){3,}/u', ' ', $text);
+        $text = trim(preg_replace('/\s+/u', ' ', $text));
         if (mb_strlen($text) > 300) {
             $text = mb_substr($text, 0, 300) . '…';
         }

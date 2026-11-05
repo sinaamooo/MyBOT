@@ -168,6 +168,12 @@ final class UI
         self::$rx = null;
     }
 
+    public static function stripEmoji(?string $s): string
+    {
+        $s = preg_replace('/[\x{1F000}-\x{1FAFF}\x{2600}-\x{27BF}\x{2B00}-\x{2BFF}\x{2190}-\x{21FF}\x{2300}-\x{23FF}\x{25A0}-\x{25FF}\x{2934}\x{2935}\x{3030}\x{303D}\x{3297}\x{3299}\x{203C}\x{2049}\x{2122}\x{2139}\x{FE0F}\x{FE0E}\x{200D}\x{20E3}\x{E0020}-\x{E007F}]/u', '', (string)$s);
+        return trim(preg_replace('/[ \t]{2,}/u', ' ', (string)$s));
+    }
+
     public static function emojiChar(string $id): ?string
     {
         foreach (Settings::get('emoji_map') ?: [] as $c => $v) {

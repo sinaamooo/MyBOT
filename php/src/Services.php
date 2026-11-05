@@ -791,15 +791,32 @@ final class Instagram
             'embed' => self::req(['url' => "https://www.instagram.com/p/$sc/embed/captioned/", 'headers' => self::browser()]),
             'page' => self::req(['url' => "https://www.instagram.com/p/$sc/", 'headers' => self::browser(), 'want_headers' => true]),
         ]);
+        $wantVideo = (bool)preg_match('~/(?:reel|reels|tv)/~i', $link);
+        $hasVideo = fn(array $o) => (bool)array_filter($o, fn($x) => $x['kind'] === 'video');
+        $fallback = null;
+        $meta = [];
+        $take = function (array $out) use ($wantVideo, $hasVideo, &$fallback, &$meta) {
+            if (!$out) {
+                return false;
+            }
+            if (!$wantVideo || $hasVideo($out)) {
+                return true;
+            }
+            if ($fallback === null) {
+                $fallback = $out;
+                $meta = self::$meta;
+            }
+            return false;
+        };
         $d = Http::decode($res['mobile']);
-        if ($out = self::nodes($d['items'][0] ?? null)) {
-            return $out;
-        }
-        if ($out = self::fromEmbed((string)($res['embed']['body'] ?? ''))) {
+        if ($take($out = self::nodes($d['items'][0] ?? null))) {
             return $out;
         }
         $html = (string)($res['page']['body'] ?? '');
-        if ($out = self::fromPage($html)) {
+        if ($take($out = self::fromPage($html))) {
+            return $out;
+        }
+        if ($take($out = self::fromEmbed((string)($res['embed']['body'] ?? '')))) {
             return $out;
         }
         $lsd = self::entry('LSD', $html)['token'] ?? (preg_match('/"lsd":"([^"]+)"/', $html, $lm) ? $lm[1] : rtrim(strtr(base64_encode(random_bytes(8)), '+/', '-_'), '='));
@@ -834,12 +851,16 @@ final class Instagram
                     'variables' => json_encode(['media_id' => $pk], JSON_UNESCAPED_SLASHES)])]),
         ]);
         $g = Http::decode($res2['gql']);
-        if ($out = self::nodes($g['data']['xdt_shortcode_media'] ?? $g['data']['shortcode_media'] ?? null)) {
+        if ($take($out = self::nodes($g['data']['xdt_shortcode_media'] ?? $g['data']['shortcode_media'] ?? null))) {
             return $out;
         }
         $p = Http::decode($res2['polaris']);
-        if ($out = self::nodes($p['data']['xig_polaris_media']['if_not_gated_logged_out'] ?? null)) {
+        if ($take($out = self::nodes($p['data']['xig_polaris_media']['if_not_gated_logged_out'] ?? null))) {
             return $out;
+        }
+        if ($fallback) {
+            self::$meta = $meta;
+            return $fallback;
         }
         error_log('instagram ' . $sc . ': mobile=' . ($res['mobile']['status'] ?? 0) . ' embed=' . ($res['embed']['status'] ?? 0) . ' page=' . ($res['page']['status'] ?? 0)
             . ' gql=' . ($res2['gql']['status'] ?? 0) . ' polaris=' . ($res2['polaris']['status'] ?? 0));

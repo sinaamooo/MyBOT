@@ -175,7 +175,7 @@ final class Tools
                 'usd' => $r['usd'] !== null ? Fmt::usd($r['usd']) : null, 'toman' => $r['usd'] !== null && $rate ? Fmt::toman($r['usd'] * $rate) : null,
                 'txs' => is_numeric($r['txs']) ? Fmt::int($r['txs']) : ($r['txs'] ?: null),
                 'nft_icon' => UI::badge('NFT', '🎞'), 'nfts' => $r['nfts'] ? Fmt::int($r['nfts']) : null, 'created' => $r['created'] ? Fmt::jalali($r['created']) : null,
-                'status' => $r['status'], 'explorer' => UI::attr($r['explorer']),
+                'status' => $r['status'] ? (UI::stripEmoji($r['status']) ?: null) : null, 'explorer' => UI::attr($r['explorer']),
             ]);
         }
         $parts[] = UI::t('wallet_footer', ['total_usd' => Fmt::usd($total), 'total_toman' => $rate ? Fmt::toman($total * $rate) : null, 'time' => Fmt::now()]);
@@ -200,7 +200,7 @@ final class Tools
         $rate = Prices::usdtToman();
         $amount = $tx['amount'] !== null ? Fmt::num($tx['amount']) . ' ' . UI::esc($tx['symbol'] ?? '') : ($tx['symbol'] ? UI::esc($tx['symbol']) : null);
         $text = UI::t('tx_result', [
-            'network' => UI::esc($tx['network']), 'status' => $tx['status'], 'amount' => $amount,
+            'network' => UI::esc($tx['network']), 'status' => UI::stripEmoji($tx['status']) ?: null, 'amount' => $amount,
             'usd' => $tx['usd'] ? Fmt::usd($tx['usd']) : null, 'toman' => $tx['usd'] && $rate ? Fmt::toman($tx['usd'] * $rate) : null,
             'token' => $tx['token_type'] ? UI::esc(($tx['token_name'] ?: $tx['symbol']) . ' (' . $tx['token_type'] . ')') : null,
             'contract' => $tx['contract'] ? UI::esc($tx['contract']) : null,

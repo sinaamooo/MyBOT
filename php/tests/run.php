@@ -298,7 +298,7 @@ $prompt = sent(['sendMessage'])[0];
 check(array_map('count', $prompt[1]['reply_markup']['inline_keyboard']) === [3, 2], 'translate 3+2');
 $tk = $prompt[1]['reply_markup']['inline_keyboard'];
 check(array_column($tk[0], 'style') === ['primary', 'primary', 'primary'] && array_column($tk[1], 'style') === ['success', 'success']
-    && $tk[0][0]['icon_custom_emoji_id'] === '5143448346001671955' && $tk[1][1]['icon_custom_emoji_id'] === '5143404335471790574' && $tk[0][0]['text'] === "\u{3164}" && $tk[1][0]['text'] === '🇨🇳', 'translate flag-only buttons');
+    && $tk[0][0]['icon_custom_emoji_id'] === '5143448346001671955' && $tk[1][1]['icon_custom_emoji_id'] === '5143404335471790574' && $tk[0][0]['text'] === "\u{3164}" && ($tk[1][0]['icon_custom_emoji_id'] ?? '') === '5294068833277990704', 'translate flag-only buttons');
 $pmid = $GLOBALS['mid'] - 0;
 $row = DB::one('SELECT message_id FROM translations ORDER BY created_at DESC LIMIT 1');
 reset_calls();
@@ -690,6 +690,15 @@ feed(msg('https://www.instagram.com/p/QQQ111/', -900, 98));
 $pho = array_values(array_filter($GLOBALS['calls'], fn($c) => $c[0] === 'sendPhoto' && ($c[1]['photo'] ?? '') === 'https://cdn/p.jpg?a=1&b=2'));
 check(count($pho) === 1, 'instagram embed fallback');
 unset($GLOBALS['http']['/embed/captioned/']);
+$GLOBALS['http']['/embed/captioned/'] = '<div><img class="EmbeddedMediaImage" alt="x" src="https://cdn/thumb.jpg"></div>';
+$GLOBALS['http']['instagram.com/graphql/query'] = ['data' => ['xdt_shortcode_media' => ['is_video' => true, 'video_url' => 'https://cdn/reel.mp4', 'display_url' => 'https://cdn/thumb.jpg', 'product_type' => 'clips',
+    'owner' => ['username' => 'coach'], 'like_count' => 5, 'edge_media_to_caption' => ['edges' => [['node' => ['text' => "🚨 Deadlifts All day 🏆✨ ---\n- - - - - - - - - -\n#gym"]]]]]]];
+reset_calls();
+feed(msg('https://www.instagram.com/reel/RRR555/', -900, 101));
+$rv = array_values(array_filter($GLOBALS['calls'], fn($c) => $c[0] === 'sendVideo'));
+$rcap = $rv[0][1]['caption'] ?? '';
+check(($rv[0][1]['video'] ?? '') === 'https://cdn/reel.mp4' && !array_filter($GLOBALS['calls'], fn($c) => $c[0] === 'sendPhoto') && str_contains($rcap, 'Deadlifts All day #gym') && !str_contains($rcap, '🏆') && !str_contains($rcap, '- - -'), 'reel prefers video over thumbnail, clean caption');
+unset($GLOBALS['http']['/embed/captioned/'], $GLOBALS['http']['instagram.com/graphql/query']);
 $GLOBALS['http']['i.instagram.com/api/v1/media/' . Instagram::mediaId('MOB123') . '/info/'] = ['items' => [['carousel_media' => [
     ['video_versions' => [['url' => 'https://cdn/small.mp4', 'width' => 320, 'height' => 240], ['url' => 'https://cdn/big.mp4', 'width' => 1080, 'height' => 1920]], 'image_versions2' => ['candidates' => [['url' => 'https://cdn/t.jpg']]]],
     ['image_versions2' => ['candidates' => [['url' => 'https://cdn/c2.jpg', 'width' => 1080, 'height' => 1080], ['url' => 'https://cdn/c2s.jpg', 'width' => 320, 'height' => 320]]]]]]]];
