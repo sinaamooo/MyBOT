@@ -18,46 +18,97 @@ final class Txs
         return rtrim(rtrim(sprintf('%.8f', $v), '0'), '.') ?: '0';
     }
 
-    private static function tokenMeta(array $chain, string $contract): array
+    private static function knownToken(array $chain, string $contract): ?array
     {
         foreach ($chain['tokens'] as $sym => [$addr, $dec]) {
             if (strtolower($addr) === strtolower($contract)) {
                 return [$sym, $dec];
             }
         }
-        return Cache::remember('tok:' . $chain['key'] . ':' . strtolower($contract), 86400 * 7, function () use ($chain, $contract) {
-            $r = Chain::batch($chain['rpcs'], [['eth_call', [['to' => $contract, 'data' => '0x95d89b41'], 'latest']], ['eth_call', [['to' => $contract, 'data' => '0x313ce567'], 'latest']]]);
-            return [Chain::abiString($r[0]) ?? 'TOKEN', ($r[1] && $r[1] !== '0x') ? (int)Chain::hexInt($r[1]) : 18];
-        });
+        $v = Cache::get('tok:' . $chain['key'] . ':' . strtolower($contract), $hit);
+        return $hit && is_array($v) ? $v : null;
     }
+
+    private static function tokenMeta(array $chain, string $contract, ?array $raw = null): array
+    {
+        if ($m = self::knownToken($chain, $contract)) {
+            return $m;
+        }
+        $r = $raw ?? Chain::batch($chain['rpcs'], [['eth_call', [['to' => $contract, 'data' => '0x95d89b41'], 'latest']], ['eth_call', [['to' => $contract, 'data' => '0x313ce567'], 'latest']]]);
+        $m = [Chain::abiString($r[0] ?? null) ?? 'TOKEN', (($r[1] ?? null) && $r[1] !== '0x') ? (int)Chain::hexInt($r[1]) : 18];
+        if (($r[0] ?? null) !== null || ($r[1] ?? null) !== null) {
+            Cache::set('tok:' . $chain['key'] . ':' . strtolower($contract), $m, 86400 * 7);
+        }
+        return $m;
+    }
+
+    const EVM_CALLS = 3;
 
     public static function evmReqs(string $h, int $timeout = 4): array
     {
+        $calls = [['eth_getTransactionByHash', [$h]], ['eth_getTransactionReceipt', [$h]], ['eth_blockNumber', []]];
         $reqs = [];
         foreach (Chain::evm() as $i => $c) {
             foreach (array_slice($c['rpcs'], 0, 3) as $j => $u) {
-                $reqs["evm|$i|$j"] = Chain::rpcReq($u, 'eth_getTransactionByHash', [$h], $timeout);
+                $reqs["evm|$i|$j"] = Chain::batchReq($u, $calls, $timeout);
             }
         }
         return $reqs;
     }
 
-    public static function evm(string $h): ?array
+    public static function evmHit($d): ?array
     {
-        $hit = Http::race(self::evmReqs($h), fn($k, $d) => !empty($d['result']) && is_array($d['result']) ? $d['result'] : null, 5);
-        return $hit ? self::evmTx(Chain::evm()[(int)explode('|', $hit[0])[1]], $h, $hit[1]) : null;
+        $r = Chain::batchParse($d, self::EVM_CALLS);
+        return $r && !empty($r[0]) && is_array($r[0]) ? $r : null;
     }
 
-    private static function evmTx(array $c, string $h, array $tx): array
+    public static function evm(string $h): ?array
+    {
+        $hit = Http::race(self::evmReqs($h), fn($k, $d) => self::evmHit($d), 5);
+        return $hit ? self::evmTx(Chain::evm()[(int)explode('|', $hit[0])[1]], $h, ...$hit[1]) : null;
+    }
+
+    private static function transferOf(?array $receipt, array $tx): ?array
+    {
+        foreach ($receipt['logs'] ?? [] as $log) {
+            $topics = $log['topics'] ?? [];
+            if (count($topics) === 3 && strtolower($topics[0]) === Chain::TRANSFER) {
+                return [$log['address'], Chain::topicAddr($topics[1]), Chain::topicAddr($topics[2]), $log['data'] ?? '0x0'];
+            }
+        }
+        $input = $tx['input'] ?? '';
+        if (!$receipt && str_starts_with($input, '0xa9059cbb') && strlen($input) >= 138 && !empty($tx['to'])) {
+            return [$tx['to'], $tx['from'] ?? null, '0x' . substr($input, 34, 40), '0x' . substr($input, 74, 64)];
+        }
+        return null;
+    }
+
+    private static function evmTx(array $c, string $h, array $tx, $receipt = null, $head = null): array
     {
         $block = !empty($tx['blockNumber']) ? (int)Chain::hexInt($tx['blockNumber']) : null;
-        $calls = [['eth_getTransactionReceipt', [$h]], ['eth_blockNumber', []]];
+        $receipt = is_array($receipt) ? $receipt : null;
+        $xfer = self::transferOf($receipt, $tx);
+        $calls = [];
         if ($block !== null) {
-            $calls[] = ['eth_getBlockByNumber', ['0x' . dechex($block), false]];
+            $calls['blk'] = ['eth_getBlockByNumber', ['0x' . dechex($block), false]];
+            if (!$receipt) {
+                $calls['rcpt'] = ['eth_getTransactionReceipt', [$h]];
+            }
         }
-        $got = Chain::batch($c['rpcs'], $calls, 4);
-        [$receipt, $head] = $got;
-        $blk = $got[2] ?? null;
+        if ($head === null) {
+            $calls['head'] = ['eth_blockNumber', []];
+        }
+        if ($xfer && !self::knownToken($c, $xfer[0])) {
+            $calls['sym'] = ['eth_call', [['to' => $xfer[0], 'data' => '0x95d89b41'], 'latest']];
+            $calls['dec'] = ['eth_call', [['to' => $xfer[0], 'data' => '0x313ce567'], 'latest']];
+        }
+        $got = $calls ? array_combine(array_keys($calls), Chain::batch($c['rpcs'], array_values($calls), 4)) : [];
+        $head = $head ?? ($got['head'] ?? null);
+        if (!$receipt && is_array($got['rcpt'] ?? null)) {
+            $receipt = $got['rcpt'];
+            $xfer = self::transferOf($receipt, $tx) ?? $xfer;
+        }
+        $blk = $got['blk'] ?? null;
         $status = self::PENDING;
         $fee = null;
         if ($receipt) {
@@ -72,29 +123,14 @@ final class Txs
         $receiver = $tx['to'] ?? null;
         $tokenType = 'COIN';
         $contract = null;
-        $found = false;
-        foreach ($receipt['logs'] ?? [] as $log) {
-            $topics = $log['topics'] ?? [];
-            if (count($topics) === 3 && strtolower($topics[0]) === Chain::TRANSFER) {
-                [$sym, $dec] = self::tokenMeta($c, $log['address']);
-                $amount = Chain::hexInt($log['data'] ?? '0x0') / 10 ** $dec;
-                $symbol = $sym;
-                $sender = Chain::topicAddr($topics[1]);
-                $receiver = Chain::topicAddr($topics[2]);
-                $tokenType = 'TOKEN';
-                $contract = $log['address'];
-                $found = true;
-                break;
-            }
-        }
-        $input = $tx['input'] ?? '';
-        if (!$found && !$receipt && str_starts_with($input, '0xa9059cbb') && strlen($input) >= 138) {
-            [$sym, $dec] = self::tokenMeta($c, $tx['to']);
-            $receiver = '0x' . substr($input, 34, 40);
-            $amount = Chain::hexInt('0x' . substr($input, 74, 64)) / 10 ** $dec;
+        if ($xfer) {
+            [$sym, $dec] = self::tokenMeta($c, $xfer[0], array_key_exists('sym', $got) ? [$got['sym'], $got['dec'] ?? null] : null);
+            $amount = Chain::hexInt($xfer[3]) / 10 ** $dec;
             $symbol = $sym;
+            $sender = $xfer[1] ?? $sender;
+            $receiver = $xfer[2];
             $tokenType = 'TOKEN';
-            $contract = $tx['to'];
+            $contract = $xfer[0];
         }
         $conf = ($head && $block !== null) ? (int)(Chain::hexInt($head) - $block + 1) : 0;
         return self::res($c['name'], $status, $h, $c['explorer'] . '/tx/' . $h, ['amount' => $amount, 'symbol' => $symbol, 'sender' => $sender,
@@ -211,9 +247,14 @@ final class Txs
         return is_array($tx) && !empty($tx['txID']) ? self::tronGridTx($h, $tx) : null;
     }
 
-    private static function tronGridTx(string $h, array $tx): array
+    public static function tronInfoReq(string $h): array
     {
-        $info = Http::postJson('https://api.trongrid.io/wallet/gettransactioninfobyid', ['value' => $h], ['headers' => Chain::tronHeaders(), 'timeout' => 5]) ?: [];
+        return ['url' => 'https://api.trongrid.io/wallet/gettransactioninfobyid', 'method' => 'POST', 'json' => ['value' => $h], 'headers' => Chain::tronHeaders(), 'timeout' => 5];
+    }
+
+    private static function tronGridTx(string $h, array $tx, ?array $info = null): array
+    {
+        $info ??= Http::postJson('https://api.trongrid.io/wallet/gettransactioninfobyid', ['value' => $h], ['headers' => Chain::tronHeaders(), 'timeout' => 5]) ?: [];
         $c = $tx['raw_data']['contract'][0] ?? [];
         $v = $c['parameter']['value'] ?? [];
         $amount = null;
@@ -248,10 +289,25 @@ final class Txs
             'timestamp' => !empty($info['blockTimeStamp']) ? intdiv((int)$info['blockTimeStamp'], 1000) : null, 'token_type' => $type, 'token_name' => $name, 'contract' => $contract]);
     }
 
+    private static function tronAccept(string $h): callable
+    {
+        $grid = $info = null;
+        return function ($k, $d) use ($h, &$grid, &$info) {
+            if ($k === 'scan' || $k === 'tron') {
+                return self::tronscanParse($d, $h);
+            }
+            if ($k === 'grid') {
+                $grid = is_array($d) && !empty($d['txID']) ? $d : false;
+            } elseif ($k === 'ginfo') {
+                $info = is_array($d) ? $d : [];
+            }
+            return ($grid && $info !== null) ? self::tronGridTx($h, $grid, $info) : null;
+        };
+    }
+
     public static function tron(string $h): ?array
     {
-        $hit = Http::race(['scan' => self::tronscanReq($h), 'grid' => self::tronGridReq($h)],
-            fn($k, $d) => $k === 'scan' ? self::tronscanParse($d, $h) : (is_array($d) && !empty($d['txID']) ? self::tronGridTx($h, $d) : null), 6);
+        $hit = Http::race(['scan' => self::tronscanReq($h), 'grid' => self::tronGridReq($h), 'ginfo' => self::tronInfoReq($h)], self::tronAccept($h), 6);
         return $hit ? $hit[1] : null;
     }
 
@@ -405,9 +461,11 @@ final class Txs
     public static function hex64(string $h): ?array
     {
         $lower = strtolower($h);
+        $tron = self::tronAccept($lower);
         $parse = [
-            'tron' => fn($d) => self::tronscanParse($d, $lower),
-            'grid' => fn($d) => is_array($d) && !empty($d['txID']) ? self::tronGridTx($lower, $d) : null,
+            'tron' => fn($d) => $tron('tron', $d),
+            'grid' => fn($d) => $tron('grid', $d),
+            'ginfo' => fn($d) => $tron('ginfo', $d),
             'btc' => fn($d) => self::esploraParse($d, $lower, 'https://mempool.space', 'Bitcoin', 'BTC', 'https://mempool.space'),
             'ltc' => fn($d) => self::esploraParse($d, $lower, 'https://litecoinspace.org', 'Litecoin', 'LTC', 'https://litecoinspace.org'),
             'doge' => fn($d) => self::blockcypherParse($d, $lower, 'Dogecoin', 'DOGE', "https://blockchair.com/dogecoin/transaction/$lower"),
@@ -418,6 +476,7 @@ final class Txs
         $reqs = [
             'tron' => self::tronscanReq($lower),
             'grid' => self::tronGridReq($lower),
+            'ginfo' => self::tronInfoReq($lower),
             'btc' => ['url' => "https://mempool.space/api/tx/$lower", 'timeout' => 5],
             'ltc' => ['url' => "https://litecoinspace.org/api/tx/$lower", 'timeout' => 5],
             'doge' => ['url' => "https://api.blockcypher.com/v1/doge/main/txs/$lower", 'timeout' => 5],
@@ -427,7 +486,7 @@ final class Txs
         ] + self::evmReqs('0x' . $lower);
         $hit = Http::race($reqs, function ($k, $d) use ($parse) {
             if (str_starts_with($k, 'evm|')) {
-                return !empty($d['result']) && is_array($d['result']) ? $d['result'] : null;
+                return self::evmHit($d);
             }
             return ($parse[$k])($d);
         }, 6);
@@ -435,7 +494,7 @@ final class Txs
             return null;
         }
         [$k, $v] = $hit;
-        return str_starts_with($k, 'evm|') ? self::evmTx(Chain::evm()[(int)explode('|', $k)[1]], '0x' . $lower, $v) : $v;
+        return str_starts_with($k, 'evm|') ? self::evmTx(Chain::evm()[(int)explode('|', $k)[1]], '0x' . $lower, ...$v) : $v;
     }
 
     public static function check(string $kind, string $h): ?array

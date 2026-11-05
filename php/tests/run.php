@@ -464,8 +464,9 @@ $h = hook_run(['update_id' => ++$GLOBALS['mid'], 'message' => msg('733 درهم'
 check($h === null && sent(['sendPhoto']), 'card upload is a normal call');
 reset_calls();
 $h = hook_run(['update_id' => ++$GLOBALS['mid'], 'message' => msg('733 درهم', 9, 9)]);
-$cp = sent(['sendPhoto']);
-check(($h['method'] ?? '') === 'setMessageReaction' && ($h['reaction'][0]['emoji'] ?? '') === '⚡' && $cp && str_starts_with((string)($cp[0][1]['photo'] ?? ''), 'AgAC') && !sent(['setMessageReaction']), 'reaction goes out first in the webhook reply, cached card follows');
+$rx = sent(['setMessageReaction']);
+check(($h['method'] ?? '') === 'sendPhoto' && str_starts_with((string)($h['photo'] ?? ''), 'AgAC') && !sent(['sendPhoto']) && $rx && ($rx[0][1]['reaction'][0]['emoji'] ?? '') === '⚡',
+    'cached card goes in the webhook reply, known reaction is sent in the background');
 feed(msg('سلام', -4400, 800));
 Cache::forget('admins:-4400');
 reset_calls();
@@ -697,6 +698,46 @@ unset($GLOBALS['http']['tronscanapi.com/api/transaction-info']);
 reset_calls();
 feed(msg(str_repeat('c', 64)));
 check(str_contains((string)last_text(), 'Bitcoin') && str_contains((string)last_text(), '2.5 BTC'), 'btc tx');
+
+$GLOBALS['http']['api.trongrid.io/wallet/gettransactionbyid'] = fn($r) => ($r['json']['value'] ?? '') === str_repeat('9', 64) ? ['txID' => str_repeat('9', 64), 'ret' => [['contractRet' => 'SUCCESS']],
+    'raw_data' => ['contract' => [['type' => 'TransferContract', 'parameter' => ['value' => ['owner_address' => '41' . str_repeat('a', 40), 'to_address' => '41' . str_repeat('b', 40), 'amount' => 7000000]]]]]] : null;
+$GLOBALS['http']['api.trongrid.io/wallet/gettransactioninfobyid'] = fn($r) => ['blockNumber' => 123, 'blockTimeStamp' => 1700000000000, 'fee' => 1100000];
+$GLOBALS['http_seen'] = [];
+reset_calls();
+feed(msg(str_repeat('9', 64)));
+$gt = (string)last_text();
+check(str_contains($gt, 'TRON') && str_contains($gt, '7 TRX') && str_contains($gt, '1.1 TRX'), 'tron tx from trongrid with info fetched in the same round');
+unset($GLOBALS['http']['api.trongrid.io/wallet/gettransactionbyid'], $GLOBALS['http']['api.trongrid.io/wallet/gettransactioninfobyid']);
+$evmHash = '0x' . str_repeat('d', 64);
+$GLOBALS['rpc_log'] = [];
+$prevNode = $GLOBALS['http']['publicnode.com'];
+$GLOBALS['http']['publicnode.com'] = function ($r) use ($evmHash, $prevNode) {
+    if (!isset($r['json'][0])) {
+        return null;
+    }
+    $GLOBALS['rpc_log'][] = parse_url($r['url'], PHP_URL_HOST) . ':' . implode(',', array_column($r['json'], 'method'));
+    $eth = str_contains($r['url'], 'ethereum');
+    $out = [];
+    foreach ($r['json'] as $c) {
+        $v = match ($c['method']) {
+            'eth_getTransactionByHash' => $eth ? ['hash' => $evmHash, 'blockNumber' => '0x10', 'from' => '0x' . str_repeat('1', 40), 'to' => '0xdAC17F958D2ee523a2206206994597C13D831ec7', 'value' => '0x0', 'gasPrice' => '0x3b9aca00', 'input' => '0x'] : null,
+            'eth_getTransactionReceipt' => $eth ? ['status' => '0x1', 'gasUsed' => '0x5208', 'effectiveGasPrice' => '0x3b9aca00', 'logs' => [['address' => '0xdAC17F958D2ee523a2206206994597C13D831ec7',
+                'topics' => [Chain::TRANSFER, '0x' . str_repeat('0', 24) . str_repeat('1', 40), '0x' . str_repeat('0', 24) . str_repeat('2', 40)], 'data' => '0x' . str_pad(dechex(25000000), 64, '0', STR_PAD_LEFT)]]] : null,
+            'eth_blockNumber' => '0x20',
+            'eth_getBlockByNumber' => ['timestamp' => '0x6553f100'],
+            default => null,
+        };
+        $out[] = ['jsonrpc' => '2.0', 'id' => $c['id'], 'result' => $v];
+    }
+    return $out;
+};
+reset_calls();
+feed(msg($evmHash));
+$et = (string)last_text();
+$ethRounds = array_values(array_filter($GLOBALS['rpc_log'], fn($l) => str_starts_with($l, 'ethereum')));
+check(str_contains($et, 'Ethereum') && str_contains($et, '25 USDT') && str_contains($et, '17') && !str_contains($et, 'کانترکت')
+    && count($ethRounds) === 2 && str_contains($ethRounds[0], 'eth_getTransactionByHash,eth_getTransactionReceipt,eth_blockNumber') && $ethRounds[1] === 'ethereum-rpc.publicnode.com:eth_getBlockByNumber', 'evm token tx in two rounds: ' . implode(' | ', $ethRounds));
+$GLOBALS['http']['publicnode.com'] = $prevNode;
 
 reset_calls();
 $GLOBALS['http_seen'] = null;

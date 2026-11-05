@@ -635,7 +635,7 @@ final class Wallets
         $res = Http::multiJson([
             'acc' => ['url' => "https://tonapi.io/v2/accounts/$a", 'headers' => $h, 'timeout' => 5],
             'jet' => ['url' => "https://tonapi.io/v2/accounts/$a/jettons", 'params' => ['currencies' => 'usd'], 'headers' => $h, 'timeout' => 5],
-            'nft' => ['url' => "https://tonapi.io/v2/accounts/$a/nfts", 'params' => ['limit' => 1000], 'headers' => $h, 'timeout' => 5],
+            'nft' => ['url' => "https://tonapi.io/v2/accounts/$a/nfts", 'params' => ['limit' => 1000], 'headers' => $h, 'timeout' => 3],
             'tc' => ['url' => 'https://toncenter.com/api/v2/getAddressInformation', 'params' => ['address' => $a] + Chain::toncenterParams(), 'timeout' => 5],
         ]);
         $bal = null;
@@ -670,14 +670,21 @@ final class Wallets
 
     public static function sol(string $a): array
     {
-        $u = Chain::rpcs('sol_rpcs')[0];
-        $res = Http::multiJson([
-            'bal' => Chain::rpcReq($u, 'getBalance', [$a]),
+        $rpcs = Chain::rpcs('sol_rpcs');
+        $u = $rpcs[0];
+        $reqs = [
             't1' => Chain::rpcReq($u, 'getTokenAccountsByOwner', [$a, ['programId' => 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'], ['encoding' => 'jsonParsed']]),
             't2' => Chain::rpcReq($u, 'getTokenAccountsByOwner', [$a, ['programId' => 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb'], ['encoding' => 'jsonParsed']]),
-            'sig' => Chain::rpcReq($u, 'getSignaturesForAddress', [$a, ['limit' => 1000]]),
-        ]);
-        $bal = $res['bal']['result'] ?? Chain::rpc(array_slice(Chain::rpcs('sol_rpcs'), 1), 'getBalance', [$a]);
+            'sig' => Chain::rpcReq($u, 'getSignaturesForAddress', [$a, ['limit' => 1000]], 3),
+        ];
+        foreach (array_slice($rpcs, 0, 3) as $i => $r) {
+            $reqs["bal$i"] = Chain::rpcReq($r, 'getBalance', [$a]);
+        }
+        $res = Http::multiJson($reqs);
+        $bal = null;
+        foreach (array_slice($rpcs, 0, 3) as $i => $r) {
+            $bal ??= $res["bal$i"]['result'] ?? null;
+        }
         if ($bal === null) {
             return [];
         }

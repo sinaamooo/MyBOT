@@ -955,6 +955,65 @@ final class MTProto
         self::save($s);
     }
 
+    private static function locked(callable $fn)
+    {
+        $lock = fopen(sys_get_temp_dir() . '/mybot_mtp_' . md5(Config::$root) . '.lock', 'c');
+        if ($lock) {
+            $until = microtime(true) + 15;
+            while (!flock($lock, LOCK_EX | LOCK_NB)) {
+                if (microtime(true) > $until) {
+                    fclose($lock);
+                    throw new RuntimeException('mtproto: busy');
+                }
+                usleep(100000);
+            }
+        }
+        try {
+            return $fn();
+        } finally {
+            if ($lock) {
+                flock($lock, LOCK_UN);
+                fclose($lock);
+            }
+        }
+    }
+
+    private static function setup(int $dc, bool $relogin = false, bool $rekey = false): array
+    {
+        return self::locked(function () use ($dc, $relogin, $rekey) {
+            $s = self::state();
+            if (($s['dc'] ?? 2) !== $dc) {
+                $s['dc'] = $dc;
+                self::save($s);
+            }
+            if ($rekey) {
+                unset($s['keys'][$dc]);
+                self::save($s);
+            }
+            if ($relogin && isset($s['keys'][$dc])) {
+                $s['keys'][$dc]['bot'] = false;
+            }
+            self::$conn?->close();
+            self::$conn = self::connect($s, $dc);
+            if (empty($s['keys'][$dc]['bot'])) {
+                self::login($s, self::$conn);
+            }
+            return $s;
+        });
+    }
+
+    private static function persist(MTConn $c): void
+    {
+        self::locked(function () use ($c) {
+            $s = self::state();
+            $k = $s['keys'][$c->dc] ?? null;
+            if ($k && base64_decode((string)($k['k'] ?? '')) === $c->key) {
+                self::remember($s, $c);
+                self::save($s);
+            }
+        });
+    }
+
     public static function call(string $method, array $args = [])
     {
         if (self::$fake) {
@@ -963,68 +1022,53 @@ final class MTProto
         if (!self::enabled()) {
             throw new RuntimeException('mtproto disabled');
         }
-        $lock = fopen(sys_get_temp_dir() . '/mybot_mtp_' . md5(Config::$root) . '.lock', 'c');
-        if ($lock) {
-            $until = microtime(true) + 12;
-            while (!flock($lock, LOCK_EX | LOCK_NB)) {
-                if (microtime(true) > $until) {
-                    fclose($lock);
-                    throw new RuntimeException('mtproto: busy');
+        $s = self::state();
+        $dc = (int)($s['dc'] ?? 2);
+        $relogin = $rekey = false;
+        for ($attempt = 0; $attempt < 4; $attempt++) {
+            try {
+                if ($relogin || $rekey || empty($s['keys'][$dc]['k']) || empty($s['keys'][$dc]['bot'])) {
+                    $s = self::setup($dc, $relogin, $rekey);
+                    $relogin = $rekey = false;
+                } elseif (!self::$conn || self::$conn->dc !== $dc) {
+                    self::$conn?->close();
+                    self::$conn = self::connect($s, $dc);
                 }
-                usleep(150000);
-            }
-        }
-        try {
-            $s = self::state();
-            for ($attempt = 0; $attempt < 4; $attempt++) {
-                $dc = (int)($s['dc'] ?? 2);
-                try {
-                    if (!self::$conn || self::$conn->dc !== $dc) {
-                        self::$conn?->close();
-                        self::$conn = self::connect($s, $dc);
-                    }
-                    $c = self::$conn;
-                    if (empty($s['keys'][$dc]['bot'])) {
-                        self::login($s, $c);
-                    }
-                    $res = $c->call(TL::method($method, $args));
-                    self::remember($s, $c);
-                    self::save($s);
-                    return $res;
-                } catch (MTError $e) {
-                    if (preg_match('/_MIGRATE_(\d+)/', $e->type, $m)) {
-                        $s['dc'] = (int)$m[1];
-                        self::$conn?->close();
-                        self::$conn = null;
-                        continue;
-                    }
-                    if (in_array($e->type, ['AUTH_KEY_UNREGISTERED', 'SESSION_REVOKED', 'USER_DEACTIVATED'], true)) {
-                        $s['keys'][$dc]['bot'] = false;
-                        continue;
-                    }
-                    if ($e->type === 'TRANSPORT_404') {
-                        unset($s['keys'][$dc]);
-                        self::save($s);
-                        self::$conn?->close();
-                        self::$conn = null;
-                        continue;
-                    }
-                    throw $e;
-                } catch (RuntimeException $e) {
+                $c = self::$conn;
+                [$salt, $off] = [$c->salt, $c->offset];
+                $res = $c->call(TL::method($method, $args));
+                if ($c->salt !== $salt || $c->offset !== $off) {
+                    self::persist($c);
+                }
+                return $res;
+            } catch (MTError $e) {
+                if (preg_match('/_MIGRATE_(\d+)/', $e->type, $m)) {
+                    $dc = (int)$m[1];
                     self::$conn?->close();
                     self::$conn = null;
-                    if ($attempt >= 1) {
-                        throw $e;
-                    }
+                    $s = self::setup($dc);
+                    continue;
+                }
+                if (in_array($e->type, ['AUTH_KEY_UNREGISTERED', 'SESSION_REVOKED', 'USER_DEACTIVATED'], true)) {
+                    $relogin = true;
+                    continue;
+                }
+                if ($e->type === 'TRANSPORT_404') {
+                    self::$conn?->close();
+                    self::$conn = null;
+                    $rekey = true;
+                    continue;
+                }
+                throw $e;
+            } catch (RuntimeException $e) {
+                self::$conn?->close();
+                self::$conn = null;
+                if ($attempt >= 1) {
+                    throw $e;
                 }
             }
-            throw new RuntimeException('mtproto: giving up');
-        } finally {
-            if ($lock) {
-                flock($lock, LOCK_UN);
-                fclose($lock);
-            }
         }
+        throw new RuntimeException('mtproto: giving up');
     }
 
     public static function resolve(string $username): ?array

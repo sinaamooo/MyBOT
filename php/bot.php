@@ -33,6 +33,7 @@ if (!is_array($update) || !isset($update['update_id']) || (function_exists('apcu
 }
 Bot::handle($update);
 TG::closeHook();
+Http::settle(5);
 if ((int)DB::kvGet('commands_v', 0) < Start::COMMANDS_V) {
     Start::registerCommands();
 }

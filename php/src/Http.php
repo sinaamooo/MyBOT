@@ -42,6 +42,9 @@ final class Http
         if ($sh = self::share()) {
             $opts[CURLOPT_SHARE] = $sh;
         }
+        if (!empty($r['h2']) && defined('CURL_HTTP_VERSION_2TLS')) {
+            $opts[CURLOPT_HTTP_VERSION] = CURL_HTTP_VERSION_2TLS;
+        }
         if (array_key_exists('json', $r)) {
             $opts[CURLOPT_POSTFIELDS] = json_encode($r['json'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
             $headers[] = 'Content-Type: application/json';
@@ -70,18 +73,113 @@ final class Http
 
     private static $share = null;
 
-    private static function share()
+    public static function share()
     {
         if (self::$share === null) {
             self::$share = false;
-            if (function_exists('curl_share_init')) {
+            if (function_exists('curl_share_init_persistent') && defined('CURL_LOCK_DATA_CONNECT')) {
+                try {
+                    self::$share = curl_share_init_persistent([CURL_LOCK_DATA_DNS, CURL_LOCK_DATA_SSL_SESSION, CURL_LOCK_DATA_CONNECT]);
+                } catch (Throwable $e) {
+                    self::$share = false;
+                }
+            }
+            if (!self::$share && function_exists('curl_share_init')) {
                 $s = curl_share_init();
                 curl_share_setopt($s, CURLSHOPT_SHARE, CURL_LOCK_DATA_DNS);
                 curl_share_setopt($s, CURLSHOPT_SHARE, CURL_LOCK_DATA_SSL_SESSION);
+                if (defined('CURL_LOCK_DATA_CONNECT')) {
+                    curl_share_setopt($s, CURLSHOPT_SHARE, CURL_LOCK_DATA_CONNECT);
+                }
                 self::$share = $s;
             }
         }
         return self::$share ?: null;
+    }
+
+    private static $bgm = null;
+    private static array $bgh = [];
+    private static array $bgdone = [];
+    private static array $bghost = [];
+
+    public static function background(array $r, ?callable $done = null): void
+    {
+        if (self::$fake) {
+            $res = self::decode((self::$fake)($r) ?? ['status' => 0, 'body' => '']);
+            if ($done) {
+                $done($res);
+            }
+            return;
+        }
+        [$ch] = self::handle($r);
+        self::$bgm ??= curl_multi_init();
+        curl_multi_add_handle(self::$bgm, $ch);
+        $id = 'bg' . spl_object_id($ch);
+        self::$bgh[$id] = $ch;
+        self::$bghost[$id] = (string)parse_url($r['url'], PHP_URL_HOST);
+        if ($done) {
+            self::$bgdone[$id] = $done;
+        }
+        self::pump();
+    }
+
+    public static function warm(string $url, array $opts = []): void
+    {
+        $host = (string)parse_url($url, PHP_URL_HOST);
+        if (self::$fake || TG::$fake || in_array($host, self::$bghost, true) || !defined('CURL_LOCK_DATA_CONNECT') || !($sh = self::share())) {
+            return;
+        }
+        self::$bgm ??= curl_multi_init();
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_NOBODY => true, CURLOPT_FOLLOWLOCATION => false, CURLOPT_NOSIGNAL => true,
+            CURLOPT_TIMEOUT_MS => 5000, CURLOPT_CONNECTTIMEOUT_MS => 4000, CURLOPT_TCP_KEEPALIVE => 1, CURLOPT_SHARE => $sh] + $opts);
+        curl_multi_add_handle(self::$bgm, $ch);
+        self::$bgh[$url] = $ch;
+        self::$bghost[$url] = $host;
+        self::pump();
+    }
+
+    public static function pump(): void
+    {
+        if (!self::$bgh) {
+            return;
+        }
+        curl_multi_exec(self::$bgm, $run);
+        while ($info = curl_multi_info_read(self::$bgm)) {
+            foreach (self::$bgh as $u => $ch) {
+                if ($ch === $info['handle']) {
+                    $done = self::$bgdone[$u] ?? null;
+                    $res = $done ? ['status' => (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE), 'body' => (string)curl_multi_getcontent($ch)] : null;
+                    curl_multi_remove_handle(self::$bgm, $ch);
+                    curl_close($ch);
+                    unset(self::$bgh[$u], self::$bgdone[$u], self::$bghost[$u]);
+                    if ($done) {
+                        try {
+                            $done(self::decode($res));
+                        } catch (Throwable $e) {
+                            error_log('background: ' . $e->getMessage());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    public static function settle(float $max = 1.5): void
+    {
+        $t = microtime(true);
+        while (self::$bgh && microtime(true) - $t < $max) {
+            self::pump();
+            if (self::$bgh) {
+                curl_multi_select(self::$bgm, 0.02);
+            }
+        }
+    }
+
+    private static function wait($mh, float $t): void
+    {
+        self::pump();
+        curl_multi_select($mh, self::$bgh ? min($t, 0.02) : $t);
     }
 
     private static function takeHeaders($ch): array
@@ -124,7 +222,7 @@ final class Http
         do {
             $st = curl_multi_exec($mh, $running);
             if ($running) {
-                curl_multi_select($mh, 0.5);
+                self::wait($mh, 0.5);
             }
         } while ($running && $st === CURLM_OK);
         foreach ($handles as $k => $ch) {
@@ -248,7 +346,7 @@ final class Http
                 break;
             }
             if ($running) {
-                curl_multi_select($mh, 0.1);
+                self::wait($mh, 0.1);
             }
         }
         foreach (array_keys($live) as $id) {
@@ -357,6 +455,37 @@ final class TG
         return rtrim(Config::get('TG_API_BASE', 'https://api.telegram.org'), '/');
     }
 
+    private static function connOpts(): array
+    {
+        $o = [];
+        if (defined('CURL_HTTP_VERSION_2TLS')) {
+            $o[CURLOPT_HTTP_VERSION] = CURL_HTTP_VERSION_2TLS;
+        }
+        $proxy = Config::get('TELEGRAM_PROXY') ?: Config::get('PROXY');
+        if ($proxy !== '') {
+            $o[CURLOPT_PROXY] = str_starts_with($proxy, 'socks5://') ? 'socks5h://' . substr($proxy, 9) : $proxy;
+        }
+        return $o;
+    }
+
+    public static function warm(): void
+    {
+        Http::warm(self::base() . '/', self::connOpts());
+    }
+
+    public static function async(string $method, array $p, ?callable $done = null): void
+    {
+        if (self::$fake) {
+            $r = (self::$fake)($method, $p);
+            if ($done) {
+                $done($r);
+            }
+            return;
+        }
+        Http::background(['url' => self::base() . '/bot' . Config::get('BOT_TOKEN') . '/' . $method, 'method' => 'POST', 'json' => $p, 'timeout' => 10, 'h2' => true,
+            'proxy' => Config::get('TELEGRAM_PROXY') ?: Config::get('PROXY')], $done ? fn($d) => $done(is_array($d) ? $d : null) : null);
+    }
+
     private static function raw(string $method, array $p): array
     {
         if (self::$fake) {
@@ -388,14 +517,12 @@ final class TG
         $opts = [CURLOPT_URL => self::base() . '/bot' . Config::get('BOT_TOKEN') . '/' . $method, CURLOPT_RETURNTRANSFER => true,
             CURLOPT_TIMEOUT => $files ? 60 : 20, CURLOPT_CONNECTTIMEOUT => 6, CURLOPT_POST => true, CURLOPT_POSTFIELDS => $fields,
             CURLOPT_TCP_KEEPALIVE => 1, CURLOPT_HTTPHEADER => ['Expect:']];
-        if (defined('CURL_HTTP_VERSION_2TLS')) {
-            $opts[CURLOPT_HTTP_VERSION] = CURL_HTTP_VERSION_2TLS;
+        if ($sh = Http::share()) {
+            $opts[CURLOPT_SHARE] = $sh;
         }
-        $proxy = Config::get('TELEGRAM_PROXY') ?: Config::get('PROXY');
-        if ($proxy !== '') {
-            $opts[CURLOPT_PROXY] = str_starts_with($proxy, 'socks5://') ? 'socks5h://' . substr($proxy, 9) : $proxy;
-        }
+        $opts += self::connOpts();
         curl_setopt_array($ch, $opts);
+        Http::settle();
         $body = curl_exec($ch);
         if ($body === false && in_array(curl_errno($ch), [6, 7, 35, 52, 55, 56], true)) {
             usleep(200000);
@@ -486,15 +613,16 @@ final class TG
             return $out;
         }
         self::closeHook();
+        Http::settle();
         $mh = curl_multi_init();
         $hs = [];
-        $proxy = Config::get('TELEGRAM_PROXY') ?: Config::get('PROXY');
+        $sh = Http::share();
         foreach ($calls as $k => [$m, $p]) {
             $ch = curl_init(self::base() . '/bot' . Config::get('BOT_TOKEN') . '/' . $m);
             $opts = [CURLOPT_RETURNTRANSFER => true, CURLOPT_POST => true, CURLOPT_POSTFIELDS => json_encode($p, JSON_UNESCAPED_UNICODE),
-                CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'Expect:'], CURLOPT_TIMEOUT => 15, CURLOPT_CONNECTTIMEOUT => 8];
-            if ($proxy !== '') {
-                $opts[CURLOPT_PROXY] = str_starts_with($proxy, 'socks5://') ? 'socks5h://' . substr($proxy, 9) : $proxy;
+                CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'Expect:'], CURLOPT_TIMEOUT => 15, CURLOPT_CONNECTTIMEOUT => 8] + self::connOpts();
+            if ($sh) {
+                $opts[CURLOPT_SHARE] = $sh;
             }
             curl_setopt_array($ch, $opts);
             curl_multi_add_handle($mh, $ch);

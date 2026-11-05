@@ -103,7 +103,11 @@ final class Tools
         $key = 'react:' . $chat . ':' . md5(json_encode($list));
         $start = (int)(Cache::get($key, $known) ?? 0);
         if ($known && $start < count($list)) {
-            TG::api('setMessageReaction', ['chat_id' => $chat, 'message_id' => $m['message_id'], 'reaction' => [$list[$start]], '__quick' => true]);
+            TG::async('setMessageReaction', ['chat_id' => $chat, 'message_id' => $m['message_id'], 'reaction' => [$list[$start]]], function ($r) use ($key, $start) {
+                if (is_array($r) && empty($r['ok']) && str_contains(strtolower((string)($r['description'] ?? '')), 'reaction')) {
+                    Cache::set($key, $start + 1, 21600);
+                }
+            });
             return;
         }
         for ($i = $start; $i < count($list); $i++) {
@@ -136,6 +140,8 @@ final class Tools
         $isHash = in_array($kind, Chain::HASH_KINDS, true);
         Perf::start();
         self::react($m, $isHash ? 'hash' : 'wallet');
+        TG::warm();
+        TG::closeHook();
         Perf::mark('react');
         try {
             if ($isHash) {

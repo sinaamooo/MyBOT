@@ -4,6 +4,7 @@ final class GiftsH
 {
     public static function link(array $m, string $slug, int $n): void
     {
+        TG::warm();
         $meta = Gifts::meta($slug, $n);
         $name = $meta['name'] ?? Gifts::splitName($slug);
         $v = Gifts::valueOf($name, $meta['model'] ?? null, $meta['backdrop'] ?? null, $meta['symbol'] ?? null);
@@ -71,6 +72,7 @@ final class GiftsH
             return;
         }
         TG::api('sendChatAction', ['chat_id' => $m['chat']['id'], 'action' => 'upload_photo', '__quick' => true]);
+        TG::warm();
         Perf::start();
         $t = self::target($m, $args);
         Perf::mark('resolve');
@@ -505,6 +507,7 @@ final class Extras
 
     public static function instaLink(array $m, string $link): void
     {
+        TG::warm();
         if (preg_match('~/stories/~i', $link) && !Instagram::enabled()) {
             if (Bot::isPrivate($m)) {
                 Bot::send($m, UI::t('insta_no_key'), null);
