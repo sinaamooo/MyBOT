@@ -33,6 +33,9 @@ TG::$fake = function (string $method, array $p) {
         case 'getMe':
             return ['ok' => true, 'result' => BOT];
         case 'sendMessage':
+            if (!empty($GLOBALS['reject_blank']) && str_contains(json_encode($p['reply_markup'] ?? [], JSON_UNESCAPED_UNICODE), "\u{200B}")) {
+                return ['ok' => false, 'description' => 'Bad Request: BUTTON_TEXT_INVALID'];
+            }
         case 'editMessageText':
             if ($GLOBALS['reject_premium'] && $hasPremium) {
                 return ['ok' => false, 'description' => 'Bad Request: DOCUMENT_INVALID'];
@@ -1240,5 +1243,14 @@ check(str_contains($w1, '<b>1</b>') && str_contains((string)last_text(), 'فـق
 reset_calls();
 feed(msg('حذف ویژه', $G, 777, $tgt(5002)));
 check(!Moderation::isVip($G, 5002), 'remove special member');
+$ib = UI::iconize(['text' => '🔴', 'callback_data' => 'x']);
+check($ib['text'] === "\u{200B}" && !empty($ib['icon_custom_emoji_id']), 'icon-only button uses a zero-width label so the icon is centered');
+$GLOBALS['reject_blank'] = true;
+reset_calls();
+TG::send(-9900, 'board', UI::kb([[['text' => '🔴', 'callback_data' => 'x']]]));
+$bs = sent(['sendMessage']);
+check(count($bs) === 2 && (end($bs)[1]['reply_markup']['inline_keyboard'][0][0]['text'] ?? '') === "\u{3164}" && UI::blank() === "\u{3164}", 'falls back to the wide blank when telegram rejects the zero-width label');
+$GLOBALS['reject_blank'] = false;
+Cache::forget('btn_blank_wide');
 echo "passed: $pass, failed: $fail\n";
 exit($fail ? 1 : 0);

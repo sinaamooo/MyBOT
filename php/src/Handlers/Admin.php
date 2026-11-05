@@ -615,7 +615,7 @@ final class Admin
             $emo = mb_convert_encoding(substr($u16, (int)$e['offset'] * 2, (int)$e['length'] * 2), 'UTF-8', 'UTF-16LE');
             if ($emo !== '' && ($pos = mb_strpos($label, $emo)) !== false) {
                 $rest = trim(mb_substr($label, 0, $pos) . mb_substr($label, $pos + mb_strlen($emo)));
-                return [mb_substr($rest !== '' ? $rest : "\u{3164}", 0, 64), (string)$e['custom_emoji_id']];
+                return [mb_substr($rest !== '' ? $rest : UI::blank(), 0, 64), (string)$e['custom_emoji_id']];
             }
         }
         return [mb_substr($label, 0, 64), null];

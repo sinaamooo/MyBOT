@@ -412,10 +412,21 @@ final class UI
         } elseif ($lead !== '' && self::$strip && preg_match('/^' . self::EMO . '$/u', $lead)) {
             $b['text'] = $rest;
         } elseif ($lead === '' && ($id = self::emojiId(trim((string)$b['text'])))) {
-            $b['text'] = "\u{3164}";
+            $b['text'] = self::blank();
             $b['icon_custom_emoji_id'] = $id;
         }
+        if (($b['text'] ?? null) === '' && !empty($b['icon_custom_emoji_id'])) {
+            $b['text'] = self::blank();
+        }
         return $b;
+    }
+
+    const BLANK = "\u{200B}";
+    const BLANK_WIDE = "\u{3164}";
+
+    public static function blank(): string
+    {
+        return Cache::get('btn_blank_wide') ? self::BLANK_WIDE : self::BLANK;
     }
 
     public static function quoteGaps(string $html): string
@@ -521,7 +532,7 @@ final class UI
             $text = $rest;
         } elseif (!$emoji && ($solo = self::emojiId(trim($text)))) {
             $emoji = $solo;
-            $text = "\u{3164}";
+            $text = self::blank();
         }
         $b = ['text' => $text];
         if (!empty($o['url'])) {

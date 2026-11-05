@@ -439,7 +439,7 @@ final class TG
                 foreach ($row as &$b) {
                     if (!empty($b['icon_custom_emoji_id'])) {
                         $ch = UI::emojiChar((string)$b['icon_custom_emoji_id']);
-                        if (($b['text'] ?? '') === "\u{3164}") {
+                        if (in_array($b['text'] ?? '', ['', UI::BLANK, UI::BLANK_WIDE], true)) {
                             $b['text'] = $ch ?? '•';
                         } elseif ($ch !== null && preg_match('/^\p{Regional_Indicator}{2}$/u', $ch)) {
                             $b['text'] = $ch . ' ' . ($b['text'] ?? '');
@@ -591,6 +591,12 @@ final class TG
         $r = self::raw($method, $p);
         if (empty($r['ok']) && (int)($r['error_code'] ?? 0) === 429 && ($wait = (int)($r['parameters']['retry_after'] ?? 1)) <= 3) {
             usleep(($wait ?: 1) * 1000000);
+            $r = self::raw($method, $p);
+        }
+        if (empty($r['ok']) && isset($p['reply_markup']) && preg_match('/button|text is empty|text must be non-empty/i', (string)($r['description'] ?? ''))
+            && str_contains($mk = json_encode($p['reply_markup'], JSON_UNESCAPED_UNICODE), UI::BLANK)) {
+            Cache::set('btn_blank_wide', 1, 86400);
+            $p['reply_markup'] = json_decode(str_replace(UI::BLANK, UI::BLANK_WIDE, $mk), true);
             $r = self::raw($method, $p);
         }
         if (empty($r['ok'])) {
