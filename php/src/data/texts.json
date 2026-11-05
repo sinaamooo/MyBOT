@@ -212,7 +212,7 @@
   "desc": "قیمت لینک گیفت ({name} {number} {model} {model_rarity} {backdrop} {backdrop_rarity} {symbol} {symbol_rarity} {owner} {quantity} {floor_ton} {model_floor} {backdrop_floor} {symbol_floor} {est_ton} {est_usd} {est_toman} {est_stars} {link})"
  },
  "gift_user_caption": {
-  "text": "🎁 <b>کلکسیون گیفت {name}</b>\n🔢 تعداد: <b>{count}</b> (یونیک: {unique_count})\n{ton_icon} ارزش کل: <code>{total_ton}</code> TON\n{pl_line}\n{change_line}\n\n<blockquote>{usd_icon}    ارزش دلاری: <code>{total_usd}</code> $</blockquote>\n<blockquote>{toman_icon}    ارزش تومانی: <code>{total_toman}</code> تومان</blockquote>\n<blockquote>{links}</blockquote>",
+  "text": "🎁 <b>کلکسیون گیفت {name}</b>\n\n🔢 تعداد: <b>{count}</b> (یونیک: {unique_count})\n{pl_line}\n{change_line}\n<blockquote>{ton_icon}    ارزش کل: <code>{total_ton}</code> TON</blockquote>\n<blockquote>{usd_icon}    ارزش دلاری: <code>{total_usd}</code> $</blockquote>\n<blockquote>{toman_icon}    ارزش تومانی: <code>{total_toman}</code> تومان</blockquote>\n<blockquote>{links}</blockquote>",
   "desc": "کپشن کارت گیفت‌های کاربر ({name} {count} {unique_count} {total_ton} {total_usd} {total_toman} {pl_line} {change_line} {links})"
  },
  "gift_profit": {
