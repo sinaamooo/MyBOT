@@ -168,6 +168,16 @@ final class UI
         self::$rx = null;
     }
 
+    public static function emojiChar(string $id): ?string
+    {
+        foreach (Settings::get('emoji_map') ?: [] as $c => $v) {
+            if ((string)$v === $id) {
+                return (string)$c;
+            }
+        }
+        return null;
+    }
+
     public static function emojiId(string $emoji): ?string
     {
         [, $lookup] = self::emojiTable();

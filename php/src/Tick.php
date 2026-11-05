@@ -21,7 +21,10 @@ final class Tick
             }
             try {
                 Market::refresh([], true, true);
-                Convert::prerender();
+                if (time() - (int)DB::kvGet('prerender_at', 0) >= 120) {
+                    Convert::prerender();
+                    DB::kvSet('prerender_at', time());
+                }
             } catch (Throwable $e) {
                 error_log('tick market: ' . $e->getMessage());
             }
@@ -33,7 +36,7 @@ final class Tick
                     Gifts::floorsDaysAgo();
                 }
                 $names = array_values(array_unique(array_filter(array_map(fn($it) => $it['full_name'] ?? null, Gifts::dataset()['index'] ?? []))));
-                Gifts::prefetch($names, 48, false);
+                Gifts::prefetch($names, 16, false);
             } catch (Throwable $e) {
                 error_log('tick gifts: ' . $e->getMessage());
             } finally {

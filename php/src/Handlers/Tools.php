@@ -133,7 +133,7 @@ final class Tools
     {
         $owner = $owner ?? ($m['from']['id'] ?? 0);
         $isHash = in_array($kind, Chain::HASH_KINDS, true);
-        $wait = Bot::send($m, UI::t($isHash ? 'tx_checking' : 'wallet_checking'), null);
+        TG::api('sendChatAction', ['chat_id' => $m['chat']['id'], 'action' => 'typing', '__quick' => true]);
         Perf::start();
         try {
             if ($isHash) {
@@ -159,7 +159,6 @@ final class Tools
             error_log('checker: ' . $e->getMessage());
             Bot::send($m, UI::t('error'));
         } finally {
-            Bot::deleteMsg($wait);
             Perf::flush('checker:' . $kind);
         }
     }

@@ -222,6 +222,9 @@ final class TG
         if (isset($p['reply_markup']['inline_keyboard'])) {
             foreach ($p['reply_markup']['inline_keyboard'] as &$row) {
                 foreach ($row as &$b) {
+                    if (($b['text'] ?? '') === "\u{3164}" && !empty($b['icon_custom_emoji_id'])) {
+                        $b['text'] = UI::emojiChar((string)$b['icon_custom_emoji_id']) ?? '•';
+                    }
                     unset($b['icon_custom_emoji_id']);
                 }
             }
