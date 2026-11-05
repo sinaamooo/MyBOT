@@ -845,6 +845,7 @@ check($kb['text'] === 'دکمه' && empty($kb['icon_custom_emoji_id']), 'unmappe
 DB::kvSet('emoji_auto', null);
 Settings::set('emoji_map', $prevMap);
 $dm = Settings::get('emoji_map');
+Settings::set('emoji_invalid', []);
 Settings::set('emoji_map', ['⏳' => '5143130625795951140', '✅' => '5100000000000000005']);
 $dq = UI::emojiMap("<blockquote>⏳    مدت: 5\n✅    تایید</blockquote>");
 check(str_contains($dq, '</tg-emoji> مدت') && str_contains($dq, '</tg-emoji>    تایید'), 'dot icons get one space');
