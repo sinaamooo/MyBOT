@@ -460,5 +460,47 @@
  },
  "lang_choose": {
   "text": "🌐 <b>زبان ربات را انتخاب کنید</b>\n🌐 <b>Choose the bot language</b>\n🌐 <b>Выберите язык бота</b>"
+ },
+ "mod_ban": {
+  "text": "⛔️ <b>User banned from the group</b>\n\n<blockquote>👤 User: {target}</blockquote>\n<blockquote>🛡 By: {by}</blockquote>"
+ },
+ "mod_unban": {
+  "text": "✅ <b>User unbanned</b>\n\n<blockquote>👤 User: {target}</blockquote>\n<blockquote>🛡 By: {by}</blockquote>"
+ },
+ "mod_mute": {
+  "text": "🔇 <b>User muted</b>\n\n<blockquote>👤 User: {target}</blockquote>\n<blockquote>⏳ Duration: {duration}</blockquote>\n<blockquote>🛡 By: {by}</blockquote>"
+ },
+ "mod_unmute": {
+  "text": "🔊 <b>User unmuted</b>\n\n<blockquote>👤 User: {target}</blockquote>\n<blockquote>🛡 By: {by}</blockquote>"
+ },
+ "mod_warn": {
+  "text": "⚠️ <b>User warned</b>\n\n<blockquote>👤 User: {target}</blockquote>\n<blockquote>⚖️ Warnings: <b>{count}</b> of <b>{max}</b></blockquote>\n<blockquote>🛡 By: {by}</blockquote>"
+ },
+ "mod_warn_mute": {
+  "text": "🔇 <b>{max} warnings reached, user muted</b>\n\n<blockquote>👤 User: {target}</blockquote>\n<blockquote>⏳ Duration: {duration}</blockquote>\n<blockquote>🛡 By: {by}</blockquote>"
+ },
+ "mod_unwarn": {
+  "text": "✅ <b>User warnings cleared</b>\n\n<blockquote>👤 User: {target}</blockquote>\n<blockquote>🛡 By: {by}</blockquote>"
+ },
+ "mod_admin": {
+  "text": "👑 <b>User is now a group admin</b>\n\n<blockquote>👤 User: {target}</blockquote>\n<blockquote>🔑 Title: <b>{title}</b></blockquote>\n<blockquote>🛡 By: {by}</blockquote>"
+ },
+ "mod_unadmin": {
+  "text": "✅ <b>User removed from admins</b>\n\n<blockquote>👤 User: {target}</blockquote>\n<blockquote>🛡 By: {by}</blockquote>"
+ },
+ "mod_vip": {
+  "text": "✨ <b>User is now a special member</b>\n\n<blockquote>👤 User: {target}</blockquote>\n<blockquote>🔑 Access: {minutes}-minute mute and {warns} warning</blockquote>\n<blockquote>🛡 By: {by}</blockquote>"
+ },
+ "mod_unvip": {
+  "text": "✅ <b>User removed from special members</b>\n\n<blockquote>👤 User: {target}</blockquote>\n<blockquote>🛡 By: {by}</blockquote>"
+ },
+ "mod_immune": {
+  "text": "🛡 {target} is an admin or a special member, this cannot be done."
+ },
+ "mod_vip_once": {
+  "text": "⚠️ Special members can give each user only {warns} warning."
+ },
+ "mod_failed": {
+  "text": "⚠️ Failed. Make the bot a full admin (restrict, ban and add admins)."
  }
 }

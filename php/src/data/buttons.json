@@ -168,5 +168,30 @@
   "text": "🏅 سطح {level}",
   "style": "success",
   "desc": "دکمه سطح در حساب"
+ },
+ "btn_md_unban": {
+  "text": "✅ رفع بن",
+  "style": "success",
+  "desc": "دکمه رفع بن زیر پیام بن"
+ },
+ "btn_md_unmute": {
+  "text": "🔊 رفع سکوت",
+  "style": "success",
+  "desc": "دکمه رفع سکوت"
+ },
+ "btn_md_unwarn": {
+  "text": "❌ حذف اخطار",
+  "style": "danger",
+  "desc": "دکمه حذف اخطار"
+ },
+ "btn_md_unadmin": {
+  "text": "❌ حذف مدیر",
+  "style": "danger",
+  "desc": "دکمه حذف مدیر"
+ },
+ "btn_md_unvip": {
+  "text": "❌ حذف ویژه",
+  "style": "danger",
+  "desc": "دکمه حذف عضو ویژه"
  }
 }

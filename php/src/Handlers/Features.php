@@ -753,6 +753,9 @@ final class TextRouter
         $priv = Bot::isPrivate($m);
         $low = Currencies::normalize($text);
         $on = fn($k) => $priv || Settings::on($chat, $k);
+        if (!$priv && !empty($m['reply_to_message']) && Moderation::handle($m)) {
+            return;
+        }
         if (!empty($m['reply_to_message']) && in_array($low, self::UID, true)) {
             Tools::uid($m);
             return;
@@ -825,5 +828,174 @@ final class TextRouter
         if (($e = Parse::expression($text)) && $on('calculator')) {
             Tools::answerCalc($m, $e);
         }
+    }
+}
+
+final class Moderation
+{
+    const WARN_MAX = 3;
+    const WARN_MUTE = 840;
+    const VIP_MUTE = 10;
+    const VIP_WARNS = 1;
+    const TITLE = '𝗔𝗗𝗠𝗜𝗡';
+    const WORDS = [
+        'ban' => ['بن', 'ban', 'бан'],
+        'unban' => ['رفع بن', 'آن بن', 'انبن', 'unban', 'разбан'],
+        'mute' => ['سکوت', 'mute', 'мут'],
+        'unmute' => ['حذف سکوت', 'رفع سکوت', 'unmute', 'размут'],
+        'warn' => ['اخطار', 'warn', 'варн'],
+        'unwarn' => ['حذف اخطار', 'unwarn', 'снять варн'],
+        'admin' => ['تنظیم مدیر', 'set admin', 'админ'],
+        'unadmin' => ['حذف مدیر', 'remove admin', 'снять админ'],
+        'vip' => ['تنظیم ویژه', 'set vip', 'вип'],
+        'unvip' => ['حذف ویژه', 'remove vip', 'снять вип'],
+    ];
+    const VIP_CAN = ['mute', 'warn'];
+    const PUNISH = ['ban', 'mute', 'warn'];
+    const UNDO = ['ban' => 'unban', 'mute' => 'unmute', 'warn' => 'unwarn', 'admin' => 'unadmin', 'vip' => 'unvip'];
+    const RIGHTS = ['can_manage_chat', 'can_delete_messages', 'can_restrict_members', 'can_invite_users', 'can_pin_messages', 'can_manage_video_chats'];
+    private static array $vips = [];
+
+    public static function vips(int $chat): array
+    {
+        return self::$vips[$chat] ??= array_map('intval', DB::chatSettings($chat)['vip'] ?? []);
+    }
+
+    public static function isVip(int $chat, int $user): bool
+    {
+        return $chat < 0 && in_array($user, self::vips($chat), true);
+    }
+
+    private static function setVip(int $chat, int $user, bool $on): void
+    {
+        $list = array_values(array_diff(self::vips($chat), [$user]));
+        if ($on) {
+            $list[] = $user;
+        }
+        DB::setChatSetting($chat, 'vip', $list);
+        self::$vips[$chat] = $list;
+    }
+
+    private static function action(string $text): ?string
+    {
+        $t = Currencies::normalize($text);
+        foreach (self::WORDS as $act => $words) {
+            foreach ($words as $w) {
+                if ($t === Currencies::normalize($w)) {
+                    return $act;
+                }
+            }
+        }
+        return null;
+    }
+
+    public static function handle(array $m): bool
+    {
+        $target = $m['reply_to_message']['from'] ?? null;
+        $by = $m['from'] ?? null;
+        if (Bot::isPrivate($m) || !$target || !$by || !empty($m['sender_chat']) || !($act = self::action((string)($m['text'] ?? '')))) {
+            return false;
+        }
+        $chat = (int)$m['chat']['id'];
+        $admin = Bot::isChatAdmin($chat, (int)$by['id']);
+        $vip = !$admin && self::isVip($chat, (int)$by['id']);
+        if (!$admin && !($vip && in_array($act, self::VIP_CAN, true))) {
+            return false;
+        }
+        $uid = (int)$target['id'];
+        if (!empty($target['is_bot']) || $uid === (int)$by['id'] || !empty($m['reply_to_message']['sender_chat'])) {
+            return true;
+        }
+        if (in_array($act, self::PUNISH, true) && (self::isVip($chat, $uid) || Bot::isChatAdmin($chat, $uid))) {
+            Bot::reply($m, UI::t('mod_immune', ['target' => UI::mention($target)]), null);
+            return true;
+        }
+        if ($vip && $act === 'warn') {
+            $k = 'vw:' . (int)$by['id'];
+            if ((int)(DB::one('SELECT count FROM strikes WHERE chat_id=? AND user_id=? AND kind=?', [$chat, $uid, $k])['count'] ?? 0) >= self::VIP_WARNS) {
+                Bot::reply($m, UI::t('mod_vip_once', ['warns' => self::VIP_WARNS]), null);
+                return true;
+            }
+            DB::q('INSERT INTO strikes(chat_id, user_id, kind, count, updated_at) VALUES(?, ?, ?, 1, ?) ON CONFLICT(chat_id, user_id, kind) DO UPDATE SET count=count+1, updated_at=excluded.updated_at',
+                [$chat, $uid, $k, time()]);
+        }
+        [$key, $vars, $kb] = self::run($chat, $act, $uid, $vip);
+        if ($key === null) {
+            Bot::reply($m, UI::t('mod_failed'), null);
+            return true;
+        }
+        Bot::reply($m, UI::t($key, ['target' => UI::mention($target), 'by' => UI::mention($by)] + $vars), $kb);
+        return true;
+    }
+
+    private static function run(int $chat, string $act, int $uid, bool $vip): array
+    {
+        $undo = fn(string $btn, string $a) => UI::kb([[UI::button($btn, ['cb' => "md:$a:$uid"])]]);
+        switch ($act) {
+            case 'ban':
+                return TG::api('banChatMember', ['chat_id' => $chat, 'user_id' => $uid]) !== null ? ['mod_ban', [], $undo('btn_md_unban', 'unban')] : [null, [], null];
+            case 'unban':
+                return TG::api('unbanChatMember', ['chat_id' => $chat, 'user_id' => $uid, 'only_if_banned' => true]) !== null ? ['mod_unban', [], null] : [null, [], null];
+            case 'mute':
+                $min = $vip ? self::VIP_MUTE : 0;
+                return Bot::mute($chat, $uid, $min) ? ['mod_mute', ['duration' => Fmt::duration($min)], $undo('btn_md_unmute', 'unmute')] : [null, [], null];
+            case 'unmute':
+                return Bot::unmute($chat, $uid) ? ['mod_unmute', [], null] : [null, [], null];
+            case 'warn':
+                DB::q('INSERT INTO strikes(chat_id, user_id, kind, count, updated_at) VALUES(?, ?, ?, 1, ?) ON CONFLICT(chat_id, user_id, kind) DO UPDATE SET count=count+1, updated_at=excluded.updated_at',
+                    [$chat, $uid, 'warn', time()]);
+                $n = (int)(DB::one('SELECT count FROM strikes WHERE chat_id=? AND user_id=? AND kind=?', [$chat, $uid, 'warn'])['count'] ?? 1);
+                if ($n < self::WARN_MAX) {
+                    return ['mod_warn', ['count' => $n, 'max' => self::WARN_MAX], $undo('btn_md_unwarn', 'unwarn')];
+                }
+                DB::resetStrikes($chat, $uid, 'warn');
+                return Bot::mute($chat, $uid, self::WARN_MUTE)
+                    ? ['mod_warn_mute', ['max' => self::WARN_MAX, 'duration' => Fmt::duration(self::WARN_MUTE)], $undo('btn_md_unmute', 'unmute')] : [null, [], null];
+            case 'unwarn':
+                DB::q("DELETE FROM strikes WHERE chat_id=? AND user_id=? AND (kind='warn' OR kind LIKE 'vw:%')", [$chat, $uid]);
+                return ['mod_unwarn', [], null];
+            case 'admin':
+                if (TG::api('promoteChatMember', ['chat_id' => $chat, 'user_id' => $uid] + array_fill_keys(self::RIGHTS, true)) === null) {
+                    return [null, [], null];
+                }
+                $title = self::TITLE;
+                if (TG::api('setChatAdministratorCustomTitle', ['chat_id' => $chat, 'user_id' => $uid, 'custom_title' => $title]) === null) {
+                    $title = 'ADMIN';
+                    TG::api('setChatAdministratorCustomTitle', ['chat_id' => $chat, 'user_id' => $uid, 'custom_title' => $title]);
+                }
+                Cache::forget("admins:$chat");
+                return ['mod_admin', ['title' => $title], $undo('btn_md_unadmin', 'unadmin')];
+            case 'unadmin':
+                $ok = TG::api('promoteChatMember', ['chat_id' => $chat, 'user_id' => $uid] + array_fill_keys(self::RIGHTS, false)) !== null;
+                Cache::forget("admins:$chat");
+                return $ok ? ['mod_unadmin', [], null] : [null, [], null];
+            case 'vip':
+                self::setVip($chat, $uid, true);
+                return ['mod_vip', ['minutes' => self::VIP_MUTE, 'warns' => self::VIP_WARNS], $undo('btn_md_unvip', 'unvip')];
+            case 'unvip':
+                self::setVip($chat, $uid, false);
+                return ['mod_unvip', [], null];
+        }
+        return [null, [], null];
+    }
+
+    public static function cb(array $cq, string $arg): void
+    {
+        [$act, $uid] = explode(':', $arg) + [1 => 0];
+        $chat = (int)($cq['message']['chat']['id'] ?? 0);
+        $uid = (int)$uid;
+        if ($chat >= 0 || !in_array($act, self::UNDO, true) || !Bot::isChatAdmin($chat, (int)$cq['from']['id'])) {
+            TG::answer($cq['id'], UI::plain('only_group_admins'), true);
+            return;
+        }
+        [$key, $vars] = self::run($chat, $act, $uid, false);
+        if ($key === null) {
+            TG::answer($cq['id'], UI::plain('mod_failed'), true);
+            return;
+        }
+        TG::answer($cq['id'], '✅');
+        $mem = TG::api('getChatMember', ['chat_id' => $chat, 'user_id' => $uid]);
+        $target = $mem ? UI::mention($mem['user']) : "<code>$uid</code>";
+        TG::edit($chat, $cq['message']['message_id'], UI::t($key, ['target' => $target, 'by' => UI::mention($cq['from'])] + $vars), null);
     }
 }

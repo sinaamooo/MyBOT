@@ -460,5 +460,47 @@
  },
  "lang_choose": {
   "text": "🌐 <b>زبان ربات را انتخاب کنید</b>\n🌐 <b>Choose the bot language</b>\n🌐 <b>Выберите язык бота</b>"
+ },
+ "mod_ban": {
+  "text": "⛔️ <b>Пользователь забанен в группе</b>\n\n<blockquote>👤 Пользователь: {target}</blockquote>\n<blockquote>🛡 Кем: {by}</blockquote>"
+ },
+ "mod_unban": {
+  "text": "✅ <b>Бан снят</b>\n\n<blockquote>👤 Пользователь: {target}</blockquote>\n<blockquote>🛡 Кем: {by}</blockquote>"
+ },
+ "mod_mute": {
+  "text": "🔇 <b>Пользователь в муте</b>\n\n<blockquote>👤 Пользователь: {target}</blockquote>\n<blockquote>⏳ Срок: {duration}</blockquote>\n<blockquote>🛡 Кем: {by}</blockquote>"
+ },
+ "mod_unmute": {
+  "text": "🔊 <b>Мут снят</b>\n\n<blockquote>👤 Пользователь: {target}</blockquote>\n<blockquote>🛡 Кем: {by}</blockquote>"
+ },
+ "mod_warn": {
+  "text": "⚠️ <b>Пользователь получил предупреждение</b>\n\n<blockquote>👤 Пользователь: {target}</blockquote>\n<blockquote>⚖️ Предупреждений: <b>{count}</b> из <b>{max}</b></blockquote>\n<blockquote>🛡 Кем: {by}</blockquote>"
+ },
+ "mod_warn_mute": {
+  "text": "🔇 <b>{max} предупреждения, пользователь в муте</b>\n\n<blockquote>👤 Пользователь: {target}</blockquote>\n<blockquote>⏳ Срок: {duration}</blockquote>\n<blockquote>🛡 Кем: {by}</blockquote>"
+ },
+ "mod_unwarn": {
+  "text": "✅ <b>Предупреждения сняты</b>\n\n<blockquote>👤 Пользователь: {target}</blockquote>\n<blockquote>🛡 Кем: {by}</blockquote>"
+ },
+ "mod_admin": {
+  "text": "👑 <b>Пользователь стал админом группы</b>\n\n<blockquote>👤 Пользователь: {target}</blockquote>\n<blockquote>🔑 Титул: <b>{title}</b></blockquote>\n<blockquote>🛡 Кем: {by}</blockquote>"
+ },
+ "mod_unadmin": {
+  "text": "✅ <b>Пользователь снят с админки</b>\n\n<blockquote>👤 Пользователь: {target}</blockquote>\n<blockquote>🛡 Кем: {by}</blockquote>"
+ },
+ "mod_vip": {
+  "text": "✨ <b>Пользователь стал особым участником</b>\n\n<blockquote>👤 Пользователь: {target}</blockquote>\n<blockquote>🔑 Доступ: мут на {minutes} мин и {warns} предупреждение</blockquote>\n<blockquote>🛡 Кем: {by}</blockquote>"
+ },
+ "mod_unvip": {
+  "text": "✅ <b>Пользователь больше не особый участник</b>\n\n<blockquote>👤 Пользователь: {target}</blockquote>\n<blockquote>🛡 Кем: {by}</blockquote>"
+ },
+ "mod_immune": {
+  "text": "🛡 {target} — админ или особый участник, это действие недоступно."
+ },
+ "mod_vip_once": {
+  "text": "⚠️ Особые участники могут дать каждому только {warns} предупреждение."
+ },
+ "mod_failed": {
+  "text": "⚠️ Не удалось. Сделайте бота полным админом (ограничение, бан и назначение админов)."
  }
 }

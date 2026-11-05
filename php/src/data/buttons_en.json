@@ -27,5 +27,10 @@
  "btn_mine_field": "💣 MINE FIELD",
  "btn_mine_cash": "💰 Cash out",
  "btn_dm_balance": "💎 {points} diamonds",
- "btn_dm_level": "🏅 Level {level}"
+ "btn_dm_level": "🏅 Level {level}",
+ "btn_md_unban": "✅ Unban",
+ "btn_md_unmute": "🔊 Unmute",
+ "btn_md_unwarn": "❌ Clear warnings",
+ "btn_md_unadmin": "❌ Remove admin",
+ "btn_md_unvip": "❌ Remove special"
 }

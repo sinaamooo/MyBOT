@@ -7,7 +7,7 @@ final class Bot
         'panel' => ['Admin', 'panel'], 'check' => ['Scam', 'check'], 'scam' => ['Scam', 'cmd'],
     ];
     const CALLBACKS = [
-        'fj:' => ['Bot', 'forceJoinCheck'], 'unmute:' => ['Bot', 'unmuteCb'], 'tr:' => ['Tools', 'translateCb'], 'gs:' => ['Groups', 'toggle'], 'ul:' => ['Start', 'langCb'],
+        'fj:' => ['Bot', 'forceJoinCheck'], 'unmute:' => ['Bot', 'unmuteCb'], 'tr:' => ['Tools', 'translateCb'], 'gs:' => ['Groups', 'toggle'], 'ul:' => ['Start', 'langCb'], 'md:' => ['Moderation', 'cb'],
         'scam:' => ['Scam', 'buttons'], 'scamadm:' => ['Scam', 'decision'], 'adm:' => ['Admin', 'callback'], 'wl:' => ['Tools', 'walletButton'],
         'tt:' => ['Tools', 'transfers'], 'tp:' => ['Tools', 'transfers'], 'is:' => ['Extras', 'story'],
         'ih:' => ['Extras', 'highlights'], 'hi:' => ['Extras', 'highlightItems'], 'gd:' => ['Games', 'doozCb'], 'gn:' => ['Games', 'mineCb'], 'gj:' => ['Diamonds', 'jailCb'], 'gb:' => ['Diamonds', 'accountCb'],
@@ -285,7 +285,7 @@ final class Bot
         $admin = function () use (&$adm, $chat, $u) {
             return $adm ??= self::isChatAdmin($chat, $u['id']);
         };
-        if (Config::isAdmin($u['id'])) {
+        if (Config::isAdmin($u['id']) || Moderation::isVip($chat, (int)$u['id'])) {
             return true;
         }
         $text = $m['text'] ?? $m['caption'] ?? '';
@@ -436,7 +436,7 @@ final class Bot
             return;
         }
         $chat = (int)$m['chat']['id'];
-        if (!Settings::on($chat, 'anti_self') || Config::isAdmin($u['id'])) {
+        if (!Settings::on($chat, 'anti_self') || Config::isAdmin($u['id']) || Moderation::isVip($chat, (int)$u['id'])) {
             return;
         }
         $score = Guard::selfOnEdit($chat, $u['id'], $m['edit_date'] - $m['date']);

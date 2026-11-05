@@ -614,5 +614,61 @@
  "lang_choose": {
   "text": "🌐 <b>زبان ربات را انتخاب کنید</b>\n🌐 <b>Choose the bot language</b>\n🌐 <b>Выберите язык бота</b>",
   "desc": "انتخاب زبان گروه"
+ },
+ "mod_ban": {
+  "text": "⛔️ <b>کـاربـر از گـروه بـن شـد</b>\n\n<blockquote>👤    کـاربـر: {target}</blockquote>\n<blockquote>🛡    تـوسـط: {by}</blockquote>",
+  "desc": "بن کاربر با ریپلای ({target} {by})"
+ },
+ "mod_unban": {
+  "text": "✅ <b>بـن کـاربـر بـرداشـتـه شـد</b>\n\n<blockquote>👤    کـاربـر: {target}</blockquote>\n<blockquote>🛡    تـوسـط: {by}</blockquote>",
+  "desc": "رفع بن ({target} {by})"
+ },
+ "mod_mute": {
+  "text": "🔇 <b>کـاربـر سـکـوت شـد</b>\n\n<blockquote>👤    کـاربـر: {target}</blockquote>\n<blockquote>⏳    مـدت: {duration}</blockquote>\n<blockquote>🛡    تـوسـط: {by}</blockquote>",
+  "desc": "سکوت کاربر ({target} {duration} {by})"
+ },
+ "mod_unmute": {
+  "text": "🔊 <b>سـکـوت کـاربـر بـرداشـتـه شـد</b>\n\n<blockquote>👤    کـاربـر: {target}</blockquote>\n<blockquote>🛡    تـوسـط: {by}</blockquote>",
+  "desc": "حذف سکوت ({target} {by})"
+ },
+ "mod_warn": {
+  "text": "⚠️ <b>کـاربـر اخـطـار گـرفـت</b>\n\n<blockquote>👤    کـاربـر: {target}</blockquote>\n<blockquote>⚖️    اخـطـار: <b>{count}</b> از <b>{max}</b></blockquote>\n<blockquote>🛡    تـوسـط: {by}</blockquote>",
+  "desc": "اخطار ({target} {count} {max} {by})"
+ },
+ "mod_warn_mute": {
+  "text": "🔇 <b>{max} اخـطـار کـامـل شـد و کـاربـر سـکـوت شـد</b>\n\n<blockquote>👤    کـاربـر: {target}</blockquote>\n<blockquote>⏳    مـدت: {duration}</blockquote>\n<blockquote>🛡    تـوسـط: {by}</blockquote>",
+  "desc": "سکوت بعد از اخطار آخر ({target} {max} {duration} {by})"
+ },
+ "mod_unwarn": {
+  "text": "✅ <b>اخـطـارهـای کـاربـر پـاک شـد</b>\n\n<blockquote>👤    کـاربـر: {target}</blockquote>\n<blockquote>🛡    تـوسـط: {by}</blockquote>",
+  "desc": "حذف اخطار ({target} {by})"
+ },
+ "mod_admin": {
+  "text": "👑 <b>کـاربـر مـدیـر گـروه شـد</b>\n\n<blockquote>👤    کـاربـر: {target}</blockquote>\n<blockquote>🔑    لـقـب: <b>{title}</b></blockquote>\n<blockquote>🛡    تـوسـط: {by}</blockquote>",
+  "desc": "تنظیم مدیر ({target} {title} {by})"
+ },
+ "mod_unadmin": {
+  "text": "✅ <b>کـاربـر از مـدیـریـت بـرکـنـار شـد</b>\n\n<blockquote>👤    کـاربـر: {target}</blockquote>\n<blockquote>🛡    تـوسـط: {by}</blockquote>",
+  "desc": "حذف مدیر ({target} {by})"
+ },
+ "mod_vip": {
+  "text": "✨ <b>کـاربـر عـضـو ویـژه شـد</b>\n\n<blockquote>👤    کـاربـر: {target}</blockquote>\n<blockquote>🔑    دسـتـرسـی: سـکـوت {minutes} دقـیـقـه‌ای و {warns} اخـطـار</blockquote>\n<blockquote>🛡    تـوسـط: {by}</blockquote>",
+  "desc": "تنظیم ویژه ({target} {minutes} {warns} {by})"
+ },
+ "mod_unvip": {
+  "text": "✅ <b>کـاربـر از اعـضـای ویـژه حـذف شـد</b>\n\n<blockquote>👤    کـاربـر: {target}</blockquote>\n<blockquote>🛡    تـوسـط: {by}</blockquote>",
+  "desc": "حذف ویژه ({target} {by})"
+ },
+ "mod_immune": {
+  "text": "🛡 {target} مـدیـر یـا عـضـو ویـژه اسـت و ایـن کـار روی او انـجـام نـمـی‌شـود.",
+  "desc": "کاربر ایمن ({target})"
+ },
+ "mod_vip_once": {
+  "text": "⚠️ اعـضـای ویـژه بـه هـر کـاربـر فـقـط {warns} اخـطـار مـی‌تـوانـنـد بـدهـنـد.",
+  "desc": "محدودیت اخطار عضو ویژه ({warns})"
+ },
+ "mod_failed": {
+  "text": "⚠️ انـجـام نـشـد. ربـات را ادمـیـن کـامـل کـنـیـد (مـحـدود کـردن، بـن کـردن و افـزودن مـدیـر).",
+  "desc": "خطای دسترسی مدیریت"
  }
 }

@@ -27,5 +27,10 @@
  "btn_mine_field": "💣 MINE FIELD",
  "btn_mine_cash": "💰 Забрать приз",
  "btn_dm_balance": "💎 {points} алмазов",
- "btn_dm_level": "🏅 Уровень {level}"
+ "btn_dm_level": "🏅 Уровень {level}",
+ "btn_md_unban": "✅ Разбан",
+ "btn_md_unmute": "🔊 Снять мут",
+ "btn_md_unwarn": "❌ Снять предупреждения",
+ "btn_md_unadmin": "❌ Снять админа",
+ "btn_md_unvip": "❌ Снять особый статус"
 }

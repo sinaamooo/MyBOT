@@ -67,6 +67,7 @@ final class Admin
         'guard' => ['🛡', 'گروه و امنیت', ['force_join_private', 'force_join_group', 'force_join_ok', 'force_join_not_yet', 'self_warn', 'self_muted', 'tabchi_muted', 'unmuted', 'group_settings', 'only_group_admins']],
         'scam' => ['🚨', 'کلاهبرداری', ['scam_keyword_warn', 'scam_known', 'scam_usage', 'scam_go_private', 'scam_ask_evidence', 'scam_evidence_saved', 'scam_need_evidence', 'scam_submitted', 'scam_cancelled', 'scam_admin', 'scam_approved_user', 'scam_rejected_user', 'scam_broadcast', 'scam_check_clean', 'scam_check_found']],
         'tools' => ['🧩', 'ابزارها', ['uid', 'account', 'emoji_item', 'emoji_none', 'calc_result', 'translate_choose', 'translate_result', 'translate_not_yours', 'translate_used', 'translate_need_reply', 'translate_failed']],
+        'mod' => ['🛡', 'مدیریت گروه', ['mod_ban', 'mod_unban', 'mod_mute', 'mod_unmute', 'mod_warn', 'mod_warn_mute', 'mod_unwarn', 'mod_admin', 'mod_unadmin', 'mod_vip', 'mod_unvip', 'mod_immune', 'mod_vip_once', 'mod_failed']],
         'insta' => ['🎞', 'اینستاگرام', ['insta_loading', 'insta_count', 'insta_media_caption', 'insta_story_caption', 'insta_not_found', 'insta_private', 'insta_no_story', 'insta_no_highlight', 'insta_no_key', 'insta_highlights', 'insta_info']],
     ];
     const NUMBERS = [

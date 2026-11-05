@@ -160,6 +160,9 @@ final class Tools
             }
             $w = Wallets::check($kind, $token);
             Perf::mark('lookup');
+            if ($kind === 'evm') {
+                $w = array_slice($w, 0, 1);
+            }
             if (!$w && $kind === 'sol' && in_array(strlen($token), [43, 44], true) && ($tx = Txs::check('sol', $token))) {
                 self::sendTx($m, $tx, $owner);
                 return;
