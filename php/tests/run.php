@@ -763,7 +763,7 @@ foreach (['/500 درهم' => 'درهم امارات', '/درهم 500' => 'دره
 reset_calls();
 feed(msg('/eur', -950, 97));
 $p = sent(['sendPhoto']);
-check($p && str_starts_with($p[0][1]['caption'], "\u{200F}" . '<tg-emoji emoji-id="5143540580424354040">') && str_contains($p[0][1]['caption'], '<tg-emoji emoji-id="5143224307622610764">'), 'fiat currency badge and dollar flag');
+check($p && str_starts_with($p[0][1]['caption'], '<tg-emoji emoji-id="5143540580424354040">') && str_contains($p[0][1]['caption'], '<tg-emoji emoji-id="5143224307622610764">'), 'fiat currency badge and dollar flag');
 reset_calls();
 feed(msg('500000 ریال', 98, 98));
 $p = sent(['sendPhoto']);
@@ -858,11 +858,12 @@ Config::set('KASHIDA', '0');
 check(UI::quoteGaps("سر\n\n<blockquote>a</blockquote>\n\nجمع\n\n<blockquote>b</blockquote>\n<blockquote>c</blockquote>") === "سر\n\n<blockquote>a</blockquote>\nجمع\n<blockquote>b</blockquote>\n<blockquote>c</blockquote>"
     && UI::quoteGaps("سر\n\n<blockquote>a</blockquote>") === "سر\n\n<blockquote>a</blockquote>", 'only first quote keeps blank line above');
 $E = fn($id) => '<tg-emoji emoji-id="' . $id . '">x</tg-emoji>';
-$al = UI::align($E(1) . " <b>عنوان</b>\n" . $E(2) . "<code>UQB1</code>\n<blockquote>" . $E(3) . " NFT: 5\n" . $E(4) . "        موجودی: 1</blockquote>\n" . $E(5) . "   1405/08/14");
-check($al === "\u{200F}" . $E(1) . " <b>عنوان</b>\n" . $E(2) . " <code>UQB1</code>\n<blockquote>" . $E(3) . " NFT: 5\n\u{200F}" . $E(4) . "    موجودی: 1</blockquote>\n\u{200F}" . $E(5) . " 1405/08/14"
-    && UI::align('<blockquote>' . $E(6) . '    <b>370,185</b></blockquote>') === "<blockquote>\u{200F}" . $E(6) . '    <b>370,185</b></blockquote>'
-    && UI::align($E(7) . '   TIME: 1405/08/14 – 18:21') === $E(7) . ' TIME: 1405/08/14 – 18:21' && UI::align($E(8) . ' @HashpriceBot') === $E(8) . ' @HashpriceBot'
-    && UI::align('<b>hello</b> ' . $E(1)) === '<b>hello</b> ' . $E(1), 'emoji lines right-aligned with exact spacing');
+$al = UI::align($E(1) . " <b>عنوان</b>\n" . $E(2) . "<code>UQB1</code>\n<blockquote>" . $E(3) . "    NFT: 5\n" . $E(4) . "        موجودی: 1</blockquote>\n" . $E(5) . "   1405/08/14");
+check($al === $E(1) . " <b>عنوان</b>\n" . $E(2) . " <code>UQB1</code>\n<blockquote>" . $E(3) . " NFT: 5\n" . $E(4) . "  موجودی: 1</blockquote>\n" . $E(5) . " 1405/08/14"
+    && UI::align('<blockquote>' . $E(4) . ' موجودی: 1</blockquote>', 4) === '<blockquote>' . $E(4) . '    موجودی: 1</blockquote>'
+    && UI::align('<blockquote>' . $E(6) . '    <b>370,185</b></blockquote>') === '<blockquote>' . $E(6) . ' <b>370,185</b></blockquote>'
+    && UI::align("\u{200F}" . $E(7) . '   <b>800 POL</b>') === "\u{200F}" . $E(7) . ' <b>800 POL</b>' && UI::align($E(8) . '    @HashpriceBot') === $E(8) . ' @HashpriceBot'
+    && UI::align('<b>hello</b> ' . $E(1)) === '<b>hello</b> ' . $E(1), 'emoji spacing: 2 in message quotes, 4 in caption quotes, 1 elsewhere');
 $dm2 = Settings::get('emoji_map');
 Settings::set('emoji_invalid', []);
 Settings::set('emoji_map', ['🇮🇷' => '5143448346001671955']);

@@ -404,7 +404,7 @@ final class UI
         return substr($html, 0, $first + 1) . preg_replace('/\n{2,}(?=<blockquote)/', "\n", substr($html, $first + 1));
     }
 
-    public static function align(string $html): string
+    public static function align(string $html, int $quoteGap = 2): string
     {
         if (!str_contains($html, '<tg-emoji')) {
             return $html;
@@ -412,13 +412,13 @@ final class UI
         $depth = 0;
         $lines = explode("\n", $html);
         foreach ($lines as &$line) {
-            if (preg_match('/^((?:<(?!tg-emoji|\/)[a-z][^>]*>)*)\x{200F}?(<tg-emoji[^>]*>.*?<\/tg-emoji>)[ \t]*/u', $line, $m)) {
+            if (preg_match('/^((?:<(?!tg-emoji|\/)[a-z][^>]*>)*)(\x{200F}?)(<tg-emoji[^>]*>.*?<\/tg-emoji>)[ \t]*/u', $line, $m)) {
                 $quote = $depth > 0 || str_contains($m[1], '<blockquote');
                 $rest = substr($line, strlen($m[0]));
                 $plain = html_entity_decode(strip_tags(preg_replace('/<tg-emoji[^>]*>.*?<\/tg-emoji>/u', '', $rest)), ENT_QUOTES, 'UTF-8');
-                $ltr = preg_match('/\p{L}/u', $plain, $lm) && !preg_match('/\p{Arabic}/u', $lm[0]);
-                $gap = $rest !== '' && !str_starts_with($rest, '</blockquote') ? str_repeat(' ', $quote && !$ltr ? 4 : 1) : '';
-                $line = $m[1] . ($ltr ? '' : "\u{200F}") . $m[2] . $gap . $rest;
+                $rtl = $m[2] !== '' || (preg_match('/\p{L}/u', $plain, $lm) && preg_match('/\p{Arabic}/u', $lm[0]));
+                $gap = $rest !== '' && !str_starts_with($rest, '</blockquote') ? str_repeat(' ', $quote && $rtl ? $quoteGap : 1) : '';
+                $line = $m[1] . $m[2] . $m[3] . $gap . $rest;
             }
             $depth = max(0, $depth + preg_match_all('/<blockquote/', $line) - substr_count($line, '</blockquote>'));
         }
