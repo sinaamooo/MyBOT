@@ -3,6 +3,7 @@
 final class Http
 {
     public static $fake = null;
+    private static array $hdr = [];
     const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36';
 
     private static function handle(array $r)
@@ -12,7 +13,14 @@ final class Http
         if (!empty($r['params'])) {
             $url .= (str_contains($url, '?') ? '&' : '?') . http_build_query($r['params']);
         }
-        $headers = ['User-Agent: ' . self::UA, 'Accept: application/json, text/plain, */*'];
+        $given = array_change_key_case($r['headers'] ?? [], CASE_LOWER);
+        $headers = [];
+        if (!isset($given['user-agent'])) {
+            $headers[] = 'User-Agent: ' . self::UA;
+        }
+        if (!isset($given['accept'])) {
+            $headers[] = 'Accept: application/json, text/plain, */*';
+        }
         foreach ($r['headers'] ?? [] as $k => $v) {
             if ($v !== null && $v !== '') {
                 $headers[] = "$k: $v";
@@ -21,7 +29,7 @@ final class Http
         $ch = curl_init($url);
         $opts = [
             CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_FOLLOWLOCATION => $r['follow'] ?? true,
             CURLOPT_MAXREDIRS => 4,
             CURLOPT_TIMEOUT => (int)($r['timeout'] ?? 12),
             CURLOPT_CONNECTTIMEOUT => 8,
@@ -35,12 +43,31 @@ final class Http
             $opts[CURLOPT_POSTFIELDS] = $r['form'];
         }
         $opts[CURLOPT_HTTPHEADER] = $headers;
-        $proxy = Config::get('PROXY');
+        $proxy = $r['proxy'] ?? Config::get('PROXY');
         if ($proxy !== '' && empty($r['no_proxy'])) {
             $opts[CURLOPT_PROXY] = str_starts_with($proxy, 'socks5://') ? 'socks5h://' . substr($proxy, 9) : $proxy;
         }
+        if (!empty($r['want_headers'])) {
+            $id = spl_object_id($ch);
+            self::$hdr[$id] = [];
+            $opts[CURLOPT_HEADERFUNCTION] = function ($c, $line) use ($id) {
+                if (str_contains($line, ':')) {
+                    [$k, $v] = explode(':', $line, 2);
+                    self::$hdr[$id][] = [strtolower(trim($k)), trim($v)];
+                }
+                return strlen($line);
+            };
+        }
         curl_setopt_array($ch, $opts);
         return [$ch, $url];
+    }
+
+    private static function takeHeaders($ch): array
+    {
+        $id = spl_object_id($ch);
+        $h = self::$hdr[$id] ?? [];
+        unset(self::$hdr[$id]);
+        return $h;
     }
 
     public static function request(array $r): array
@@ -51,8 +78,9 @@ final class Http
         [$ch] = self::handle($r);
         $body = curl_exec($ch);
         $status = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+        $h = self::takeHeaders($ch);
         curl_close($ch);
-        return ['status' => $body === false ? 0 : $status, 'body' => $body === false ? '' : $body];
+        return ['status' => $body === false ? 0 : $status, 'body' => $body === false ? '' : $body, 'headers' => $h];
     }
 
     public static function multi(array $reqs): array
@@ -80,7 +108,7 @@ final class Http
         foreach ($handles as $k => $ch) {
             $body = curl_multi_getcontent($ch);
             $status = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-            $out[$k] = ['status' => ($body === null || $body === '') && $status === 0 ? 0 : $status, 'body' => (string)$body];
+            $out[$k] = ['status' => ($body === null || $body === '') && $status === 0 ? 0 : $status, 'body' => (string)$body, 'headers' => self::takeHeaders($ch)];
             curl_multi_remove_handle($mh, $ch);
             curl_close($ch);
         }

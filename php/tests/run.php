@@ -665,6 +665,20 @@ feed(msg('https://www.instagram.com/p/QQQ111/', -900, 98));
 $pho = array_values(array_filter($GLOBALS['calls'], fn($c) => $c[0] === 'sendPhoto' && ($c[1]['photo'] ?? '') === 'https://cdn/p.jpg?a=1&b=2'));
 check(count($pho) === 1, 'instagram embed fallback');
 unset($GLOBALS['http']['/embed/captioned/']);
+$GLOBALS['http']['i.instagram.com/api/v1/media/' . Instagram::mediaId('MOB123') . '/info/'] = ['items' => [['carousel_media' => [
+    ['video_versions' => [['url' => 'https://cdn/small.mp4', 'width' => 320, 'height' => 240], ['url' => 'https://cdn/big.mp4', 'width' => 1080, 'height' => 1920]], 'image_versions2' => ['candidates' => [['url' => 'https://cdn/t.jpg']]]],
+    ['image_versions2' => ['candidates' => [['url' => 'https://cdn/c2.jpg', 'width' => 1080, 'height' => 1080], ['url' => 'https://cdn/c2s.jpg', 'width' => 320, 'height' => 320]]]]]]]];
+reset_calls();
+feed(msg('https://www.instagram.com/p/MOB123/', -900, 99));
+$v = array_values(array_filter($GLOBALS['calls'], fn($c) => $c[0] === 'sendVideo' && ($c[1]['video'] ?? '') === 'https://cdn/big.mp4'));
+$p = array_values(array_filter($GLOBALS['calls'], fn($c) => $c[0] === 'sendPhoto' && ($c[1]['photo'] ?? '') === 'https://cdn/c2.jpg'));
+check(count($v) === 1 && count($p) === 1, 'instagram mobile api carousel');
+$ctx = json_encode(['gql_data' => ['shortcode_media' => ['is_video' => true, 'video_url' => 'https://cdn/e.mp4']]]);
+$GLOBALS['http']['/p/EMB777/embed/captioned/'] = '<script>s.handle({"require":[["X","init",[],[' . json_encode(['contextJSON' => $ctx]) . ']],1]})</script>';
+reset_calls();
+feed(msg('https://www.instagram.com/reel/EMB777/', -900, 100));
+check(array_filter($GLOBALS['calls'], fn($c) => $c[0] === 'sendVideo' && ($c[1]['video'] ?? '') === 'https://cdn/e.mp4'), 'instagram embed init context');
+unset($GLOBALS['http']['/p/EMB777/embed/captioned/']);
 
 cb('adm:power', 999, 999);
 check(Settings::get('bot_enabled') === false, 'power off');

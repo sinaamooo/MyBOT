@@ -548,7 +548,7 @@ final class Phone
 
 final class Instagram
 {
-    const LINK = '~(?:https?://)?(?:www\.)?instagram\.com/(?:[A-Za-z0-9_.]+/)?(?:p|reel|reels|tv|stories)/\S+~i';
+    const LINK = '~(?:https?://)?(?:www\.)?instagram\.com/(?:[A-Za-z0-9_.]+/)?(?:p|reel|reels|tv|stories|share)/\S+~i';
     public static int $lastStatus = 0;
 
     public static function enabled(): bool
@@ -586,13 +586,82 @@ final class Instagram
         return $out ?: self::direct($link);
     }
 
+    const ALPHA = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+    const MOBILE_UA = 'Instagram 275.0.0.27.98 Android (33/13; 280dpi; 720x1423; Xiaomi; Redmi 7; onclite; qcom; en_US; 458229237)';
+
+    private static function proxy(): ?string
+    {
+        $p = Config::get('INSTAGRAM_PROXY');
+        return $p !== '' ? $p : null;
+    }
+
+    private static function browser(array $extra = []): array
+    {
+        return $extra + [
+            'User-Agent' => Http::UA,
+            'Accept' => 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+            'Accept-Language' => 'en-US,en;q=0.9',
+            'Sec-Ch-Ua' => '"Chromium";v="131", "Google Chrome";v="131", "Not-A.Brand";v="99"',
+            'Sec-Ch-Ua-Mobile' => '?0',
+            'Sec-Ch-Ua-Platform' => '"Windows"',
+            'Sec-Fetch-Dest' => 'document',
+            'Sec-Fetch-Mode' => 'navigate',
+            'Sec-Fetch-Site' => 'none',
+            'Sec-Fetch-User' => '?1',
+            'Upgrade-Insecure-Requests' => '1',
+        ];
+    }
+
+    private static function req(array $r): array
+    {
+        $p = self::proxy();
+        return $r + ['timeout' => 15] + ($p ? ['proxy' => $p] : []);
+    }
+
+    public static function mediaId(string $sc): ?string
+    {
+        if (strlen($sc) > 28) {
+            $sc = substr($sc, 0, -28);
+        }
+        $n = '0';
+        foreach (str_split($sc) as $c) {
+            $v = strpos(self::ALPHA, $c);
+            if ($v === false) {
+                return null;
+            }
+            $n = function_exists('bcmul') ? bcadd(bcmul($n, '64'), (string)$v) : (string)((int)$n * 64 + $v);
+        }
+        return $n;
+    }
+
+    private static function best(array $list): ?array
+    {
+        $best = null;
+        foreach ($list as $v) {
+            if (!empty($v['url']) && (!$best || ($v['width'] ?? 0) * ($v['height'] ?? 0) > ($best['width'] ?? 0) * ($best['height'] ?? 0))) {
+                $best = $v;
+            }
+        }
+        return $best;
+    }
+
     private static function nodes(?array $n): array
     {
         if (!$n) {
             return [];
         }
-        $list = !empty($n['edge_sidecar_to_children']['edges']) ? array_column($n['edge_sidecar_to_children']['edges'], 'node') : [$n];
         $out = [];
+        if (!empty($n['carousel_media']) || !empty($n['video_versions']) || !empty($n['image_versions2'])) {
+            foreach (!empty($n['carousel_media']) ? $n['carousel_media'] : [$n] as $x) {
+                if (!empty($x['video_versions']) && ($v = self::best($x['video_versions']))) {
+                    $out[] = ['url' => $v['url'], 'kind' => 'video'];
+                } elseif ($img = self::best($x['image_versions2']['candidates'] ?? [])) {
+                    $out[] = ['url' => $img['url'], 'kind' => 'photo'];
+                }
+            }
+            return $out;
+        }
+        $list = !empty($n['edge_sidecar_to_children']['edges']) ? array_column($n['edge_sidecar_to_children']['edges'], 'node') : [$n];
         foreach ($list as $x) {
             if (!empty($x['is_video']) && !empty($x['video_url'])) {
                 $out[] = ['url' => $x['video_url'], 'kind' => 'video'];
@@ -603,37 +672,38 @@ final class Instagram
         return $out;
     }
 
-    public static function direct(string $link): ?array
+    private static function entry(string $name, string $html): ?array
     {
-        if (!preg_match('~/(?:p|reel|reels|tv)/([A-Za-z0-9_-]+)~', $link, $mm)) {
-            return null;
+        if (preg_match('/\["' . preg_quote($name, '/') . '",\[\],(\{.*?\}),\d+\]/s', $html, $m)) {
+            $d = json_decode($m[1], true);
+            return is_array($d) ? $d : null;
         }
-        $sc = $mm[1];
-        $lsd = 'AVqbxe3J_YA';
-        $head = ['X-IG-App-ID' => '936619743392459', 'X-FB-LSD' => $lsd, 'X-ASBD-ID' => '129477', 'Sec-Fetch-Site' => 'same-origin',
-            'Origin' => 'https://www.instagram.com', 'Referer' => "https://www.instagram.com/p/$sc/", 'Content-Type' => 'application/x-www-form-urlencoded'];
-        $vars = [
-            '8845758582119845' => ['shortcode' => $sc, 'fetch_tagged_user_count' => null, 'hoisted_comment_id' => null, 'hoisted_reply_id' => null],
-            '10015901848480474' => ['shortcode' => $sc],
-        ];
-        $reqs = [];
-        foreach ($vars as $doc => $v) {
-            $reqs[$doc] = ['method' => 'POST', 'url' => 'https://www.instagram.com/graphql/query', 'headers' => $head, 'timeout' => 20,
-                'form' => http_build_query(['lsd' => $lsd, 'doc_id' => (string)$doc, 'variables' => json_encode($v)])];
-        }
-        $reqs['embed'] = ['url' => "https://www.instagram.com/p/$sc/embed/captioned/", 'timeout' => 20, 'headers' => ['Accept' => 'text/html']];
-        $res = Http::multi($reqs);
-        foreach (array_keys($vars) as $doc) {
-            $d = json_decode($res[$doc]['body'] ?? '', true);
-            $n = $d['data']['xdt_shortcode_media'] ?? $d['data']['shortcode_media'] ?? null;
-            if ($out = self::nodes(is_array($n) ? $n : null)) {
-                return $out;
+        return null;
+    }
+
+    private static function cookies(array $res): array
+    {
+        $c = [];
+        foreach ($res['headers'] ?? [] as [$k, $v]) {
+            if ($k === 'set-cookie' && preg_match('/^([^=;]+)=([^;]*)/', $v, $m) && $m[2] !== '' && $m[2] !== '""') {
+                $c[$m[1]] = $m[2];
             }
         }
-        $html = (string)($res['embed']['body'] ?? '');
-        if (preg_match('/"contextJSON":"((?:[^"\\\\]|\\\\.)*)"/', $html, $cm)) {
-            $ctx = json_decode((string)json_decode('"' . $cm[1] . '"'), true);
-            $n = $ctx['gql_data']['shortcode_media'] ?? $ctx['context']['media'] ?? null;
+        return $c;
+    }
+
+    private static function fromEmbed(string $html): array
+    {
+        if ($html === '') {
+            return [];
+        }
+        foreach (['/"init",\[\],\[(.*?)\]\],/s', '/"contextJSON":"((?:[^"\\\\]|\\\\.)*)"/s'] as $i => $rx) {
+            if (!preg_match($rx, $html, $m)) {
+                continue;
+            }
+            $ctx = $i === 0 ? (json_decode($m[1], true)['contextJSON'] ?? null) : json_decode('"' . $m[1] . '"');
+            $ctx = is_string($ctx) ? json_decode($ctx, true) : null;
+            $n = $ctx['gql_data']['shortcode_media'] ?? $ctx['gql_data']['xdt_shortcode_media'] ?? $ctx['context']['media'] ?? null;
             if ($out = self::nodes(is_array($n) ? $n : null)) {
                 return $out;
             }
@@ -641,12 +711,107 @@ final class Instagram
         if (preg_match('/\\\\?"video_url\\\\?":\\\\?"(https:[^"]+?)\\\\?"/', $html, $vm)) {
             return [['url' => str_replace(['\\/', '\\u0026', '\\'], ['/', '&', ''], $vm[1]), 'kind' => 'video']];
         }
-        if (preg_match('/class="EmbeddedMediaImage"[^>]*src="([^"]+)"/', $html, $im) || preg_match('/<img[^>]+class="EmbeddedMediaImage"[^>]*>/', $html, $im)) {
-            $src = $im[1] ?? (preg_match('/src="([^"]+)"/', $im[0], $s2) ? $s2[1] : '');
-            if ($src !== '') {
-                return [['url' => html_entity_decode($src), 'kind' => 'photo']];
+        if (preg_match('/<img[^>]+class="EmbeddedMediaImage"[^>]*>/', $html, $im) && preg_match('/src="([^"]+)"/', $im[0], $s2)) {
+            return [['url' => html_entity_decode($s2[1]), 'kind' => 'photo']];
+        }
+        return [];
+    }
+
+    private static function fromPage(string $html): array
+    {
+        if (!preg_match_all('/"xig_polaris_media":(\{.*?\}),"extensions"/s', $html, $mm)) {
+            return [];
+        }
+        foreach ($mm[1] as $j) {
+            $d = json_decode($j, true);
+            if ($out = self::nodes($d['if_not_gated_logged_out'] ?? null)) {
+                return $out;
             }
         }
+        return [];
+    }
+
+    public static function shortcode(string $link): ?string
+    {
+        if (preg_match('~/share/(?:reel/|p/)?([A-Za-z0-9_-]+)~', $link, $m)) {
+            $r = Http::request(self::req(['url' => "https://www.instagram.com/share/$m[1]/", 'follow' => false, 'want_headers' => true, 'headers' => ['User-Agent' => 'curl/7.88.1', 'Accept' => '*/*'], 'timeout' => 10]));
+            foreach ($r['headers'] ?? [] as [$k, $v]) {
+                if ($k === 'location' && preg_match('~/(?:p|reel|reels|tv)/([A-Za-z0-9_-]+)~', $v, $x)) {
+                    return $x[1];
+                }
+            }
+            return null;
+        }
+        return preg_match('~/(?:p|reel|reels|tv)/([A-Za-z0-9_-]+)~', $link, $m) ? $m[1] : null;
+    }
+
+    public static function direct(string $link): ?array
+    {
+        $sc = self::shortcode($link);
+        $pk = $sc ? self::mediaId($sc) : null;
+        if (!$sc || !$pk) {
+            self::$lastStatus = 404;
+            return null;
+        }
+        $mobile = ['User-Agent' => self::MOBILE_UA, 'X-IG-App-Locale' => 'en_US', 'X-IG-Device-Locale' => 'en_US', 'X-IG-Mapped-Locale' => 'en_US',
+            'Accept-Language' => 'en-US', 'X-FB-HTTP-Engine' => 'Liger', 'X-IG-App-ID' => '567067343352427', 'Accept' => '*/*'];
+        $res = Http::multi([
+            'mobile' => self::req(['url' => "https://i.instagram.com/api/v1/media/$pk/info/", 'headers' => $mobile]),
+            'embed' => self::req(['url' => "https://www.instagram.com/p/$sc/embed/captioned/", 'headers' => self::browser()]),
+            'page' => self::req(['url' => "https://www.instagram.com/p/$sc/", 'headers' => self::browser(), 'want_headers' => true]),
+        ]);
+        $d = Http::decode($res['mobile']);
+        if ($out = self::nodes($d['items'][0] ?? null)) {
+            return $out;
+        }
+        if ($out = self::fromEmbed((string)($res['embed']['body'] ?? ''))) {
+            return $out;
+        }
+        $html = (string)($res['page']['body'] ?? '');
+        if ($out = self::fromPage($html)) {
+            return $out;
+        }
+        $lsd = self::entry('LSD', $html)['token'] ?? (preg_match('/"lsd":"([^"]+)"/', $html, $lm) ? $lm[1] : rtrim(strtr(base64_encode(random_bytes(8)), '+/', '-_'), '='));
+        $sec = self::entry('InstagramSecurityConfig', $html);
+        $site = self::entry('SiteData', $html) ?? [];
+        $polaris = self::entry('PolarisSiteData', $html) ?? [];
+        $ck = self::cookies($res['page']);
+        $csrf = $sec['csrf_token'] ?? $ck['csrftoken'] ?? '';
+        $cookie = implode('; ', array_filter([
+            $csrf !== '' ? "csrftoken=$csrf" : null,
+            !empty($polaris['device_id']) ? 'ig_did=' . $polaris['device_id'] : (isset($ck['ig_did']) ? 'ig_did=' . $ck['ig_did'] : null),
+            !empty($polaris['machine_id']) ? 'mid=' . $polaris['machine_id'] : (isset($ck['mid']) ? 'mid=' . $ck['mid'] : null),
+            isset($ck['datr']) ? 'datr=' . $ck['datr'] : null,
+            'ig_nrcb=1', 'wd=1280x720', 'dpr=2',
+        ]));
+        $api = ['User-Agent' => Http::UA, 'Accept' => '*/*', 'Accept-Language' => 'en-US,en;q=0.9', 'Content-Type' => 'application/x-www-form-urlencoded',
+            'X-IG-App-ID' => '936619743392459', 'X-FB-LSD' => $lsd, 'X-CSRFToken' => $csrf, 'X-IG-WWW-Claim' => '0', 'X-Requested-With' => 'XMLHttpRequest',
+            'Origin' => 'https://www.instagram.com', 'Referer' => "https://www.instagram.com/p/$sc/", 'Sec-Fetch-Site' => 'same-origin', 'Sec-Fetch-Mode' => 'cors',
+            'Sec-Fetch-Dest' => 'empty', 'Cookie' => $cookie];
+        $common = ['av' => '0', '__d' => 'www', '__user' => '0', '__a' => '1', '__req' => 'b', '__hs' => $site['haste_session'] ?? '20126.HYP:instagram_web_pkg.2.1...0',
+            'dpr' => '2', '__ccg' => 'EXCELLENT', '__rev' => (string)($site['__spin_r'] ?? '1019933358'), '__hsi' => (string)($site['hsi'] ?? '7436540909012459023'),
+            '__comet_req' => preg_match('/__comet_req=(\d+)/', $html, $cm) ? $cm[1] : '7', 'lsd' => $lsd,
+            'jazoest' => preg_match('/jazoest=(\d+)/', $html, $jm) ? $jm[1] : (string)random_int(2000, 29999),
+            '__spin_r' => (string)($site['__spin_r'] ?? '1019933358'), '__spin_b' => $site['__spin_b'] ?? 'trunk', '__spin_t' => (string)($site['__spin_t'] ?? time()),
+            'fb_api_caller_class' => 'RelayModern', 'server_timestamps' => 'true'];
+        $res2 = Http::multi([
+            'gql' => self::req(['url' => 'https://www.instagram.com/graphql/query', 'method' => 'POST', 'headers' => $api + ['X-FB-Friendly-Name' => 'PolarisPostActionLoadPostQueryQuery', 'X-ASBD-ID' => '129477'],
+                'form' => http_build_query($common + ['fb_api_req_friendly_name' => 'PolarisPostActionLoadPostQueryQuery', 'doc_id' => '8845758582119845',
+                    'variables' => json_encode(['shortcode' => $sc, 'fetch_tagged_user_count' => null, 'hoisted_comment_id' => null, 'hoisted_reply_id' => null])])]),
+            'polaris' => self::req(['url' => 'https://www.instagram.com/api/graphql', 'method' => 'POST', 'headers' => $api + ['X-FB-Friendly-Name' => 'PolarisLoggedOutDesktopWWWPostRootContentQuery', 'X-ASBD-ID' => '359341'],
+                'form' => http_build_query($common + ['fb_api_req_friendly_name' => 'PolarisLoggedOutDesktopWWWPostRootContentQuery', 'doc_id' => '27130156389949648',
+                    'variables' => json_encode(['media_id' => $pk], JSON_UNESCAPED_SLASHES)])]),
+        ]);
+        $g = Http::decode($res2['gql']);
+        if ($out = self::nodes($g['data']['xdt_shortcode_media'] ?? $g['data']['shortcode_media'] ?? null)) {
+            return $out;
+        }
+        $p = Http::decode($res2['polaris']);
+        if ($out = self::nodes($p['data']['xig_polaris_media']['if_not_gated_logged_out'] ?? null)) {
+            return $out;
+        }
+        error_log('instagram ' . $sc . ': mobile=' . ($res['mobile']['status'] ?? 0) . ' embed=' . ($res['embed']['status'] ?? 0) . ' page=' . ($res['page']['status'] ?? 0)
+            . ' gql=' . ($res2['gql']['status'] ?? 0) . ' polaris=' . ($res2['polaris']['status'] ?? 0));
         self::$lastStatus = 404;
         return null;
     }
