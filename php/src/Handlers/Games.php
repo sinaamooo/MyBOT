@@ -322,8 +322,8 @@ final class Diamonds
         $uid = (int)$u['id'];
         $row = self::get($uid);
         $pts = (float)($row['points'] ?? 0);
-        $kb = UI::kb([[UI::button('btn_dm_balance', ['cb' => "gb:$uid"], ['points' => Fmt::int($pts)]),
-            UI::button('btn_dm_level', ['cb' => "gb:$uid"], ['level' => self::level($pts)])]]);
+        $kb = UI::kb([[UI::button('btn_dm_level', ['cb' => "gb:$uid"], ['level' => self::level($pts)])],
+            [UI::button('btn_dm_balance', ['cb' => "gb:$uid"], ['points' => Fmt::int($pts)])]]);
         Bot::reply($m, UI::t('dm_account', ['name' => self::name($u)]), $kb);
     }
 

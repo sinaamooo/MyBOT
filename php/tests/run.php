@@ -554,7 +554,9 @@ feed(msg('حساب', -7100, 502, null, null, 'Reza'));
 $acc = sent(['sendMessage']);
 $ab = buttons($acc[0] ?? [0, []]);
 $p502 = Fmt::int(Diamonds::points(502));
-check($acc && str_contains($ab[0]['text'] ?? '', $p502) && str_starts_with($ab[0]['callback_data'] ?? '', 'gb:'), 'account shows diamonds on glass button');
+$rows = $acc[0][1]['reply_markup']['inline_keyboard'] ?? [];
+check($acc && count($rows) >= 2 && count($rows[0]) === 1 && count($rows[1]) === 1 && str_contains($ab[0]['text'] ?? '', 'سطح') && str_contains($ab[1]['text'] ?? '', $p502)
+    && str_starts_with($ab[1]['callback_data'] ?? '', 'gb:'), 'account buttons stacked: level on top, diamonds below');
 reset_calls();
 cb($ab[0]['callback_data'], 502, -7100);
 check(!empty($GLOBALS['calls'][0][1]['show_alert']) && str_contains($GLOBALS['calls'][0][1]['text'] ?? '', $p502), 'account button alert');
