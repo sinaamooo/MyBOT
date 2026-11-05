@@ -115,6 +115,9 @@ final class Fmt
     public static function jalali(?int $ts = null, bool $time = true): string
     {
         $d = self::tehran($ts);
+        if (UI::$lang !== 'fa') {
+            return $d->format($time ? 'Y/m/d - H:i' : 'Y/m/d');
+        }
         [$y, $m, $dd] = self::jalaliParts((int)$d->format('Y'), (int)$d->format('n'), (int)$d->format('j'));
         $s = sprintf('%d/%02d/%02d', $y, $m, $dd);
         if ($time) {
@@ -126,6 +129,12 @@ final class Fmt
     public static function jalaliLong(?int $ts = null): string
     {
         $d = self::tehran($ts);
+        if (UI::$lang === 'ru') {
+            return $d->format('j') . ' ' . ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'][(int)$d->format('n') - 1] . ' ' . $d->format('Y');
+        }
+        if (UI::$lang === 'en') {
+            return $d->format('j M Y');
+        }
         [$y, $m, $dd] = self::jalaliParts((int)$d->format('Y'), (int)$d->format('n'), (int)$d->format('j'));
         return self::fa("$dd " . self::MONTHS[$m - 1] . " $y");
     }
@@ -137,6 +146,10 @@ final class Fmt
 
     public static function duration(int $minutes): string
     {
+        if (UI::$lang !== 'fa') {
+            $w = UI::$lang === 'ru' ? ['навсегда', 'мин', 'ч', 'дн.'] : ['permanent', 'min', 'h', 'days'];
+            return !$minutes ? $w[0] : ($minutes < 60 ? "$minutes {$w[1]}" : ($minutes < 1440 ? intdiv($minutes, 60) . " {$w[2]}" : intdiv($minutes, 1440) . " {$w[3]}"));
+        }
         if (!$minutes) {
             return 'دائمی';
         }

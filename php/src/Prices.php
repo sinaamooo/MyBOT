@@ -126,7 +126,18 @@ final class Currencies
 
     public static function cryptoName(string $sym): ?string
     {
-        return Config::data('crypto')[strtoupper($sym)]['fa'] ?? null;
+        return UI::$lang === 'fa' ? (Config::data('crypto')[strtoupper($sym)]['fa'] ?? null) : null;
+    }
+
+    public static function fiatName(string $code): string
+    {
+        $code = strtoupper($code);
+        $f = self::fiat($code) ?? ['fa' => $code, 'en' => $code];
+        return match (UI::$lang) {
+            'fa' => $f['fa'],
+            'ru' => Config::data('phrases_ru')['fiat:' . $code] ?? $f['en'],
+            default => $f['en'],
+        };
     }
 
     public static function knownCrypto(string $t): ?string

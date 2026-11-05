@@ -1,0 +1,479 @@
+{
+ "start_private": {
+  "text": "👋 Привет, <b>{name}</b>, добро пожаловать!\n🤖 Я универсальный бот для криптовалют и управления группами.\n\n<blockquote>💱 Курсы и конвертация криптовалют: <code>10 usdt</code>\n💰 Конвертация в томаны: <code>500000 toman</code>\n🌍 Мировые валюты: <code>500 aed</code>\n🪙 Золото и монеты: <code>gold</code>\n👛 Проверка кошельков и хешей во всех сетях\n🎁 Цены подарков: <code>/gift @username</code>\n🌐 Перевод: ответьте на сообщение и напишите <code>перевод</code>\n🧮 Калькулятор: <code>200+79</code>\n🆔 Числовой ID: ответьте и напишите <code>UID</code>\n👤 Информация об аккаунте: <code>/me</code>\n🎮 Игры: <code>алмаз</code> , <code>xo 100</code> , <code>mine 100</code>\n🛡 Анти-селф, анти-спам, анти-скам</blockquote>\n👥 Добавьте меня в группу и сделайте админом"
+ },
+ "help": {
+  "text": "📖 <b>Справка по боту</b>\n\n<blockquote>💱 <b>Курс криптовалюты:</b> <code>btc</code> , <code>price ton</code> , <code>/p eth</code></blockquote>\n<blockquote>💵 <b>Конвертация:</b> <code>10 usdt</code> , <code>500 ton</code> , <code>2.5 btc</code> , <code>1000 stars</code></blockquote>\n<blockquote>💰 <b>Томан:</b> <code>500000 toman</code> , <code>2m toman</code> , <code>10m rial</code></blockquote>\n<blockquote>🌍 <b>Мировые валюты:</b> <code>500 aed</code> , <code>100 eur</code> , <code>50 usd</code> , <code>1000 rub</code></blockquote>\n<blockquote>👛 <b>Проверка кошелька:</b> отправьте адрес кошелька (BTC, ETH, BSC, TRON, TON, SOL, ...)</blockquote>\n<blockquote>🔗 <b>Проверка хеша:</b> отправьте хеш транзакции</blockquote>\n<blockquote>🎁 <b>Подарки:</b> ссылка <code>t.me/nft/...</code> или <code>/gift @username</code></blockquote>\n<blockquote>🌐 <b>Перевод:</b> ответьте на сообщение и напишите <code>перевод</code></blockquote>\n<blockquote>🧮 <b>Калькулятор:</b> <code>698*789</code> , <code>797÷788</code></blockquote>\n<blockquote>🆔 <b>Числовой ID:</b> ответьте и напишите <code>UID</code></blockquote>\n<blockquote>😀 <b>Эмодзи:</b> <code>/emoji</code> + премиум-эмодзи или ответ</blockquote>\n<blockquote>🚨 <b>Сообщить о мошеннике:</b> <code>/scam @username</code></blockquote>\n<blockquote>🔍 <b>Проверить мошенника:</b> <code>/check @username</code></blockquote>\n<blockquote>👤 <b>Аккаунт:</b> <code>/account</code></blockquote>\n<blockquote>⚙️ <b>Настройки группы:</b> <code>/panel</code> (админы группы)</blockquote>"
+ },
+ "bot_added": {
+  "text": "🎉 <b>Бот добавлен в группу!</b>\n⚠️ Чтобы включить все функции (анти-селф, анти-спам, обязательная подписка и ...), сделайте меня <b>полным админом</b>.\n⚙️ Настройки: <code>/settings</code>"
+ },
+ "error": {
+  "text": "⚠️ Произошла ошибка, попробуйте ещё раз."
+ },
+ "loading": {
+  "text": "⏳ Пожалуйста, подождите..."
+ },
+ "force_join_private": {
+  "text": "🔒 Уважаемый <b>{name}</b>\nЧтобы пользоваться ботом, сначала подпишитесь на каналы ниже ⬇️\nБез подписки бот недоступен.\n✅ После подписки нажмите «Я подписался»."
+ },
+ "force_join_group": {
+  "text": "🔒 Уважаемый {mention}\nЧтобы писать в этой группе, подпишитесь на каналы ниже ⬇️\n⛔️ Без подписки писать нельзя."
+ },
+ "force_join_ok": {
+  "text": "✅ Подписка подтверждена, добро пожаловать!"
+ },
+ "force_join_not_yet": {
+  "text": "❌ Вы ещё не подписались на все каналы!"
+ },
+ "conv_crypto": {
+  "text": "{coin_icon} <b>{amount} {title}</b> = <b>{toman}</b> томан\n\n<blockquote>{trx_icon} Трон: <code>{trx}</code> TRX\n{ton_icon} Тонкоин: <code>{ton}</code> TON\n{usd_icon} Доллар: <code>{usd}</code> $\n⭐️ Звёзды: <code>{stars}</code> Stars</blockquote>\n🗓 {time}"
+ },
+ "conv_toman": {
+  "text": "{icon} <b>{amount} {unit}</b>\n\n<blockquote>{usdt_icon} Тетер: <code>{usdt}</code> USDT\n{ton_icon} Тонкоин: <code>{ton}</code> TON\n{trx_icon} Трон: <code>{trx}</code> TRX</blockquote>\n🗓 {time}"
+ },
+ "conv_stars": {
+  "text": "⭐️ <b>{amount} звёзд</b> = <b>{toman}</b> томан\n\n<blockquote>{usd_icon} Доллар: <code>{usd}</code> $\n{ton_icon} Тонкоин: <code>{ton}</code> TON\n{trx_icon} Трон: <code>{trx}</code> TRX</blockquote>\n🗓 {time}"
+ },
+ "conv_pair": {
+  "text": "{icon} <b>{amount} {from}</b> = <b>{result} {to}</b>\n\n<blockquote>{dorange_icon} Курс: <code>1 {from_code} = {rate} {to_code}</code>\n{dgreen_icon} Обратный: <code>1 {to_code} = {inverse} {from_code}</code>\n{dpeach_icon} В долларах: <code>{usd}</code> $\n{dblue_icon} В томанах: <code>{toman}</code></blockquote>\n🗓 {time}"
+ },
+ "conv_fiat": {
+  "text": "{icon} <b>{amount} {name}</b> = <b>{toman}</b> томан\n\n<blockquote>{usd_icon} Доллар: <code>{usd}</code> $\n{ton_icon} Тонкоин: <code>{ton}</code> TON\n{trx_icon} Трон: <code>{trx}</code> TRX\n⭐️ Звёзды: <code>{stars}</code> Stars</blockquote>\n🗓 {time}"
+ },
+ "market": {
+  "text": "📊 <b>Рынок онлайн</b>\n\n<blockquote>{lines}</blockquote>\n{usdt_icon} Тетер: <code>{usdt_toman}</code> томан\n🗓 {time}"
+ },
+ "market_line": {
+  "text": "{icon} <b>{symbol}</b>  <code>{usd}</code> $  ·  <code>{toman}</code> T  {change}"
+ },
+ "currency_not_found": {
+  "text": "❌ Валюта «{query}» не найдена."
+ },
+ "price_unavailable": {
+  "text": "⚠️ Сейчас цены недоступны, попробуйте чуть позже."
+ },
+ "wallet_checking": {
+  "text": "🔍 Проверяю кошелёк во всех сетях..."
+ },
+ "wallet_header": {
+  "text": "👛 <b>Результат проверки кошелька</b>\n📍 <code>{address}</code>\n🌐 Найдено сетей: <b>{count}</b>"
+ },
+ "wallet_chain": {
+  "text": "{chain_icon} <b>{chain}</b>\n\n<blockquote>{dorange_icon} Баланс: <code>{balance}</code> {symbol}\n{dgreen_icon} В долларах: <code>{usd}</code> $\n{dpeach_icon} В томанах: <code>{toman}</code>\n{dblue_icon} Транзакций: <code>{txs}</code>\n{dolive_icon} NFT: <code>{nfts}</code>\n{dbrown_icon} Кошелёк создан: {created}\n{status_icon} Статус: {status}\n{dnavy_icon} <a href=\"{explorer}\">Открыть в обозревателе</a></blockquote>"
+ },
+ "wallet_footer": {
+  "text": "📊 <b>Всего активов</b>\n\n<blockquote>{dgreen_icon} Доллар: <code>{total_usd}</code> $\n{dpeach_icon} Томан: <code>{total_toman}</code></blockquote>\n🗓 {time}"
+ },
+ "wallet_not_found": {
+  "text": "❌ Для этого адреса не найдено активов или активности в поддерживаемых сетях.\n📍 <code>{address}</code>"
+ },
+ "tx_checking": {
+  "text": "🔍 Ищу транзакцию во всех сетях..."
+ },
+ "tx_result": {
+  "text": "🧾 <b>Результат проверки хеша</b>\n\n<blockquote>{dblue_icon} Сеть: <b>{network}</b>\n{status_icon} Статус: {status}\n{dorange_icon} Сумма: <code>{amount}</code>\n{dgreen_icon} В долларах: <code>{usd}</code> $\n{dpeach_icon} В томанах: <code>{toman}</code>\n{dolive_icon} Токен: {token}\n{dbrown_icon} Контракт / ID токена: <code>{contract}</code>\n{dnavy_icon} От: <code>{sender}</code>\n{dblue_icon} Кому: <code>{receiver}</code>\n{dred_icon} Комиссия: <code>{fee}</code>\n{dbrown_icon} Блок: <code>{block}</code>\n{dgreen_icon} Подтверждений: <code>{confirmations}</code>\n{dnavy_icon} Время: {time}</blockquote>\n#️⃣ <code>{hash}</code>\n🔎 <a href=\"{explorer}\">Открыть в обозревателе</a>"
+ },
+ "tx_not_found": {
+  "text": "❌ Этот хеш не найден ни в одной поддерживаемой сети.\n#️⃣ <code>{hash}</code>"
+ },
+ "tron_transfers": {
+  "text": "📜 <b>Транзакции кошелька</b>\n📍 <code>{address}</code>\n📄 Страница <b>{page}</b> из <b>{pages}</b>\n\n{items}"
+ },
+ "tron_transfer_item": {
+  "text": "<blockquote>{dir_icon} {kind}: <b>{amount} {symbol}</b>\n{dnavy_icon} Время: {time}\n{dblue_icon} {side}: <code>{party}</code>\n{dorange_icon} <a href=\"https://tronscan.org/#/transaction/{hash}\">Открыть транзакцию</a></blockquote>"
+ },
+ "tron_transfers_empty": {
+  "text": "📭 Для этого кошелька транзакций не найдено."
+ },
+ "not_your_button": {
+  "text": "❌ У вас нет доступа"
+ },
+ "expired": {
+  "text": "⌛️ Срок действия кнопки истёк, запросите заново."
+ },
+ "card_result": {
+  "text": "💳 <b>Проверка банковской карты</b>\n\n<blockquote>🔢 Номер карты: <code>{card}</code>\n🏦 Банк: <b>{bank}</b>\n👤 Владелец: <b>{owner}</b>\n🧾 IBAN: <code>{iban}</code>\n🛡 Проверка: {valid}\n{extra}</blockquote>"
+ },
+ "iban_result": {
+  "text": "🏦 <b>Проверка IBAN</b>\n\n<blockquote>🔢 IBAN: <code>{iban}</code>\n🏦 Банк: <b>{bank}</b>\n🛡 Проверка: {valid}</blockquote>"
+ },
+ "phone_result": {
+  "text": "📱 <b>Проверка номера Telegram</b>\n\n<blockquote>📞 Номер: <code>{phone}</code>\n{status} {description}</blockquote>"
+ },
+ "phone_invalid": {
+  "text": "⚠️ Отправьте номер в международном формате, например: <code>/phone +15005550006</code>"
+ },
+ "phone_failed": {
+  "text": "⚠️ Проблема на сервере, попробуйте чуть позже."
+ },
+ "arz_board": {
+  "text": "💱 <b>Курсы валют на свободном рынке</b>\n\n<blockquote>{lines}</blockquote>\n🗓 {time}"
+ },
+ "arz_line": {
+  "text": "{icon} {name}  <code>{toman}</code> T  {change}"
+ },
+ "insta_loading": {
+  "text": "⏳ Получаю данные из Instagram..."
+ },
+ "insta_count": {
+  "text": "⏳ Пожалуйста, подождите\n🖼 Фото и видео: {count}"
+ },
+ "insta_media_caption": {
+  "text": "🎬 <b>{title}</b>\n\n<blockquote>👤 Страница: <b>{owner}</b>\n❤️ Лайки: <code>{likes}</code>\n💬 Комментарии: <code>{comments}</code>\n👁 Просмотры: <code>{views}</code>\n⏱ Длительность: <code>{duration}</code>\n🖼 Файлов: <code>{count}</code>\n🗓 Дата: {date}</blockquote>\n<blockquote expandable>📝 {text}</blockquote>\n🤖 @{bot}"
+ },
+ "insta_not_found": {
+  "text": "⛔️ Не удалось получить этот пост.\n💬 Пост должен быть публичным; попробуйте ещё раз через минуту."
+ },
+ "insta_private": {
+  "text": "🔒 Эта страница закрыта."
+ },
+ "insta_no_story": {
+  "text": "⛔️ У этой страницы нет историй."
+ },
+ "insta_no_highlight": {
+  "text": "⛔️ У этой страницы нет хайлайтов."
+ },
+ "insta_no_key": {
+  "text": "⚠️ Сервис Instagram ещё не включён администратором."
+ },
+ "insta_highlights": {
+  "text": "🌟 Хайлайты <b>{username}</b>"
+ },
+ "insta_info": {
+  "text": "📸 <b>Информация о странице Instagram</b>\n\n<blockquote>🆔 ID: <code>{id}</code>\n👤 Имя: <b>{name}</b>\n🔗 Юзернейм: <code>{username}</code>\n👥 Подписчики: <code>{followers}</code>\n👀 Подписки: <code>{following}</code>\n🖼 Посты: <code>{posts}</code>\n✅ Галочка: {verified}\n🔒 Закрытый: {private}</blockquote>\n📝 Био:\n<blockquote expandable>{bio}</blockquote>"
+ },
+ "bot_off": {
+  "text": "⛔️ Бот сейчас выключен."
+ },
+ "banned": {
+  "text": "⛔️ Вы заблокированы в боте."
+ },
+ "bot_promoted": {
+  "text": "🎉 <b>Бот стал админом в этой группе!</b>\n🔗 Для проверки хеша просто отправьте хеш или ссылку на транзакцию\n👛 Для проверки кошелька: <code>wallet адрес</code>\n💱 Для цен: <code>10 usdt</code>\n⚙️ Настройки группы: /settings"
+ },
+ "admin_message": {
+  "text": "📢 <b>Сообщение от администрации</b>\n\n{text}"
+ },
+ "gift_link": {
+  "text": "🎁 <b>{name} #{number}</b>\n\n<blockquote>🎨 Модель: <b>{model}</b> {model_rarity}\n🖼 Фон: <b>{backdrop}</b> {backdrop_rarity}\n✨ Символ: <b>{symbol}</b> {symbol_rarity}\n👤 Владелец: {owner}\n🔢 Выпущено: {quantity}</blockquote>\n<blockquote>📉 Флор коллекции: <code>{floor_ton}</code> TON\n🎨 Флор модели: <code>{model_floor}</code> TON\n🖼 Флор фона: <code>{backdrop_floor}</code> TON\n✨ Флор символа: <code>{symbol_floor}</code> TON</blockquote>\n🏷 <b>Оценочная стоимость:</b>\n{ton_icon} <code>{est_ton}</code> TON\n{usd_icon} <code>{est_usd}</code> $\n{toman_icon} <code>{est_toman}</code> томан\n⭐️ <code>{est_stars}</code> Stars\n🔗 {link}"
+ },
+ "gift_user_caption": {
+  "text": "🎁 <b>Коллекция подарков {name}</b>\n\n{pl_line}\n{change_line}\n<blockquote>🔢 Подарков: <b>{count}</b> (уникальных: {unique_count})</blockquote>\n<blockquote>{ton_icon} Общая стоимость: <code>{total_ton}</code> TON</blockquote>\n<blockquote>{usd_icon} В долларах: <code>{total_usd}</code> $</blockquote>\n<blockquote>{toman_icon} В томанах: <code>{total_toman}</code> томан</blockquote>\n<blockquote>{links}</blockquote>"
+ },
+ "gift_profit": {
+  "text": "📈 Прибыль рынка за 7 дней: <b>+{ton} TON</b> (+{percent}%) ≈ {toman} T"
+ },
+ "gift_loss": {
+  "text": "📉 Убыток рынка за 7 дней: <b>-{ton} TON</b> (-{percent}%) ≈ {toman} T"
+ },
+ "gift_since_last": {
+  "text": "🔄 С прошлой проверки: <b>{sign}{ton} TON</b> ({sign}{percent}%)"
+ },
+ "gift_user_none": {
+  "text": "📭 Публичных подарков у {name} не найдено."
+ },
+ "gift_user_unknown": {
+  "text": "❌ Не удалось найти этого пользователя.\n💬 Пользователь должен хотя бы раз написать в группе с ботом или запустить бота.\n💡 Можно ответить на его сообщение и отправить <code>/gift</code>."
+ },
+ "gift_ask": {
+  "text": "🎁 Отправьте юзернейм или ссылку на подарок.\n👤 Для своих подарков: <b>я</b>"
+ },
+ "gift_not_found": {
+  "text": "❌ Данные об этом подарке не найдены."
+ },
+ "self_warn": {
+  "text": "⚠️ {mention}\n🤖 <b>На вашем аккаунте обнаружен селф-бот (автоуправление)!</b>\nПожалуйста, <b>выключите</b> селф-бот, иначе вы получите <b>мут</b>. ⛔️"
+ },
+ "self_muted": {
+  "text": "🔇 {mention} получил мут за включённый <b>селф-бот</b>.\n⏱ Срок: {duration}"
+ },
+ "tabchi_muted": {
+  "text": "🔇 {mention} распознан как <b>спам / рекламный бот</b> и получил мут.\n⏱ Срок: {duration}"
+ },
+ "unmuted": {
+  "text": "🔊 С {mention} снят мут."
+ },
+ "scam_keyword_warn": {
+  "text": "🚨 {mention}\n⚠️ <b>Предупреждение безопасности:</b> сделки в личке без надёжного гаранта несут высокий риск мошенничества!\n🛡 Никогда никому не отправляйте код, пароль, фразу восстановления (seed) или приватный ключ."
+ },
+ "scam_known": {
+  "text": "⛔️ <b>Внимание!</b> {mention} в <b>списке мошенников</b>.\n📝 Причина: {reason}\n⚠️ Не заключайте сделки с этим человеком."
+ },
+ "scam_usage": {
+  "text": "💡 Как пожаловаться: <code>/scam @username</code>\nили ответьте на сообщение мошенника и отправьте <code>/scam</code>."
+ },
+ "scam_go_private": {
+  "text": "🚨 Жалоба на {target} создана.\n📩 Нажмите кнопку ниже и отправьте доказательства в личке бота."
+ },
+ "scam_ask_evidence": {
+  "text": "🚨 <b>Жалоба на мошенника {target}</b>\n📎 Отправьте <b>доказательства</b> (скриншоты, видео, файлы, описание, хеш транзакции и ...).\n✅ После отправки всего нажмите «Отправить»."
+ },
+ "scam_evidence_saved": {
+  "text": "📎 Доказательство #{count} получено. Отправьте следующее или нажмите «Отправить»."
+ },
+ "scam_need_evidence": {
+  "text": "⚠️ Отправьте хотя бы одно доказательство."
+ },
+ "scam_submitted": {
+  "text": "📨 Ваша жалоба <b>#{id}</b> отправлена администрации.\nПосле проверки вам сообщат результат."
+ },
+ "scam_cancelled": {
+  "text": "❌ Жалоба отменена."
+ },
+ "scam_admin": {
+  "text": "🚨 <b>Новая жалоба #{id}</b>\n🎯 Обвиняемый: {target}\n🆔 Числовой ID: <code>{target_id}</code>\n🗣 Заявитель: {reporter}\n📎 Доказательств: {count}\n📝 Описание: {reason}"
+ },
+ "scam_approved_user": {
+  "text": "✅ Ваша жалоба #{id} одобрена и объявлена в группах. Спасибо 🌟"
+ },
+ "scam_rejected_user": {
+  "text": "❌ Ваша жалоба #{id} отклонена администрацией."
+ },
+ "scam_broadcast": {
+  "text": "🚨 <b>Объявление о мошеннике</b> ‼️\n\n<blockquote>🎯 Пользователь: {target}\n🆔 Числовой ID: <code>{target_id}</code>\n📝 Причина: {reason}\n🗂 Номер дела: #{id}</blockquote>\n⛔️ Пожалуйста, не заключайте сделки с этим человеком, чтобы не попасться!"
+ },
+ "scam_check_clean": {
+  "text": "✅ {target} нет в списке мошенников.\n⚠️ И всё же всегда проводите сделки через надёжного гаранта."
+ },
+ "scam_check_found": {
+  "text": "⛔️ {target} в <b>списке мошенников</b>!\n📝 Причина: {reason}\n🗂 Дело: #{id}"
+ },
+ "uid": {
+  "text": "🪪 <b>Информация о пользователе</b>\n\n<blockquote>👤 Имя: {name}\n🆔 Числовой ID: <code>{id}</code>\n🔗 Юзернейм: {username}</blockquote>"
+ },
+ "emoji_item": {
+  "text": "<code>{id}</code>"
+ },
+ "emoji_ask": {
+  "text": "✨ Отправьте премиум-эмодзи."
+ },
+ "emoji_none": {
+  "text": "❌ Премиум-эмодзи не найдено.\n💡 Отправьте <code>/emoji</code> вместе с премиум-эмодзи или ответьте на сообщение с ним."
+ },
+ "translate_choose": {
+  "text": "🌐 Выберите язык"
+ },
+ "translate_result": {
+  "text": "🌐 <b>Перевод на {lang}</b>\n\n<blockquote expandable>{text}</blockquote>"
+ },
+ "translate_not_yours": {
+  "text": "⛔️ Этот запрос на перевод не ваш."
+ },
+ "translate_used": {
+  "text": "✅ Это сообщение уже переведено."
+ },
+ "translate_need_reply": {
+  "text": "💡 Чтобы перевести, ответьте на текстовое сообщение и напишите <code>перевод</code>."
+ },
+ "translate_failed": {
+  "text": "⚠️ Перевод не удался, попробуйте ещё раз."
+ },
+ "calc_result": {
+  "text": "🧮 <code>{expr}</code>\n<blockquote>🟰 <b>{result}</b></blockquote>"
+ },
+ "account": {
+  "text": "🪪 <b>Информация об аккаунте</b>\n\n👤 Имя: {name}\n<blockquote>🆔 Числовой ID: <code>{id}</code></blockquote>\n🔗 Юзернейм: {username}\n<blockquote>{premium_icon} Премиум: {premium}</blockquote>\n🏅 Уровень аккаунта Telegram: {level}\n<blockquote>🗓 Создан (примерно): {created}</blockquote>\n🖥 Дата-центр: {dc}\n<blockquote>🗣 Язык: {lang}</blockquote>\n<blockquote>🎂 День рождения: {birthdate}</blockquote>\n<blockquote>📝 Био: {bio}</blockquote>\n🎁 Подарков: {gifts}\n<blockquote>💎 Алмазы: <code>{diamonds}</code>\n🏅 Уровень алмазов: <b>{dlevel}</b></blockquote>"
+ },
+ "whale_alert": {
+  "text": "💸 <b>Крупный перевод!</b> {bar}\n\n<blockquote>💸 Сумма: <b>{amount} {symbol}</b>\n💵 Стоимость: <code>{usd}</code> $\n💰 Это: <code>{toman}</code> томан\n🌐 Сеть: <b>{network}</b>\n📤 От: {sender}\n📥 Кому: {receiver}</blockquote>\n🔍 <a href=\"{link}\">Открыть транзакцию</a>\n🗓 {time}"
+ },
+ "group_settings": {
+  "text": "⚙️ <b>Настройки группы</b> {title}\nНажмите на пункт, чтобы включить/выключить:"
+ },
+ "only_group_admins": {
+  "text": "⛔️ Это могут делать только админы группы."
+ },
+ "conv_gold": {
+  "text": "{icon} <b>{amount} {name}</b> = <b>{toman}</b> томан\n\n<blockquote>{usd_icon} Доллар: <code>{usd}</code> $\n📈 Изменение за 24ч: {change}</blockquote>\n🗓 {time}"
+ },
+ "premium_prices": {
+  "text": "{icon} <b>Цены Telegram Premium</b>\n\n<blockquote>{lines}</blockquote>\n🗓 {time}"
+ },
+ "premium_line": {
+  "text": "👑 <b>{months} мес.</b>  <code>{toman}</code> томан  ·  <code>{ton}</code> TON"
+ },
+ "stars_prices": {
+  "text": "⭐️ <b>Цены Telegram Stars</b>\n\n<blockquote>{lines}</blockquote>\n💰 За одну звезду: <code>{each}</code> томан\n🗓 {time}"
+ },
+ "stars_line": {
+  "text": "⭐️ <b>{stars}</b> звёзд  <code>{toman}</code> томан"
+ },
+ "dm_win": {
+  "text": "💎 <b>Алмаз!</b> {name}\n\n<blockquote>✨ Вы получили <b>{reward}</b> алмазов\n💰 Баланс: {points}\n🏅 Уровень: {level}</blockquote>\n🆙 <b>Новый уровень!</b> Вы достигли уровня {new_level}!"
+ },
+ "dm_wait": {
+  "text": "⏳ {name}, ещё рано!\n⌛️ Добывать алмазы можно будет через {m} мин {s} сек."
+ },
+ "dm_me": {
+  "text": "👤 <b>{name}</b>\n\n<blockquote>💎 Алмазы: <b>{points}</b>\n🏅 Уровень: <b>{level}</b>\n🔢 Сколько раз добыто: <b>{total}</b>\n🎯 До следующего уровня: <b>{left}</b></blockquote>"
+ },
+ "dm_me_none": {
+  "text": "💎 Вы ещё не добывали алмазы. Напишите в группе <code>алмаз</code>"
+ },
+ "dm_top": {
+  "text": "🏆 <b>Лучшие по алмазам</b>\n\n<blockquote>{lines}</blockquote>"
+ },
+ "dm_top_line": {
+  "text": "{medal} {rank}. {name}  <b>{points}</b> алмазов  (уровень {level})"
+ },
+ "dm_top_none": {
+  "text": "💎 Пока никто не добывал алмазы."
+ },
+ "dm_jail_hit": {
+  "text": "🚨 {name} попался и должен отправиться в тюрьму!\n👥 {need} участников должны подтвердить."
+ },
+ "dm_jail_prog": {
+  "text": "🚨 {name} попался и должен отправиться в тюрьму!\n✅ Подтвердили {got} из {need}."
+ },
+ "dm_jail_done": {
+  "text": "🔒 {name} отправлен в тюрьму!\n⏳ Не может добывать алмазы {dur}."
+ },
+ "dm_jail_self": {
+  "text": "Нельзя отправить себя в тюрьму"
+ },
+ "dm_jail_twice": {
+  "text": "Вы уже подтвердили."
+ },
+ "dm_jail_wait": {
+  "text": "⛔️ {name}, вы сейчас в тюрьме!\n⏳ Освобождение через {m} мин {s} сек."
+ },
+ "gm_group_only": {
+  "text": "🎮 Игры работают только в группах."
+ },
+ "gm_dooz_how": {
+  "text": "🎮 <code>xo 100</code>  ставка от {min} до {max} алмазов"
+ },
+ "gm_mine_how": {
+  "text": "💣 <code>mine 100</code>  вход от {min} до {max} алмазов"
+ },
+ "gm_dooz_open": {
+  "text": "🎮 <b>Крестики-нолики на {stake} алмазов</b>\n\n<blockquote>👤 Создатель: {host}\n🏆 Приз победителю: <b>{prize}</b> алмазов\n🧾 Налог: <b>{tax}</b> алмазов</blockquote>\nПоле откроется, когда второй игрок нажмёт «Присоединиться»."
+ },
+ "gm_dooz_turn": {
+  "text": "🎮 <b>Крестики-нолики на {stake} алмазов</b>\n\n<blockquote>{p1}\n{p2}\n🏆 Приз: <b>{prize}</b> алмазов</blockquote>\n👉 Ход: {turn}"
+ },
+ "gm_dooz_win": {
+  "text": "🏆 <b>Игра окончена</b>\n\n<blockquote>👑 Победитель: {wname}\n❌ Проигравший: {lname}\n💎 Приз: <b>{prize}</b> алмазов</blockquote>"
+ },
+ "gm_dooz_draw": {
+  "text": "⚖️ <b>Ничья</b>\nСтавки обоих игроков возвращены."
+ },
+ "gm_cancelled": {
+  "text": "❌ <b>Игра отменена</b>\nСтавка возвращена."
+ },
+ "gm_expired": {
+  "text": "⌛️ <b>Никто не присоединился</b>\nСтавка возвращена создателю."
+ },
+ "gm_idle": {
+  "text": "💤 <b>Игра не завершена</b>\nСтавки обоих игроков возвращены."
+ },
+ "gm_low": {
+  "text": "❌ Недостаточно алмазов.\n💎 Ваш баланс: <b>{points}</b> · нужно: <b>{need}</b>"
+ },
+ "gm_bad_stake": {
+  "text": "❌ Ставка должна быть от <b>{min}</b> до <b>{max}</b> алмазов."
+ },
+ "gm_open_max": {
+  "text": "⛔️ У вас <b>{n}</b> открытых игр."
+ },
+ "gm_not_yours": {
+  "text": "Это не ваша игра."
+ },
+ "gm_not_turn": {
+  "text": "Сейчас не ваш ход."
+ },
+ "gm_taken": {
+  "text": "Эта клетка занята."
+ },
+ "gm_gone": {
+  "text": "Эта игра закончена."
+ },
+ "gm_already": {
+  "text": "Вы уже в этой игре, ждите соперника."
+ },
+ "gm_bal_pop": {
+  "text": "💎 Баланс {name}: {points} алмазов"
+ },
+ "gm_mine_preview": {
+  "text": "💣 <b>MINE FIELD</b>\n🔲 Поле 3×3: восемь алмазов, одна мина.\n<blockquote>💰 Вход: <code>{entry}</code>\n💎 Безопасная клетка: больше приз\n💥 Мина: конец игры</blockquote>\nНажмите «Присоединиться»."
+ },
+ "gm_mine_active": {
+  "text": "💣 <b>MINE FIELD</b>\n\n<blockquote>👤 {name}\n🔢 Шаг: <b>{picks}</b> из 8\n💰 Вход: <code>{entry}</code>\n💎 Приз: <b>{reward}</b>\n✖️ Множитель: <b>{mult}×</b>\n🛡 Щит: {shield}</blockquote>\n{progress}\n🎯 Следующая клетка: <b>+{next}</b>"
+ },
+ "gm_shield_on": {
+  "text": "активен"
+ },
+ "gm_shield_off": {
+  "text": "ещё {n} клеток"
+ },
+ "gm_mine_lost": {
+  "text": "💥 <b>GAME OVER</b>\nВы наступили на мину.\n<blockquote>✅ Безопасных клеток: <b>{picks}</b>\n💸 Потеряно: <b>{entry}</b></blockquote>"
+ },
+ "gm_mine_protected": {
+  "text": "🛡 <b>Щит сработал!</b>\n💥 Вы наступили на мину после <b>{picks}</b> безопасных клеток.\n<blockquote>💸 Вход и приз этого раунда не возвращены\n✅ Безопасных клеток: <b>{picks}</b></blockquote>"
+ },
+ "gm_mine_cashout": {
+  "text": "🤑 <b>Вы забрали приз!</b>\n\n<blockquote>💎 Приз: <b>+{reward}</b>\n👛 Баланс: <b>{wallet}</b></blockquote>"
+ },
+ "gm_mine_expired": {
+  "text": "⌛️ <b>Время игры истекло</b>"
+ },
+ "gm_mine_cancelled": {
+  "text": "❌ Игра отменена. С вас ничего не списано."
+ },
+ "gm_mine_low": {
+  "text": "❌ Недостаточно алмазов.\n\n<blockquote>💎 Нужно: <b>{need}</b>\n👛 Ваш баланс: <b>{wallet}</b></blockquote>"
+ },
+ "gm_mine_pop_low": {
+  "text": "Недостаточно алмазов, нужно {need}."
+ },
+ "gm_mine_bad": {
+  "text": "❌ Сумма должна быть от {min} до {max}."
+ },
+ "gm_mine_busy": {
+  "text": "⏳ У вас уже есть открытая игра."
+ },
+ "gm_mine_already": {
+  "text": "Эта клетка уже выбрана."
+ },
+ "gm_mine_need_join": {
+  "text": "Сначала нажмите «Присоединиться»."
+ },
+ "insta_story_caption": {
+  "text": "({index}/{count})\n🤖 Отправлено: @{bot}"
+ },
+ "dm_board": {
+  "text": "🏆 <b>Рейтинг алмазов</b>\n{global}\n{group}\n{me}"
+ },
+ "dm_board_global": {
+  "text": "🌍 <b>Лучшие во всём боте</b>\n\n<blockquote>{lines}</blockquote>"
+ },
+ "dm_board_group": {
+  "text": "👥 <b>Лучшие в этой группе</b>\n\n<blockquote>{lines}</blockquote>"
+ },
+ "dm_board_group_none": {
+  "text": "👥 В этой группе пока никто не собрал алмазы."
+ },
+ "dm_board_line": {
+  "text": "{medal} {name} — <b>{points}</b> 💎"
+ },
+ "dm_board_me": {
+  "text": "<blockquote>📍 Ваше место: <b>{rank}</b> — <b>{points}</b> 💎</blockquote>"
+ },
+ "dm_board_me_none": {
+  "text": "<blockquote>📍 У вас пока нет алмазов.</blockquote>"
+ },
+ "dm_account": {
+  "text": "💎 <b>Алмазный счёт {name}</b>"
+ },
+ "dm_account_alert": {
+  "text": "💎 Алмазы: {points}\n🏅 Уровень: {level}\n🏆 Место: {rank}\n🎯 Сколько раз добыто: {total}"
+ },
+ "lang_set": {
+  "text": "✅ Язык бота: <b>русский</b> 🇷🇺"
+ },
+ "lang_choose": {
+  "text": "🌐 <b>زبان ربات را انتخاب کنید</b>\n🌐 <b>Choose the bot language</b>\n🌐 <b>Выберите язык бота</b>"
+ }
+}

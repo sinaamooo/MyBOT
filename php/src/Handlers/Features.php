@@ -117,7 +117,7 @@ final class GiftsH
     private static function portfolio(array $m, array $t): void
     {
         $extra = Bot::isPrivate($m) ? [] : ['reply_parameters' => Bot::replyParams($m)];
-        $ck = 'gpc:' . ($t['kind'] ?? '') . ':' . ($t['id'] ?? '');
+        $ck = 'gpc:' . ($t['kind'] ?? '') . ':' . ($t['id'] ?? '') . (UI::$lang !== 'fa' ? ':' . UI::$lang : '');
         $hit = Cache::get($ck);
         if (!empty($hit['f']) && TG::photo($m['chat']['id'], $hit['f'], $hit['c'], UI::footer(), $extra) !== null) {
             Perf::mark('cached');
@@ -377,12 +377,15 @@ final class Scam
 
     public static function broadcast(array $r): int
     {
-        $text = UI::t('scam_broadcast', ['target' => self::label($r), 'target_id' => $r['target_id'] ?: '—', 'reason' => UI::esc($r['reason'] ?: '—'), 'id' => $r['id']]);
+        $texts = [];
         $sent = 0;
+        $was = UI::$lang;
         foreach (DB::activeGroups() as $g) {
             if (!Settings::on((int)$g['id'], 'anti_scam')) {
                 continue;
             }
+            Lang::use($g['id']);
+            $text = $texts[UI::$lang] ??= UI::t('scam_broadcast', ['target' => self::label($r), 'target_id' => $r['target_id'] ?: '—', 'reason' => UI::esc($r['reason'] ?: '—'), 'id' => $r['id']]);
             if (TG::send($g['id'], $text, UI::footer())) {
                 $sent++;
             } elseif (preg_match('/kicked|not found|forbidden/i', (string)TG::$lastError)) {
@@ -390,6 +393,7 @@ final class Scam
             }
             usleep(50000);
         }
+        UI::$lang = $was;
         return $sent;
     }
 
@@ -416,14 +420,14 @@ final class Extras
         $i = Banking::lookup($d);
         $extra = implode("\n", array_map(fn($k, $v) => '🔹    ' . UI::esc($k) . ': <code>' . UI::esc($v) . '</code>', array_keys($i['extra']), $i['extra']));
         Bot::send($m, UI::t('card_result', ['card' => Banking::format($d), 'bank' => $i['bank'] ? UI::esc($i['bank']) : null, 'owner' => $i['owner'] ? UI::esc($i['owner']) : null,
-            'iban' => $i['iban'] ? UI::esc($i['iban']) : null, 'valid' => $i['valid'] ? '✅ معتبر' : '❌ نامعتبر', 'extra' => $extra !== '' ? $extra : null]),
+            'iban' => $i['iban'] ? UI::esc($i['iban']) : null, 'valid' => UI::l($i['valid'] ? '✅ معتبر' : '❌ نامعتبر'), 'extra' => $extra !== '' ? $extra : null]),
             UI::footer([[UI::button('btn_copy_id', ['copy' => $d])]]));
     }
 
     public static function answerIban(array $m, string $iban): void
     {
         $b = Banking::bankOfIban($iban);
-        Bot::send($m, UI::t('iban_result', ['iban' => $iban, 'bank' => $b ? UI::esc($b) : null, 'valid' => Banking::ibanOk($iban) ? '✅ معتبر' : '❌ نامعتبر']),
+        Bot::send($m, UI::t('iban_result', ['iban' => $iban, 'bank' => $b ? UI::esc($b) : null, 'valid' => UI::l(Banking::ibanOk($iban) ? '✅ معتبر' : '❌ نامعتبر')]),
             UI::footer([[UI::button('btn_copy_id', ['copy' => $iban])]]));
     }
 
@@ -434,7 +438,7 @@ final class Extras
         } elseif ($i = Banking::iban($args)) {
             self::answerIban($m, $i);
         } else {
-            Bot::send($m, UI::t('card_result', ['card' => '—', 'bank' => null, 'owner' => null, 'iban' => null, 'valid' => '❌ نامعتبر', 'extra' => null]));
+            Bot::send($m, UI::t('card_result', ['card' => '—', 'bank' => null, 'owner' => null, 'iban' => null, 'valid' => UI::l('❌ نامعتبر'), 'extra' => null]));
         }
     }
 
@@ -485,14 +489,14 @@ final class Extras
                 continue;
             }
             $market = $market || $px['source'] === 'market';
-            $lines[] = UI::fill(UI::template('arz_line'), ['icon' => self::arzIcon($code, (string)$f['cc']), 'flag' => Currencies::flag($f['cc']), 'name' => $f['fa'], 'toman' => Fmt::toman($px['toman']),
+            $lines[] = UI::fill(UI::template('arz_line'), ['icon' => self::arzIcon($code, (string)$f['cc']), 'flag' => Currencies::flag($f['cc']), 'name' => Currencies::fiatName($code), 'toman' => Fmt::toman($px['toman']),
                 'change' => $px['change'] !== null ? Fmt::badge($px['change']) : '']);
         }
         if (!$lines) {
             Bot::send($m, UI::t('price_unavailable'));
             return;
         }
-        Bot::send($m, UI::t('arz_board', ['lines' => implode("\n", $lines), 'source' => $market ? 'tgju.org' : 'نرخ جهانی × تتر', 'time' => Fmt::now()]));
+        Bot::send($m, UI::t('arz_board', ['lines' => implode("\n", $lines), 'source' => $market ? 'tgju.org' : UI::l('نرخ جهانی × تتر'), 'time' => Fmt::now()]));
         Tools::react($m);
     }
 
@@ -530,7 +534,7 @@ final class Extras
         }
         $n = fn($v) => $v === null ? null : Fmt::int($v);
         return UI::t('insta_media_caption', [
-            'title' => !empty($x['reel']) ? 'ریلز اینستاگرام' : 'پست اینستاگرام', 'owner' => !empty($x['owner']) ? '@' . UI::esc($x['owner']) : null,
+            'title' => UI::l(!empty($x['reel']) ? 'ریلز اینستاگرام' : 'پست اینستاگرام'), 'owner' => !empty($x['owner']) ? '@' . UI::esc($x['owner']) : null,
             'likes' => $n($x['likes'] ?? null), 'comments' => $n($x['comments'] ?? null), 'views' => $n($x['views'] ?? null), 'duration' => $dur,
             'date' => !empty($x['date']) ? Fmt::jalali((int)$x['date']) : null, 'count' => $count > 1 ? Fmt::int($count) : null,
             'text' => $text !== '' ? UI::esc($text) : null, 'bot' => TG::username(),
@@ -701,8 +705,8 @@ final class Extras
 
 final class TextRouter
 {
-    const UID = ['uid', 'آیدی عددی', 'ایدی عددی', 'آیدی', 'ایدی', 'id', 'ایدیش', 'آیدیش'];
-    const TR = ['ترجمه', 'ترجمه کن', 'translate', 'tr', 'ترجمش کن', 'ترجمه شود'];
+    const UID = ['uid', 'آیدی عددی', 'ایدی عددی', 'آیدی', 'ایدی', 'id', 'ایدیش', 'آیدیش', 'айди'];
+    const TR = ['ترجمه', 'ترجمه کن', 'translate', 'tr', 'ترجمش کن', 'ترجمه شود', 'перевод', 'перевести'];
 
     public static function slash(array $m, string $text): bool
     {

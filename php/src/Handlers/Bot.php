@@ -23,7 +23,7 @@ final class Bot
         'insta' => ['Extras', 'insta'], 'instagram' => ['Extras', 'insta'], 'اینستا' => ['Extras', 'insta'],
     ];
     const CALLBACKS = [
-        'fj:' => ['Bot', 'forceJoinCheck'], 'unmute:' => ['Bot', 'unmuteCb'], 'tr:' => ['Tools', 'translateCb'], 'gs:' => ['Groups', 'toggle'],
+        'fj:' => ['Bot', 'forceJoinCheck'], 'unmute:' => ['Bot', 'unmuteCb'], 'tr:' => ['Tools', 'translateCb'], 'gs:' => ['Groups', 'toggle'], 'gl:' => ['Groups', 'lang'],
         'scam:' => ['Scam', 'buttons'], 'scamadm:' => ['Scam', 'decision'], 'adm:' => ['Admin', 'callback'], 'wl:' => ['Tools', 'walletButton'],
         'tt:' => ['Tools', 'transfers'], 'tp:' => ['Tools', 'transfers'], 'is:' => ['Extras', 'story'],
         'ih:' => ['Extras', 'highlights'], 'hi:' => ['Extras', 'highlightItems'], 'gd:' => ['Games', 'doozCb'], 'gn:' => ['Games', 'mineCb'], 'gj:' => ['Diamonds', 'jailCb'], 'gb:' => ['Diamonds', 'accountCb'],
@@ -31,7 +31,10 @@ final class Bot
 
     public static function handle(array $u): void
     {
+        $c = $u['message']['chat']['id'] ?? $u['edited_message']['chat']['id'] ?? $u['callback_query']['message']['chat']['id'] ?? $u['my_chat_member']['chat']['id'] ?? $u['chat_member']['chat']['id'] ?? 0;
+        UI::$lang = 'fa';
         try {
+            Lang::use($c);
             if (isset($u['message'])) {
                 self::message($u['message']);
             } elseif (isset($u['edited_message'])) {
@@ -206,7 +209,7 @@ final class Bot
 
     public static function forceJoinKb(int $user, array $channels): array
     {
-        $rows = array_map(fn($c) => [UI::button('btn_join', ['url' => $c['url']], ['title' => $c['title'] ?? 'کانال'])], $channels);
+        $rows = array_map(fn($c) => [UI::button('btn_join', ['url' => $c['url']], ['title' => $c['title'] ?? UI::l('کانال')])], $channels);
         $rows[] = [UI::button('btn_check_join', ['cb' => "fj:$user"])];
         return UI::kb($rows);
     }
@@ -551,9 +554,17 @@ final class Bot
         } elseif (in_array($old, ['left', 'kicked'], true)) {
             $key = 'bot_added';
         }
-        if ($key) {
-            TG::send($chat['id'], UI::t($key), UI::footer());
+        if (!$key) {
+            return;
         }
+        if (!Lang::chosen((int)$chat['id'])) {
+            Cache::set('lang_next:' . $chat['id'], $key, 86400);
+            if (!Cache::throttled('lang_ask:' . $chat['id'], 600)) {
+                TG::send($chat['id'], UI::t('lang_choose'), Groups::langKb((int)$chat['id'], 'gl:'));
+            }
+            return;
+        }
+        TG::send($chat['id'], UI::t($key), UI::footer());
     }
 
     private static function chatMember(array $e): void
@@ -645,7 +656,7 @@ final class Groups
         $row = [];
         foreach (Settings::groupFeatures() as $k => $label) {
             $on = Settings::on($chat, $k);
-            $row[] = UI::raw(($on ? '✅ ' : '❌ ') . $label, "gs:$k", $on ? 'success' : 'danger');
+            $row[] = UI::raw(($on ? '✅ ' : '❌ ') . UI::l($label), "gs:$k", $on ? 'success' : 'danger');
             if (count($row) === 2) {
                 $rows[] = $row;
                 $row = [];
@@ -654,8 +665,41 @@ final class Groups
         if ($row) {
             $rows[] = $row;
         }
-        $rows[] = [UI::raw('⛔️ بستن', 'gs:close')];
+        $rows[] = self::langKb($chat, 'gs:lang:')['inline_keyboard'][0];
+        $rows[] = [UI::raw(UI::l('⛔️ بستن'), 'gs:close')];
         return UI::kb($rows);
+    }
+
+    public static function langKb(int $chat, string $prefix): array
+    {
+        $cur = Lang::chosen($chat) ? Lang::of($chat) : null;
+        $row = [];
+        foreach (Lang::ALL as $l) {
+            $b = UI::button("lang_$l", ['cb' => $prefix . $l]);
+            $b['style'] = $l === $cur ? 'success' : 'primary';
+            $row[] = $b;
+        }
+        return UI::kb([$row]);
+    }
+
+    public static function lang(array $cq, string $l): void
+    {
+        $chat = (int)$cq['message']['chat']['id'];
+        if (!in_array($l, Lang::ALL, true)) {
+            TG::answer($cq['id']);
+            return;
+        }
+        if (!Bot::isChatAdmin($chat, $cq['from']['id'])) {
+            TG::answer($cq['id'], UI::plain('only_group_admins'), true);
+            return;
+        }
+        Lang::set($chat, $l);
+        UI::$lang = $l;
+        TG::answer($cq['id'], '✅');
+        TG::edit($chat, $cq['message']['message_id'], UI::t('lang_set'), null);
+        $next = Cache::get('lang_next:' . $chat);
+        Cache::forget('lang_next:' . $chat);
+        TG::send($chat, UI::t(is_string($next) ? $next : 'bot_promoted'), UI::footer());
     }
 
     public static function settings(array $m, string $args): void
@@ -678,6 +722,16 @@ final class Groups
         if ($key === 'close') {
             TG::answer($cq['id']);
             TG::delete($chat, $cq['message']['message_id']);
+            return;
+        }
+        if (str_starts_with($key, 'lang:')) {
+            $l = substr($key, 5);
+            if (in_array($l, Lang::ALL, true)) {
+                Lang::set($chat, $l);
+                UI::$lang = $l;
+            }
+            TG::answer($cq['id'], '✅');
+            TG::edit($chat, $cq['message']['message_id'], UI::t('group_settings', ['title' => UI::esc($cq['message']['chat']['title'] ?? '')]), self::kb($chat));
             return;
         }
         if (!isset(Settings::groupFeatures()[$key])) {

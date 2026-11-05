@@ -158,7 +158,7 @@ final class Diamonds
         $nm = self::names(array_column($rows, 'id'));
         $lines = [];
         foreach ($rows as $i => $r) {
-            $lines[] = UI::fill(UI::template('dm_top_line'), ['medal' => ['👑', '💎', '🏅'][$i] ?? '🔹', 'rank' => $i + 1, 'name' => UI::esc(($nm[(int)$r['id']]['name'] ?? '') !== '' ? $nm[(int)$r['id']]['name'] : 'کاربر ' . $r['id']),
+            $lines[] = UI::fill(UI::template('dm_top_line'), ['medal' => ['👑', '💎', '🏅'][$i] ?? '🔹', 'rank' => $i + 1, 'name' => UI::esc(($nm[(int)$r['id']]['name'] ?? '') !== '' ? $nm[(int)$r['id']]['name'] : UI::l('کاربر') . ' ' . $r['id']),
                 'points' => Fmt::int($r['points']), 'level' => self::level((float)$r['points'])]);
         }
         return UI::t('dm_top', ['lines' => implode("\n", $lines)]);
@@ -243,7 +243,7 @@ final class Diamonds
 
     private static function tag(array $r): string
     {
-        return !empty($r['username']) ? '@' . UI::esc($r['username']) : UI::esc(($r['name'] ?? '') !== '' ? $r['name'] : 'کاربر ' . $r['id']);
+        return !empty($r['username']) ? '@' . UI::esc($r['username']) : UI::esc(($r['name'] ?? '') !== '' ? $r['name'] : UI::l('کاربر') . ' ' . $r['id']);
     }
 
     private static function lines(array $rows): string
@@ -292,7 +292,7 @@ final class Diamonds
             Bot::reply($m, $caption);
             return;
         }
-        $sig = 'dmb:' . md5(json_encode(array_map(fn($r) => [$r['id'], (int)$r['points'], $r['name'], $r['username']], $global)) . TG::username());
+        $sig = 'dmb:' . md5(json_encode(array_map(fn($r) => [$r['id'], (int)$r['points'], $r['name'], $r['username']], $global)) . TG::username() . UI::$lang);
         $extra = !$priv ? ['reply_parameters' => Bot::replyParams($m)] : [];
         $fid = Cache::get($sig);
         if ($fid && TG::photo($chat, $fid, $caption, UI::footer(), $extra) !== null) {
@@ -364,7 +364,7 @@ final class Diamonds
         $uid = (int)$cq['from']['id'];
         $j = DB::one('SELECT * FROM jails WHERE id=?', [$id]);
         if (!$j || time() - (int)$j['created'] > 3600) {
-            TG::answer($cq['id'], 'این دیگر معتبر نیست.', true);
+            TG::answer($cq['id'], UI::l('این دیگر معتبر نیست.'), true);
             return;
         }
         if ((int)$j['target'] === $uid) {
@@ -393,13 +393,13 @@ final class Diamonds
 
 final class Games
 {
-    const WORDS_DIAMOND = ['الماس'];
-    const WORDS_ME = ['الماس من', 'امتیاز من', 'امتیازم', 'حساب الماس', 'موجودی', 'موجودی من'];
+    const WORDS_DIAMOND = ['الماس', 'diamond', 'алмаз'];
+    const WORDS_ME = ['الماس من', 'امتیاز من', 'امتیازم', 'حساب الماس', 'موجودی', 'موجودی من', 'my diamonds', 'мои алмазы'];
     const WORDS_TOP = ['برترین ها', 'برترین', 'برترینها', 'رتبه بندی', 'رتبه', 'لیدربورد', 'لیدر بورد', 'لیدربرد', 'لیدر برد', 'لیدبورد', 'leaderboard', 'leader board', 'top', 'تاپ',
-        'تاپ الماسی', 'تاپ الماس', 'برترین های الماسی', 'برترین های الماس', 'top diamond', 'تاپ لیست', 'تاپلیست'];
-    const WORDS_ACCOUNT = ['حساب', 'حساب من'];
-    const DOOZ = ['دوز'];
-    const MINE = ['مین'];
+        'تاپ الماسی', 'تاپ الماس', 'برترین های الماسی', 'برترین های الماس', 'top diamond', 'تاپ لیست', 'تاپلیست', 'топ', 'рейтинг', 'лидеры'];
+    const WORDS_ACCOUNT = ['حساب', 'حساب من', 'balance', 'баланс'];
+    const DOOZ = ['دوز', 'xo', 'крестики'];
+    const MINE = ['مین', 'mine', 'мины'];
     const DOOZ_MIN = 10;
     const DOOZ_MAX = 1000000000;
     const TAX = 10;
@@ -1013,11 +1013,13 @@ final class Games
     public static function tick(): void
     {
         $now = time();
+        $was = UI::$lang;
         foreach (DB::all("SELECT data FROM games WHERE status IN ('open','playing','waiting','active') AND created < ? LIMIT 50", [$now - 60]) as $r) {
             $g = json_decode($r['data'], true);
             if (!$g) {
                 continue;
             }
+            Lang::use($g['chat'] ?? 0);
             if ($g['kind'] === 'dooz') {
                 if ($g['status'] === 'playing' && $now - (int)($g['moved'] ?? $g['created']) >= self::EXPIRE) {
                     $ids = array_map('intval', array_keys($g['players']));
@@ -1042,6 +1044,7 @@ final class Games
                 }
             }
         }
+        UI::$lang = $was;
         DB::q("DELETE FROM games WHERE status NOT IN ('open','playing','waiting','active') AND created < ?", [$now - 3 * 86400]);
         DB::q('DELETE FROM jails WHERE created < ?', [$now - 3600]);
     }

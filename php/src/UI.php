@@ -92,8 +92,32 @@ final class UI
         return trim($text);
     }
 
+    public static string $lang = 'fa';
+
+    public static function l(string $fa): string
+    {
+        return self::$lang === 'fa' ? $fa : (Config::data('phrases_' . self::$lang)[$fa] ?? $fa);
+    }
+
+    public static function lx(string $fa): string
+    {
+        if (self::$lang === 'fa' || $fa === '') {
+            return $fa;
+        }
+        static $sorted = [];
+        if (!isset($sorted[self::$lang])) {
+            $map = Config::data('phrases_' . self::$lang);
+            uksort($map, fn($a, $b) => mb_strlen($b) <=> mb_strlen($a));
+            $sorted[self::$lang] = $map;
+        }
+        return strtr($fa, $sorted[self::$lang]);
+    }
+
     public static function template(string $key): string
     {
+        if (self::$lang !== 'fa' && ($t = Config::data('texts_' . self::$lang)[$key]['text'] ?? null) !== null) {
+            return $t;
+        }
         $o = DB::textOverride($key);
         return self::kashida($o ?? (Config::data('texts')[$key]['text'] ?? $key));
     }
@@ -117,7 +141,7 @@ final class UI
 
     public static function kashida(string $text): string
     {
-        if (Config::get('KASHIDA', '1') === '0' || !preg_match('/\p{Arabic}/u', $text)) {
+        if (self::$lang !== 'fa' || Config::get('KASHIDA', '1') === '0' || !preg_match('/\p{Arabic}/u', $text)) {
             return $text;
         }
         $parts = preg_split('/(<[^>]+>|\{[a-z_]+\})/u', $text, -1, PREG_SPLIT_DELIM_CAPTURE);
@@ -367,7 +391,7 @@ final class UI
                     $sp += strspn($follow, ' ');
                     $next = substr($follow, strspn($follow, ' '), 1);
                 }
-                $pad = ($quote && $next !== '' && $next !== "\n") ? str_repeat(' ', max(0, 4 - $sp)) : '';
+                $pad = ($quote && self::$lang === 'fa' && $next !== '' && $next !== "\n") ? str_repeat(' ', max(0, 4 - $sp)) : '';
                 $used = true;
                 $id = $lookup[str_replace("\u{FE0F}", '', $e)] ?? '';
                 return '<tg-emoji emoji-id="' . $id . '">' . $e . '</tg-emoji>' . $pad;
@@ -437,7 +461,8 @@ final class UI
                 $rtl = $m[2] !== '' || (preg_match('/\p{L}/u', $plain, $lm) && preg_match('/\p{Arabic}/u', $lm[0]));
                 $dot = preg_match('/emoji-id="(\d+)"/', $m[3], $em) && isset(self::DOTS[$em[1]]);
                 $had = strlen($m[0]) - strlen(rtrim($m[0], " \t"));
-                $gap = $rest !== '' && !str_starts_with($rest, '</blockquote') ? str_repeat(' ', $quote && $rtl ? ($dot ? $quoteGap : 4) : ($rtl ? max(1, min(2, $had)) : 1)) : '';
+                $n = self::$lang !== 'fa' ? 1 : ($quote && $rtl ? ($dot ? $quoteGap : 4) : ($rtl ? max(1, min(2, $had)) : 1));
+                $gap = $rest !== '' && !str_starts_with($rest, '</blockquote') ? str_repeat(' ', $n) : '';
                 $line = $m[1] . $m[2] . $m[3] . $gap . $rest;
             }
             $depth = max(0, $depth + preg_match_all('/<blockquote/', $line) - substr_count($line, '</blockquote>'));
@@ -473,7 +498,8 @@ final class UI
     {
         $conf = (Settings::get('buttons') ?: [])[$key] ?? [];
         $def = Config::data('buttons')[$key] ?? ['text' => $key, 'style' => null];
-        $text = self::fill(self::kashida(($conf['text'] ?? '') !== '' ? $conf['text'] : $def['text']), $values);
+        $own = self::$lang !== 'fa' ? (Config::data('buttons_' . self::$lang)[$key] ?? null) : null;
+        $text = self::fill(self::kashida($own ?? (($conf['text'] ?? '') !== '' ? $conf['text'] : $def['text'])), $values);
         $style = array_key_exists('style', $conf) ? $conf['style'] : $def['style'];
         if (in_array($style, ['', 'none', null], true)) {
             $style = null;
@@ -564,7 +590,7 @@ final class UI
 
     public static function fullName(array $u): string
     {
-        return trim(($u['first_name'] ?? '') . ' ' . ($u['last_name'] ?? '')) ?: ($u['title'] ?? 'کاربر');
+        return trim(($u['first_name'] ?? '') . ' ' . ($u['last_name'] ?? '')) ?: ($u['title'] ?? self::l('کاربر'));
     }
 
     public static function mention(array $u): string
@@ -575,5 +601,40 @@ final class UI
     public static function uname(?string $u): string
     {
         return $u ? '@' . self::esc($u) : '—';
+    }
+}
+
+final class Lang
+{
+    const ALL = ['fa', 'en', 'ru'];
+    private static array $memo = [];
+
+    public static function of($chat): string
+    {
+        $c = (int)$chat;
+        if ($c >= 0) {
+            return 'fa';
+        }
+        if (!isset(self::$memo[$c])) {
+            $l = (string)(DB::chatSettings($c)['lang'] ?? 'fa');
+            self::$memo[$c] = in_array($l, self::ALL, true) ? $l : 'fa';
+        }
+        return self::$memo[$c];
+    }
+
+    public static function chosen(int $chat): bool
+    {
+        return isset(DB::chatSettings($chat)['lang']);
+    }
+
+    public static function set(int $chat, string $l): void
+    {
+        DB::setChatSetting($chat, 'lang', $l);
+        self::$memo[$chat] = $l;
+    }
+
+    public static function use($chat): void
+    {
+        UI::$lang = self::of($chat);
     }
 }

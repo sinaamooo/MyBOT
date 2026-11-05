@@ -56,6 +56,9 @@ final class Tools
 
     public static function sendPriced(array $m, array $a): void
     {
+        if (!empty($a['key']) && UI::$lang !== 'fa') {
+            $a['key'] .= '|' . UI::$lang;
+        }
         $photo = null;
         $fk = !empty($a['key']) ? 'fid:' . md5(Config::get('BOT_TOKEN') . '|' . $a['key']) : null;
         if ($fk && ($fid = Cache::get($fk))) {
@@ -205,7 +208,7 @@ final class Tools
                 'usd' => $r['usd'] !== null ? Fmt::usd($r['usd']) : null, 'toman' => $r['usd'] !== null && $rate ? Fmt::toman($r['usd'] * $rate) : null,
                 'txs' => is_numeric($r['txs']) ? Fmt::int($r['txs']) : ($r['txs'] ?: null),
                 'nft_icon' => UI::badge('NFT', '🎞'), 'nfts' => $r['nfts'] ? Fmt::int($r['nfts']) : null, 'created' => $r['created'] ? Fmt::jalali($r['created']) : null,
-                'status' => $r['status'] ? (UI::stripEmoji($r['status']) ?: null) : null, 'status_icon' => self::statusDot($r['status'] ? UI::stripEmoji($r['status']) : null), 'explorer' => UI::attr($r['explorer']),
+                'status' => $r['status'] ? (UI::lx(UI::stripEmoji($r['status'])) ?: null) : null, 'status_icon' => self::statusDot($r['status'] ? UI::stripEmoji($r['status']) : null), 'explorer' => UI::attr($r['explorer']),
             ]);
         }
         $parts[] = UI::t('wallet_footer', ['total_usd' => Fmt::usd($total), 'total_toman' => $rate ? Fmt::toman($total * $rate) : null, 'time' => Fmt::now()]);
@@ -231,7 +234,7 @@ final class Tools
         $rate = Prices::usdtToman();
         $amount = $tx['amount'] !== null ? Fmt::num($tx['amount']) . ' ' . UI::esc($tx['symbol'] ?? '') : ($tx['symbol'] ? UI::esc($tx['symbol']) : null);
         $text = UI::t('tx_result', [
-            'network' => UI::esc($tx['network']), 'status' => UI::stripEmoji($tx['status']) ?: null, 'status_icon' => self::statusDot(UI::stripEmoji($tx['status'])), 'amount' => $amount,
+            'network' => UI::esc($tx['network']), 'status' => UI::lx(UI::stripEmoji($tx['status'])) ?: null, 'status_icon' => self::statusDot(UI::stripEmoji($tx['status'])), 'amount' => $amount,
             'usd' => $tx['usd'] ? Fmt::usd($tx['usd']) : null, 'toman' => $tx['usd'] && $rate ? Fmt::toman($tx['usd'] * $rate) : null,
             'token' => $tx['token_type'] ? UI::esc(($tx['token_name'] ?: $tx['symbol']) . ' (' . $tx['token_type'] . ')') : null,
             'contract' => $tx['contract'] ? UI::esc($tx['contract']) : null,
@@ -296,9 +299,9 @@ final class Tools
         $items = [];
         foreach (array_slice($all, ($page - 1) * self::TX_PAGE, self::TX_PAGE) as $it) {
             $in = ($it['to'] ?? '') === $d['addr'];
-            $items[] = UI::fill(UI::template('tron_transfer_item'), ['dir_icon' => $in ? UI::badge('DGREEN', '🟢') : UI::badge('DRED', '🔴'), 'direction' => $in ? '📥' : '📤', 'kind' => $in ? 'دریافت' : 'ارسال',
+            $items[] = UI::fill(UI::template('tron_transfer_item'), ['dir_icon' => $in ? UI::badge('DGREEN', '🟢') : UI::badge('DRED', '🔴'), 'direction' => $in ? '📥' : '📤', 'kind' => UI::l($in ? 'دریافت' : 'ارسال'),
                 'amount' => Fmt::num($it['amount']), 'symbol' => UI::esc($it['symbol']), 'time' => $it['ts'] ? Fmt::jalali($it['ts']) : '—',
-                'side' => $in ? 'از' : 'به', 'party' => UI::esc((string)($in ? $it['from'] : $it['to'])), 'hash' => UI::esc($it['hash'] ?? '')]);
+                'side' => UI::l($in ? 'از' : 'به'), 'party' => UI::esc((string)($in ? $it['from'] : $it['to'])), 'hash' => UI::esc($it['hash'] ?? '')]);
         }
         $text = UI::t('tron_transfers', ['address' => UI::esc($d['addr']), 'page' => $page, 'pages' => $pages, 'items' => implode("\n", $items)]);
         $nav = [];
@@ -356,7 +359,7 @@ final class Tools
         }
         $items = array_slice($items, 0, 25, true);
         if (!$items && empty($m['reply_to_message']) && trim($args) === '' && preg_match('/^\//', $m['text'] ?? '')) {
-            Bot::ask($m, 'emoji', 'emoji_ask', 'ایموجی پریمیوم');
+            Bot::ask($m, 'emoji', 'emoji_ask', UI::l('ایموجی پریمیوم'));
             return;
         }
         if (!$items) {
@@ -397,7 +400,7 @@ final class Tools
         }
         $text = UI::t('account', [
             'name' => UI::mention($t), 'id' => $t['id'], 'username' => UI::uname($t['username'] ?? null),
-            'premium_icon' => UI::badge('PREMIUM', '💫'), 'premium' => !empty($t['is_premium']) ? '✅   دارد' : '❌   ندارد', 'level' => $level,
+            'premium_icon' => UI::badge('PREMIUM', '💫'), 'premium' => UI::l(!empty($t['is_premium']) ? '✅   دارد' : '❌   ندارد'), 'level' => $level,
             'created' => Fmt::jalaliLong(Account::created((int)$t['id'])), 'dc' => $dc ? "DC$dc • " . (Account::DC[$dc] ?? '') : null,
             'lang' => !empty($t['language_code']) ? strtoupper($t['language_code']) : null, 'birthdate' => $bd,
             'bio' => !empty($info['bio']) ? UI::esc($info['bio']) : null, 'gifts' => $gifts ? Fmt::int($gifts['total_count'] ?? 0) : null,
@@ -479,7 +482,7 @@ final class Tools
             return;
         }
         TG::answer($cq['id'], '✅');
-        $text = UI::t('translate_result', ['lang' => Translate::LANGS[$lang][0], 'text' => UI::esc(mb_substr($res, 0, 3700))]);
+        $text = UI::t('translate_result', ['lang' => UI::l(Translate::LANGS[$lang][0]), 'text' => UI::esc(mb_substr($res, 0, 3700))]);
         if (TG::edit($chat, $mid, $text, UI::footer()) === null) {
             TG::send($chat, $text, UI::footer());
         }

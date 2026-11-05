@@ -1,0 +1,479 @@
+{
+ "start_private": {
+  "text": "👋 Hi <b>{name}</b>, welcome!\n🤖 I'm an all-in-one crypto and group management bot.\n\n<blockquote>💱 Crypto prices and conversion: <code>10 usdt</code>\n💰 Toman conversion: <code>500000 toman</code>\n🌍 World currencies: <code>500 aed</code>\n🪙 Gold and coins: <code>gold</code>\n👛 Wallet and hash checker on all networks\n🎁 Gift prices: <code>/gift @username</code>\n🌐 Translate: reply and type <code>translate</code>\n🧮 Calculator: <code>200+79</code>\n🆔 Numeric ID: reply and type <code>UID</code>\n👤 Account info: <code>/me</code>\n🎮 Games: <code>diamond</code> , <code>xo 100</code> , <code>mine 100</code>\n🛡 Anti-self, anti-spam bot, anti-scam</blockquote>\n👥 Add me to your group and make me admin"
+ },
+ "help": {
+  "text": "📖 <b>Bot guide</b>\n\n<blockquote>💱 <b>Crypto price:</b> <code>btc</code> , <code>price ton</code> , <code>/p eth</code></blockquote>\n<blockquote>💵 <b>Convert:</b> <code>10 usdt</code> , <code>500 ton</code> , <code>2.5 btc</code> , <code>1000 stars</code></blockquote>\n<blockquote>💰 <b>Toman:</b> <code>500000 toman</code> , <code>2m toman</code> , <code>10m rial</code></blockquote>\n<blockquote>🌍 <b>World currencies:</b> <code>500 aed</code> , <code>100 eur</code> , <code>50 usd</code> , <code>1000 try</code></blockquote>\n<blockquote>👛 <b>Wallet checker:</b> send a wallet address (BTC, ETH, BSC, TRON, TON, SOL, ...)</blockquote>\n<blockquote>🔗 <b>Hash checker:</b> send a transaction hash</blockquote>\n<blockquote>🎁 <b>Gift:</b> link <code>t.me/nft/...</code> or <code>/gift @username</code></blockquote>\n<blockquote>🌐 <b>Translate:</b> reply to a message and type <code>translate</code></blockquote>\n<blockquote>🧮 <b>Calculator:</b> <code>698*789</code> , <code>797÷788</code></blockquote>\n<blockquote>🆔 <b>Numeric ID:</b> reply and type <code>UID</code></blockquote>\n<blockquote>😀 <b>Emoji:</b> <code>/emoji</code> + premium emoji or reply</blockquote>\n<blockquote>🚨 <b>Report a scammer:</b> <code>/scam @username</code></blockquote>\n<blockquote>🔍 <b>Check a scammer:</b> <code>/check @username</code></blockquote>\n<blockquote>👤 <b>Account:</b> <code>/account</code></blockquote>\n<blockquote>⚙️ <b>Group settings:</b> <code>/panel</code> (group admins)</blockquote>"
+ },
+ "bot_added": {
+  "text": "🎉 <b>The bot was added to the group!</b>\n⚠️ To enable every feature (anti-self, anti-spam, forced join, ...) make me a <b>full admin</b>.\n⚙️ Settings: <code>/settings</code>"
+ },
+ "error": {
+  "text": "⚠️ Something went wrong, please try again."
+ },
+ "loading": {
+  "text": "⏳ Please wait..."
+ },
+ "force_join_private": {
+  "text": "🔒 Dear <b>{name}</b>\nTo use the bot you need to join the channels below first ⬇️\nYou can't use the bot until you join.\n✅ After joining tap «I joined»."
+ },
+ "force_join_group": {
+  "text": "🔒 Dear {mention}\nTo send messages in this group you need to join the channels below ⬇️\n⛔️ You can't chat until you join."
+ },
+ "force_join_ok": {
+  "text": "✅ Your membership is confirmed, welcome!"
+ },
+ "force_join_not_yet": {
+  "text": "❌ You haven't joined all the channels yet!"
+ },
+ "conv_crypto": {
+  "text": "{coin_icon} <b>{amount} {title}</b> = <b>{toman}</b> Toman\n\n<blockquote>{trx_icon} Tron: <code>{trx}</code> TRX\n{ton_icon} Toncoin: <code>{ton}</code> TON\n{usd_icon} Dollar: <code>{usd}</code> $\n⭐️ Stars: <code>{stars}</code> Stars</blockquote>\n🗓 {time}"
+ },
+ "conv_toman": {
+  "text": "{icon} <b>{amount} {unit}</b>\n\n<blockquote>{usdt_icon} Tether: <code>{usdt}</code> USDT\n{ton_icon} Toncoin: <code>{ton}</code> TON\n{trx_icon} Tron: <code>{trx}</code> TRX</blockquote>\n🗓 {time}"
+ },
+ "conv_stars": {
+  "text": "⭐️ <b>{amount} Stars</b> = <b>{toman}</b> Toman\n\n<blockquote>{usd_icon} Dollar: <code>{usd}</code> $\n{ton_icon} Toncoin: <code>{ton}</code> TON\n{trx_icon} Tron: <code>{trx}</code> TRX</blockquote>\n🗓 {time}"
+ },
+ "conv_pair": {
+  "text": "{icon} <b>{amount} {from}</b> = <b>{result} {to}</b>\n\n<blockquote>{dorange_icon} Rate: <code>1 {from_code} = {rate} {to_code}</code>\n{dgreen_icon} Inverse: <code>1 {to_code} = {inverse} {from_code}</code>\n{dpeach_icon} USD value: <code>{usd}</code> $\n{dblue_icon} Toman value: <code>{toman}</code></blockquote>\n🗓 {time}"
+ },
+ "conv_fiat": {
+  "text": "{icon} <b>{amount} {name}</b> = <b>{toman}</b> Toman\n\n<blockquote>{usd_icon} Dollar: <code>{usd}</code> $\n{ton_icon} Toncoin: <code>{ton}</code> TON\n{trx_icon} Tron: <code>{trx}</code> TRX\n⭐️ Stars: <code>{stars}</code> Stars</blockquote>\n🗓 {time}"
+ },
+ "market": {
+  "text": "📊 <b>Live market</b>\n\n<blockquote>{lines}</blockquote>\n{usdt_icon} Tether: <code>{usdt_toman}</code> Toman\n🗓 {time}"
+ },
+ "market_line": {
+  "text": "{icon} <b>{symbol}</b>  <code>{usd}</code> $  ·  <code>{toman}</code> T  {change}"
+ },
+ "currency_not_found": {
+  "text": "❌ Currency «{query}» was not found."
+ },
+ "price_unavailable": {
+  "text": "⚠️ Prices are unavailable right now, please try again shortly."
+ },
+ "wallet_checking": {
+  "text": "🔍 Checking the wallet on all networks..."
+ },
+ "wallet_header": {
+  "text": "👛 <b>Wallet checker result</b>\n📍 <code>{address}</code>\n🌐 Networks found: <b>{count}</b>"
+ },
+ "wallet_chain": {
+  "text": "{chain_icon} <b>{chain}</b>\n\n<blockquote>{dorange_icon} Balance: <code>{balance}</code> {symbol}\n{dgreen_icon} USD value: <code>{usd}</code> $\n{dpeach_icon} Toman value: <code>{toman}</code>\n{dblue_icon} Transactions: <code>{txs}</code>\n{dolive_icon} NFT: <code>{nfts}</code>\n{dbrown_icon} Wallet created: {created}\n{status_icon} Status: {status}\n{dnavy_icon} <a href=\"{explorer}\">View in explorer</a></blockquote>"
+ },
+ "wallet_footer": {
+  "text": "📊 <b>Total assets</b>\n\n<blockquote>{dgreen_icon} Dollar: <code>{total_usd}</code> $\n{dpeach_icon} Toman: <code>{total_toman}</code></blockquote>\n🗓 {time}"
+ },
+ "wallet_not_found": {
+  "text": "❌ No assets or activity were found for this address on the supported networks.\n📍 <code>{address}</code>"
+ },
+ "tx_checking": {
+  "text": "🔍 Searching for the transaction on all networks..."
+ },
+ "tx_result": {
+  "text": "🧾 <b>Transaction hash result</b>\n\n<blockquote>{dblue_icon} Network: <b>{network}</b>\n{status_icon} Status: {status}\n{dorange_icon} Amount: <code>{amount}</code>\n{dgreen_icon} USD value: <code>{usd}</code> $\n{dpeach_icon} Toman value: <code>{toman}</code>\n{dolive_icon} Token: {token}\n{dbrown_icon} Contract / token ID: <code>{contract}</code>\n{dnavy_icon} From: <code>{sender}</code>\n{dblue_icon} To: <code>{receiver}</code>\n{dred_icon} Fee: <code>{fee}</code>\n{dbrown_icon} Block: <code>{block}</code>\n{dgreen_icon} Confirmations: <code>{confirmations}</code>\n{dnavy_icon} Time: {time}</blockquote>\n#️⃣ <code>{hash}</code>\n🔎 <a href=\"{explorer}\">View in explorer</a>"
+ },
+ "tx_not_found": {
+  "text": "❌ This hash was not found on any supported network.\n#️⃣ <code>{hash}</code>"
+ },
+ "tron_transfers": {
+  "text": "📜 <b>Wallet transactions</b>\n📍 <code>{address}</code>\n📄 Page <b>{page}</b> of <b>{pages}</b>\n\n{items}"
+ },
+ "tron_transfer_item": {
+  "text": "<blockquote>{dir_icon} {kind}: <b>{amount} {symbol}</b>\n{dnavy_icon} Time: {time}\n{dblue_icon} {side}: <code>{party}</code>\n{dorange_icon} <a href=\"https://tronscan.org/#/transaction/{hash}\">View transaction</a></blockquote>"
+ },
+ "tron_transfers_empty": {
+  "text": "📭 No transactions were found for this wallet."
+ },
+ "not_your_button": {
+  "text": "❌ You don't have access"
+ },
+ "expired": {
+  "text": "⌛️ This button has expired, please request again."
+ },
+ "card_result": {
+  "text": "💳 <b>Bank card lookup</b>\n\n<blockquote>🔢 Card number: <code>{card}</code>\n🏦 Bank: <b>{bank}</b>\n👤 Card holder: <b>{owner}</b>\n🧾 IBAN: <code>{iban}</code>\n🛡 Validation: {valid}\n{extra}</blockquote>"
+ },
+ "iban_result": {
+  "text": "🏦 <b>IBAN lookup</b>\n\n<blockquote>🔢 IBAN: <code>{iban}</code>\n🏦 Bank: <b>{bank}</b>\n🛡 Validation: {valid}</blockquote>"
+ },
+ "phone_result": {
+  "text": "📱 <b>Telegram number checker</b>\n\n<blockquote>📞 Number: <code>{phone}</code>\n{status} {description}</blockquote>"
+ },
+ "phone_invalid": {
+  "text": "⚠️ Send the number in international format, e.g. <code>/phone +15005550006</code>"
+ },
+ "phone_failed": {
+  "text": "⚠️ The server has a problem, please try again shortly."
+ },
+ "arz_board": {
+  "text": "💱 <b>Open market exchange rates</b>\n\n<blockquote>{lines}</blockquote>\n🗓 {time}"
+ },
+ "arz_line": {
+  "text": "{icon} {name}  <code>{toman}</code> T  {change}"
+ },
+ "insta_loading": {
+  "text": "⏳ Fetching data from Instagram..."
+ },
+ "insta_count": {
+  "text": "⏳ Please wait\n🖼 Photos and videos: {count}"
+ },
+ "insta_media_caption": {
+  "text": "🎬 <b>{title}</b>\n\n<blockquote>👤 Page: <b>{owner}</b>\n❤️ Likes: <code>{likes}</code>\n💬 Comments: <code>{comments}</code>\n👁 Views: <code>{views}</code>\n⏱ Duration: <code>{duration}</code>\n🖼 Items: <code>{count}</code>\n🗓 Date: {date}</blockquote>\n<blockquote expandable>📝 {text}</blockquote>\n🤖 @{bot}"
+ },
+ "insta_not_found": {
+  "text": "⛔️ Couldn't fetch this post.\n💬 The post must be public; try again in a moment."
+ },
+ "insta_private": {
+  "text": "🔒 This page is private."
+ },
+ "insta_no_story": {
+  "text": "⛔️ This page has no stories."
+ },
+ "insta_no_highlight": {
+  "text": "⛔️ This page has no highlights."
+ },
+ "insta_no_key": {
+  "text": "⚠️ The Instagram service hasn't been enabled by the admin yet."
+ },
+ "insta_highlights": {
+  "text": "🌟 Highlights of <b>{username}</b>"
+ },
+ "insta_info": {
+  "text": "📸 <b>Instagram page info</b>\n\n<blockquote>🆔 ID: <code>{id}</code>\n👤 Name: <b>{name}</b>\n🔗 Username: <code>{username}</code>\n👥 Followers: <code>{followers}</code>\n👀 Following: <code>{following}</code>\n🖼 Posts: <code>{posts}</code>\n✅ Verified: {verified}\n🔒 Private: {private}</blockquote>\n📝 Bio:\n<blockquote expandable>{bio}</blockquote>"
+ },
+ "bot_off": {
+  "text": "⛔️ The bot is currently turned off."
+ },
+ "banned": {
+  "text": "⛔️ You are banned from the bot."
+ },
+ "bot_promoted": {
+  "text": "🎉 <b>The bot is now an admin in this group!</b>\n🔗 To check a hash just send the hash or transaction link\n👛 To check a wallet: <code>wallet address</code>\n💱 For prices: <code>10 usdt</code>\n⚙️ Group settings: /settings"
+ },
+ "admin_message": {
+  "text": "📢 <b>Message from the admins</b>\n\n{text}"
+ },
+ "gift_link": {
+  "text": "🎁 <b>{name} #{number}</b>\n\n<blockquote>🎨 Model: <b>{model}</b> {model_rarity}\n🖼 Backdrop: <b>{backdrop}</b> {backdrop_rarity}\n✨ Symbol: <b>{symbol}</b> {symbol_rarity}\n👤 Owner: {owner}\n🔢 Issued: {quantity}</blockquote>\n<blockquote>📉 Collection floor: <code>{floor_ton}</code> TON\n🎨 Model floor: <code>{model_floor}</code> TON\n🖼 Backdrop floor: <code>{backdrop_floor}</code> TON\n✨ Symbol floor: <code>{symbol_floor}</code> TON</blockquote>\n🏷 <b>Estimated value:</b>\n{ton_icon} <code>{est_ton}</code> TON\n{usd_icon} <code>{est_usd}</code> $\n{toman_icon} <code>{est_toman}</code> Toman\n⭐️ <code>{est_stars}</code> Stars\n🔗 {link}"
+ },
+ "gift_user_caption": {
+  "text": "🎁 <b>Gift collection of {name}</b>\n\n{pl_line}\n{change_line}\n<blockquote>🔢 Gifts: <b>{count}</b> (unique: {unique_count})</blockquote>\n<blockquote>{ton_icon} Total value: <code>{total_ton}</code> TON</blockquote>\n<blockquote>{usd_icon} USD value: <code>{total_usd}</code> $</blockquote>\n<blockquote>{toman_icon} Toman value: <code>{total_toman}</code> Toman</blockquote>\n<blockquote>{links}</blockquote>"
+ },
+ "gift_profit": {
+  "text": "📈 Market profit, last 7 days: <b>+{ton} TON</b> (+{percent}%) ≈ {toman} T"
+ },
+ "gift_loss": {
+  "text": "📉 Market loss, last 7 days: <b>-{ton} TON</b> (-{percent}%) ≈ {toman} T"
+ },
+ "gift_since_last": {
+  "text": "🔄 Since the last check: <b>{sign}{ton} TON</b> ({sign}{percent}%)"
+ },
+ "gift_user_none": {
+  "text": "📭 No public gifts were found for {name}."
+ },
+ "gift_user_unknown": {
+  "text": "❌ I couldn't find this user.\n💬 The user must have written at least once in a group with the bot, or started the bot.\n💡 You can reply to their message and send <code>/gift</code>."
+ },
+ "gift_ask": {
+  "text": "🎁 Send a username or a gift link.\n👤 For your own gifts: <b>me</b>"
+ },
+ "gift_not_found": {
+  "text": "❌ No data was found for this gift."
+ },
+ "self_warn": {
+  "text": "⚠️ {mention}\n🤖 <b>A self-bot (auto control) was detected on your account!</b>\nPlease turn your self-bot <b>off</b>, otherwise you will be <b>muted</b>. ⛔️"
+ },
+ "self_muted": {
+  "text": "🔇 {mention} was muted for running a <b>self-bot</b>.\n⏱ Duration: {duration}"
+ },
+ "tabchi_muted": {
+  "text": "🔇 {mention} was detected as a <b>spam / advertising bot</b> and muted.\n⏱ Duration: {duration}"
+ },
+ "unmuted": {
+  "text": "🔊 {mention} was unmuted."
+ },
+ "scam_keyword_warn": {
+  "text": "🚨 {mention}\n⚠️ <b>Security warning:</b> trading in private chats without a trusted escrow carries a high scam risk!\n🛡 Never send your code, password, recovery phrase (seed) or private key to anyone."
+ },
+ "scam_known": {
+  "text": "⛔️ <b>Warning!</b> {mention} is on the <b>scammer list</b>.\n📝 Reason: {reason}\n⚠️ Do not trade with this person."
+ },
+ "scam_usage": {
+  "text": "💡 How to report: <code>/scam @username</code>\nor reply to the scammer's message and send <code>/scam</code>."
+ },
+ "scam_go_private": {
+  "text": "🚨 A scam report against {target} has been opened.\n📩 Tap the button below and send your evidence in the bot's private chat."
+ },
+ "scam_ask_evidence": {
+  "text": "🚨 <b>Scam report against {target}</b>\n📎 Please send your <b>evidence</b> (screenshots, videos, files, description, transaction hash, ...).\n✅ After sending everything tap «Submit»."
+ },
+ "scam_evidence_saved": {
+  "text": "📎 Evidence #{count} received. Send the next one or tap «Submit»."
+ },
+ "scam_need_evidence": {
+  "text": "⚠️ Send at least one piece of evidence."
+ },
+ "scam_submitted": {
+  "text": "📨 Your report <b>#{id}</b> was sent to the admins.\nYou'll be notified after review."
+ },
+ "scam_cancelled": {
+  "text": "❌ The report was cancelled."
+ },
+ "scam_admin": {
+  "text": "🚨 <b>New scam report #{id}</b>\n🎯 Accused: {target}\n🆔 Numeric ID: <code>{target_id}</code>\n🗣 Reporter: {reporter}\n📎 Evidence: {count}\n📝 Details: {reason}"
+ },
+ "scam_approved_user": {
+  "text": "✅ Your report #{id} was approved and announced in the groups. Thank you 🌟"
+ },
+ "scam_rejected_user": {
+  "text": "❌ Your report #{id} was rejected by the admins."
+ },
+ "scam_broadcast": {
+  "text": "🚨 <b>Scammer alert</b> ‼️\n\n<blockquote>🎯 User: {target}\n🆔 Numeric ID: <code>{target_id}</code>\n📝 Reason: {reason}\n🗂 Case number: #{id}</blockquote>\n⛔️ Please don't trade with this person so you don't get scammed!"
+ },
+ "scam_check_clean": {
+  "text": "✅ {target} is not on the scammer list.\n⚠️ Still, always trade through a trusted escrow."
+ },
+ "scam_check_found": {
+  "text": "⛔️ {target} is on the <b>scammer list</b>!\n📝 Reason: {reason}\n🗂 Case: #{id}"
+ },
+ "uid": {
+  "text": "🪪 <b>User info</b>\n\n<blockquote>👤 Name: {name}\n🆔 Numeric ID: <code>{id}</code>\n🔗 Username: {username}</blockquote>"
+ },
+ "emoji_item": {
+  "text": "<code>{id}</code>"
+ },
+ "emoji_ask": {
+  "text": "✨ Send a premium emoji."
+ },
+ "emoji_none": {
+  "text": "❌ No premium emoji was found.\n💡 Send <code>/emoji</code> together with a premium emoji, or reply to a message that has one."
+ },
+ "translate_choose": {
+  "text": "🌐 Please choose a language"
+ },
+ "translate_result": {
+  "text": "🌐 <b>Translation to {lang}</b>\n\n<blockquote expandable>{text}</blockquote>"
+ },
+ "translate_not_yours": {
+  "text": "⛔️ This translation request isn't yours."
+ },
+ "translate_used": {
+  "text": "✅ This message has already been translated."
+ },
+ "translate_need_reply": {
+  "text": "💡 To translate, reply to a text message and type <code>translate</code>."
+ },
+ "translate_failed": {
+  "text": "⚠️ Translation failed, please try again."
+ },
+ "calc_result": {
+  "text": "🧮 <code>{expr}</code>\n<blockquote>🟰 <b>{result}</b></blockquote>"
+ },
+ "account": {
+  "text": "🪪 <b>Account info</b>\n\n👤 Name: {name}\n<blockquote>🆔 Numeric ID: <code>{id}</code></blockquote>\n🔗 Username: {username}\n<blockquote>{premium_icon} Premium: {premium}</blockquote>\n🏅 Telegram account level: {level}\n<blockquote>🗓 Created (estimated): {created}</blockquote>\n🖥 Data center: {dc}\n<blockquote>🗣 Language: {lang}</blockquote>\n<blockquote>🎂 Birthday: {birthdate}</blockquote>\n<blockquote>📝 Bio: {bio}</blockquote>\n🎁 Gifts: {gifts}\n<blockquote>💎 Diamonds: <code>{diamonds}</code>\n🏅 Diamond level: <b>{dlevel}</b></blockquote>"
+ },
+ "whale_alert": {
+  "text": "💸 <b>Whale alert!</b> {bar}\n\n<blockquote>💸 Amount: <b>{amount} {symbol}</b>\n💵 Value: <code>{usd}</code> $\n💰 Equals: <code>{toman}</code> Toman\n🌐 Network: <b>{network}</b>\n📤 From: {sender}\n📥 To: {receiver}</blockquote>\n🔍 <a href=\"{link}\">View transaction</a>\n🗓 {time}"
+ },
+ "group_settings": {
+  "text": "⚙️ <b>Group settings</b> {title}\nTap an option to turn it on/off:"
+ },
+ "only_group_admins": {
+  "text": "⛔️ Only group admins can do this."
+ },
+ "conv_gold": {
+  "text": "{icon} <b>{amount} {name}</b> = <b>{toman}</b> Toman\n\n<blockquote>{usd_icon} Dollar: <code>{usd}</code> $\n📈 24h change: {change}</blockquote>\n🗓 {time}"
+ },
+ "premium_prices": {
+  "text": "{icon} <b>Telegram Premium prices</b>\n\n<blockquote>{lines}</blockquote>\n🗓 {time}"
+ },
+ "premium_line": {
+  "text": "👑 <b>{months} months</b>  <code>{toman}</code> Toman  ·  <code>{ton}</code> TON"
+ },
+ "stars_prices": {
+  "text": "⭐️ <b>Telegram Stars prices</b>\n\n<blockquote>{lines}</blockquote>\n💰 Per star: <code>{each}</code> Toman\n🗓 {time}"
+ },
+ "stars_line": {
+  "text": "⭐️ <b>{stars}</b> Stars  <code>{toman}</code> Toman"
+ },
+ "dm_win": {
+  "text": "💎 <b>Diamond!</b> {name}\n\n<blockquote>✨ You received <b>{reward}</b> diamonds\n💰 Balance: {points}\n🏅 Level: {level}</blockquote>\n🆙 <b>Level up!</b> You reached level {new_level}!"
+ },
+ "dm_wait": {
+  "text": "⏳ {name}, it's too early!\n⌛️ You can mine diamonds again in {m} min {s} sec."
+ },
+ "dm_me": {
+  "text": "👤 <b>{name}</b>\n\n<blockquote>💎 Diamonds: <b>{points}</b>\n🏅 Level: <b>{level}</b>\n🔢 Times mined: <b>{total}</b>\n🎯 To next level: <b>{left}</b></blockquote>"
+ },
+ "dm_me_none": {
+  "text": "💎 You haven't mined any diamonds yet. Type <code>diamond</code> in the group"
+ },
+ "dm_top": {
+  "text": "🏆 <b>Top diamonds</b>\n\n<blockquote>{lines}</blockquote>"
+ },
+ "dm_top_line": {
+  "text": "{medal} {rank}. {name}  <b>{points}</b> diamonds  (level {level})"
+ },
+ "dm_top_none": {
+  "text": "💎 Nobody has mined diamonds yet."
+ },
+ "dm_jail_hit": {
+  "text": "🚨 {name} got caught and has to go to jail!\n👥 {need} members must confirm it."
+ },
+ "dm_jail_prog": {
+  "text": "🚨 {name} got caught and has to go to jail!\n✅ {got} of {need} confirmed."
+ },
+ "dm_jail_done": {
+  "text": "🔒 {name} went to jail!\n⏳ Can't mine diamonds for {dur}."
+ },
+ "dm_jail_self": {
+  "text": "You can't send yourself to jail"
+ },
+ "dm_jail_twice": {
+  "text": "You already confirmed."
+ },
+ "dm_jail_wait": {
+  "text": "⛔️ {name}, you're in jail right now!\n⏳ You'll be free in {m} min {s} sec."
+ },
+ "gm_group_only": {
+  "text": "🎮 Games only work inside groups."
+ },
+ "gm_dooz_how": {
+  "text": "🎮 <code>xo 100</code>  bet between {min} and {max} diamonds"
+ },
+ "gm_mine_how": {
+  "text": "💣 <code>mine 100</code>  entry between {min} and {max} diamonds"
+ },
+ "gm_dooz_open": {
+  "text": "🎮 <b>Tic-tac-toe for {stake} diamonds</b>\n\n<blockquote>👤 Host: {host}\n🏆 Winner's prize: <b>{prize}</b> diamonds\n🧾 Tax: <b>{tax}</b> diamonds</blockquote>\nThe board opens when a second player taps join."
+ },
+ "gm_dooz_turn": {
+  "text": "🎮 <b>Tic-tac-toe for {stake} diamonds</b>\n\n<blockquote>{p1}\n{p2}\n🏆 Prize: <b>{prize}</b> diamonds</blockquote>\n👉 Turn: {turn}"
+ },
+ "gm_dooz_win": {
+  "text": "🏆 <b>The game is over</b>\n\n<blockquote>👑 Winner: {wname}\n❌ Loser: {lname}\n💎 Prize: <b>{prize}</b> diamonds</blockquote>"
+ },
+ "gm_dooz_draw": {
+  "text": "⚖️ <b>It's a draw</b>\nBoth bets were returned."
+ },
+ "gm_cancelled": {
+  "text": "❌ <b>The game was cancelled</b>\nThe bet was returned."
+ },
+ "gm_expired": {
+  "text": "⌛️ <b>Nobody joined</b>\nThe bet was returned to the host."
+ },
+ "gm_idle": {
+  "text": "💤 <b>The game was left unfinished</b>\nBoth bets were returned."
+ },
+ "gm_low": {
+  "text": "❌ You don't have enough diamonds.\n💎 Your balance: <b>{points}</b> · needed: <b>{need}</b>"
+ },
+ "gm_bad_stake": {
+  "text": "❌ The bet must be between <b>{min}</b> and <b>{max}</b> diamonds."
+ },
+ "gm_open_max": {
+  "text": "⛔️ You have <b>{n}</b> open games."
+ },
+ "gm_not_yours": {
+  "text": "This game isn't yours."
+ },
+ "gm_not_turn": {
+  "text": "It's not your turn."
+ },
+ "gm_taken": {
+  "text": "This cell is taken."
+ },
+ "gm_gone": {
+  "text": "This game is over."
+ },
+ "gm_already": {
+  "text": "You're already in this game, wait for an opponent."
+ },
+ "gm_bal_pop": {
+  "text": "💎 {name}'s balance: {points} diamonds"
+ },
+ "gm_mine_preview": {
+  "text": "💣 <b>MINE FIELD</b>\n🔲 A 3×3 field: eight diamonds, one mine.\n<blockquote>💰 Entry: <code>{entry}</code>\n💎 Safe cell: bigger prize\n💥 Mine: game over</blockquote>\nTap «Join»."
+ },
+ "gm_mine_active": {
+  "text": "💣 <b>MINE FIELD</b>\n\n<blockquote>👤 {name}\n🔢 Step: <b>{picks}</b> of 8\n💰 Entry: <code>{entry}</code>\n💎 Prize: <b>{reward}</b>\n✖️ Multiplier: <b>{mult}×</b>\n🛡 Shield: {shield}</blockquote>\n{progress}\n🎯 Next cell: <b>+{next}</b>"
+ },
+ "gm_shield_on": {
+  "text": "active"
+ },
+ "gm_shield_off": {
+  "text": "{n} more cells"
+ },
+ "gm_mine_lost": {
+  "text": "💥 <b>GAME OVER</b>\nYou hit a mine.\n<blockquote>✅ Safe cells: <b>{picks}</b>\n💸 Lost: <b>{entry}</b></blockquote>"
+ },
+ "gm_mine_protected": {
+  "text": "🛡 <b>Shield activated!</b>\n💥 You hit a mine after <b>{picks}</b> safe cells.\n<blockquote>💸 This round's entry and prize were not returned\n✅ Safe cells: <b>{picks}</b></blockquote>"
+ },
+ "gm_mine_cashout": {
+  "text": "🤑 <b>Cashed out!</b>\n\n<blockquote>💎 Prize: <b>+{reward}</b>\n👛 Balance: <b>{wallet}</b></blockquote>"
+ },
+ "gm_mine_expired": {
+  "text": "⌛️ <b>The game expired</b>"
+ },
+ "gm_mine_cancelled": {
+  "text": "❌ The game was cancelled. Nothing was taken from you."
+ },
+ "gm_mine_low": {
+  "text": "❌ You don't have enough diamonds.\n\n<blockquote>💎 Needed: <b>{need}</b>\n👛 Your balance: <b>{wallet}</b></blockquote>"
+ },
+ "gm_mine_pop_low": {
+  "text": "Not enough diamonds, {need} diamonds are needed."
+ },
+ "gm_mine_bad": {
+  "text": "❌ The amount must be between {min} and {max}."
+ },
+ "gm_mine_busy": {
+  "text": "⏳ You already have an open game."
+ },
+ "gm_mine_already": {
+  "text": "This cell was already picked."
+ },
+ "gm_mine_need_join": {
+  "text": "Tap «Join» first."
+ },
+ "insta_story_caption": {
+  "text": "({index}/{count})\n🤖 Sent by: @{bot}"
+ },
+ "dm_board": {
+  "text": "🏆 <b>Diamond leaderboard</b>\n{global}\n{group}\n{me}"
+ },
+ "dm_board_global": {
+  "text": "🌍 <b>Top of the whole bot</b>\n\n<blockquote>{lines}</blockquote>"
+ },
+ "dm_board_group": {
+  "text": "👥 <b>Top of this group</b>\n\n<blockquote>{lines}</blockquote>"
+ },
+ "dm_board_group_none": {
+  "text": "👥 Nobody in this group has collected diamonds yet."
+ },
+ "dm_board_line": {
+  "text": "{medal} {name} — <b>{points}</b> 💎"
+ },
+ "dm_board_me": {
+  "text": "<blockquote>📍 Your rank: <b>{rank}</b> — <b>{points}</b> 💎</blockquote>"
+ },
+ "dm_board_me_none": {
+  "text": "<blockquote>📍 You don't have any diamonds yet.</blockquote>"
+ },
+ "dm_account": {
+  "text": "💎 <b>Diamond account of {name}</b>"
+ },
+ "dm_account_alert": {
+  "text": "💎 Diamonds: {points}\n🏅 Level: {level}\n🏆 Rank: {rank}\n🎯 Times mined: {total}"
+ },
+ "lang_set": {
+  "text": "✅ The bot language is now <b>English</b> 🇬🇧"
+ },
+ "lang_choose": {
+  "text": "🌐 <b>زبان ربات را انتخاب کنید</b>\n🌐 <b>Choose the bot language</b>\n🌐 <b>Выберите язык бота</b>"
+ }
+}

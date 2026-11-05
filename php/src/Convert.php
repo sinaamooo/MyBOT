@@ -36,9 +36,9 @@ final class Convert
                 }
                 $c = Market::usdtChange();
                 $r = $kind === 'rial' ? 10 : 1;
-                return [1 / ($usdt * $r), $c !== null && $c > -100 ? (1 / (1 + $c / 100) - 1) * 100 : null, $kind === 'rial' ? 'IRR' : 'IRT', $kind === 'rial' ? 'ریال' : 'تومان', UI::badge($kind === 'rial' ? 'IRR' : 'TOMAN', '💰')];
+                return [1 / ($usdt * $r), $c !== null && $c > -100 ? (1 / (1 + $c / 100) - 1) * 100 : null, $kind === 'rial' ? 'IRR' : 'IRT', UI::l($kind === 'rial' ? 'ریال' : 'تومان'), UI::badge($kind === 'rial' ? 'IRR' : 'TOMAN', '💰')];
             case 'stars':
-                return [Prices::starUsd(), null, 'STARS', 'استارز', '⭐️'];
+                return [Prices::starUsd(), null, 'STARS', UI::l('استارز'), '⭐️'];
             case 'fiat':
                 $fx = Prices::fiatRates();
                 $px = Market::fiatToman($code);
@@ -47,14 +47,14 @@ final class Convert
                     return null;
                 }
                 $f = Currencies::fiat($code) ?? ['fa' => $code, 'cc' => null];
-                return [$usd, $code === 'USD' ? 0.0 : $vsUsd($px['change'] ?? null, Market::usdtChange()), $code, $f['fa'], UI::badge($code, Currencies::flag($f['cc'] ?? null) ?: '💱')];
+                return [$usd, $code === 'USD' ? 0.0 : $vsUsd($px['change'] ?? null, Market::usdtChange()), $code, Currencies::fiatName($code), UI::badge($code, Currencies::flag($f['cc'] ?? null) ?: '💱')];
             case 'gold':
                 $g = Market::gold($code);
                 if (!$g || ($code !== 'OUNCE' && !$usdt)) {
                     return null;
                 }
                 $usd = $code === 'OUNCE' ? $g['toman'] : $g['toman'] / $usdt;
-                return [$usd, $code === 'OUNCE' ? $g['change'] : $vsUsd($g['change'], Market::usdtChange()), Market::GOLD[$code][2] ?? 'XAU', Market::GOLD[$code][1] ?? 'انس جهانی طلا', UI::badge('GOLD', '🏅')];
+                return [$usd, $code === 'OUNCE' ? $g['change'] : $vsUsd($g['change'], Market::usdtChange()), Market::GOLD[$code][2] ?? 'XAU', UI::l(Market::GOLD[$code][1] ?? 'انس جهانی طلا'), UI::badge('GOLD', '🏅')];
         }
         return null;
     }
@@ -167,11 +167,11 @@ final class Convert
             $pre = '$';
             $unit = '';
         }
-        $label = $name ?? 'قیمت لحظه‌ای';
+        $label = $name ?? UI::l('قیمت لحظه‌ای');
         if (!$stable && $pre === '' ) {
             $label .= ' · $' . PriceCard::valueStr($q['price'], '');
         } elseif ($pre === '$' && $usdt) {
-            $label .= ' · ' . Fmt::toman($q['price'] * $usdt) . ' تومان';
+            $label .= ' · ' . Fmt::toman($q['price'] * $usdt) . ' ' . UI::l('تومان');
         }
         $key = 'c|' . $S . '|' . self::rnd($amount) . '|' . self::rnd($val) . '|' . round((float)$chg, 2) . '|' . self::bot();
         $bot = self::bot();
@@ -205,7 +205,7 @@ final class Convert
         $bot = self::bot();
         return ['text' => $text, 'key' => $key, 'card' => fn() => PriceCard::crypto([
             'sym' => 'USDT', 'title' => 'USDT', 'pill' => Fmt::toman($shown) . ' ' . $tag, 'value' => $usd,
-            'unit' => '', 'prefix' => '', 'chg' => $inv, 'label' => 'تتر · ' . Fmt::toman($usdt) . ' تومان', 'bot' => $bot,
+            'unit' => '', 'prefix' => '', 'chg' => $inv, 'label' => UI::l('تتر') . ' · ' . Fmt::toman($usdt) . ' ' . UI::l('تومان'), 'bot' => $bot,
         ])];
     }
 
@@ -231,7 +231,7 @@ final class Convert
         $bot = self::bot();
         return ['text' => $text, 'key' => $key, 'card' => fn() => PriceCard::crypto([
             'sym' => 'STARS', 'title' => 'TELEGRAM STARS', 'pill' => Fmt::int($amount) . ' STARS', 'value' => $toman,
-            'unit' => 'تومان', 'chg' => $chg, 'label' => 'استارز تلگرام · $' . Fmt::usd($usd), 'bot' => $bot,
+            'unit' => 'تومان', 'chg' => $chg, 'label' => UI::l('استارز تلگرام') . ' · $' . Fmt::usd($usd), 'bot' => $bot,
         ])];
     }
 
@@ -252,7 +252,7 @@ final class Convert
             'icon' => UI::badge($code, Currencies::flag($f['cc']) ?: '💱'),
             'flag' => Currencies::flag($f['cc']),
             'amount' => Fmt::num($amount),
-            'name' => $f['fa'],
+            'name' => Currencies::fiatName($code),
             'code' => $code,
             'toman' => $toman !== null ? Fmt::toman($toman) : null,
             'unit_toman' => $px ? Fmt::toman($px['toman']) : null,
@@ -271,9 +271,9 @@ final class Convert
         $bot = self::bot();
         $one = abs($amount - 1) < 1e-9;
         return ['text' => $text, 'key' => $key, 'card' => fn() => PriceCard::fiat([
-            'badge' => $badge, 'name' => $f['fa'], 'value' => $toman, 'unit' => 'تومان',
+            'badge' => $badge, 'name' => Currencies::fiatName($code), 'value' => $toman, 'unit' => 'تومان',
             'tag' => $one ? $code . '/IRT' : Fmt::num($amount) . ' ' . $code, 'chg' => $chg,
-            'label' => $one ? 'قیمت لحظه‌ای' : 'هر واحد ' . Fmt::toman($px['toman']) . ' تومان', 'bot' => $bot,
+            'label' => $one ? UI::l('قیمت لحظه‌ای') : UI::l('هر واحد') . ' ' . Fmt::toman($px['toman']) . ' ' . UI::l('تومان'), 'bot' => $bot,
         ])];
     }
 
@@ -287,7 +287,7 @@ final class Convert
         [$usdt] = self::ctx();
         $isOunce = $code === 'OUNCE';
         $total = $amount * $g['toman'];
-        $name = Market::GOLD[$code][1] ?? 'انس جهانی طلا';
+        $name = UI::l(Market::GOLD[$code][1] ?? 'انس جهانی طلا');
         $text = UI::t('conv_gold', [
             'icon' => UI::badge('GOLD', '🏅'),
             'amount' => Fmt::num($amount),

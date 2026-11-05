@@ -629,10 +629,10 @@ final class PriceCard
                 self::put($im, $f, self::fit($f, 14, $ini, 36, 8), $dx, 172 + self::capH($f, 14) / 2, $white, $ini, 'c');
             }
         }
-        self::say($im, 18, 600, 256, $gray, (string)($o['label'] ?? 'قیمت لحظه‌ای'), 'c');
+        self::say($im, 18, 600, 256, $gray, UI::l((string)($o['label'] ?? 'قیمت لحظه‌ای')), 'c');
         $val = (string)$o['value'];
         $pre = (string)($o['prefix'] ?? '');
-        $unit = (string)($o['unit'] ?? '');
+        $unit = UI::l((string)($o['unit'] ?? ''));
         $size = self::fit($lat, 58, $pre . $val, 520 - ($unit !== '' ? self::sayW(22, $unit) + 18 : 0), 28);
         $base = 350 - (58 - $size) * 0.3;
         $pw = $pre !== '' ? self::inkW($lat, $size, $pre) + 4 : 0;
@@ -650,7 +650,7 @@ final class PriceCard
         imagefilledrectangle($im, 232 * $S, 412 * $S, 968 * $S, 412 * $S + 1, self::col($im, 'FFFFFF', 0.08));
         $tone = $up ? '86EBC9' : 'F7A1B4';
         $pct = self::signed(number_format(abs((float)$o['chg']), 2), !$up) . '%';
-        foreach ([[844, '۲۴ ساعت پیش', (string)$o['prev'], 'E4E6EB'], [600, 'تغییر', (string)$o['diff'], $tone], [356, 'درصد تغییر', $pct, $tone]] as [$cx, $lab, $v, $hex]) {
+        foreach ([[844, UI::l('۲۴ ساعت پیش'), (string)$o['prev'], 'E4E6EB'], [600, UI::l('تغییر'), (string)$o['diff'], $tone], [356, UI::l('درصد تغییر'), $pct, $tone]] as [$cx, $lab, $v, $hex]) {
             self::say($im, 15.5, $cx, 462, $gray, $lab, 'c');
             self::put($im, $lat, self::fit($lat, 22, $v, 220, 12), $cx, 510, self::col($im, $hex), $v, 'c');
         }
@@ -861,7 +861,7 @@ final class PriceCard
         if ($username) {
             self::put($im, self::lat(500), 17, $W - 104, 178, $gray, '@' . $username, 'r');
         }
-        self::say($im, 18, 600, 232, $gray, 'ارزش کل پرتفوی', 'c');
+        self::say($im, 18, 600, 232, $gray, UI::l('ارزش کل پرتفوی'), 'c');
         $val = self::valueStr($totalTon, '');
         $lat = self::lat(700);
         $size = self::fit($lat, 58, $val . ' TON', 760, 28);
@@ -951,7 +951,7 @@ final class PriceCard
         $white = self::col($im, 'F5F5F7');
         [, $tr] = self::tag($im, 232, 172, 'TOP ' . min(3, count($top)), 'gold', 'l');
         self::tag($im, $tr + 10, 172, 'LIVE', 'green', 'l');
-        $title = 'تاپ الماسی';
+        $title = UI::l('تاپ الماسی');
         self::say($im, self::sayFit(38, $title, 966 - $tr - 120, 18), 966, 186, $white, $title, 'r');
         $medal = [1 => ['F2B705', 'FFE08A'], 2 => ['AEB6C2', 'E3E7EE'], 3 => ['CD7F32', 'F0B584']];
         $cols = [1 => [600, 128, 334], 2 => [844, 102, 348], 3 => [356, 102, 348]];
@@ -971,7 +971,7 @@ final class PriceCard
                     (int)(($cx + 24) * $S), (int)(($ky + 10) * $S),
                 ], self::col($im, $medal[1][0]));
             }
-            $nm = self::clean((string)($r['name'] ?? '')) ?: (!empty($r['username']) ? '@' . $r['username'] : 'کاربر');
+            $nm = self::clean((string)($r['name'] ?? '')) ?: (!empty($r['username']) ? '@' . $r['username'] : UI::l('کاربر'));
             if (mb_strlen($nm) > 16) {
                 $nm = mb_substr($nm, 0, 15) . '…';
             }

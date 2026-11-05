@@ -21,7 +21,7 @@ final class Whales
     private static function label(?string $a): string
     {
         if (!$a) {
-            return 'نامشخص';
+            return UI::l('نامشخص');
         }
         $n = self::LABELS[$a] ?? self::LABELS[strtolower($a)] ?? (DB::kvGet('whale_labels') ?: [])[$a] ?? null;
         $s = Fmt::short($a, 6, 4);

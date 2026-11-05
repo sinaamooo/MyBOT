@@ -426,23 +426,23 @@ final class Cards
         $im = self::canvas($W, $H);
         self::glow($im, $W - 200, 120, 300, [124, 58, 237], 90);
         self::glow($im, 160, 260, 260, [14, 165, 233], 70);
-        self::text($im, $W - 60, 48, 'پرتفوی گیفت‌های تلگرام', 30, 'Bold', self::MUTED, 'ra');
+        self::text($im, $W - 60, 48, UI::l('پرتفوی گیفت‌های تلگرام'), 30, 'Bold', self::MUTED, 'ra');
         self::text($im, $W - 60, 92, $owner, self::fit($owner, 760, 62, 'Black'), 'Black', self::WHITE, 'ra');
         if ($username) {
             self::text($im, $W - 60, 176, "@$username", 28, 'Medium', self::MUTED, 'ra');
         }
         self::text($im, 60, 60, 'GIFT PORTFOLIO', 26, 'Black', self::GOLD, 'la');
         $stats = [
-            ['تعداد گیفت', Fmt::num($count), self::WHITE],
-            ['ارزش کل (TON)', Fmt::num($totalTon), self::WHITE],
-            ['ارزش (تومان)', $totalToman ? Fmt::num($totalToman) : '—', self::WHITE],
+            [UI::l('تعداد گیفت'), Fmt::num($count), self::WHITE],
+            [UI::l('ارزش کل (TON)'), Fmt::num($totalTon), self::WHITE],
+            [UI::l('ارزش (تومان)'), $totalToman ? Fmt::num($totalToman) : '—', self::WHITE],
         ];
         if ($plTon !== null) {
             $sign = $plTon >= 0 ? '+' : '';
             $pct = $plPct !== null ? sprintf(' (%s%.1f%%)', $sign, $plPct) : '';
-            $stats[] = ['سود/ضرر ۷ روز', $sign . Fmt::num($plTon) . $pct, $plTon >= 0 ? self::GREEN : self::RED];
+            $stats[] = [UI::l('سود/ضرر ۷ روز'), $sign . Fmt::num($plTon) . $pct, $plTon >= 0 ? self::GREEN : self::RED];
         } else {
-            $stats[] = ['ارزش (دلار)', $totalUsd ? Fmt::num($totalUsd) : '—', self::WHITE];
+            $stats[] = [UI::l('ارزش (دلار)'), $totalUsd ? Fmt::num($totalUsd) : '—', self::WHITE];
         }
         $bw = (int)(($W - 120 - 3 * 20) / 4);
         foreach ($stats as $i => [$label, $value, $color]) {
@@ -490,7 +490,7 @@ final class Cards
         }
         self::text($im, 60, $H - 60, $footer, 24, 'Medium', self::MUTED, 'lm');
         if ($more > 0) {
-            self::text($im, $W - 60, $H - 60, "+$more گیفت دیگر", 26, 'Bold', self::WHITE, 'rm');
+            self::text($im, $W - 60, $H - 60, "+$more " . UI::l('گیفت دیگر'), 26, 'Bold', self::WHITE, 'rm');
         }
         $png = self::png($im);
         imagedestroy($im);
