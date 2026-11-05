@@ -188,7 +188,7 @@
   "desc": "قیمت لینک گیفت ({name} {number} {model} {model_rarity} {backdrop} {backdrop_rarity} {symbol} {symbol_rarity} {owner} {quantity} {floor_ton} {model_floor} {backdrop_floor} {symbol_floor} {est_ton} {est_usd} {est_toman} {est_stars} {link})"
  },
  "gift_user_caption": {
-  "text": "🎁 <b>کلکسیون گیفت {name}</b>\n\n<blockquote>🔢    تعداد: <b>{count}</b> (یونیک: {unique_count})</blockquote>\n{pl_line}\n{change_line}\n<blockquote>{ton_icon}    ارزش کل: <code>{total_ton}</code> TON</blockquote>\n<blockquote>{usd_icon}    ارزش دلاری: <code>{total_usd}</code> $</blockquote>\n<blockquote>{toman_icon}    ارزش تومانی: <code>{total_toman}</code> تومان</blockquote>\n<blockquote>{links}</blockquote>",
+  "text": "🎁 <b>کلکسیون گیفت {name}</b>\n\n<blockquote>🔢    تعداد: <b>{count}</b> (یونیک: {unique_count})</blockquote>\n{pl_line}\n{change_line}\n<blockquote>{ton_icon}    ارزش کل: <code>{total_ton}</code> TON</blockquote>\n<blockquote>{usd_icon}    ارزش دلاری: <code>{total_usd}</code> $</blockquote>\n<blockquote>{toman_icon}    ارزش تومانی: <code>{total_toman}</code> تومان</blockquote>\n<blockquote>{links}</blockquote>\n🗓 {time}",
   "desc": "کپشن کارت گیفت‌های کاربر ({name} {count} {unique_count} {total_ton} {total_usd} {total_toman} {pl_line} {change_line} {links})"
  },
  "gift_profit": {
@@ -216,8 +216,8 @@
   "desc": "درخواست یوزرنیم بعد از /gift"
  },
  "gift_wait": {
-  "text": "<tg-emoji emoji-id=\"5386367538735104399\">⏳</tg-emoji> لطفاً کمی منتظر بمانید",
-  "desc": "پیام انتظار بررسی گیفت، کلمه به کلمه نوشته می‌شود"
+  "text": "<tg-emoji emoji-id=\"5386367538735104399\">⏳</tg-emoji> لـطـفاً منتـظـر بمـانید دارم چـک مـی‌کنـم",
+  "desc": "پیام انتظار بررسی گیفت اکانت"
  },
  "gift_not_found": {
   "text": "❌ اطلاعات این گیفت پیدا نشد.",

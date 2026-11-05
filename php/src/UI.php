@@ -141,7 +141,7 @@ final class UI
 
     public static function kashida(string $text): string
     {
-        if (self::$lang !== 'fa' || Config::get('KASHIDA', '1') === '0' || !preg_match('/\p{Arabic}/u', $text)) {
+        if (self::$lang !== 'fa' || Config::get('KASHIDA', '1') === '0' || !preg_match('/\p{Arabic}/u', $text) || str_contains($text, "\u{0640}")) {
             return $text;
         }
         $parts = preg_split('/(<[^>]+>|\{[a-z_]+\})/u', $text, -1, PREG_SPLIT_DELIM_CAPTURE);

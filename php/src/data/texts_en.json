@@ -141,7 +141,7 @@
   "text": "🎁 <b>{name} #{number}</b>\n\n<blockquote>🎨 Model: <b>{model}</b> {model_rarity}\n🖼 Backdrop: <b>{backdrop}</b> {backdrop_rarity}\n✨ Symbol: <b>{symbol}</b> {symbol_rarity}\n👤 Owner: {owner}\n🔢 Issued: {quantity}</blockquote>\n<blockquote>📉 Collection floor: <code>{floor_ton}</code> TON\n🎨 Model floor: <code>{model_floor}</code> TON\n🖼 Backdrop floor: <code>{backdrop_floor}</code> TON\n✨ Symbol floor: <code>{symbol_floor}</code> TON</blockquote>\n🏷 <b>Estimated value:</b>\n<blockquote>{ton_icon} <code>{est_ton}</code> TON\n{usd_icon} <code>{est_usd}</code> $</blockquote>\n{toman_icon} <code>{est_toman}</code> Toman\n⭐️ <code>{est_stars}</code> Stars\n<blockquote>🔗 {link}</blockquote>"
  },
  "gift_user_caption": {
-  "text": "🎁 <b>Gift collection of {name}</b>\n\n<blockquote>🔢 Gifts: <b>{count}</b> (unique: {unique_count})</blockquote>\n{pl_line}\n{change_line}\n<blockquote>{ton_icon} Total value: <code>{total_ton}</code> TON</blockquote>\n<blockquote>{usd_icon} USD value: <code>{total_usd}</code> $</blockquote>\n<blockquote>{toman_icon} Toman value: <code>{total_toman}</code> Toman</blockquote>\n<blockquote>{links}</blockquote>"
+  "text": "🎁 <b>Gift collection of {name}</b>\n\n<blockquote>🔢 Gifts: <b>{count}</b> (unique: {unique_count})</blockquote>\n{pl_line}\n{change_line}\n<blockquote>{ton_icon} Total value: <code>{total_ton}</code> TON</blockquote>\n<blockquote>{usd_icon} USD value: <code>{total_usd}</code> $</blockquote>\n<blockquote>{toman_icon} Toman value: <code>{total_toman}</code> Toman</blockquote>\n<blockquote>{links}</blockquote>\n🗓 {time}"
  },
  "gift_profit": {
   "text": "📈 Market profit, last 7 days: <b>+{ton} TON</b> (+{percent}%) ≈ {toman} T"
@@ -162,7 +162,7 @@
   "text": "🎁 Send a username or a gift link.\n👤 For your own gifts: <b>me</b>"
  },
  "gift_wait": {
-  "text": "<tg-emoji emoji-id=\"5386367538735104399\">⏳</tg-emoji> Please wait a moment"
+  "text": "<tg-emoji emoji-id=\"5386367538735104399\">⏳</tg-emoji> Please wait, checking…"
  },
  "gift_not_found": {
   "text": "❌ No data was found for this gift."

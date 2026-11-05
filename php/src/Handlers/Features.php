@@ -16,12 +16,7 @@ final class Waiter
     {
         $w = new self();
         $w->chat = $m['chat']['id'];
-        $html = trim(UI::t($key));
-        $lead = preg_match('/^(<tg-emoji[^>]*>.*?<\/tg-emoji>)\s*/u', $html, $mm) ? $mm[1] : '';
-        $words = preg_split('/\s+/u', trim(substr($html, strlen($mm[0] ?? ''))), -1, PREG_SPLIT_NO_EMPTY) ?: [''];
-        foreach ($words as $n => $_) {
-            $w->frames[] = trim($lead . ' ' . implode(' ', array_slice($words, 0, $n + 1)));
-        }
+        $w->frames = [trim(UI::t($key))];
         $w->reply = !Bot::isPrivate($m) && isset($m['message_id']) ? ['reply_parameters' => Bot::replyParams($m)] : [];
         if ($prompt && TG::api('editMessageText', ['chat_id' => $w->chat, 'message_id' => $prompt, 'text' => $w->frames[0], 'reply_markup' => UI::footer()]) !== null) {
             $w->mid = $prompt;
@@ -315,7 +310,7 @@ final class GiftsH
             $links = array_slice($top, 0, $n);
             $caption = UI::t('gift_user_caption', ['name' => UI::esc($t['name']), 'count' => Fmt::int($count), 'unique_count' => Fmt::int($unique),
                 'total_ton' => Fmt::num($now), 'total_usd' => $tonUsd ? Fmt::usd($now * $tonUsd) : '—', 'total_toman' => $tonToman ? Fmt::toman($now * $tonToman) : '—',
-                'pl_line' => $plLine, 'change_line' => $change, 'links' => $links ? implode("\n", array_map(fn($l) => "🔗 $l", $links)) : null]);
+                'pl_line' => $plLine, 'change_line' => $change, 'links' => $links ? implode("\n", array_map(fn($l) => "🔗 $l", $links)) : null, 'time' => Fmt::now()]);
             if (UI::textLen($caption) <= 1000) {
                 break;
             }
