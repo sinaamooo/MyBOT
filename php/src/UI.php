@@ -138,12 +138,8 @@ final class UI
         if (self::$rx !== null) {
             return self::$rx;
         }
-        $map = Settings::get('emoji_map') ?: [];
         $auto = DB::kvGet('emoji_auto');
-        if (is_array($auto['map'] ?? null)) {
-            $map = array_merge($map, $auto['map']);
-        }
-        $map = array_merge($map, Settings::get('emoji_pack') ?: []);
+        $map = array_merge(is_array($auto['map'] ?? null) ? $auto['map'] : [], Settings::get('emoji_pack') ?: [], Settings::get('emoji_map') ?: []);
         $bad = array_flip((array)(Settings::get('emoji_invalid') ?: []));
         $lookup = [];
         foreach ($map as $k => $id) {
