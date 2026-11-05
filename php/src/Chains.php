@@ -79,12 +79,8 @@ final class Chain
         foreach (array_slice($urls, 0, 3) as $i => $u) {
             $reqs[$i] = self::rpcReq($u, $method, $params, $timeout);
         }
-        foreach ($reqs ? Http::multiJson($reqs) : [] as $d) {
-            if (is_array($d) && array_key_exists('result', $d)) {
-                return $d['result'];
-            }
-        }
-        return null;
+        $hit = Http::race($reqs, fn($k, $d) => is_array($d) && array_key_exists('result', $d) ? ['r' => $d['result']] : null, $timeout + 1);
+        return $hit ? $hit[1]['r'] : null;
     }
 
     public static function batchReq(string $url, array $calls, int $timeout = 12): array
@@ -123,10 +119,9 @@ final class Chain
         foreach (array_slice($urls, 0, 3) as $i => $u) {
             $reqs[$i] = self::batchReq($u, $calls, $timeout);
         }
-        foreach ($reqs ? Http::multiJson($reqs) : [] as $d) {
-            if (($r = self::batchParse($d, count($calls))) !== null) {
-                return $r;
-            }
+        $hit = Http::race($reqs, fn($k, $d) => self::batchParse($d, count($calls)), $timeout + 1);
+        if ($hit) {
+            return $hit[1];
         }
         $reqs = [];
         foreach ($calls as $i => [$m, $p]) {
@@ -359,24 +354,19 @@ final class Wallets
             $callsBy[$i] = $calls;
         }
         $got = [];
-        foreach ([[0, 2], [2, 3]] as [$from, $len]) {
+        foreach ([[0, 2, 6], [2, 3, 5]] as [$from, $len, $wait]) {
             $reqs = [];
             foreach ($chains as $i => $c) {
                 if (!isset($got[$i])) {
                     foreach (array_slice($c['rpcs'], $from, $len) as $j => $u) {
-                        $reqs["$i|$j"] = Chain::batchReq($u, $callsBy[$i], 7);
+                        $reqs["$i|$j"] = Chain::batchReq($u, $callsBy[$i], $wait);
                     }
                 }
             }
             if (!$reqs) {
                 break;
             }
-            foreach (Http::multiJson($reqs) as $k => $d) {
-                $i = (int)strtok($k, '|');
-                if (!isset($got[$i]) && ($r = Chain::batchParse($d, count($callsBy[$i])))) {
-                    $got[$i] = $r;
-                }
-            }
+            $got += Http::collect($reqs, fn($k) => (int)strtok($k, '|'), fn($k, $d) => Chain::batchParse($d, count($callsBy[(int)strtok($k, '|')])), $wait + 0.5);
         }
         $out = [];
         foreach ($chains as $i => $c) {
@@ -404,12 +394,8 @@ final class Wallets
 
     private static function first(array $reqs, callable $parse): ?array
     {
-        foreach (Http::multi($reqs) as $k => $res) {
-            if (($r = $parse($k, Http::decode($res))) !== null) {
-                return $r;
-            }
-        }
-        return null;
+        $hit = Http::race($reqs, $parse, 9);
+        return $hit ? $hit[1] : null;
     }
 
     private static function esploraParse($d, string $address, string $name, string $sym, string $explorer): ?array
@@ -488,7 +474,7 @@ final class Wallets
 
     public static function tronTokensReq(string $a): array
     {
-        return ['url' => 'https://apilist.tronscanapi.com/api/account/tokens', 'params' => ['address' => $a, 'start' => 0, 'limit' => 1000], 'headers' => Chain::tronscanHeaders(), 'timeout' => 15];
+        return ['url' => 'https://apilist.tronscanapi.com/api/account/tokens', 'params' => ['address' => $a, 'start' => 0, 'limit' => 1000], 'headers' => Chain::tronscanHeaders(), 'timeout' => 9];
     }
 
     public static function tronTokensParse($d, string $a): ?array
@@ -656,7 +642,7 @@ final class Wallets
         $res = Http::multiJson([
             'acc' => ['url' => "https://tonapi.io/v2/accounts/$a", 'headers' => $h, 'timeout' => 10],
             'jet' => ['url' => "https://tonapi.io/v2/accounts/$a/jettons", 'params' => ['currencies' => 'usd'], 'headers' => $h, 'timeout' => 10],
-            'nft' => ['url' => "https://tonapi.io/v2/accounts/$a/nfts", 'params' => ['limit' => 1000], 'headers' => $h, 'timeout' => 12],
+            'nft' => ['url' => "https://tonapi.io/v2/accounts/$a/nfts", 'params' => ['limit' => 1000], 'headers' => $h, 'timeout' => 9],
             'tc' => ['url' => 'https://toncenter.com/api/v2/getAddressInformation', 'params' => ['address' => $a] + Chain::toncenterParams(), 'timeout' => 10],
         ]);
         $bal = null;
@@ -759,19 +745,34 @@ final class Wallets
     public static function aptos(string $a): array
     {
         $base = 'https://fullnode.mainnet.aptoslabs.com/v1';
-        $raw = Http::json("$base/accounts/$a/balance/0x1::aptos_coin::AptosCoin", ['timeout' => 10]);
-        if ($raw === null) {
-            $res = Http::json("$base/accounts/$a/resource/0x1::coin::CoinStore%3C0x1::aptos_coin::AptosCoin%3E", ['timeout' => 10]);
-            $raw = $res['data']['coin']['value'] ?? null;
-        }
+        $res = Http::multiJson([
+            'bal' => ['url' => "$base/accounts/$a/balance/0x1::aptos_coin::AptosCoin", 'timeout' => 8],
+            'res' => ['url' => "$base/accounts/$a/resource/0x1::coin::CoinStore%3C0x1::aptos_coin::AptosCoin%3E", 'timeout' => 8],
+            'acc' => ['url' => "$base/accounts/$a", 'timeout' => 8],
+        ]);
+        $raw = $res['bal'] ?? ($res['res']['data']['coin']['value'] ?? null);
         if ($raw === null || !is_numeric($raw)) {
             return [];
         }
-        $acc = Http::json("$base/accounts/$a", ['timeout' => 10]);
+        $acc = $res['acc'];
         return [self::result('Aptos', 'APT', $raw / 1e8, "https://explorer.aptoslabs.com/account/$a?network=mainnet", ['txs' => isset($acc['sequence_number']) ? (int)$acc['sequence_number'] : null])];
     }
 
     public static function check(string $kind, string $address): array
+    {
+        $ck = 'wlr:' . md5($kind . '|' . $address);
+        $c = Cache::get($ck, $hit);
+        if ($hit && is_array($c)) {
+            return $c;
+        }
+        $found = self::lookup($kind, $address);
+        if ($found) {
+            Cache::set($ck, $found, 30);
+        }
+        return $found;
+    }
+
+    private static function lookup(string $kind, string $address): array
     {
         try {
             $found = match ($kind) {

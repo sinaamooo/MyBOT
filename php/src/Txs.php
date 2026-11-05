@@ -31,41 +31,33 @@ final class Txs
         });
     }
 
+    public static function evmReqs(string $h, int $timeout = 6): array
+    {
+        $reqs = [];
+        foreach (Chain::evm() as $i => $c) {
+            foreach (array_slice($c['rpcs'], 0, 2) as $j => $u) {
+                $reqs["evm|$i|$j"] = Chain::rpcReq($u, 'eth_getTransactionByHash', [$h], $timeout);
+            }
+        }
+        return $reqs;
+    }
+
     public static function evm(string $h): ?array
     {
-        $chains = Chain::evm();
-        $reqs = [];
-        foreach ($chains as $i => $c) {
-            $reqs[$i] = Chain::rpcReq($c['rpcs'][0], 'eth_getTransactionByHash', [$h]);
-        }
-        $res = Http::multiJson($reqs);
-        $hit = null;
-        foreach ($chains as $i => $c) {
-            if (!empty($res[$i]['result'])) {
-                $hit = [$c, $res[$i]['result']];
-                break;
-            }
-        }
-        if (!$hit) {
-            $reqs = [];
-            foreach ($chains as $i => $c) {
-                if (!is_array($res[$i]) && isset($c['rpcs'][1])) {
-                    $reqs[$i] = Chain::rpcReq($c['rpcs'][1], 'eth_getTransactionByHash', [$h]);
-                }
-            }
-            foreach ($reqs ? Http::multiJson($reqs) : [] as $i => $d) {
-                if (!empty($d['result'])) {
-                    $hit = [$chains[$i], $d['result']];
-                    break;
-                }
-            }
-        }
-        if (!$hit) {
-            return null;
-        }
-        [$c, $tx] = $hit;
-        [$receipt, $head] = Chain::batch($c['rpcs'], [['eth_getTransactionReceipt', [$h]], ['eth_blockNumber', []]]);
+        $hit = Http::race(self::evmReqs($h), fn($k, $d) => !empty($d['result']) && is_array($d['result']) ? $d['result'] : null, 7);
+        return $hit ? self::evmTx(Chain::evm()[(int)explode('|', $hit[0])[1]], $h, $hit[1]) : null;
+    }
+
+    private static function evmTx(array $c, string $h, array $tx): array
+    {
         $block = !empty($tx['blockNumber']) ? (int)Chain::hexInt($tx['blockNumber']) : null;
+        $calls = [['eth_getTransactionReceipt', [$h]], ['eth_blockNumber', []]];
+        if ($block !== null) {
+            $calls[] = ['eth_getBlockByNumber', ['0x' . dechex($block), false]];
+        }
+        $got = Chain::batch($c['rpcs'], $calls, 6);
+        [$receipt, $head] = $got;
+        $blk = $got[2] ?? null;
         $status = self::PENDING;
         $fee = null;
         if ($receipt) {
@@ -73,11 +65,7 @@ final class Txs
             $gp = Chain::hexInt($receipt['effectiveGasPrice'] ?? $tx['gasPrice'] ?? '0x0');
             $fee = self::g(Chain::hexInt($receipt['gasUsed'] ?? '0x0') * $gp / 1e18) . ' ' . $c['symbol'];
         }
-        $ts = null;
-        if ($block !== null) {
-            $blk = Chain::rpc($c['rpcs'], 'eth_getBlockByNumber', ['0x' . dechex($block), false]);
-            $ts = $blk ? (int)Chain::hexInt($blk['timestamp'] ?? '0x0') : null;
-        }
+        $ts = is_array($blk) ? (int)Chain::hexInt($blk['timestamp'] ?? '0x0') : null;
         $amount = Chain::hexInt($tx['value'] ?? '0x0') / 1e18;
         $symbol = $c['symbol'];
         $sender = $tx['from'] ?? null;
@@ -120,7 +108,7 @@ final class Txs
             return null;
         }
         $st = $tx['status'] ?? [];
-        $tip = Http::text("$base/api/blocks/tip/height", ['timeout' => 8]);
+        $tip = !empty($st['confirmed']) ? Http::text("$base/api/blocks/tip/height", ['timeout' => 5]) : null;
         $conf = !empty($st['confirmed']) && $tip !== null && ctype_digit(trim($tip)) ? (int)trim($tip) - (int)$st['block_height'] + 1 : 0;
         $senders = [];
         foreach ($tx['vin'] ?? [] as $v) {
@@ -161,7 +149,7 @@ final class Txs
 
     public static function tronscanReq(string $h): array
     {
-        return ['url' => 'https://apilist.tronscanapi.com/api/transaction-info', 'params' => ['hash' => $h], 'headers' => Chain::tronscanHeaders(), 'timeout' => 10];
+        return ['url' => 'https://apilist.tronscanapi.com/api/transaction-info', 'params' => ['hash' => $h], 'headers' => Chain::tronscanHeaders(), 'timeout' => 8];
     }
 
     public static function tronscanParse($info, string $h): ?array
@@ -212,13 +200,20 @@ final class Txs
             'timestamp' => isset($info['timestamp']) ? intdiv((int)$info['timestamp'], 1000) : null, 'token_type' => $type, 'token_name' => $name, 'contract' => $contract]);
     }
 
+    public static function tronGridReq(string $h): array
+    {
+        return ['url' => 'https://api.trongrid.io/wallet/gettransactionbyid', 'method' => 'POST', 'json' => ['value' => $h], 'headers' => Chain::tronHeaders(), 'timeout' => 8];
+    }
+
     public static function tronGrid(string $h): ?array
     {
-        $tx = Http::postJson('https://api.trongrid.io/wallet/gettransactionbyid', ['value' => $h], ['headers' => Chain::tronHeaders(), 'timeout' => 10]);
-        if (!is_array($tx) || empty($tx['txID'])) {
-            return null;
-        }
-        $info = Http::postJson('https://api.trongrid.io/wallet/gettransactioninfobyid', ['value' => $h], ['headers' => Chain::tronHeaders(), 'timeout' => 10]) ?: [];
+        $tx = Http::decode(Http::request(self::tronGridReq($h)));
+        return is_array($tx) && !empty($tx['txID']) ? self::tronGridTx($h, $tx) : null;
+    }
+
+    private static function tronGridTx(string $h, array $tx): array
+    {
+        $info = Http::postJson('https://api.trongrid.io/wallet/gettransactioninfobyid', ['value' => $h], ['headers' => Chain::tronHeaders(), 'timeout' => 8]) ?: [];
         $c = $tx['raw_data']['contract'][0] ?? [];
         $v = $c['parameter']['value'] ?? [];
         $amount = null;
@@ -255,7 +250,9 @@ final class Txs
 
     public static function tron(string $h): ?array
     {
-        return self::tronscanParse(Http::decode(Http::request(self::tronscanReq($h))), $h) ?? self::tronGrid($h);
+        $hit = Http::race(['scan' => self::tronscanReq($h), 'grid' => self::tronGridReq($h)],
+            fn($k, $d) => $k === 'scan' ? self::tronscanParse($d, $h) : (is_array($d) && !empty($d['txID']) ? self::tronGridTx($h, $d) : null), 9);
+        return $hit ? $hit[1] : null;
     }
 
     private static function tonVariants(string $h): array
@@ -303,31 +300,34 @@ final class Txs
 
     public static function ton(string $h): ?array
     {
-        $hex = null;
-        foreach (self::tonVariants($h) as $v) {
+        $reqs = [];
+        foreach (self::tonVariants($h) as $i => $v) {
             if (strlen($v) === 64 && ctype_xdigit($v)) {
-                $hex = $v;
+                $reqs["ev|$v"] = ['url' => "https://tonapi.io/v2/events/$v", 'headers' => Chain::tonapiHeaders(), 'timeout' => 8];
             }
+            $reqs["tc|$i"] = ['url' => 'https://toncenter.com/api/v3/transactions', 'params' => ['hash' => $v, 'limit' => 1] + Chain::toncenterParams(), 'timeout' => 8];
         }
-        if ($hex) {
-            $r = self::tonEventParse(Http::json("https://tonapi.io/v2/events/$hex", ['headers' => Chain::tonapiHeaders(), 'timeout' => 10]), $h, $hex);
-            if ($r) {
-                return $r;
+        $hit = Http::race($reqs, function ($k, $d) use ($h) {
+            if (str_starts_with($k, 'ev|')) {
+                return self::tonEventParse($d, $h, substr($k, 3));
             }
+            return self::toncenterParse($d, $h);
+        }, 9);
+        return $hit ? $hit[1] : null;
+    }
+
+    private static function toncenterParse($d, string $h): ?array
+    {
+        $tx = is_array($d) ? ($d['transactions'][0] ?? null) : null;
+        if (!$tx) {
+            return null;
         }
-        foreach (self::tonVariants($h) as $v) {
-            $d = Http::json('https://toncenter.com/api/v3/transactions', ['params' => ['hash' => $v, 'limit' => 1] + Chain::toncenterParams(), 'timeout' => 10]);
-            $tx = $d['transactions'][0] ?? null;
-            if ($tx) {
-                $book = $d['address_book'] ?? [];
-                $fr = fn($x) => $x ? ($book[$x]['user_friendly'] ?? $x) : null;
-                $in = $tx['in_msg'] ?? [];
-                return self::res('TON', !empty($tx['description']['aborted']) ? self::FAIL : self::OK, $h, 'https://tonviewer.com/transaction/' . ($tx['hash'] ?? $h), [
-                    'amount' => ($in['value'] ?? 0) / 1e9, 'symbol' => 'TON', 'sender' => $fr($in['source'] ?? null), 'receiver' => $fr($in['destination'] ?? null),
-                    'fee' => self::g(($tx['total_fees'] ?? 0) / 1e9) . ' TON', 'block' => $tx['mc_block_seqno'] ?? null, 'timestamp' => $tx['now'] ?? null, 'token_type' => 'COIN', 'token_name' => 'TON']);
-            }
-        }
-        return null;
+        $book = $d['address_book'] ?? [];
+        $fr = fn($x) => $x ? ($book[$x]['user_friendly'] ?? $x) : null;
+        $in = $tx['in_msg'] ?? [];
+        return self::res('TON', !empty($tx['description']['aborted']) ? self::FAIL : self::OK, $h, 'https://tonviewer.com/transaction/' . ($tx['hash'] ?? $h), [
+            'amount' => ($in['value'] ?? 0) / 1e9, 'symbol' => 'TON', 'sender' => $fr($in['source'] ?? null), 'receiver' => $fr($in['destination'] ?? null),
+            'fee' => self::g(($tx['total_fees'] ?? 0) / 1e9) . ' TON', 'block' => $tx['mc_block_seqno'] ?? null, 'timestamp' => $tx['now'] ?? null, 'token_type' => 'COIN', 'token_name' => 'TON']);
     }
 
     public static function sol(string $sig): ?array
@@ -405,27 +405,54 @@ final class Txs
     public static function hex64(string $h): ?array
     {
         $lower = strtolower($h);
-        $res = Http::multiJson([
+        $parse = [
+            'tron' => fn($d) => self::tronscanParse($d, $lower),
+            'grid' => fn($d) => is_array($d) && !empty($d['txID']) ? self::tronGridTx($lower, $d) : null,
+            'btc' => fn($d) => self::esploraParse($d, $lower, 'https://mempool.space', 'Bitcoin', 'BTC', 'https://mempool.space'),
+            'ltc' => fn($d) => self::esploraParse($d, $lower, 'https://litecoinspace.org', 'Litecoin', 'LTC', 'https://litecoinspace.org'),
+            'doge' => fn($d) => self::blockcypherParse($d, $lower, 'Dogecoin', 'DOGE', "https://blockchair.com/dogecoin/transaction/$lower"),
+            'dash' => fn($d) => self::blockcypherParse($d, $lower, 'Dash', 'DASH', "https://blockchair.com/dash/transaction/$lower"),
+            'xrp' => fn($d) => self::xrpParse($d, strtoupper($h)),
+            'ton' => fn($d) => self::tonEventParse($d, $h, $lower),
+        ];
+        $reqs = [
             'tron' => self::tronscanReq($lower),
-            'btc' => ['url' => "https://mempool.space/api/tx/$lower", 'timeout' => 10],
-            'ltc' => ['url' => "https://litecoinspace.org/api/tx/$lower", 'timeout' => 10],
-            'doge' => ['url' => "https://api.blockcypher.com/v1/doge/main/txs/$lower", 'timeout' => 10],
-            'dash' => ['url' => "https://api.blockcypher.com/v1/dash/main/txs/$lower", 'timeout' => 10],
-            'xrp' => ['url' => Chain::rpcs('xrp_rpcs')[0], 'method' => 'POST', 'json' => ['method' => 'tx', 'params' => [['transaction' => strtoupper($h), 'binary' => false]]], 'timeout' => 10],
-            'ton' => ['url' => "https://tonapi.io/v2/events/$lower", 'headers' => Chain::tonapiHeaders(), 'timeout' => 10],
-        ]);
-        return self::tronscanParse($res['tron'], $lower)
-            ?? self::esploraParse($res['btc'], $lower, 'https://mempool.space', 'Bitcoin', 'BTC', 'https://mempool.space')
-            ?? self::esploraParse($res['ltc'], $lower, 'https://litecoinspace.org', 'Litecoin', 'LTC', 'https://litecoinspace.org')
-            ?? self::blockcypherParse($res['doge'], $lower, 'Dogecoin', 'DOGE', "https://blockchair.com/dogecoin/transaction/$lower")
-            ?? self::blockcypherParse($res['dash'], $lower, 'Dash', 'DASH', "https://blockchair.com/dash/transaction/$lower")
-            ?? self::xrpParse($res['xrp'], strtoupper($h))
-            ?? self::tonEventParse($res['ton'], $h, $lower)
-            ?? (is_array($res['tron']) ? null : self::tronGrid($lower))
-            ?? self::evm('0x' . $lower);
+            'grid' => self::tronGridReq($lower),
+            'btc' => ['url' => "https://mempool.space/api/tx/$lower", 'timeout' => 8],
+            'ltc' => ['url' => "https://litecoinspace.org/api/tx/$lower", 'timeout' => 8],
+            'doge' => ['url' => "https://api.blockcypher.com/v1/doge/main/txs/$lower", 'timeout' => 8],
+            'dash' => ['url' => "https://api.blockcypher.com/v1/dash/main/txs/$lower", 'timeout' => 8],
+            'xrp' => ['url' => Chain::rpcs('xrp_rpcs')[0], 'method' => 'POST', 'json' => ['method' => 'tx', 'params' => [['transaction' => strtoupper($h), 'binary' => false]]], 'timeout' => 8],
+            'ton' => ['url' => "https://tonapi.io/v2/events/$lower", 'headers' => Chain::tonapiHeaders(), 'timeout' => 8],
+        ] + self::evmReqs('0x' . $lower);
+        $hit = Http::race($reqs, function ($k, $d) use ($parse) {
+            if (str_starts_with($k, 'evm|')) {
+                return !empty($d['result']) && is_array($d['result']) ? $d['result'] : null;
+            }
+            return ($parse[$k])($d);
+        }, 9);
+        if (!$hit) {
+            return null;
+        }
+        [$k, $v] = $hit;
+        return str_starts_with($k, 'evm|') ? self::evmTx(Chain::evm()[(int)explode('|', $k)[1]], '0x' . $lower, $v) : $v;
     }
 
     public static function check(string $kind, string $h): ?array
+    {
+        $ck = 'txr:' . md5($kind . '|' . $h);
+        $c = Cache::get($ck, $hit);
+        if ($hit && is_array($c)) {
+            return $c;
+        }
+        $r = self::lookup($kind, $h);
+        if ($r) {
+            Cache::set($ck, $r, ($r['status'] ?? '') === self::PENDING ? 10 : 60);
+        }
+        return $r;
+    }
+
+    private static function lookup(string $kind, string $h): ?array
     {
         $r = match ($kind) {
             'hex64x' => self::evm($h),

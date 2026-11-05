@@ -145,6 +145,96 @@ final class Http
     {
         return array_map([self::class, 'decode'], self::multi($reqs));
     }
+
+    public static function race(array $reqs, callable $accept, float $deadline = 10.0): ?array
+    {
+        $hit = null;
+        self::collect($reqs, fn($k) => 0, function ($k, $d) use ($accept, &$hit) {
+            $v = $accept($k, $d);
+            if ($v !== null) {
+                $hit = [$k, $v];
+            }
+            return $v;
+        }, $deadline);
+        return $hit;
+    }
+
+    public static function collect(array $reqs, callable $group, callable $accept, float $deadline = 10.0): array
+    {
+        $groups = [];
+        foreach (array_keys($reqs) as $k) {
+            $groups[$group($k)] = true;
+        }
+        $out = [];
+        if (!$reqs) {
+            return $out;
+        }
+        if (self::$fake) {
+            foreach ($reqs as $k => $r) {
+                $g = $group($k);
+                if (!array_key_exists($g, $out) && ($v = $accept($k, self::decode((self::$fake)($r) ?? ['status' => 0, 'body' => '']))) !== null) {
+                    $out[$g] = $v;
+                    if (count($out) === count($groups)) {
+                        break;
+                    }
+                }
+            }
+            return $out;
+        }
+        $mh = curl_multi_init();
+        $live = [];
+        foreach ($reqs as $k => $r) {
+            [$ch] = self::handle($r);
+            curl_multi_add_handle($mh, $ch);
+            $live[spl_object_id($ch)] = [$k, $ch];
+        }
+        $t0 = microtime(true);
+        $drop = function (int $id) use ($mh, &$live) {
+            [, $ch] = $live[$id];
+            curl_multi_remove_handle($mh, $ch);
+            self::takeHeaders($ch);
+            curl_close($ch);
+            unset($live[$id]);
+        };
+        while ($live && microtime(true) - $t0 < $deadline) {
+            $st = curl_multi_exec($mh, $running);
+            $any = false;
+            while ($info = curl_multi_info_read($mh)) {
+                $any = true;
+                $ch = $info['handle'];
+                $id = spl_object_id($ch);
+                if (!isset($live[$id])) {
+                    continue;
+                }
+                $k = $live[$id][0];
+                $res = ['status' => (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE), 'body' => (string)curl_multi_getcontent($ch), 'headers' => []];
+                $drop($id);
+                $g = $group($k);
+                if (array_key_exists($g, $out)) {
+                    continue;
+                }
+                if (($v = $accept($k, self::decode($res))) !== null) {
+                    $out[$g] = $v;
+                    foreach ($live as $lid => [$lk]) {
+                        if ($group($lk) === $g) {
+                            $drop($lid);
+                        }
+                    }
+                }
+            }
+            if (count($out) === count($groups) || $st !== CURLM_OK || (!$running && !$any)) {
+                break;
+            }
+            if ($running) {
+                curl_multi_select($mh, 0.1);
+            }
+        }
+        foreach (array_keys($live) as $id) {
+            $drop($id);
+        }
+        curl_multi_close($mh);
+        return $out;
+    }
 }
 
 final class TG
