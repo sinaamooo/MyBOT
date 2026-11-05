@@ -329,7 +329,7 @@ feed(msg('10 تتر'));
 $sm = sent(['sendPhoto']);
 check(count($sm) === 2 && str_contains($sm[0][1]['caption'], '<tg-emoji') && !str_contains($sm[1][1]['caption'], '<tg-emoji'), 'premium fallback');
 $GLOBALS['reject_premium'] = false;
-Settings::set('emoji_map', Settings::defaults()['emoji_map'] + TESTMAP);
+Settings::set('emoji_map', TESTMAP + Settings::defaults()['emoji_map']);
 
 Settings::set('force_channels', [['id' => NON_MEMBER, 'title' => 'Main', 'url' => 'https://t.me/main']]);
 reset_calls();
@@ -569,7 +569,7 @@ check(count($rx) === 1 && $rx[0][1]['reaction'][0]['emoji'] === '🐳', 'fallbac
 $GLOBALS['reject_blue'] = false;
 
 $prevMap = Settings::get('emoji_map');
-Settings::set('emoji_map', Settings::defaults()['emoji_map'] + TESTMAP);
+Settings::set('emoji_map', TESTMAP + Settings::defaults()['emoji_map']);
 $qm = UI::emojiMap("<blockquote>👤    سازنده: 🔴 @ali\n✅    دارد ⭐️</blockquote>");
 check(substr_count($qm, '<tg-emoji') === 4 && str_contains($qm, '🔴</tg-emoji>    @ali') && str_contains($qm, '⭐️</tg-emoji></blockquote>') && str_contains($qm, '✅</tg-emoji>    دارد'), 'all quote emojis premium with 4 spaces');
 $qm2 = UI::emojiMap("<blockquote>🏷    وضعیت: ✅ <b>موفق</b>\n💸    مقدار: <code>1</code></blockquote>");
@@ -816,7 +816,7 @@ foreach (array_slice($pool, 0, 30) as $i => $id) {
 $GLOBALS['alts'][$pool[0]] = '🔥'; $GLOBALS['alts'][$pool[1]] = '👁'; $GLOBALS['alts'][$pool[2]] = '🎂'; $GLOBALS['alts'][$pool[3]] = '⌛️';
 for ($i = 4; $i < 30; $i++) { $GLOBALS['alts'][$pool[$i]] = mb_chr(0x1F600 + $i); }
 $prevMap = Settings::get('emoji_map');
-Settings::set('emoji_map', Settings::defaults()['emoji_map']);
+Settings::set('emoji_map', []);
 $v = UI::validateEmoji();
 check($v !== null && $v[2] >= 25 && UI::emojiId('🔥') === (string)$pool[0] && UI::emojiId('🎂') === (string)$pool[2], 'auto map by pack emoji');
 check(UI::emojiId('⏱') === (string)$pool[3] && UI::emojiId('⏳') === (string)$pool[3], 'synonym mapping');
