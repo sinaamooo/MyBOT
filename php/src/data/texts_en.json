@@ -62,6 +62,9 @@
  "wallet_chain": {
   "text": "<blockquote>{chain_icon} Network: <b>{chain}</b>\n{dorange_icon} Balance: <code>{balance}</code> {symbol}\n{dgreen_icon} USD value: <code>{usd}</code> $\n{dpeach_icon} Toman value: <code>{toman}</code>\n{dblue_icon} Transactions: <code>{txs}</code>\n{dolive_icon} NFT: <code>{nfts}</code>\n{dbrown_icon} Wallet created: {created}\n{status_icon} Status: {status}\n{dnavy_icon} <a href=\"{explorer}\">View in explorer</a></blockquote>"
  },
+ "wallet_more": {
+  "text": "➕ and {count} more networks"
+ },
  "wallet_footer": {
   "text": "📊 <b>Total assets</b>\n\n<blockquote>{dgreen_icon} Dollar: <code>{total_usd}</code> $\n{dpeach_icon} Toman: <code>{total_toman}</code></blockquote>\n🗓 {time}"
  },

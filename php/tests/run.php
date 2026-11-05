@@ -706,6 +706,29 @@ $GLOBALS['http']['publicnode.com'] = function ($r) {
 reset_calls();
 feed(msg('0xdAC17F958D2ee523a2206206994597C13D831ec7'));
 check(str_contains((string)last_text(), 'Ethereum') && str_contains((string)last_text(), '4,000'), 'evm wallet');
+$GLOBALS['http']['publicnode.com'] = function ($r) {
+    if (!isset($r['json'][0])) {
+        return null;
+    }
+    $res = [];
+    foreach ($r['json'] as $c) {
+        $v = match ($c['method']) {
+            'eth_getBalance' => '0x' . dechex(123456789012345678),
+            'eth_getTransactionCount' => '0x4d2',
+            'eth_getCode' => '0x',
+            'eth_call' => '0x' . str_pad(dechex(987654321000), 64, '0', STR_PAD_LEFT),
+            default => '0x0',
+        };
+        $res[] = ['jsonrpc' => '2.0', 'id' => $c['id'], 'result' => $v];
+    }
+    return $res;
+};
+Cache::forget('wlr:' . md5('evm|0x28c6c06298d514db089934071355e5743bf21d60'));
+reset_calls();
+feed(msg('0x28c6c06298d514db089934071355e5743bf21d60', -4600, 841));
+$bw = array_values(array_filter(sent(['sendMessage']), fn($c) => str_contains($c[1]['text'], 'BNB Smart Chain')));
+$bt = (string)($bw[0][1]['text'] ?? '');
+check($bw && substr_count($bt, '<blockquote') === substr_count($bt, '</blockquote>') && UI::textLen($bt) <= 4096 && substr_count($bt, 'شبکه: ') >= 6, 'busy evm wallet on every chain is sent whole: ' . UI::textLen($bt));
 $fm = Prices::fetchMany(['BTC', 'ETH', 'NOPE']);
 check(round($fm['BTC']['price'] ?? 0) == 100000 && round($fm['ETH']['price'] ?? 0) == 4000 && $fm['NOPE'] === null, 'several coins priced in one round');
 $rxw = array_column(array_column(array_column(array_values(array_filter($GLOBALS['calls'], fn($c) => $c[0] === 'setMessageReaction')), 1), 'reaction'), 0);

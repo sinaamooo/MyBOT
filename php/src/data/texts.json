@@ -83,6 +83,10 @@
   "text": "<blockquote>{chain_icon}    شبکه: <b>{chain}</b>\n{dorange_icon}    موجودی: <code>{balance}</code> {symbol}\n{dgreen_icon}    ارزش دلاری: <code>{usd}</code> $\n{dpeach_icon}    ارزش تومانی: <code>{toman}</code>\n{dblue_icon}    تعداد تراکنش: <code>{txs}</code>\n{dolive_icon}    تعداد NFT: <code>{nfts}</code>\n{dbrown_icon}    تاریخ ساخت ولت: {created}\n{status_icon}    وضعیت: {status}\n{dnavy_icon}    <a href=\"{explorer}\">مشاهده در اکسپلورر</a></blockquote>",
   "desc": "بلوک هر شبکه در چکر ولت ({chain} {balance} {symbol} {usd} {toman} {tokens} {txs} {nfts} {status} {explorer})"
  },
+ "wallet_more": {
+  "text": "➕ و {count} شبکه دیگر",
+  "desc": "وقتی همه شبکه‌ها در یک پیام جا نشوند ({count})"
+ },
  "wallet_footer": {
   "text": "📊 <b>مجموع دارایی</b>\n\n<blockquote>{dgreen_icon}    دلار: <code>{total_usd}</code> $\n{dpeach_icon}    تومان: <code>{total_toman}</code></blockquote>\n🗓 {time}",
   "desc": "پاورقی چکر ولت ({total_usd} {total_toman} {time})"

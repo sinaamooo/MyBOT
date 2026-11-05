@@ -191,9 +191,10 @@ final class Tools
         $rate = Prices::usdtToman();
         $parts = [UI::t('wallet_header', ['address' => UI::esc($address), 'count' => count($found)])];
         $total = 0.0;
+        $blocks = [];
         foreach ($found as $r) {
             $total += Wallets::totalUsd($r);
-            $parts[] = UI::t('wallet_chain', [
+            $blocks[] = UI::t('wallet_chain', [
                 'chain_icon' => UI::badge($r['symbol'], '🔷'), 'chain' => UI::esc($r['chain']), 'balance' => Fmt::num($r['balance']), 'symbol' => $r['symbol'],
                 'usd' => $r['usd'] !== null ? Fmt::usd($r['usd']) : null, 'toman' => $r['usd'] !== null && $rate ? Fmt::toman($r['usd'] * $rate) : null,
                 'txs' => is_numeric($r['txs']) ? Fmt::int($r['txs']) : ($r['txs'] ?: null),
@@ -201,12 +202,20 @@ final class Tools
                 'status' => $r['status'] ? (UI::lx(UI::stripEmoji($r['status'])) ?: null) : null, 'status_icon' => self::statusDot($r['status'] ? UI::stripEmoji($r['status']) : null), 'explorer' => UI::attr($r['explorer']),
             ]);
         }
-        $parts[] = UI::t('wallet_footer', ['total_usd' => Fmt::usd($total), 'total_toman' => $rate ? Fmt::toman($total * $rate) : null, 'time' => Fmt::now()]);
-        $text = implode("\n\n", $parts);
-        if (mb_strlen($text) > 4000) {
-            $text = mb_substr($text, 0, 3990);
-            $text = mb_substr($text, 0, mb_strrpos($text, "\n"));
+        $footer = UI::t('wallet_footer', ['total_usd' => Fmt::usd($total), 'total_toman' => $rate ? Fmt::toman($total * $rate) : null, 'time' => Fmt::now()]);
+        $room = 3800 - UI::textLen($parts[0]) - UI::textLen($footer);
+        foreach ($blocks as $i => $b) {
+            $more = count($blocks) - $i - 1;
+            $need = UI::textLen($b) + 2 + ($more ? 60 : 0);
+            if ($need > $room) {
+                $parts[] = UI::t('wallet_more', ['count' => count($blocks) - $i]);
+                break;
+            }
+            $parts[] = $b;
+            $room -= $need - ($more ? 60 : 0);
         }
+        $parts[] = $footer;
+        $text = implode("\n\n", $parts);
         $rows = [];
         foreach ($found as $r) {
             if ($r['kind'] === 'tron') {
@@ -395,7 +404,7 @@ final class Tools
             'bio' => !empty($info['bio']) ? UI::esc($info['bio']) : null, 'gifts' => $gifts ? Fmt::int($gifts['total_count'] ?? 0) : null,
             'diamonds' => Fmt::int($pts = Diamonds::points((int)$t['id'])), 'dlevel' => Diamonds::level($pts),
         ]);
-        if ($photo && mb_strlen($text) <= 1024) {
+        if ($photo && UI::textLen($text) <= 1000) {
             $extra = Bot::isPrivate($m) ? [] : ['reply_parameters' => Bot::replyParams($m)];
             if (TG::photo($m['chat']['id'], $photo, $text, UI::footer(), $extra)) {
                 return;

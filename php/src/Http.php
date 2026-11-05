@@ -281,7 +281,7 @@ final class Http
         return $hit;
     }
 
-    public static function collect(array $reqs, callable $group, callable $accept, float $deadline = 10.0): array
+    public static function collect(array $reqs, callable $group, callable $accept, float $deadline = 10.0, ?callable $enough = null): array
     {
         $groups = [];
         foreach (array_keys($reqs) as $k) {
@@ -344,7 +344,7 @@ final class Http
                     }
                 }
             }
-            if (count($out) === count($groups) || $st !== CURLM_OK || (!$running && !$any)) {
+            if (count($out) === count($groups) || $st !== CURLM_OK || (!$running && !$any) || ($enough && $enough($out, microtime(true) - $t0))) {
                 break;
             }
             if ($running) {
@@ -605,8 +605,18 @@ final class TG
                 $r = self::raw($method, self::stripPremium($p));
             }
         }
+        if (empty($r['ok']) && ($k = isset($p['text']) ? 'text' : (isset($p['caption']) ? 'caption' : null)) && is_string($p[$k])
+            && preg_match("/can't parse entities|too long/i", (string)($r['description'] ?? ''))) {
+            $q = $p;
+            unset($q['parse_mode']);
+            $q[$k] = mb_substr(html_entity_decode(strip_tags($p[$k]), ENT_QUOTES | ENT_HTML5, 'UTF-8'), 0, $k === 'text' ? 4000 : 1000);
+            $r = self::raw($method, $q);
+        }
         if (empty($r['ok'])) {
             self::$lastError = (string)($r['description'] ?? 'error');
+            if (preg_match('/^(send|edit)/', $method) && !preg_match('/' . implode('|', array_map('preg_quote', self::SKIP)) . '/i', self::$lastError)) {
+                error_log('telegram ' . $method . ': ' . self::$lastError);
+            }
             return null;
         }
         self::$lastError = null;

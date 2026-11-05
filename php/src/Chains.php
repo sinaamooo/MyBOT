@@ -365,7 +365,8 @@ final class Wallets
                 $reqs["$i|$j"] = Chain::batchReq($u, $callsBy[$i], 4);
             }
         }
-        $got = Http::collect($reqs, fn($k) => (int)strtok($k, '|'), fn($k, $d) => Chain::batchParse($d, count($callsBy[(int)strtok($k, '|')])), 4.5);
+        $got = Http::collect($reqs, fn($k) => (int)strtok($k, '|'), fn($k, $d) => Chain::batchParse($d, count($callsBy[(int)strtok($k, '|')])), 4.5,
+            fn($out, $t) => $t >= 2.0 && isset($out[0], $out[1]));
         Perf::mark('evm:' . count($got) . '/' . count($chains));
         $out = [];
         foreach ($chains as $i => $c) {

@@ -322,10 +322,15 @@ final class GiftsH
                 $top[] = 'https://t.me/nft/' . $x['name'];
             }
         }
-        $caption = UI::t('gift_user_caption', ['name' => UI::esc($t['name']), 'count' => Fmt::int($count), 'unique_count' => Fmt::int($unique),
-            'total_ton' => Fmt::num($now), 'total_usd' => $tonUsd ? Fmt::usd($now * $tonUsd) : '—', 'total_toman' => $tonToman ? Fmt::toman($now * $tonToman) : '—',
-            'pl_line' => $plLine, 'change_line' => $change, 'links' => $top ? implode("\n", array_map(fn($l) => "🔗 $l", $top)) : null]);
-        $caption = mb_substr($caption, 0, 1024);
+        for ($n = count($top); $n >= 0; $n--) {
+            $links = array_slice($top, 0, $n);
+            $caption = UI::t('gift_user_caption', ['name' => UI::esc($t['name']), 'count' => Fmt::int($count), 'unique_count' => Fmt::int($unique),
+                'total_ton' => Fmt::num($now), 'total_usd' => $tonUsd ? Fmt::usd($now * $tonUsd) : '—', 'total_toman' => $tonToman ? Fmt::toman($now * $tonToman) : '—',
+                'pl_line' => $plLine, 'change_line' => $change, 'links' => $links ? implode("\n", array_map(fn($l) => "🔗 $l", $links)) : null]);
+            if (UI::textLen($caption) <= 1000) {
+                break;
+            }
+        }
         $sent = TG::photo($m['chat']['id'], $png, $caption, UI::footer(), $extra);
         $ph = $sent['photo'] ?? [];
         if ($ph && !empty(end($ph)['file_id'])) {
@@ -662,7 +667,7 @@ final class Extras
             $k = Store::put(['username' => $info['username'] ?? $username, 'owner' => $m['from']['id']]);
             $rows = [[UI::button('btn_insta_story', ['cb' => "is:$k"])], [UI::button('btn_insta_highlight', ['cb' => "ih:$k"])]];
         }
-        if (!empty($info['profile']) && mb_strlen($text) <= 1024) {
+        if (!empty($info['profile']) && UI::textLen($text) <= 1000) {
             $extra = Bot::isPrivate($m) ? [] : ['reply_parameters' => Bot::replyParams($m)];
             if (TG::photo($m['chat']['id'], $info['profile'], $text, UI::footer($rows), $extra)) {
                 return;

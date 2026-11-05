@@ -474,6 +474,12 @@ final class UI
         return implode("\n", $lines);
     }
 
+    public static function textLen(string $html): int
+    {
+        $plain = html_entity_decode(strip_tags($html), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        return intdiv(strlen((string)mb_convert_encoding($plain, 'UTF-16LE', 'UTF-8')), 2);
+    }
+
     public static function stripPremium(string $text): string
     {
         return preg_replace('/<tg-emoji[^>]*>.*?<\/tg-emoji>[ \t]*/us', '', $text);

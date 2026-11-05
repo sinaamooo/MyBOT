@@ -65,7 +65,7 @@ final class Bot
             $extra['reply_parameters'] = self::replyParams($m);
         }
         $chat = $m['chat']['id'];
-        if ($photo !== null && mb_strlen($text) <= 1024) {
+        if ($photo !== null && UI::textLen($text) <= 1000) {
             TG::photo($chat, $photo, $text, $markup, $extra);
             return;
         }
@@ -115,7 +115,7 @@ final class Bot
         }
         $chat = $m['chat']['id'];
         if ($photo !== null) {
-            if (mb_strlen($text) > 1024) {
+            if (UI::textLen($text) > 1000) {
                 $sent = TG::photo($chat, $photo, null, null, $extra);
                 TG::send($chat, $text, $markup);
                 return $sent;
