@@ -225,8 +225,13 @@ final class TG
         if (isset($p['reply_markup']['inline_keyboard'])) {
             foreach ($p['reply_markup']['inline_keyboard'] as &$row) {
                 foreach ($row as &$b) {
-                    if (($b['text'] ?? '') === "\u{3164}" && !empty($b['icon_custom_emoji_id'])) {
-                        $b['text'] = UI::emojiChar((string)$b['icon_custom_emoji_id']) ?? '•';
+                    if (!empty($b['icon_custom_emoji_id'])) {
+                        $ch = UI::emojiChar((string)$b['icon_custom_emoji_id']);
+                        if (($b['text'] ?? '') === "\u{3164}") {
+                            $b['text'] = $ch ?? '•';
+                        } elseif ($ch !== null && preg_match('/^\p{Regional_Indicator}{2}$/u', $ch)) {
+                            $b['text'] = $ch . ' ' . ($b['text'] ?? '');
+                        }
                     }
                     unset($b['icon_custom_emoji_id']);
                 }
@@ -302,7 +307,7 @@ final class TG
         if (($p['parse_mode'] ?? '') === 'HTML') {
             foreach (['text', 'caption'] as $k) {
                 if (isset($p[$k]) && is_string($p[$k])) {
-                    $p[$k] = UI::emojiMap($p[$k]);
+                    $p[$k] = UI::emojiMap(UI::quoteGaps($p[$k]));
                 }
             }
         }

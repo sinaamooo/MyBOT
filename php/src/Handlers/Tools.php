@@ -283,11 +283,11 @@ final class Tools
         }
         $text = UI::t('tron_transfers', ['address' => UI::esc($d['addr']), 'page' => $page, 'pages' => $pages, 'items' => implode("\n", $items)]);
         $nav = [];
-        if ($page < $pages) {
-            $nav[] = UI::button('btn_next', ['cb' => "tp:$key:" . ($page + 1)]);
-        }
         if ($page > 1) {
             $nav[] = UI::button('btn_prev', ['cb' => "tp:$key:" . ($page - 1)]);
+        }
+        if ($page < $pages) {
+            $nav[] = UI::button('btn_next', ['cb' => "tp:$key:" . ($page + 1)]);
         }
         $kb = $nav ? UI::kb([$nav]) : null;
         $chat = $cq['message']['chat']['id'];

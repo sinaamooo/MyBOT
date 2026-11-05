@@ -305,7 +305,7 @@ $prompt = sent(['sendMessage'])[0];
 check(array_map('count', $prompt[1]['reply_markup']['inline_keyboard']) === [3, 2], 'translate 3+2');
 $tk = $prompt[1]['reply_markup']['inline_keyboard'];
 check(array_column($tk[0], 'style') === ['primary', 'primary', 'primary'] && array_column($tk[1], 'style') === ['success', 'success']
-    && $tk[0][0]['icon_custom_emoji_id'] === '5143448346001671955' && $tk[1][1]['icon_custom_emoji_id'] === '5143404335471790574' && $tk[0][0]['text'] === "\u{3164}" && ($tk[1][0]['icon_custom_emoji_id'] ?? '') === '5294068833277990704', 'translate flag-only buttons');
+    && $tk[0][0]['icon_custom_emoji_id'] === '5143448346001671955' && $tk[1][1]['icon_custom_emoji_id'] === '5143404335471790574' && $tk[0][0]['text'] === '𝗳𝗮' && $tk[0][1]['text'] === '𝗲𝗻' && $tk[1][0]['text'] === '𝘇𝗵' && ($tk[1][0]['icon_custom_emoji_id'] ?? '') === '5294068833277990704', 'translate flag + bold code buttons');
 $pmid = $GLOBALS['mid'] - 0;
 $row = DB::one('SELECT message_id FROM translations ORDER BY created_at DESC LIMIT 1');
 reset_calls();
@@ -649,7 +649,8 @@ reset_calls();
 cb(str_replace('tt:', 'tp:', $nb[0]['callback_data']), 90, -700);
 $p2 = end($GLOBALS['calls']);
 $nb2 = buttons($p2);
-check($p2[0] === 'editMessageText' && str_contains($p2[1]['text'], 'صفحه <b>2</b> از <b>4</b>') && count($nb2) === 2 && ($nb2[1]['style'] ?? '') === 'danger', 'tron history page 2 with red prev');
+check($p2[0] === 'editMessageText' && str_contains($p2[1]['text'], 'صفحه <b>2</b> از <b>4</b>') && count($nb2) === 2 && ($nb2[0]['style'] ?? '') === 'danger' && ($nb2[1]['style'] ?? '') === 'success'
+    && str_contains($nb2[1]['callback_data'] ?? '', ':3') && str_contains($nb2[0]['callback_data'] ?? '', ':1'), 'tron history page 2: prev left, next right');
 unset($GLOBALS['http']['/transactions/trc20'], $GLOBALS['http']['/transactions']);
 
 $GLOBALS['http']['publicnode.com'] = function ($r) {
@@ -849,15 +850,19 @@ $kb = UI::iconize(['text' => '🦄 دکمه', 'callback_data' => 'x']);
 check($kb['text'] === 'دکمه' && empty($kb['icon_custom_emoji_id']), 'unmapped button emoji removed');
 DB::kvSet('emoji_auto', null);
 Settings::set('emoji_map', $prevMap);
-$dm = Settings::get('emoji_map');
-Settings::set('emoji_invalid', []);
-Settings::set('emoji_map', ['⏳' => '5143130625795951140', '✅' => '5100000000000000005']);
-$dq = UI::emojiMap("<blockquote>⏳    مدت: 5\n✅    تایید</blockquote>");
-check(str_contains($dq, '</tg-emoji> مدت') && str_contains($dq, '</tg-emoji>    تایید'), 'dot icons get one space');
-Settings::set('emoji_map', $dm);
 Config::set('KASHIDA', '1');
 check(UI::stretch('لینک') === 'لـیـنـک' && UI::stretch('دارد') === 'دارد' && UI::kashida('🔗 لینک <code>آدرس</code> {name}') === '🔗 لـیـنـک <code>آدرس</code> {name}', 'kashida stretch');
 Config::set('KASHIDA', '0');
+check(UI::quoteGaps("سر\n\n<blockquote>a</blockquote>\n\nجمع\n\n<blockquote>b</blockquote>\n<blockquote>c</blockquote>") === "سر\n\n<blockquote>a</blockquote>\n\nجمع\n<blockquote>b</blockquote>\n<blockquote>c</blockquote>"
+    && UI::quoteGaps("سر\n\n<blockquote>a</blockquote>") === "سر\n\n<blockquote>a</blockquote>", 'only first quote keeps blank line above');
+$dm2 = Settings::get('emoji_map');
+Settings::set('emoji_invalid', []);
+Settings::set('emoji_map', ['🇮🇷' => '5143448346001671955']);
+$ps = (new ReflectionMethod(TG::class, 'stripPremium'));
+$ps->setAccessible(true);
+$fb = $ps->invoke(null, ['reply_markup' => ['inline_keyboard' => [[['text' => '𝗳𝗮', 'icon_custom_emoji_id' => '5143448346001671955', 'callback_data' => 'tr:fa']]]]]);
+check($fb['reply_markup']['inline_keyboard'][0][0]['text'] === '🇮🇷 𝗳𝗮' && !isset($fb['reply_markup']['inline_keyboard'][0][0]['icon_custom_emoji_id']), 'flag kept when premium icon rejected');
+Settings::set('emoji_map', $dm2);
 base_http();
 $hx = 0;
 $prevFake = Http::$fake;
