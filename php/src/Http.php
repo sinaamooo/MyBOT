@@ -261,7 +261,7 @@ final class TG
         }
         $ch = self::$ch;
         $opts = [CURLOPT_URL => 'https://api.telegram.org/bot' . Config::get('BOT_TOKEN') . '/' . $method, CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT => $files ? 60 : 25, CURLOPT_CONNECTTIMEOUT => 8, CURLOPT_POST => true, CURLOPT_POSTFIELDS => $fields,
+            CURLOPT_TIMEOUT => $files ? 60 : 20, CURLOPT_CONNECTTIMEOUT => 6, CURLOPT_POST => true, CURLOPT_POSTFIELDS => $fields,
             CURLOPT_TCP_KEEPALIVE => 1, CURLOPT_HTTPHEADER => ['Expect:']];
         if (defined('CURL_HTTP_VERSION_2TLS')) {
             $opts[CURLOPT_HTTP_VERSION] = CURL_HTTP_VERSION_2TLS;
@@ -272,7 +272,7 @@ final class TG
         }
         curl_setopt_array($ch, $opts);
         $body = curl_exec($ch);
-        if ($body === false) {
+        if ($body === false && in_array(curl_errno($ch), [6, 7, 35, 52, 55, 56], true)) {
             usleep(200000);
             $body = curl_exec($ch);
         }

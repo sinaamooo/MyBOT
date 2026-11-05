@@ -351,7 +351,7 @@ final class UI
 
     public static function stripPremium(string $text): string
     {
-        return preg_replace('/<tg-emoji[^>]*>(.*?)<\/tg-emoji>/us', '$1', $text);
+        return preg_replace('/<tg-emoji[^>]*>.*?<\/tg-emoji>[ \t]*/us', '', $text);
     }
 
     public static function splitLeadingEmoji(string $text): array

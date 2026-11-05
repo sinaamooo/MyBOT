@@ -645,7 +645,7 @@ final class Instagram
     private static function req(array $r): array
     {
         $p = self::proxy();
-        return $r + ['timeout' => 15] + ($p ? ['proxy' => $p] : []);
+        return $r + ['timeout' => 10] + ($p ? ['proxy' => $p] : []);
     }
 
     public static function mediaId(string $sc): ?string

@@ -23,6 +23,8 @@ foreach (array('curl', 'gd', 'pdo_sqlite', 'mbstring', 'openssl', 'json', 'intl'
     echo 'ext ' . $ext . ': ' . (extension_loaded($ext) ? 'OK' : ($ext === 'intl' || $ext === 'Zend OPcache' ? 'off (optional)' : 'MISSING')) . "\n";
 }
 echo 'gd freetype: ' . $ok(function_exists('imagettftext')) . "\n";
+echo 'sapi: ' . PHP_SAPI . ' | early reply: ' . ((function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request')) ? 'OK' : 'NO (set a cron for cron.php)') . "\n";
+echo 'max_execution_time: ' . ini_get('max_execution_time') . ' | memory_limit: ' . ini_get('memory_limit') . "\n";
 $data = $root . '/data';
 echo 'data writable: ' . $ok(is_dir($data) ? is_writable($data) : @mkdir($data, 0755, true)) . "\n";
 echo '.env token: ' . $ok(!empty($env['BOT_TOKEN'])) . "\n";

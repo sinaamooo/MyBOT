@@ -477,7 +477,7 @@ final class MTConn
         $this->dc = $dc;
         $this->session = random_bytes(8);
         $this->sock = self::open($ip, $port);
-        stream_set_timeout($this->sock, 15);
+        stream_set_timeout($this->sock, 10);
         fwrite($this->sock, "\xee\xee\xee\xee");
     }
 
@@ -485,11 +485,11 @@ final class MTConn
     {
         $proxy = Config::get('MTPROTO_PROXY') ?: Config::get('TELEGRAM_PROXY');
         if ($proxy !== '' && preg_match('#^(socks5h?|http)://(?:([^:@]*):([^@]*)@)?([^:/]+):(\d+)#i', $proxy, $p)) {
-            $s = @stream_socket_client("tcp://{$p[4]}:{$p[5]}", $en, $es, 10);
+            $s = @stream_socket_client("tcp://{$p[4]}:{$p[5]}", $en, $es, 6);
             if (!$s) {
                 throw new RuntimeException("proxy connect: $es");
             }
-            stream_set_timeout($s, 15);
+            stream_set_timeout($s, 10);
             if (stripos($p[1], 'socks') === 0) {
                 $auth = $p[2] !== '';
                 fwrite($s, "\x05\x01" . ($auth ? "\x02" : "\x00"));
@@ -523,7 +523,7 @@ final class MTConn
             }
             return $s;
         }
-        $s = @stream_socket_client("tcp://$ip:$port", $en, $es, 10);
+        $s = @stream_socket_client("tcp://$ip:$port", $en, $es, 6);
         if (!$s) {
             throw new RuntimeException("connect $ip: $es");
         }
@@ -684,7 +684,7 @@ final class MTConn
         return [$mid, $r->raw($len)];
     }
 
-    public function call(string $body, int $deadline = 20)
+    public function call(string $body, int $deadline = 15)
     {
         if (!$this->inited) {
             $body = TL::int(0xda9b0d0d) . TL::int(TL::layer())
@@ -965,7 +965,14 @@ final class MTProto
         }
         $lock = fopen(sys_get_temp_dir() . '/mybot_mtp_' . md5(Config::$root) . '.lock', 'c');
         if ($lock) {
-            flock($lock, LOCK_EX);
+            $until = microtime(true) + 12;
+            while (!flock($lock, LOCK_EX | LOCK_NB)) {
+                if (microtime(true) > $until) {
+                    fclose($lock);
+                    throw new RuntimeException('mtproto: busy');
+                }
+                usleep(150000);
+            }
         }
         try {
             $s = self::state();

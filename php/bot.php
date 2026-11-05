@@ -29,6 +29,6 @@ TG::closeHook();
 if ((int)DB::kvGet('commands_v', 0) < Start::COMMANDS_V) {
     Start::registerCommands();
 }
-if (Tick::due()) {
+if (Tick::canDefer() && Tick::due()) {
     Tick::run();
 }
