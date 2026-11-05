@@ -433,6 +433,14 @@ $cap = $ph[0][1]['caption'] ?? '';
 check(str_contains($cap, 'https://t.me/nft/ToyBear-55') && str_contains($cap, 'https://t.me/nft/PlushPepe-7'), 'gift links in caption');
 check(str_contains($cap, '5,020') && str_contains($cap, 'ضرر'), 'gift value and loss');
 check(str_starts_with($ph[0][1]['photo']['__bytes'] ?? '', "\xFF\xD8"), 'gift card image');
+$names = array_column($GLOBALS['calls'], 0);
+$we = array_values(array_filter($GLOBALS['calls'], fn($c) => $c[0] === 'editMessageText' && ($c[1]['message_id'] ?? 0) === 1));
+$wd = array_search('deleteMessage', $names, true);
+check($we && str_contains($we[0][1]['text'], '5386367538735104399') && str_contains($we[0][1]['text'], 'لطفاً') && (bool)array_filter(buttons($we[0]), fn($b) => str_contains($b['url'] ?? '', 'startgroup'))
+    && $wd !== false && $wd > array_search('sendPhoto', $names, true) && ($GLOBALS['calls'][$wd][1]['message_id'] ?? 0) === 1, 'prompt turns into the waiting message and is removed after the card');
+$wr = new ReflectionProperty('Waiter', 'frames');
+$fr = $wr->getValue(Waiter::start(msg('x', -500, 70), 'gift_wait', 1));
+check(count($fr) === 4 && str_ends_with($fr[0], 'لطفاً') && str_ends_with($fr[3], 'لطفاً کمی منتظر بمانید') && str_starts_with($fr[2], '<tg-emoji emoji-id="5386367538735104399">'), 'waiting text is built word by word');
 
 Config::set('API_ID', '12345');
 Config::set('API_HASH', 'hash');
@@ -442,6 +450,14 @@ feed(msg('/gift @tofan', -500, 71, null, null, 'Sina'));
 $ph = sent(['sendPhoto']);
 $cap = $ph[0][1]['caption'] ?? '';
 check(str_contains($cap, 'https://t.me/nft/PlushPepe-1') && str_contains($cap, 'Tofan'), 'gift by username via mtproto');
+$ws = array_values(array_filter(sent(['sendMessage']), fn($c) => str_contains($c[1]['text'], 'لطفاً')));
+check($ws && sent(['deleteMessage']), 'direct /gift shows a waiting message and removes it');
+reset_calls();
+feed(msg('/gift', -500, 73, null, null, 'Reza'));
+reset_calls();
+feed(msg('@nobody_y', -500, 73, ['message_id' => 2, 'date' => time(), 'chat' => ['id' => -500, 'type' => 'supergroup'], 'from' => BOT, 'text' => 'x'], null, 'Reza'));
+$ue = array_values(array_filter($GLOBALS['calls'], fn($c) => $c[0] === 'editMessageText' && ($c[1]['message_id'] ?? 0) === 2));
+check(count($ue) >= 2 && str_contains(end($ue)[1]['text'], 'نتوانستم') && !sent(['sendMessage']), 'unknown user turns the waiting message into the error');
 reset_calls();
 feed(msg('/gift @nobody_x', -500, 72, null, null, 'Sina'));
 check(str_contains((string)last_text(), 'نتوانستم'), 'gift unknown username');
@@ -688,6 +704,8 @@ $GLOBALS['http']['publicnode.com'] = function ($r) {
 reset_calls();
 feed(msg('0xdAC17F958D2ee523a2206206994597C13D831ec7'));
 check(str_contains((string)last_text(), 'Ethereum') && str_contains((string)last_text(), '4,000'), 'evm wallet');
+$fm = Prices::fetchMany(['BTC', 'ETH', 'NOPE']);
+check(round($fm['BTC']['price'] ?? 0) == 100000 && round($fm['ETH']['price'] ?? 0) == 4000 && $fm['NOPE'] === null, 'several coins priced in one round');
 $rxw = array_column(array_column(array_column(array_values(array_filter($GLOBALS['calls'], fn($c) => $c[0] === 'setMessageReaction')), 1), 'reaction'), 0);
 check(array_slice(array_column($rxw, 'emoji'), -2) === ['🔰', '👌'], 'wallet reaction tries 🔰 then 👌');
 

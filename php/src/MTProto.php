@@ -1113,7 +1113,7 @@ final class MTProto
         return $out;
     }
 
-    public static function gifts(array $t, int $max = 400): ?array
+    public static function gifts(array $t, int $max = 400, ?callable $tick = null): ?array
     {
         $peer = $t['type'] === 'channel'
             ? ['_' => 'inputPeerChannel', 'channel_id' => $t['id'], 'access_hash' => $t['access_hash']]
@@ -1129,6 +1129,9 @@ final class MTProto
                     $items[] = self::ownedGift($sg);
                 }
                 $offset = (string)($r['next_offset'] ?? '');
+                if ($tick) {
+                    $tick();
+                }
             } while ($offset !== '' && count($items) < $max);
         } catch (Throwable $e) {
             error_log('mtproto gifts: ' . $e->getMessage());

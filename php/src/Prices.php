@@ -335,6 +335,51 @@ final class Prices
 
     private static function fetchQuote(string $sym): ?array
     {
+        return self::fetchMany([$sym])[$sym] ?? null;
+    }
+
+    public static function fetchMany(array $syms, float $deadline = 2.5): array
+    {
+        $reqs = [];
+        foreach ($syms as $sym) {
+            foreach (self::quoteReqs($sym) as $src => $r) {
+                $reqs["$sym|$src"] = $r;
+            }
+        }
+        $got = $reqs ? Http::collect($reqs, fn($k) => $k, fn($k, $d) => is_array($d) ? $d : null, $deadline) : [];
+        $by = [];
+        foreach ($got as $k => $d) {
+            [$sym, $src] = explode('|', $k, 2);
+            $by[$sym][$src] = $d;
+        }
+        $out = [];
+        foreach ($syms as $sym) {
+            $out[$sym] = self::quoteParse($sym, $by[$sym] ?? []);
+        }
+        return $out;
+    }
+
+    public static function prefetch(array $syms): void
+    {
+        $need = [];
+        foreach (array_unique(array_filter(array_map(fn($x) => strtoupper(trim((string)$x)), $syms))) as $sym) {
+            if (in_array($sym, self::STABLES, true) || Market::coin($sym)) {
+                continue;
+            }
+            Cache::get('q:' . $sym, $hit);
+            if (!$hit) {
+                $need[] = $sym;
+            }
+        }
+        if ($need) {
+            foreach (self::fetchMany(array_slice($need, 0, 20)) as $sym => $v) {
+                Cache::set('q:' . $sym, $v, $v ? 45 : 600);
+            }
+        }
+    }
+
+    private static function quoteReqs(string $sym): array
+    {
         $cg = Config::get('COINGECKO_API_KEY');
         $reqs = [
             'Binance' => ['url' => 'https://api.binance.com/api/v3/ticker/24hr', 'params' => ['symbol' => $sym . 'USDT'], 'timeout' => 6],
@@ -351,7 +396,12 @@ final class Prices
         if ($mask) {
             $reqs = array_filter($reqs, fn($k) => ($mask & (SpotDir::BITS[$k === 'BinanceVision' ? 'Binance' : $k] ?? 0)) !== 0, ARRAY_FILTER_USE_KEY);
         }
-        $res = Http::multiJson($reqs) + array_fill_keys(['Binance', 'BinanceVision', 'CoinGecko', 'OKX', 'Bybit', 'KuCoin', 'Gate', 'CryptoCompare', 'MEXC'], null);
+        return $reqs;
+    }
+
+    private static function quoteParse(string $sym, array $res): ?array
+    {
+        $res += array_fill_keys(['Binance', 'BinanceVision', 'CoinGecko', 'OKX', 'Bybit', 'KuCoin', 'Gate', 'CryptoCompare', 'MEXC'], null);
         $found = [];
         $add = function ($name, $price, $change) use (&$found) {
             if ($price) {
@@ -431,7 +481,7 @@ final class Prices
                 'bitpin' => ['url' => 'https://api.bitpin.org/api/v1/mkt/tickers/', 'timeout' => 7],
                 'tabdeal' => ['url' => 'https://api1.tabdeal.org/r/api/v1/ticker/price', 'params' => ['symbol' => 'USDTIRT'], 'timeout' => 7],
                 'ramzinex' => ['url' => 'https://publicapi.ramzinex.com/exchange/api/v1.0/exchange/pairs/11', 'timeout' => 7],
-            ]);
+            ], 3.0);
             $vals = [];
             $s = $res['nobitex']['stats']['usdt-rls'] ?? null;
             if ($s && ($v = self::f($s['latest'] ?? null) ?? self::f($s['bestSell'] ?? null))) {

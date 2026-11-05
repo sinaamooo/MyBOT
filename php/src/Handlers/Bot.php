@@ -94,6 +94,7 @@ final class Bot
             return false;
         }
         Cache::forget($k);
+        $m['__prompt'] = (int)($r['message_id'] ?? 0);
         unset($m['reply_to_message']);
         if ($cmd === 'gift') {
             GiftsH::cmd($m, $text);

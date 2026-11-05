@@ -306,13 +306,19 @@ final class Wallets
             'tokens' => [], 'txs' => null, 'nfts' => null, 'status' => null, 'created' => null, 'kind' => null], $extra);
     }
 
-    private static function priceOf(string $sym): ?float
+    private static function priceSym(string $sym): ?string
     {
         $s = strtoupper(str_replace('.E', '', strtoupper($sym)));
         if (in_array($s, Prices::STABLES, true) || in_array(strtoupper($sym), ['USDC.E', 'BUSD'], true)) {
-            return 1.0;
+            return null;
         }
-        return Prices::usd($s === 'WBTC' ? 'BTC' : $s);
+        return $s === 'WBTC' ? 'BTC' : $s;
+    }
+
+    private static function priceOf(string $sym): ?float
+    {
+        $s = self::priceSym($sym);
+        return $s === null ? 1.0 : Prices::usd($s);
     }
 
     private static function fill(array &$r): void
@@ -794,6 +800,17 @@ final class Wallets
             $found = [];
         }
         $found = array_values(array_filter($found, [self::class, 'active']));
+        $syms = [];
+        foreach ($found as $r) {
+            $syms[] = self::priceSym($r['symbol']);
+            foreach ($r['tokens'] as $t) {
+                if ($t['usd'] === null) {
+                    $syms[] = self::priceSym($t['symbol']);
+                }
+            }
+        }
+        Prices::prefetch(array_filter($syms));
+        Perf::mark('prices');
         foreach ($found as &$r) {
             self::fill($r);
         }

@@ -39,7 +39,7 @@ final class Http
             CURLOPT_ENCODING => '',
             CURLOPT_CUSTOMREQUEST => $method,
         ];
-        if ($sh = self::share()) {
+        if ($sh = self::share(!empty($r['tg']))) {
             $opts[CURLOPT_SHARE] = $sh;
         }
         if (!empty($r['h2']) && defined('CURL_HTTP_VERSION_2TLS')) {
@@ -71,30 +71,31 @@ final class Http
         return [$ch, $url];
     }
 
-    private static $share = null;
+    private static array $shares = [];
 
-    public static function share()
+    public static function share(bool $conn = false)
     {
-        if (self::$share === null) {
-            self::$share = false;
-            if (function_exists('curl_share_init_persistent') && defined('CURL_LOCK_DATA_CONNECT')) {
+        $k = $conn ? 'c' : 'p';
+        if (!isset(self::$shares[$k])) {
+            self::$shares[$k] = false;
+            if ($conn && function_exists('curl_share_init_persistent') && defined('CURL_LOCK_DATA_CONNECT')) {
                 try {
-                    self::$share = curl_share_init_persistent([CURL_LOCK_DATA_DNS, CURL_LOCK_DATA_SSL_SESSION, CURL_LOCK_DATA_CONNECT]);
+                    self::$shares[$k] = curl_share_init_persistent([CURL_LOCK_DATA_DNS, CURL_LOCK_DATA_SSL_SESSION, CURL_LOCK_DATA_CONNECT]);
                 } catch (Throwable $e) {
-                    self::$share = false;
+                    self::$shares[$k] = false;
                 }
             }
-            if (!self::$share && function_exists('curl_share_init')) {
+            if (!self::$shares[$k] && function_exists('curl_share_init')) {
                 $s = curl_share_init();
                 curl_share_setopt($s, CURLSHOPT_SHARE, CURL_LOCK_DATA_DNS);
                 curl_share_setopt($s, CURLSHOPT_SHARE, CURL_LOCK_DATA_SSL_SESSION);
-                if (defined('CURL_LOCK_DATA_CONNECT')) {
+                if ($conn && defined('CURL_LOCK_DATA_CONNECT')) {
                     curl_share_setopt($s, CURLSHOPT_SHARE, CURL_LOCK_DATA_CONNECT);
                 }
-                self::$share = $s;
+                self::$shares[$k] = $s;
             }
         }
-        return self::$share ?: null;
+        return self::$shares[$k] ?: null;
     }
 
     private static $bgm = null;
@@ -126,7 +127,7 @@ final class Http
     public static function warm(string $url, array $opts = []): void
     {
         $host = (string)parse_url($url, PHP_URL_HOST);
-        if (self::$fake || TG::$fake || in_array($host, self::$bghost, true) || !defined('CURL_LOCK_DATA_CONNECT') || !($sh = self::share())) {
+        if (self::$fake || TG::$fake || in_array($host, self::$bghost, true) || !defined('CURL_LOCK_DATA_CONNECT') || !($sh = self::share(true))) {
             return;
         }
         self::$bgm ??= curl_multi_init();
@@ -203,7 +204,7 @@ final class Http
         return ['status' => $body === false ? 0 : $status, 'body' => $body === false ? '' : $body, 'headers' => $h];
     }
 
-    public static function multi(array $reqs): array
+    public static function multi(array $reqs, float $deadline = 0.0): array
     {
         $out = [];
         if (self::$fake) {
@@ -219,12 +220,13 @@ final class Http
             curl_multi_add_handle($mh, $ch);
             $handles[$k] = $ch;
         }
+        $t0 = microtime(true);
         do {
             $st = curl_multi_exec($mh, $running);
             if ($running) {
-                self::wait($mh, 0.5);
+                self::wait($mh, $deadline > 0 ? 0.05 : 0.5);
             }
-        } while ($running && $st === CURLM_OK);
+        } while ($running && $st === CURLM_OK && ($deadline <= 0 || microtime(true) - $t0 < $deadline));
         foreach ($handles as $k => $ch) {
             $body = curl_multi_getcontent($ch);
             $status = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
@@ -261,9 +263,9 @@ final class Http
         return ($r['status'] >= 200 && $r['status'] < 400) ? $r['body'] : null;
     }
 
-    public static function multiJson(array $reqs): array
+    public static function multiJson(array $reqs, float $deadline = 0.0): array
     {
-        return array_map([self::class, 'decode'], self::multi($reqs));
+        return array_map([self::class, 'decode'], self::multi($reqs, $deadline));
     }
 
     public static function race(array $reqs, callable $accept, float $deadline = 10.0): ?array
@@ -475,6 +477,8 @@ final class TG
 
     public static function async(string $method, array $p, ?callable $done = null): void
     {
+        $p = self::prep($method, $p);
+        unset($p['__quick']);
         if (self::$fake) {
             $r = (self::$fake)($method, $p);
             if ($done) {
@@ -482,7 +486,7 @@ final class TG
             }
             return;
         }
-        Http::background(['url' => self::base() . '/bot' . Config::get('BOT_TOKEN') . '/' . $method, 'method' => 'POST', 'json' => $p, 'timeout' => 10, 'h2' => true,
+        Http::background(['url' => self::base() . '/bot' . Config::get('BOT_TOKEN') . '/' . $method, 'method' => 'POST', 'json' => $p, 'timeout' => 10, 'h2' => true, 'tg' => true,
             'proxy' => Config::get('TELEGRAM_PROXY') ?: Config::get('PROXY')], $done ? fn($d) => $done(is_array($d) ? $d : null) : null);
     }
 
@@ -517,7 +521,7 @@ final class TG
         $opts = [CURLOPT_URL => self::base() . '/bot' . Config::get('BOT_TOKEN') . '/' . $method, CURLOPT_RETURNTRANSFER => true,
             CURLOPT_TIMEOUT => $files ? 60 : 20, CURLOPT_CONNECTTIMEOUT => 6, CURLOPT_POST => true, CURLOPT_POSTFIELDS => $fields,
             CURLOPT_TCP_KEEPALIVE => 1, CURLOPT_HTTPHEADER => ['Expect:']];
-        if ($sh = Http::share()) {
+        if ($sh = Http::share(true)) {
             $opts[CURLOPT_SHARE] = $sh;
         }
         $opts += self::connOpts();
@@ -535,7 +539,7 @@ final class TG
         return is_array($d) ? $d : ['ok' => false, 'description' => 'network error'];
     }
 
-    public static function api(string $method, array $p = [])
+    public static function prep(string $method, array $p): array
     {
         if (isset($p['parse_mode']) === false && (isset($p['text']) || isset($p['caption'])) && !in_array($method, ['answerCallbackQuery'], true)) {
             $p['parse_mode'] = 'HTML';
@@ -562,6 +566,12 @@ final class TG
         if ($method === 'answerCallbackQuery' && isset($p['text']) && is_string($p['text'])) {
             $p['text'] = UI::stripEmoji($p['text']) ?: null;
         }
+        return $p;
+    }
+
+    public static function api(string $method, array $p = [])
+    {
+        $p = self::prep($method, $p);
         $quick = !empty($p['__quick']);
         unset($p['__quick']);
         if ($quick && self::$hook && Config::get('QUICK_REPLY', '1') !== '0' && in_array($method, self::QUICK, true)) {
@@ -616,7 +626,7 @@ final class TG
         Http::settle();
         $mh = curl_multi_init();
         $hs = [];
-        $sh = Http::share();
+        $sh = Http::share(true);
         foreach ($calls as $k => [$m, $p]) {
             $ch = curl_init(self::base() . '/bot' . Config::get('BOT_TOKEN') . '/' . $m);
             $opts = [CURLOPT_RETURNTRANSFER => true, CURLOPT_POST => true, CURLOPT_POSTFIELDS => json_encode($p, JSON_UNESCAPED_UNICODE),

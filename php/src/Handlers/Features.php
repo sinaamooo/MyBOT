@@ -1,7 +1,108 @@
 <?php
 
+final class Waiter
+{
+    const GAP = 0.45;
+    private $chat;
+    private ?int $mid = null;
+    private array $frames = [];
+    private int $i = 0;
+    private float $last = 0.0;
+    private bool $busy = true;
+    private bool $done = false;
+    private array $reply = [];
+
+    public static function start(array $m, string $key, ?int $prompt = null): self
+    {
+        $w = new self();
+        $w->chat = $m['chat']['id'];
+        $html = trim(UI::t($key));
+        $lead = preg_match('/^(<tg-emoji[^>]*>.*?<\/tg-emoji>)\s*/u', $html, $mm) ? $mm[1] : '';
+        $words = preg_split('/\s+/u', trim(substr($html, strlen($mm[0] ?? ''))), -1, PREG_SPLIT_NO_EMPTY) ?: [''];
+        foreach ($words as $n => $_) {
+            $w->frames[] = trim($lead . ' ' . implode(' ', array_slice($words, 0, $n + 1)));
+        }
+        $w->reply = !Bot::isPrivate($m) && isset($m['message_id']) ? ['reply_parameters' => Bot::replyParams($m)] : [];
+        $w->last = microtime(true);
+        if ($prompt) {
+            $w->mid = $prompt;
+            TG::async('editMessageText', ['chat_id' => $w->chat, 'message_id' => $prompt, 'text' => $w->frames[0], 'reply_markup' => UI::footer()], function ($r) use ($w, $prompt) {
+                if (!empty($r['ok'])) {
+                    $w->busy = false;
+                    return;
+                }
+                TG::async('deleteMessage', ['chat_id' => $w->chat, 'message_id' => $prompt]);
+                $w->mid = null;
+                $w->send();
+            });
+        } else {
+            $w->send();
+        }
+        return $w;
+    }
+
+    private function send(): void
+    {
+        TG::async('sendMessage', ['chat_id' => $this->chat, 'text' => $this->frames[0], 'reply_markup' => UI::footer()] + $this->reply, function ($r) {
+            $this->mid = isset($r['result']['message_id']) ? (int)$r['result']['message_id'] : null;
+            $this->busy = false;
+            if ($this->done && $this->mid) {
+                TG::async('deleteMessage', ['chat_id' => $this->chat, 'message_id' => $this->mid]);
+            }
+        });
+    }
+
+    public function tick(): void
+    {
+        Http::pump();
+        if ($this->done || $this->busy || !$this->mid || $this->i >= count($this->frames) - 1 || microtime(true) - $this->last < self::GAP) {
+            return;
+        }
+        $this->i++;
+        $this->busy = true;
+        $this->last = microtime(true);
+        TG::async('editMessageText', ['chat_id' => $this->chat, 'message_id' => $this->mid, 'text' => $this->frames[$this->i], 'reply_markup' => UI::footer()], function () {
+            $this->busy = false;
+        });
+    }
+
+    public function finish(?string $html = null): void
+    {
+        if ($this->done) {
+            return;
+        }
+        $this->done = true;
+        Http::settle(2);
+        if (!$this->mid) {
+            if ($html !== null) {
+                TG::async('sendMessage', ['chat_id' => $this->chat, 'text' => $html, 'reply_markup' => UI::footer()] + $this->reply);
+            }
+            return;
+        }
+        $html !== null
+            ? TG::async('editMessageText', ['chat_id' => $this->chat, 'message_id' => $this->mid, 'text' => $html, 'reply_markup' => UI::footer()])
+            : TG::async('deleteMessage', ['chat_id' => $this->chat, 'message_id' => $this->mid]);
+    }
+}
+
 final class GiftsH
 {
+    public static ?Waiter $wait = null;
+
+    private static function tick(): void
+    {
+        self::$wait?->tick();
+    }
+
+    private static function say(array $m, string $html): void
+    {
+        if (self::$wait) {
+            self::$wait->finish($html);
+            self::$wait = null;
+            return;
+        }
+        Bot::send($m, $html);
+    }
     public static function link(array $m, string $slug, int $n): void
     {
         TG::warm();
@@ -74,20 +175,27 @@ final class GiftsH
         TG::api('sendChatAction', ['chat_id' => $m['chat']['id'], 'action' => 'upload_photo', '__quick' => true]);
         TG::warm();
         Perf::start();
-        $t = self::target($m, $args);
-        Perf::mark('resolve');
-        if (!$t) {
-            Perf::flush('gift');
-            Bot::send($m, UI::t('gift_user_unknown'));
-            return;
+        self::$wait = !empty($m['__prompt']) ? Waiter::start($m, 'gift_wait', (int)$m['__prompt']) : null;
+        try {
+            $t = self::target($m, $args);
+            self::tick();
+            Perf::mark('resolve');
+            if (!$t) {
+                Perf::flush('gift');
+                self::say($m, UI::t('gift_user_unknown'));
+                return;
+            }
+            self::portfolio($m, $t);
+        } finally {
+            self::$wait?->finish();
+            self::$wait = null;
         }
-        self::portfolio($m, $t);
     }
 
     private static function owned(array $t): ?array
     {
         if ($t['kind'] === 'mt') {
-            return MTProto::gifts($t);
+            return MTProto::gifts($t, 400, fn() => self::tick());
         }
         $items = [];
         $total = 0;
@@ -95,9 +203,10 @@ final class GiftsH
         for ($i = 0; $i < 4; $i++) {
             $p = ['limit' => 100] + ($offset ? ['offset' => $offset] : []);
             $r = $t['kind'] === 'chat' ? TG::api('getChatGifts', ['chat_id' => $t['id']] + $p) : TG::api('getUserGifts', ['user_id' => $t['id']] + $p);
+            self::tick();
             if ($r === null) {
                 if (!$i && !empty($t['username']) && MTProto::enabled() && ($mt = MTProto::resolve($t['username']))) {
-                    return MTProto::gifts($mt);
+                    return MTProto::gifts($mt, 400, fn() => self::tick());
                 }
                 return $i ? [$items, $total] : null;
             }
@@ -126,24 +235,28 @@ final class GiftsH
             Perf::flush('gift');
             return;
         }
+        self::$wait ??= Waiter::start($m, 'gift_wait');
         $res = self::owned($t);
+        self::tick();
         Perf::mark('owned:' . count($res[0] ?? []));
         if ($res === null) {
             Perf::flush('gift');
-            Bot::send($m, UI::t('gift_user_unknown'));
+            self::say($m, UI::t('gift_user_unknown'));
             return;
         }
         [$owned, $count] = $res;
         if (!$owned) {
-            Bot::send($m, UI::t('gift_user_none', ['name' => UI::esc($t['name'])]));
+            self::say($m, UI::t('gift_user_none', ['name' => UI::esc($t['name'])]));
             return;
         }
         $s = Prices::snapshot();
         $tonUsd = $s['ton'];
         $tonToman = $tonUsd && $s['toman'] ? $tonUsd * $s['toman'] : null;
         $ds = Gifts::dataset();
+        self::tick();
         Perf::mark('dataset');
         Gifts::prefetch(array_map(fn($og) => (string)($og['gift']['base_name'] ?? ''), array_filter($owned, fn($og) => ($og['type'] ?? '') === 'unique')));
+        self::tick();
         Perf::mark('floors');
         $starTon = $tonUsd ? Prices::starUsd() / $tonUsd : null;
         $tiles = [];
@@ -183,6 +296,7 @@ final class GiftsH
         usort($tiles, fn($a, $b) => ($b['value'] ?? 0) <=> ($a['value'] ?? 0));
         Perf::mark('values');
         $imgs = Gifts::images(array_map(fn($x) => $x['name'], array_slice($tiles, 0, 12)));
+        self::tick();
         Perf::mark('images');
         foreach ($imgs as $i => $bytes) {
             $tiles[$i]['image'] = $bytes;
@@ -194,6 +308,7 @@ final class GiftsH
         $plShow = ($pl !== null && abs($pl) > 0.0001) ? $pl : null;
         $png = PriceCard::gift($t['name'], $t['username'], $tiles, $now, $tonUsd ? $now * $tonUsd : null, $tonToman ? $now * $tonToman : null, $plShow, $pct, (int)$count, TG::username())
             ?? Cards::gift($t['name'], $t['username'], $tiles, $now, $tonUsd ? $now * $tonUsd : null, $tonToman ? $now * $tonToman : null, $plShow, $pct, (int)$count, TG::username());
+        self::tick();
         Perf::mark('render');
         $plLine = $plShow !== null ? UI::fill(UI::template($pl >= 0 ? 'gift_profit' : 'gift_loss'), ['ton' => Fmt::num(abs($pl)), 'percent' => sprintf('%.2f', abs($pct ?? 0)), 'toman' => $tonToman ? Fmt::toman(abs($pl) * $tonToman) : '—']) : null;
         $change = null;
