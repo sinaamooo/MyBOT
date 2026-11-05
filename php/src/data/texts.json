@@ -356,7 +356,7 @@
   "desc": "خطای ترجمه"
  },
  "calc_result": {
-  "text": "🧮 <code>{expr}</code>\n\n<blockquote>🟰    <b>{result}</b></blockquote>",
+  "text": "🧮 <code>{expr}</code>\n<blockquote>🟰    <b>{result}</b></blockquote>",
   "desc": "نتیجه ماشین حساب ({expr} {result})"
  },
  "account": {

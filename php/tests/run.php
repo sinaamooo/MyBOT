@@ -448,6 +448,7 @@ Config::set('API_ID', '');
 reset_calls();
 $h = hook_run(['update_id' => ++$GLOBALS['mid'], 'message' => msg('200+79', 9, 9)]);
 check(($h['method'] ?? '') === 'sendMessage' && str_contains($h['text'] ?? '', '279') && !sent(['sendMessage']), 'quick reply via webhook');
+check(str_contains(Config::data('texts')['calc_result']['text'], "</code>\n<blockquote>") && !str_contains(Config::data('texts')['calc_result']['text'], "\n\n"), 'calculator result without blank line');
 reset_calls();
 $h = hook_run(['update_id' => ++$GLOBALS['mid'], 'callback_query' => ['id' => 'cbq', 'from' => ['id' => 9, 'is_bot' => false, 'first_name' => 'x'], 'data' => 'noop',
     'message' => ['message_id' => 3, 'chat' => ['id' => 9, 'type' => 'private'], 'date' => time()]]]);
