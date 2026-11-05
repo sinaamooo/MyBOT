@@ -18,6 +18,8 @@ if ($key === '' || !isset($_GET['key']) || $_GET['key'] !== $key) {
     exit("forbidden\n");
 }
 $ok = function ($c) { return $c ? 'OK' : 'FAIL'; };
+echo 'bot version: ' . trim((string)@file_get_contents(__DIR__ . '/src/data/version.txt') ?: 'dev') . "\n";
+echo 'opcache validate_timestamps: ' . ini_get('opcache.validate_timestamps') . ' | revalidate_freq: ' . ini_get('opcache.revalidate_freq') . "\n";
 echo 'php: ' . PHP_VERSION . ' ' . $ok(version_compare(PHP_VERSION, '8.0.0', '>=')) . "\n";
 foreach (array('curl', 'gd', 'pdo_sqlite', 'mbstring', 'openssl', 'json', 'intl', 'Zend OPcache') as $ext) {
     echo 'ext ' . $ext . ': ' . (extension_loaded($ext) ? 'OK' : ($ext === 'intl' || $ext === 'Zend OPcache' ? 'off (optional)' : 'MISSING')) . "\n";

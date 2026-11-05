@@ -7,6 +7,13 @@ ob_start();
 require __DIR__ . '/src/bootstrap.php';
 
 DB::connect();
+$stamp = (int)@filemtime(__DIR__ . '/src/data/version.txt');
+if ($stamp && (int)DB::kvGet('code_stamp', 0) !== $stamp) {
+    DB::kvSet('code_stamp', $stamp);
+    if (function_exists('opcache_reset')) {
+        @opcache_reset();
+    }
+}
 $secret = (string)DB::kvGet('webhook_secret', '');
 if ($secret !== '' && !hash_equals($secret, (string)($_SERVER['HTTP_X_TELEGRAM_BOT_API_SECRET_TOKEN'] ?? ''))) {
     if (!Cache::throttled('secret_mismatch', 300)) {

@@ -40,6 +40,11 @@ final class Config
         return ($e !== false && $e !== '') ? $e : $d;
     }
 
+    public static function version(): string
+    {
+        return trim((string)@file_get_contents(__DIR__ . '/data/version.txt')) ?: 'dev';
+    }
+
     public static function admins(): array
     {
         $out = [];
