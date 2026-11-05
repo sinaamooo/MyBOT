@@ -985,7 +985,7 @@ reset_calls();
 feed(msg('500 تتر تون', -4600, 821));
 $pc = sent(['sendPhoto']) ?: sent(['sendMessage']);
 $pt = (string)($pc[0][1]['caption'] ?? $pc[0][1]['text'] ?? '');
-check($pc && str_contains($pt, '166.6667') && str_contains($pt, '1 USDT = 0.3333 TON') && str_contains($pt, '1 TON = 3 USDT'), 'usdt to ton conversion');
+check($pc && str_contains($pt, '166.6667') && str_contains($pt, '1 USDT = 0.3333 TON') && !str_contains($pt, '1 TON = 3 USDT') && !str_contains($pt, 'معکوس'), 'usdt to ton conversion without inverse line');
 reset_calls();
 feed(msg('800 تتر بیت کوین', -4600, 822));
 $pc = sent(['sendPhoto']) ?: sent(['sendMessage']);

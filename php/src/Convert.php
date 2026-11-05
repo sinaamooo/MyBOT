@@ -85,7 +85,6 @@ final class Convert
             'from_code' => $codeA,
             'to_code' => $codeB,
             'rate' => Fmt::num($rate),
-            'inverse' => Fmt::num(1 / $rate),
             'usd' => in_array('USD', [$codeA, $codeB], true) ? null : Fmt::usd($usd),
             'toman' => $usdt && !array_intersect([$codeA, $codeB], ['IRT', 'IRR']) ? Fmt::toman($usd * $usdt) : null,
             'time' => Fmt::now(),

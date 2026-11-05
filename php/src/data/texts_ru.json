@@ -36,7 +36,7 @@
   "text": "⭐️ <b>{amount} звёзд</b> = <b>{toman}</b> томан\n\n<blockquote>{usd_icon} Доллар: <code>{usd}</code> $\n{ton_icon} Тонкоин: <code>{ton}</code> TON\n{trx_icon} Трон: <code>{trx}</code> TRX</blockquote>\n🗓 {time}"
  },
  "conv_pair": {
-  "text": "{icon} <b>{amount} {from}</b> = <b>{result} {to}</b>\n\n<blockquote>{dorange_icon} Курс: <code>1 {from_code} = {rate} {to_code}</code>\n{dgreen_icon} Обратный: <code>1 {to_code} = {inverse} {from_code}</code>\n{dpeach_icon} В долларах: <code>{usd}</code> $\n{dblue_icon} В томанах: <code>{toman}</code></blockquote>\n🗓 {time}"
+  "text": "{icon} <b>{amount} {from}</b> = <b>{result} {to}</b>\n\n<blockquote>{dorange_icon} Курс: <code>1 {from_code} = {rate} {to_code}</code>\n{dpeach_icon} В долларах: <code>{usd}</code> $\n{dblue_icon} В томанах: <code>{toman}</code></blockquote>\n🗓 {time}"
  },
  "conv_fiat": {
   "text": "{icon} <b>{amount} {name}</b> = <b>{toman}</b> томан\n\n<blockquote>{usd_icon} Доллар: <code>{usd}</code> $\n{ton_icon} Тонкоин: <code>{ton}</code> TON\n{trx_icon} Трон: <code>{trx}</code> TRX\n⭐️ Звёзды: <code>{stars}</code> Stars</blockquote>\n🗓 {time}"
