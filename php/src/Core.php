@@ -60,9 +60,41 @@ final class Config
     {
         static $cache = [];
         if (!isset($cache[$name])) {
-            $cache[$name] = json_decode(file_get_contents(__DIR__ . '/data/' . $name . '.json'), true) ?: [];
+            $f = __DIR__ . '/data/' . $name . '.json';
+            $cache[$name] = self::compiled('d_' . $name, [$f], fn() => json_decode((string)@file_get_contents($f), true) ?: []);
         }
         return $cache[$name];
+    }
+
+    public static function compiled(string $key, array $sources, callable $build): array
+    {
+        $sig = '';
+        foreach ($sources as $f) {
+            $sig .= $f . ':' . @filemtime($f) . ':' . @filesize($f) . ';';
+        }
+        $dir = (self::$root ?: dirname(__DIR__)) . '/data/compiled';
+        $file = $dir . '/' . $key . '-' . hash('crc32b', $sig . PHP_VERSION) . '.php';
+        if (is_file($file)) {
+            $v = @include $file;
+            if (is_array($v)) {
+                return $v;
+            }
+        }
+        $v = $build();
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0775, true);
+        }
+        $tmp = $file . '.' . getmypid() . '.tmp';
+        if (@file_put_contents($tmp, '<?php return ' . var_export($v, true) . ';') !== false && @rename($tmp, $file)) {
+            foreach (glob($dir . '/' . $key . '-*.php') ?: [] as $old) {
+                if ($old !== $file) {
+                    @unlink($old);
+                }
+            }
+        } else {
+            @unlink($tmp);
+        }
+        return $v;
     }
 }
 
@@ -86,13 +118,16 @@ final class DB
         self::$pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
         self::$pdo->exec('PRAGMA busy_timeout=8000');
         self::$pdo->exec('PRAGMA synchronous=NORMAL');
-        if ((int)self::$pdo->query('PRAGMA user_version')->fetchColumn() < 5) {
+        self::$pdo->exec('PRAGMA temp_store=MEMORY');
+        self::$pdo->exec('PRAGMA cache_size=-8000');
+        self::$pdo->exec('PRAGMA mmap_size=134217728');
+        $ver = (int)self::$pdo->query('PRAGMA user_version')->fetchColumn();
+        if ($ver < 6) {
             self::$pdo->exec('PRAGMA journal_mode=WAL');
             self::$pdo->exec(<<<SQL
 CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS texts (k TEXT PRIMARY KEY, v TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, username TEXT, first_name TEXT, last_name TEXT, is_premium INTEGER DEFAULT 0, first_seen INTEGER, last_seen INTEGER, msg_count INTEGER DEFAULT 0, xp INTEGER DEFAULT 0, balance REAL DEFAULT 0, started INTEGER DEFAULT 0, banned INTEGER DEFAULT 0);
-CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, started INTEGER DEFAULT 0, banned INTEGER DEFAULT 0, first_seen INTEGER);
 CREATE TABLE IF NOT EXISTS chats (id INTEGER PRIMARY KEY, type TEXT, title TEXT, username TEXT, added_at INTEGER, active INTEGER DEFAULT 1, settings TEXT DEFAULT '{}');
 CREATE TABLE IF NOT EXISTS scams (id INTEGER PRIMARY KEY AUTOINCREMENT, target_id INTEGER, target_username TEXT, target_name TEXT, reporter_id INTEGER, reason TEXT, evidence TEXT DEFAULT '[]', status TEXT DEFAULT 'draft', origin_chat INTEGER, created_at INTEGER, decided_at INTEGER, decided_by INTEGER);
 CREATE INDEX IF NOT EXISTS idx_scams_target ON scams(target_id);
@@ -111,9 +146,8 @@ CREATE TABLE IF NOT EXISTS msglog (user_id INTEGER, chat_id INTEGER, hash TEXT, 
 CREATE INDEX IF NOT EXISTS idx_msglog ON msglog(user_id, ts);
 CREATE TABLE IF NOT EXISTS names (user_id INTEGER PRIMARY KEY, name TEXT, ts INTEGER);
 CREATE TABLE IF NOT EXISTS delete_queue (chat_id INTEGER, message_id INTEGER, at INTEGER);
-CREATE TABLE IF NOT EXISTS diamonds (id INTEGER PRIMARY KEY, points REAL NOT NULL DEFAULT 0, total INTEGER NOT NULL DEFAULT 0, last INTEGER NOT NULL DEFAULT 0, jailed_until INTEGER NOT NULL DEFAULT 0, name TEXT, username TEXT, joined INTEGER);
+CREATE TABLE IF NOT EXISTS diamonds (id INTEGER PRIMARY KEY, points REAL NOT NULL DEFAULT 0, total INTEGER NOT NULL DEFAULT 0, last INTEGER NOT NULL DEFAULT 0, jailed_until INTEGER NOT NULL DEFAULT 0);
 CREATE INDEX IF NOT EXISTS idx_diamonds_points ON diamonds(points DESC);
-CREATE INDEX IF NOT EXISTS idx_diamonds_username ON diamonds(username);
 CREATE TABLE IF NOT EXISTS games (id TEXT PRIMARY KEY, kind TEXT, status TEXT, host INTEGER, chat INTEGER, created INTEGER, data TEXT);
 CREATE INDEX IF NOT EXISTS idx_games_status ON games(status, created);
 CREATE INDEX IF NOT EXISTS idx_games_host ON games(host, kind, status);
@@ -121,7 +155,7 @@ CREATE TABLE IF NOT EXISTS jails (id TEXT PRIMARY KEY, chat INTEGER, target INTE
 CREATE TABLE IF NOT EXISTS members (chat INTEGER NOT NULL, uid INTEGER NOT NULL, at INTEGER NOT NULL, PRIMARY KEY (chat, uid));
 CREATE INDEX IF NOT EXISTS idx_members_at ON members(at);
 SQL);
-            self::$pdo->exec('PRAGMA user_version=5');
+            self::lean();
         }
         self::$kv = [];
         foreach (self::$pdo->query('SELECT k, v FROM kv') as $row) {
@@ -140,6 +174,45 @@ SQL);
             }
             self::$pdo->exec("DELETE FROM cache WHERE k LIKE 'fid:%' OR k LIKE 'gpc:%'");
             self::kvSet('schema_v', 3);
+        }
+    }
+
+    private static function lean(): void
+    {
+        $pdo = self::$pdo;
+        $cols = fn(string $t) => array_column($pdo->query("PRAGMA table_info($t)")->fetchAll(), 'name');
+        $pdo->exec('BEGIN IMMEDIATE');
+        try {
+            $moved = false;
+            if (in_array('username', $cols('users'), true)) {
+                $pdo->exec('DROP INDEX IF EXISTS idx_users_username;
+CREATE TABLE users_lean (id INTEGER PRIMARY KEY, started INTEGER DEFAULT 0, banned INTEGER DEFAULT 0, first_seen INTEGER);
+INSERT INTO users_lean(id, started, banned, first_seen) SELECT id, COALESCE(started, 0), COALESCE(banned, 0), first_seen FROM users;
+DROP TABLE users;
+ALTER TABLE users_lean RENAME TO users;');
+                $moved = true;
+            }
+            if (in_array('name', $cols('diamonds'), true)) {
+                $pdo->exec('DROP INDEX IF EXISTS idx_diamonds_username;
+DROP INDEX IF EXISTS idx_diamonds_points;
+CREATE TABLE diamonds_lean (id INTEGER PRIMARY KEY, points REAL NOT NULL DEFAULT 0, total INTEGER NOT NULL DEFAULT 0, last INTEGER NOT NULL DEFAULT 0, jailed_until INTEGER NOT NULL DEFAULT 0);
+INSERT INTO diamonds_lean(id, points, total, last, jailed_until) SELECT id, points, total, last, jailed_until FROM diamonds;
+DROP TABLE diamonds;
+ALTER TABLE diamonds_lean RENAME TO diamonds;
+CREATE INDEX IF NOT EXISTS idx_diamonds_points ON diamonds(points DESC);');
+                $moved = true;
+            }
+            $pdo->exec('PRAGMA user_version=6');
+            $pdo->exec('COMMIT');
+        } catch (Throwable $e) {
+            $pdo->exec('ROLLBACK');
+            throw $e;
+        }
+        if ($moved) {
+            try {
+                $pdo->exec('VACUUM');
+            } catch (Throwable $e) {
+            }
         }
     }
 
@@ -212,27 +285,23 @@ SQL);
 
     public static function touchUser(array $u, bool $countMessage = false, bool $started = false): void
     {
-        $now = time();
-        $c = (int)$countMessage;
-        self::q(
-            'INSERT INTO users(id, username, first_name, last_name, is_premium, first_seen, last_seen, msg_count, xp, started)
-             VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-             ON CONFLICT(id) DO UPDATE SET username=excluded.username, first_name=excluded.first_name, last_name=excluded.last_name,
-             is_premium=excluded.is_premium, last_seen=excluded.last_seen, msg_count=users.msg_count + ?, xp=users.xp + ?,
-             started=MAX(CAST(users.started AS INTEGER), CAST(excluded.started AS INTEGER))',
-            [$u['id'], isset($u['username']) ? strtolower($u['username']) : null, $u['first_name'] ?? null, $u['last_name'] ?? null,
-             (int)!empty($u['is_premium']), $now, $now, $c, $c, (int)$started, $c, $c]
-        );
+        static $seen = [];
+        $id = (int)($u['id'] ?? 0);
+        if ($id <= 0 || isset($seen[$id]) && ($seen[$id] || !$started)) {
+            return;
+        }
+        $row = self::one('SELECT started FROM users WHERE id=?', [$id]);
+        if (!$row) {
+            self::q('INSERT OR IGNORE INTO users(id, first_seen, started) VALUES(?, ?, ?)', [$id, time(), (int)$started]);
+        } elseif ($started && !(int)$row['started']) {
+            self::q('UPDATE users SET started=1 WHERE id=?', [$id]);
+        }
+        $seen[$id] = $started || (int)($row['started'] ?? 0) === 1;
     }
 
     public static function user(int $id): ?array
     {
         return self::one('SELECT * FROM users WHERE id=?', [$id]);
-    }
-
-    public static function userByUsername(string $username): ?array
-    {
-        return self::one('SELECT * FROM users WHERE username=? ORDER BY last_seen DESC LIMIT 1', [strtolower(ltrim($username, '@'))]);
     }
 
     public static function isBanned(int $id): bool
@@ -243,15 +312,8 @@ SQL);
 
     public static function setBanned(int $id, bool $banned): void
     {
-        self::q('INSERT INTO users(id, banned, first_seen, last_seen) VALUES(?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET banned=excluded.banned',
-            [$id, (int)$banned, time(), time()]);
-    }
-
-    public static function addBalance(int $id, float $amount): float
-    {
-        self::q('INSERT INTO users(id, balance, first_seen, last_seen) VALUES(?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET balance=users.balance + ?',
-            [$id, $amount, time(), time(), $amount]);
-        return (float)(self::user($id)['balance'] ?? 0);
+        self::q('INSERT INTO users(id, banned, first_seen) VALUES(?, ?, ?) ON CONFLICT(id) DO UPDATE SET banned=excluded.banned',
+            [$id, (int)$banned, time()]);
     }
 
     public static function userIds(): array
@@ -262,8 +324,7 @@ SQL);
     public static function stats(): array
     {
         $now = time();
-        return self::one('SELECT COUNT(*) total, SUM(started=1) started, SUM(banned=1) banned, SUM(is_premium=1) premium,
-            SUM(last_seen>=?) day, SUM(last_seen>=?) week, SUM(first_seen>=?) fresh FROM users', [$now - 86400, $now - 7 * 86400, $now - 86400]) ?? [];
+        return self::one('SELECT COUNT(*) total, SUM(started=1) started, SUM(banned=1) banned, SUM(first_seen>=?) fresh FROM users', [$now - 86400]) ?? [];
     }
 
     public static function deleteUser(int $id): void
@@ -285,6 +346,13 @@ SQL);
     public static function countUsers(): int
     {
         return (int)self::one('SELECT COUNT(*) c FROM users')['c'];
+    }
+
+    public static function seenChat(array $chat): void
+    {
+        if (!self::one('SELECT 1 FROM chats WHERE id=?', [$chat['id']])) {
+            self::upsertChat($chat);
+        }
     }
 
     public static function upsertChat(array $chat, bool $active = true): void
@@ -484,7 +552,9 @@ final class Cache
 
     public static function forget(string $k): void
     {
-        DB::q('DELETE FROM cache WHERE k=?', [$k]);
+        if (DB::one('SELECT 1 FROM cache WHERE k=?', [$k])) {
+            DB::q('DELETE FROM cache WHERE k=?', [$k]);
+        }
     }
 
     public static function remember(string $k, int $ttl, callable $fn)

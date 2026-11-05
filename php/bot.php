@@ -20,7 +20,7 @@ ignore_user_abort(true);
 set_time_limit(180);
 TG::$hook = true;
 register_shutdown_function([TG::class, 'closeHook']);
-if (!is_array($update) || !isset($update['update_id']) || Cache::throttled('upd:' . $update['update_id'], 86400)) {
+if (!is_array($update) || !isset($update['update_id']) || (function_exists('apcu_add') && !@apcu_add('mybot_upd:' . md5(__DIR__) . ':' . $update['update_id'], 1, 3600) && apcu_exists('mybot_upd:' . md5(__DIR__) . ':' . $update['update_id']))) {
     TG::closeHook();
     exit;
 }

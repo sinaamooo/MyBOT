@@ -171,7 +171,10 @@ final class TG
             (self::$hookSink)($body);
             return;
         }
-        @file_put_contents(Config::$root . '/data/last_update.txt', date('Y-m-d H:i:s') . ' reply=' . ($call['method'] ?? 'api') . "\n");
+        $lu = Config::$root . '/data/last_update.txt';
+        if ((int)@filemtime($lu) < time() - 30) {
+            @file_put_contents($lu, date('Y-m-d H:i:s') . ' reply=' . ($call['method'] ?? 'api') . "\n");
+        }
         while (ob_get_level() > 0) {
             ob_end_clean();
         }
@@ -232,6 +235,11 @@ final class TG
         return $p;
     }
 
+    public static function base(): string
+    {
+        return rtrim(Config::get('TG_API_BASE', 'https://api.telegram.org'), '/');
+    }
+
     private static function raw(string $method, array $p): array
     {
         if (self::$fake) {
@@ -260,7 +268,7 @@ final class TG
             curl_reset(self::$ch);
         }
         $ch = self::$ch;
-        $opts = [CURLOPT_URL => 'https://api.telegram.org/bot' . Config::get('BOT_TOKEN') . '/' . $method, CURLOPT_RETURNTRANSFER => true,
+        $opts = [CURLOPT_URL => self::base() . '/bot' . Config::get('BOT_TOKEN') . '/' . $method, CURLOPT_RETURNTRANSFER => true,
             CURLOPT_TIMEOUT => $files ? 60 : 20, CURLOPT_CONNECTTIMEOUT => 6, CURLOPT_POST => true, CURLOPT_POSTFIELDS => $fields,
             CURLOPT_TCP_KEEPALIVE => 1, CURLOPT_HTTPHEADER => ['Expect:']];
         if (defined('CURL_HTTP_VERSION_2TLS')) {
@@ -327,6 +335,10 @@ final class TG
         }
         self::closeHook();
         $r = self::raw($method, $p);
+        if (empty($r['ok']) && (int)($r['error_code'] ?? 0) === 429 && ($wait = (int)($r['parameters']['retry_after'] ?? 1)) <= 3) {
+            usleep(($wait ?: 1) * 1000000);
+            $r = self::raw($method, $p);
+        }
         if (empty($r['ok'])) {
             $desc = strtolower((string)($r['description'] ?? ''));
             $skip = false;
@@ -361,7 +373,7 @@ final class TG
         $hs = [];
         $proxy = Config::get('TELEGRAM_PROXY') ?: Config::get('PROXY');
         foreach ($calls as $k => [$m, $p]) {
-            $ch = curl_init('https://api.telegram.org/bot' . Config::get('BOT_TOKEN') . '/' . $m);
+            $ch = curl_init(self::base() . '/bot' . Config::get('BOT_TOKEN') . '/' . $m);
             $opts = [CURLOPT_RETURNTRANSFER => true, CURLOPT_POST => true, CURLOPT_POSTFIELDS => json_encode($p, JSON_UNESCAPED_UNICODE),
                 CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'Expect:'], CURLOPT_TIMEOUT => 15, CURLOPT_CONNECTTIMEOUT => 8];
             if ($proxy !== '') {

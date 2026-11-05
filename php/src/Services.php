@@ -913,9 +913,6 @@ final class Resolver
         if ($username === '') {
             return null;
         }
-        if ($row = DB::userByUsername($username)) {
-            return ['kind' => 'user', 'id' => (int)$row['id'], 'name' => trim(($row['first_name'] ?? '') . ' ' . ($row['last_name'] ?? '')) ?: $username, 'username' => $username];
-        }
         if (MTProto::enabled() && ($mt = MTProto::resolve($username))) {
             return $mt;
         }
@@ -1043,7 +1040,9 @@ final class Guard
         $name = trim(($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? ''));
         $hm = self::clockInName($name);
         $prev = DB::one('SELECT name FROM names WHERE user_id=?', [$uid])['name'] ?? null;
-        DB::q('INSERT OR REPLACE INTO names(user_id, name, ts) VALUES(?, ?, ?)', [$uid, $name, time()]);
+        if ($hm && $prev !== $name) {
+            DB::q('INSERT OR REPLACE INTO names(user_id, name, ts) VALUES(?, ?, ?)', [$uid, $name, time()]);
+        }
         if ($hm) {
             if (self::clockIsNow($hm)) {
                 $score = self::addSelf($chat, $uid, 4, 'clock_now');
@@ -1102,9 +1101,9 @@ final class Guard
                 $score += 2;
                 $reasons[] = 'joined<3m';
             }
-            DB::q('UPDATE joins SET msgs=msgs+1 WHERE chat_id=? AND user_id=?', [$chat, $u['id']]);
-        } else {
-            DB::q('INSERT OR IGNORE INTO joins(chat_id, user_id, ts, msgs) VALUES(?, ?, 0, 1)', [$chat, $u['id']]);
+            if ((int)$j['msgs'] < 5) {
+                DB::q('UPDATE joins SET msgs=msgs+1 WHERE chat_id=? AND user_id=?', [$chat, $u['id']]);
+            }
         }
         $first = !$j || (int)$j['msgs'] === 0;
         $ents = $m['entities'] ?? $m['caption_entities'] ?? [];
@@ -1142,7 +1141,7 @@ final class Guard
             $score += 1;
             $reasons[] = 'first_message';
         }
-        if (mb_strlen($text) >= 15) {
+        if (mb_strlen($text) >= 15 && ($hasLink || $fwd || $score > 0 || preg_match('/@[A-Za-z]/', $text))) {
             $h = md5(self::norm($text));
             $other = (int)DB::one('SELECT COUNT(*) c FROM msglog WHERE user_id=? AND hash=? AND chat_id<>? AND ts>=?', [$u['id'], $h, $chat, $now - 900])['c'];
             $same = (int)DB::one('SELECT COUNT(*) c FROM msglog WHERE user_id=? AND hash=? AND chat_id=? AND ts>=?', [$u['id'], $h, $chat, $now - 600])['c'];

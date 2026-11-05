@@ -16,7 +16,7 @@ final class Bot
         'check' => ['Scam', 'check'], 'estelam' => ['Scam', 'check'], 'استعلام' => ['Scam', 'check'],
         'settings' => ['Groups', 'settings'], 'تنظیمات' => ['Groups', 'settings'],
         'panel' => ['Admin', 'panel'], 'admin' => ['Admin', 'panel'], 'پنل' => ['Admin', 'panel'], 'emojis' => ['Admin', 'emojiStatus'], 'ایموجی‌ها' => ['Admin', 'emojiStatus'],
-        'unscam' => ['Admin', 'unscam'], 'addbalance' => ['Admin', 'addBalance'], 'setrate' => ['Admin', 'setRate'],
+        'unscam' => ['Admin', 'unscam'], 'setrate' => ['Admin', 'setRate'],
         'card' => ['Extras', 'card'], 'cart' => ['Extras', 'card'], 'kart' => ['Extras', 'card'], 'کارت' => ['Extras', 'card'],
         'phone' => ['Extras', 'phone'], 'number' => ['Extras', 'phone'], 'shomare' => ['Extras', 'phone'], 'شماره' => ['Extras', 'phone'],
         'arz' => ['Extras', 'arz'], 'ارز' => ['Extras', 'arz'], 'dollar' => ['Extras', 'arz'],
@@ -255,14 +255,10 @@ final class Bot
         if (!$f || !empty($f['is_bot'])) {
             return;
         }
-        $priv = self::isPrivate($m);
-        DB::touchUser($f, true, $priv);
-        if (!$priv) {
-            DB::upsertChat($m['chat']);
-        }
-        $r = $m['reply_to_message']['from'] ?? null;
-        if ($r && empty($r['is_bot'])) {
-            DB::touchUser($r);
+        if (self::isPrivate($m)) {
+            DB::touchUser($f, false, true);
+        } else {
+            DB::seenChat($m['chat']);
         }
     }
 
@@ -287,13 +283,17 @@ final class Bot
             return true;
         }
         $chat = (int)$m['chat']['id'];
-        if (self::isChatAdmin($chat, $u['id'])) {
+        $adm = null;
+        $admin = function () use (&$adm, $chat, $u) {
+            return $adm ??= self::isChatAdmin($chat, $u['id']);
+        };
+        if (Config::isAdmin($u['id'])) {
             return true;
         }
         $text = $m['text'] ?? $m['caption'] ?? '';
         if (Settings::on($chat, 'anti_tabchi')) {
             [$score] = Guard::tabchi($m);
-            if ($score >= Guard::TABCHI_THRESHOLD) {
+            if ($score >= Guard::TABCHI_THRESHOLD && !$admin()) {
                 $min = (int)(Settings::get('tabchi_mute_minutes') ?? 0);
                 self::deleteMsg($m);
                 if (self::mute($chat, $u['id'], $min) && !Cache::throttled("$chat:{$u['id']}:tabchi", 60)) {
@@ -303,7 +303,7 @@ final class Bot
             }
         }
         $sc = DB::findScammer($u['id'], $u['username'] ?? null);
-        if ($sc) {
+        if ($sc && !$admin()) {
             if (Settings::get('auto_ban_scammers')) {
                 TG::api('banChatMember', ['chat_id' => $chat, 'user_id' => $u['id']]);
             }
@@ -313,7 +313,7 @@ final class Bot
         }
         if (Settings::get('force_channels') && Settings::on($chat, 'force_join_groups')) {
             $missing = self::missing($u['id']);
-            if ($missing) {
+            if ($missing && !$admin()) {
                 self::deleteMsg($m);
                 if (!Cache::throttled("$chat:{$u['id']}:fj", 45)) {
                     self::deleteLater(TG::send($chat, UI::t('force_join_group', ['mention' => UI::mention($u)]), self::forceJoinKb($u['id'], $missing)), 90);
@@ -328,11 +328,13 @@ final class Bot
                 $delta = $m['date'] - $rt['date'];
             }
             $score = Guard::selfOnMessage($chat, $u, $text, $m['entities'] ?? $m['caption_entities'] ?? null, $delta);
-            if (self::handleSelf($chat, $u, $score)) {
+            if ($score >= Guard::SELF_THRESHOLD && $admin()) {
+                Guard::selfReset($chat, $u['id']);
+            } elseif (self::handleSelf($chat, $u, $score)) {
                 return false;
             }
         }
-        if ($text !== '' && Settings::on($chat, 'anti_scam') && Guard::scammy($text)) {
+        if ($text !== '' && Settings::on($chat, 'anti_scam') && Guard::scammy($text) && !$admin()) {
             if (!Cache::throttled("$chat:{$u['id']}:scamwarn", 600) && !Cache::throttled("$chat:scamwarn", 30)) {
                 self::deleteLater(self::send($m, UI::t('scam_keyword_warn', ['mention' => UI::mention($u)]), null), 600);
             }
@@ -381,9 +383,6 @@ final class Bot
         }
         $text = trim($m['text'] ?? $m['caption'] ?? '');
         $uid = $m['from']['id'] ?? 0;
-        if (!$priv && $uid && empty($m['from']['is_bot']) && !isset($m['sender_chat']) && Settings::on((int)$m['chat']['id'], 'games')) {
-            Diamonds::touch((int)$m['chat']['id'], (int)$uid);
-        }
         if ($priv && $uid && ($st = State::get($uid))) {
             if (($st['mode'] ?? '') === 'admin' && Config::isAdmin($uid)) {
                 if (preg_match('/^\/cancel\b/i', $text)) {
@@ -446,10 +445,15 @@ final class Bot
             return;
         }
         $chat = (int)$m['chat']['id'];
-        if (!Settings::on($chat, 'anti_self') || self::isChatAdmin($chat, $u['id'])) {
+        if (!Settings::on($chat, 'anti_self') || Config::isAdmin($u['id'])) {
             return;
         }
-        self::handleSelf($chat, $u, Guard::selfOnEdit($chat, $u['id'], $m['edit_date'] - $m['date']));
+        $score = Guard::selfOnEdit($chat, $u['id'], $m['edit_date'] - $m['date']);
+        if ($score >= Guard::SELF_THRESHOLD && self::isChatAdmin($chat, $u['id'])) {
+            Guard::selfReset($chat, $u['id']);
+            return;
+        }
+        self::handleSelf($chat, $u, $score);
     }
 
     private static function callback(array $cq): void

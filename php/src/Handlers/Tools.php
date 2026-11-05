@@ -24,10 +24,10 @@ final class Tools
         self::react($m);
     }
 
-    public static function answerAmount(array $m, float $amount, string $unit, bool $silent): bool
+    public static function answerAmount(array $m, float $amount, string $unit, bool $silent, ?bool $guess = null): bool
     {
         $r = Currencies::resolve($unit);
-        if (!$r) {
+        if (!$r || ($r[0] === 'crypto_guess' && !($guess ?? !$silent) && !Market::coin($r[1]))) {
             return false;
         }
         $a = Convert::run($amount, $r[0], $r[1]);
@@ -364,7 +364,6 @@ final class Tools
         }
         ['info' => $info, 'photos' => $photos, 'gifts' => $gifts] = TG::multi(['info' => ['getChat', ['chat_id' => $t['id']]],
             'photos' => ['getUserProfilePhotos', ['user_id' => $t['id'], 'limit' => 1]], 'gifts' => ['getUserGifts', ['user_id' => $t['id'], 'limit' => 1]]]);
-        $row = DB::user($t['id']) ?? [];
         $photo = !empty($photos['total_count']) ? end($photos['photos'][0])['file_id'] : null;
         $dc = $photo ? Account::dc($photo) : null;
         $level = null;
@@ -377,15 +376,13 @@ final class Tools
             $b = $info['birthdate'];
             $bd = !empty($b['year']) ? sprintf('%d/%02d/%02d', $b['year'], $b['month'], $b['day']) : sprintf('%02d/%02d', $b['month'], $b['day']);
         }
-        $xp = (int)($row['xp'] ?? 0);
         $text = UI::t('account', [
             'name' => UI::mention($t), 'id' => $t['id'], 'username' => UI::uname($t['username'] ?? null),
             'premium_icon' => UI::badge('PREMIUM', '💫'), 'premium' => !empty($t['is_premium']) ? '✅   دارد' : '❌   ندارد', 'level' => $level,
             'created' => Fmt::jalaliLong(Account::created((int)$t['id'])), 'dc' => $dc ? "DC$dc • " . (Account::DC[$dc] ?? '') : null,
             'lang' => !empty($t['language_code']) ? strtoupper($t['language_code']) : null, 'birthdate' => $bd,
             'bio' => !empty($info['bio']) ? UI::esc($info['bio']) : null, 'gifts' => $gifts ? Fmt::int($gifts['total_count'] ?? 0) : null,
-            'bot_level' => Account::level($xp), 'xp' => Fmt::int($xp), 'msgs' => Fmt::int($row['msg_count'] ?? 0),
-            'balance' => Fmt::num($row['balance'] ?? 0), 'joined' => !empty($row['first_seen']) ? Fmt::jalali((int)$row['first_seen'], false) : null,
+            'diamonds' => Fmt::int($pts = Diamonds::points((int)$t['id'])), 'dlevel' => Diamonds::level($pts),
         ]);
         if ($photo && mb_strlen($text) <= 1024) {
             $extra = Bot::isPrivate($m) ? [] : ['reply_parameters' => Bot::replyParams($m)];

@@ -118,11 +118,10 @@ final class Admin
         if (!$u) {
             return ["⚠️ کاربر <code>$id</code> در دیتابیس ربات نیست.", UI::kb([[UI::raw('⛔️ مسدود / آزاد', "adm:uban:$id", 'danger')], self::back()])];
         }
-        $name = trim(($u['first_name'] ?? '') . ' ' . ($u['last_name'] ?? '')) ?: '—';
-        $text = "👤 <b>اطلاعات کاربر</b>\n<blockquote>👤     نام: <a href=\"tg://user?id=$id\">" . UI::esc($name) . "</a>\n🆔     آیدی عددی: <code>$id</code>\n🔗     یوزرنیم: "
-            . UI::uname($u['username'] ?? null) . "\n⭐️     پریمیوم: " . (!empty($u['is_premium']) ? 'دارد' : 'ندارد') . "\n💬     پیام‌ها: <code>" . Fmt::int($u['msg_count'] ?? 0)
-            . "</code>\n🗓     اولین بازدید: " . (!empty($u['first_seen']) ? Fmt::jalali((int)$u['first_seen']) : '—') . "\n🗓     آخرین بازدید: "
-            . (!empty($u['last_seen']) ? Fmt::jalali((int)$u['last_seen']) : '—') . "\n✅     استارت ربات: " . (!empty($u['started']) ? 'بله' : 'خیر')
+        $nm = Diamonds::names([$id])[$id] ?? ['name' => '', 'username' => null];
+        $name = $nm['name'] !== '' ? $nm['name'] : '—';
+        $text = "👤 <b>اطلاعات کاربر</b>\n\n<blockquote>👤     نام: <a href=\"tg://user?id=$id\">" . UI::esc($name) . "</a>\n🆔     آیدی عددی: <code>$id</code>\n🔗     یوزرنیم: "
+            . UI::uname($nm['username'] ?? null) . "\n💎     الماس: <code>" . Fmt::int(Diamonds::points($id)) . "</code>\n✅     استارت ربات: " . (!empty($u['started']) ? 'بله' : 'خیر')
             . "\n⛔️     وضعیت: " . (!empty($u['banned']) ? 'مسدود' : 'آزاد') . '</blockquote>';
         $kb = UI::kb([[UI::raw(!empty($u['banned']) ? '✅ آزاد کردن' : '⛔️ مسدود کردن', "adm:uban:$id", !empty($u['banned']) ? 'success' : 'danger'),
             UI::raw('⛔️ حذف', "adm:udel:$id", 'danger')], [UI::raw('📨 پیام', "adm:upm:$id")], self::back()]);
@@ -447,8 +446,7 @@ final class Admin
                 $st = DB::stats();
                 TG::answer($cq['id']);
                 self::editOrSend($cq, "📊 <b>آمار کاربران</b>\n<blockquote>👤     کل کاربران: <b>" . Fmt::int($st['total'] ?? 0) . "</b>\n✅     استارت کرده: <b>" . Fmt::int($st['started'] ?? 0)
-                    . "</b>\n🔥     فعال ۲۴ ساعت: <b>" . Fmt::int($st['day'] ?? 0) . "</b>\n📈     فعال ۷ روز: <b>" . Fmt::int($st['week'] ?? 0) . "</b>\n🆙     جدید امروز: <b>"
-                    . Fmt::int($st['fresh'] ?? 0) . "</b>\n⭐️     پریمیوم: <b>" . Fmt::int($st['premium'] ?? 0) . "</b>\n⛔️     مسدود: <b>" . Fmt::int($st['banned'] ?? 0)
+                    . "</b>\n🆙     جدید امروز: <b>" . Fmt::int($st['fresh'] ?? 0) . "</b>\n⛔️     مسدود: <b>" . Fmt::int($st['banned'] ?? 0)
                     . "</b>\n👥     گروه‌های فعال: <b>" . Fmt::int(DB::countGroups()) . '</b></blockquote>', UI::kb([self::back()]));
                 return;
             case 'groups':
@@ -765,7 +763,8 @@ final class Admin
                 return;
             case 'find':
                 $q = ltrim(Fmt::en($text), '@');
-                $u = ctype_digit($q) ? DB::user((int)$q) : DB::userByUsername($q);
+                $rid = ctype_digit($q) ? (int)$q : (int)(Resolver::resolve($q)['id'] ?? 0);
+                $u = $rid ? (DB::user($rid) ?? ['id' => $rid]) : null;
                 State::clear($uid);
                 if (!$u) {
                     TG::send($chat, '⚠️ کاربر در دیتابیس ربات پیدا نشد.', self::homeKb());
@@ -816,8 +815,7 @@ final class Admin
                 $who = $mm[1];
                 $id = ctype_digit($who) ? (int)$who : null;
                 if ($id === null) {
-                    $row = DB::userByUsername($who) ?? DB::one('SELECT id FROM diamonds WHERE LOWER(username)=? LIMIT 1', [strtolower(ltrim($who, '@'))]);
-                    $id = $row ? (int)$row['id'] : null;
+                    $id = (int)(Resolver::resolve($who)['id'] ?? 0) ?: null;
                 }
                 if (!$id) {
                     TG::send($chat, '⚠️ این کاربر در دیتابیس ربات نیست. آیدی عددی‌اش را بفرستید.');
@@ -923,16 +921,6 @@ final class Admin
         }
         DB::updateScam((int)$args, ['status' => 'revoked']);
         TG::send($m['chat']['id'], '✅ لغو شد.');
-    }
-
-    public static function addBalance(array $m, string $args): void
-    {
-        $p = preg_split('/\s+/', trim($args));
-        if (count($p) !== 2 || !ctype_digit($p[0]) || !is_numeric($p[1])) {
-            TG::send($m['chat']['id'], '/addbalance USER_ID AMOUNT');
-            return;
-        }
-        TG::send($m['chat']['id'], '✅ موجودی جدید: ' . Fmt::num(DB::addBalance((int)$p[0], (float)$p[1])));
     }
 
     public static function setRate(array $m, string $args): void

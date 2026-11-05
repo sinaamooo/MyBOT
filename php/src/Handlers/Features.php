@@ -797,7 +797,7 @@ final class TextRouter
         }
         if ($conv && preg_match('/^(?:قیمت|نرخ|price|ارزش)\s+(.+)$/iu', $text, $pm)) {
             $t = trim($pm[1]);
-            ($s = Parse::amount($t)) ? Tools::answerAmount($m, $s[0], $s[1], !$priv) : Tools::answerAmount($m, 1, $t, !$priv);
+            ($s = Parse::amount($t)) ? Tools::answerAmount($m, $s[0], $s[1], !$priv, true) : Tools::answerAmount($m, 1, $t, !$priv, true);
             return;
         }
         if ($conv && Currencies::word($text, 'market')) {

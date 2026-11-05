@@ -19,6 +19,15 @@ final class Currencies
         if (self::$fiatIdx !== null) {
             return;
         }
+        $src = array_map(fn($n) => dirname(__FILE__) . '/data/' . $n . '.json', ['units', 'fiat', 'crypto']);
+        [self::$fiatIdx, self::$cryptoIdx, self::$goldIdx] = Config::compiled('cur_idx', array_merge($src, [__FILE__]), function () {
+            self::index();
+            return [self::$fiatIdx, self::$cryptoIdx, self::$goldIdx];
+        });
+    }
+
+    private static function index(): void
+    {
         self::$fiatIdx = [];
         self::$cryptoIdx = [];
         self::$goldIdx = [];
@@ -170,7 +179,28 @@ final class Prices
         if ($m) {
             return ['symbol' => $sym, 'price' => $m['price'], 'change' => $m['change'], 'name' => $m['name'], 'sources' => ['market']];
         }
-        return Cache::remember('q:' . $sym, 45, fn() => self::fetchQuote($sym));
+        $k = 'q:' . $sym;
+        $v = Cache::get($k, $hit);
+        if ($hit) {
+            return $v;
+        }
+        $lock = @fopen(sys_get_temp_dir() . '/mybot_q_' . md5(Config::$root . $sym) . '.lock', 'c');
+        if ($lock && flock($lock, LOCK_EX)) {
+            $v = Cache::get($k, $hit);
+            if ($hit) {
+                flock($lock, LOCK_UN);
+                return $v;
+            }
+        }
+        try {
+            $v = self::fetchQuote($sym);
+            Cache::set($k, $v, $v ? 45 : 600);
+        } finally {
+            if ($lock) {
+                flock($lock, LOCK_UN);
+            }
+        }
+        return $v;
     }
 
     private static function fetchQuote(string $sym): ?array

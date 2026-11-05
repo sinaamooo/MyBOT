@@ -24,10 +24,27 @@ final class Diamonds
 
     private static function ensure(int $uid, string $name = '', string $uname = ''): void
     {
-        DB::q('INSERT OR IGNORE INTO diamonds(id, points, total, last, jailed_until, name, username, joined) VALUES(?, 0, 0, 0, 0, ?, ?, ?)', [$uid, $name, $uname, time()]);
-        if ($name !== '' || $uname !== '') {
-            DB::q('UPDATE diamonds SET name=COALESCE(NULLIF(?, \'\'), name), username=COALESCE(NULLIF(?, \'\'), username) WHERE id=?', [$name, $uname, $uid]);
+        DB::q('INSERT OR IGNORE INTO diamonds(id, points, total, last, jailed_until) VALUES(?, 0, 0, 0, 0)', [$uid]);
+    }
+
+    public static function names(array $ids): array
+    {
+        $out = [];
+        $need = [];
+        foreach (array_unique(array_map('intval', $ids)) as $id) {
+            $c = Cache::get("nm:$id", $hit);
+            if ($hit && is_array($c)) {
+                $out[$id] = $c;
+            } else {
+                $need[$id] = ['getChat', ['chat_id' => $id]];
+            }
         }
+        foreach ($need ? TG::multi($need) : [] as $id => $r) {
+            $v = ['name' => is_array($r) ? UI::fullName($r) : '', 'username' => is_array($r) ? ($r['username'] ?? null) : null];
+            Cache::set("nm:$id", $v, is_array($r) ? 86400 : 3600);
+            $out[$id] = $v;
+        }
+        return $out;
     }
 
     public static function add(int $uid, float $delta, string $name = '', string $uname = ''): bool
@@ -84,7 +101,9 @@ final class Diamonds
         $u = $m['from'];
         $uid = (int)$u['id'];
         $now = time();
-        self::ensure($uid, UI::fullName($u), (string)($u['username'] ?? ''));
+        self::ensure($uid);
+        self::touch((int)$m['chat']['id'], $uid);
+        Cache::set("nm:$uid", ['name' => UI::fullName($u), 'username' => $u['username'] ?? null], 86400);
         $row = self::get($uid);
         $jail = (int)$row['jailed_until'] - $now;
         if ($jail > 0) {
@@ -126,19 +145,20 @@ final class Diamonds
         }
         $level = self::level((float)$row['points']);
         $next = self::nextAt($level);
-        return UI::t('dm_me', ['name' => UI::esc(($row['name'] ?? '') !== '' ? $row['name'] : UI::fullName($u)), 'points' => Fmt::int($row['points']), 'level' => $level,
+        return UI::t('dm_me', ['name' => UI::esc(UI::fullName($u)), 'points' => Fmt::int($row['points']), 'level' => $level,
             'total' => Fmt::int($row['total']), 'left' => $next > 0 ? Fmt::int(max(0, $next - (float)$row['points'])) : '—']);
     }
 
     public static function topText(): string
     {
-        $rows = DB::all('SELECT * FROM diamonds WHERE points > 0 ORDER BY points DESC LIMIT 10');
+        $rows = DB::all('SELECT id, points FROM diamonds WHERE points > 0 ORDER BY points DESC LIMIT 10');
         if (!$rows) {
             return UI::t('dm_top_none');
         }
+        $nm = self::names(array_column($rows, 'id'));
         $lines = [];
         foreach ($rows as $i => $r) {
-            $lines[] = UI::fill(UI::template('dm_top_line'), ['medal' => ['👑', '💎', '🏅'][$i] ?? '🔹', 'rank' => $i + 1, 'name' => UI::esc(($r['name'] ?? '') !== '' ? $r['name'] : 'کاربر ' . $r['id']),
+            $lines[] = UI::fill(UI::template('dm_top_line'), ['medal' => ['👑', '💎', '🏅'][$i] ?? '🔹', 'rank' => $i + 1, 'name' => UI::esc(($nm[(int)$r['id']]['name'] ?? '') !== '' ? $nm[(int)$r['id']]['name'] : 'کاربر ' . $r['id']),
                 'points' => Fmt::int($r['points']), 'level' => self::level((float)$r['points'])]);
         }
         return UI::t('dm_top', ['lines' => implode("\n", $lines)]);
@@ -160,7 +180,14 @@ final class Diamonds
         if ($pts <= 0) {
             return [0, 0.0];
         }
-        return [(int)(DB::one('SELECT COUNT(*) n FROM diamonds WHERE points > ?', [$pts])['n'] ?? 0) + 1, $pts];
+        $k = "rk:$uid";
+        $c = Cache::get($k);
+        if (is_array($c) && (float)$c[1] === $pts) {
+            return [(int)$c[0], $pts];
+        }
+        $rank = (int)(DB::one('SELECT COUNT(*) n FROM diamonds WHERE points > ?', [$pts])['n'] ?? 0) + 1;
+        Cache::set($k, [$rank, $pts], 20);
+        return [$rank, $pts];
     }
 
     private static function avatars(array $ids): array
@@ -202,7 +229,7 @@ final class Diamonds
         $dl = [];
         foreach ($files ? TG::multi($files) : [] as $id => $r) {
             if (!empty($r['file_path'])) {
-                $dl[$id] = ['url' => 'https://api.telegram.org/file/bot' . Config::get('BOT_TOKEN') . '/' . $r['file_path'], 'timeout' => 6,
+                $dl[$id] = ['url' => TG::base() . '/file/bot' . Config::get('BOT_TOKEN') . '/' . $r['file_path'], 'timeout' => 6,
                     'proxy' => Config::get('TELEGRAM_PROXY') ?: Config::get('PROXY'), 'headers' => ['Accept' => '*/*']];
             }
         }
@@ -233,12 +260,20 @@ final class Diamonds
         $chat = (int)$m['chat']['id'];
         $uid = (int)($m['from']['id'] ?? 0);
         $priv = Bot::isPrivate($m);
-        $global = DB::all("SELECT d.id, d.points, COALESCE(NULLIF(d.name, ''), TRIM(COALESCE(u.first_name, '') || ' ' || COALESCE(u.last_name, ''))) AS name, COALESCE(NULLIF(d.username, ''), u.username) AS username FROM diamonds d LEFT JOIN users u ON u.id = d.id WHERE d.points > 0 ORDER BY d.points DESC LIMIT 3");
+        $global = DB::all("SELECT d.id, d.points FROM diamonds d WHERE d.points > 0 ORDER BY d.points DESC LIMIT 3");
         if (!$global) {
             Bot::reply($m, UI::t('dm_top_none'), null);
             return;
         }
-        $group = $priv ? [] : DB::all("SELECT d.id, d.points, COALESCE(NULLIF(d.name, ''), TRIM(COALESCE(u.first_name, '') || ' ' || COALESCE(u.last_name, ''))) AS name, COALESCE(NULLIF(d.username, ''), u.username) AS username FROM members mb JOIN diamonds d ON d.id = mb.uid LEFT JOIN users u ON u.id = d.id WHERE mb.chat = ? AND d.points > 0 ORDER BY d.points DESC LIMIT 5", [$chat]);
+        $group = $priv ? [] : DB::all("SELECT d.id, d.points FROM members mb JOIN diamonds d ON d.id = mb.uid WHERE mb.chat = ? AND d.points > 0 ORDER BY d.points DESC LIMIT 5", [$chat]);
+        $nm = self::names(array_merge(array_column($global, 'id'), array_column($group, 'id')));
+        foreach ([&$global, &$group] as &$list) {
+            foreach ($list as &$r) {
+                $r += $nm[(int)$r['id']] ?? ['name' => '', 'username' => null];
+            }
+            unset($r);
+        }
+        unset($list);
         [$rank, $pts] = self::rankOf($uid);
         $me = $rank > 0 ? UI::fill(UI::template('dm_board_me'), ['rank' => Fmt::int($rank), 'points' => Fmt::int($pts)]) : UI::template('dm_board_me_none');
         $card = PriceCard::ready();

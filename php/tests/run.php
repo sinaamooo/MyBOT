@@ -462,6 +462,9 @@ Cache::forget('admins:-4400');
 reset_calls();
 feed(msg('سلام', -4400, 801));
 feed(msg('خوبی', -4400, 802));
+check(!sent(['getChatAdministrators']) && !sent(['getChatMember']), 'plain group chatter needs no admin lookup');
+Bot::isChatAdmin(-4400, 801);
+Bot::isChatAdmin(-4400, 802);
 check(count(sent(['getChatAdministrators'])) === 1 && !sent(['getChatMember']), 'admin list cached per chat');
 DB::touchUser(['id' => 4242, 'first_name' => 's'], true, true);
 DB::touchUser(['id' => 4242, 'first_name' => 's']);
@@ -491,13 +494,13 @@ feed(msg('الماس', 501, 501));
 check(str_contains((string)last_text(), 'فقط داخل گروه'), 'games group only');
 DB::touchUser(['id' => 502, 'first_name' => 'Reza', 'username' => 'reza_t'], true, true);
 cb('adm:dmadj', 999, 999);
-feed(msg('@reza_t +1000', 999, 999));
+feed(msg('502 +1000', 999, 999));
 check(Diamonds::points(502) === 1000.0, 'admin add diamonds');
 cb('adm:dmadj', 999, 999);
 feed(msg('502 ـ200', 999, 999));
 check(Diamonds::points(502) === 800.0, 'admin remove diamonds');
 reset_calls();
-feed(msg('سلام', -7100, 502, null, null, 'Reza'));
+feed(msg('الماس', -7100, 502, null, null, 'Reza'));
 feed(msg('تاپ الماسی', -7100, 501, null, null, 'Ali'));
 $tp = sent(['sendPhoto']);
 $cap = $tp[0][1]['caption'] ?? '';
@@ -514,19 +517,21 @@ reset_calls();
 feed(msg('حساب', -7100, 502, null, null, 'Reza'));
 $acc = sent(['sendMessage']);
 $ab = buttons($acc[0] ?? [0, []]);
-check($acc && str_contains($ab[0]['text'] ?? '', '800') && str_starts_with($ab[0]['callback_data'] ?? '', 'gb:'), 'account shows diamonds on glass button');
+$p502 = Fmt::int(Diamonds::points(502));
+check($acc && str_contains($ab[0]['text'] ?? '', $p502) && str_starts_with($ab[0]['callback_data'] ?? '', 'gb:'), 'account shows diamonds on glass button');
 reset_calls();
 cb($ab[0]['callback_data'], 502, -7100);
-check(!empty($GLOBALS['calls'][0][1]['show_alert']) && str_contains($GLOBALS['calls'][0][1]['text'] ?? '', '800'), 'account button alert');
+check(!empty($GLOBALS['calls'][0][1]['show_alert']) && str_contains($GLOBALS['calls'][0][1]['text'] ?? '', $p502), 'account button alert');
 Diamonds::adjust(501, 500);
 $a0 = Diamonds::points(501);
 reset_calls();
 feed(msg('دوز 100', -7100, 501, null, null, 'Ali'));
 $gid = DB::one("SELECT id FROM games WHERE kind='dooz' AND host=501 AND status='open'")['id'] ?? '';
 check($gid !== '' && Diamonds::points(501) === $a0 - 100, 'dooz created and stake taken');
+$b502 = Diamonds::points(502);
 cb("gd:j:$gid", 502, -7100);
 $g = Games::load($gid);
-check($g['status'] === 'playing' && Diamonds::points(502) === 700.0, 'dooz joined');
+check($g['status'] === 'playing' && Diamonds::points(502) === $b502 - 100, 'dooz joined');
 foreach ([[501, 0], [502, 3], [501, 1], [502, 4], [501, 2]] as [$who, $cell]) {
     cb("gd:m:$gid:$cell", $who, -7100);
 }
@@ -853,5 +858,46 @@ Settings::set('emoji_map', $dm);
 Config::set('KASHIDA', '1');
 check(UI::stretch('لینک') === 'لـیـنـک' && UI::stretch('دارد') === 'دارد' && UI::kashida('🔗 لینک <code>آدرس</code> {name}') === '🔗 لـیـنـک <code>آدرس</code> {name}', 'kashida stretch');
 Config::set('KASHIDA', '0');
+base_http();
+$hx = 0;
+$prevFake = Http::$fake;
+Http::$fake = function (array $r) use (&$hx, $prevFake) {
+    if (str_contains($r['url'], 'ticker')) {
+        $hx++;
+    }
+    return $prevFake($r);
+};
+reset_calls();
+feed(msg('ok 571', -4401, 803));
+check(!sent(['sendMessage']) && !sent(['sendPhoto']) && $hx === 0, 'group chatter with unknown ticker makes no lookup');
+feed(msg('571 zzq', 4402, 4402));
+$n = $hx;
+check($n > 0, 'private unknown ticker is looked up');
+feed(msg('571 zzq', 4402, 4402));
+check($hx === $n, 'unknown ticker miss is cached');
+Http::$fake = $prevFake;
+$lean = sys_get_temp_dir() . '/mybot_lean_' . getmypid() . '.db';
+DB::connect($lean);
+DB::connect($lean);
+check((int)DB::pdo()->query('PRAGMA user_version')->fetchColumn() === 6 && array_column(DB::all('PRAGMA table_info(users)'), 'name') === ['id', 'started', 'banned', 'first_seen']
+    && array_column(DB::all('PRAGMA table_info(diamonds)'), 'name') === ['id', 'points', 'total', 'last', 'jailed_until'], 'lean schema');
+foreach (['', '-wal', '-shm'] as $x) {
+    @unlink($lean . $x);
+}
+$old = new PDO('sqlite:' . $lean);
+$old->exec("CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT, first_name TEXT, last_name TEXT, is_premium INTEGER DEFAULT 0, first_seen INTEGER, last_seen INTEGER, msg_count INTEGER DEFAULT 0, xp INTEGER DEFAULT 0, balance REAL DEFAULT 0, started INTEGER DEFAULT 0, banned INTEGER DEFAULT 0);
+CREATE INDEX idx_users_username ON users(username);
+CREATE TABLE diamonds (id INTEGER PRIMARY KEY, points REAL NOT NULL DEFAULT 0, total INTEGER NOT NULL DEFAULT 0, last INTEGER NOT NULL DEFAULT 0, jailed_until INTEGER NOT NULL DEFAULT 0, name TEXT, username TEXT, joined INTEGER);
+CREATE INDEX idx_diamonds_points ON diamonds(points DESC);
+INSERT INTO users(id, username, first_name, first_seen, started, banned, balance) VALUES (11, 'aa', 'Ali', 100, 1, 0, 5), (12, 'bb', 'Reza', 200, 0, 1, 0);
+INSERT INTO diamonds(id, points, total, last, jailed_until, name, username) VALUES (11, 42.5, 3, 7, 0, 'Ali', 'aa');
+PRAGMA user_version=5;");
+$old = null;
+DB::connect($lean);
+check(array_column(DB::all('PRAGMA table_info(users)'), 'name') === ['id', 'started', 'banned', 'first_seen'] && DB::all('SELECT * FROM users ORDER BY id') === [['id' => 11, 'started' => 1, 'banned' => 0, 'first_seen' => 100], ['id' => 12, 'started' => 0, 'banned' => 1, 'first_seen' => 200]]
+    && DB::one('SELECT * FROM diamonds') === ['id' => 11, 'points' => 42.5, 'total' => 3, 'last' => 7, 'jailed_until' => 0] && DB::one("SELECT 1 FROM sqlite_master WHERE name='idx_diamonds_points'"), 'old data migrated to lean schema');
+foreach (['', '-wal', '-shm'] as $x) {
+    @unlink($lean . $x);
+}
 echo "passed: $pass, failed: $fail\n";
 exit($fail ? 1 : 0);
