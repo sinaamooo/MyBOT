@@ -76,11 +76,11 @@
   "desc": "سربرگ چکر ولت ({address} {count})"
  },
  "wallet_chain": {
-  "text": "{chain_icon} <b>{chain}</b>\n\n<blockquote>{dorange_icon}    موجودی: <code>{balance}</code> {symbol}\n{dgreen_icon}    ارزش دلاری: <code>{usd}</code> $\n{dpeach_icon}    ارزش تومانی: <code>{toman}</code>\n{dblue_icon}    تعداد تراکنش: <code>{txs}</code>\n{dolive_icon}    NFT: <code>{nfts}</code>\n{dbrown_icon}    تاریخ ساخت ولت: {created}\n{status_icon}    وضعیت: {status}\n{dnavy_icon}    <a href=\"{explorer}\">مشاهده در اکسپلورر</a></blockquote>",
+  "text": "{chain_icon} <b>{chain}</b>\n\n<blockquote>{dorange_icon} موجودی: <code>{balance}</code> {symbol}\n{dgreen_icon} ارزش دلاری: <code>{usd}</code> $\n{dpeach_icon} ارزش تومانی: <code>{toman}</code>\n{dblue_icon} تعداد تراکنش: <code>{txs}</code>\n{dolive_icon} NFT: <code>{nfts}</code>\n{dbrown_icon} تاریخ ساخت ولت: {created}\n{status_icon} وضعیت: {status}\n{dnavy_icon} <a href=\"{explorer}\">مشاهده در اکسپلورر</a></blockquote>",
   "desc": "بلوک هر شبکه در چکر ولت ({chain} {balance} {symbol} {usd} {toman} {tokens} {txs} {nfts} {status} {explorer})"
  },
  "wallet_footer": {
-  "text": "📊 <b>مجموع دارایی</b>\n\n<blockquote>{dgreen_icon}    دلار: <code>{total_usd}</code> $\n{dpeach_icon}    تومان: <code>{total_toman}</code></blockquote>\n🗓 {time}",
+  "text": "📊 <b>مجموع دارایی</b>\n\n<blockquote>{dgreen_icon} دلار: <code>{total_usd}</code> $\n{dpeach_icon} تومان: <code>{total_toman}</code></blockquote>\n🗓 {time}",
   "desc": "پاورقی چکر ولت ({total_usd} {total_toman} {time})"
  },
  "wallet_not_found": {
@@ -92,7 +92,7 @@
   "desc": "در حال چک هش"
  },
  "tx_result": {
-  "text": "🧾 <b>نتیجه چکر هش تراکنش</b>\n\n<blockquote>{dblue_icon}    شبکه: <b>{network}</b>\n{status_icon}    وضعیت: {status}\n{dorange_icon}    مقدار: <code>{amount}</code>\n{dgreen_icon}    ارزش دلاری: <code>{usd}</code> $\n{dpeach_icon}    ارزش تومانی: <code>{toman}</code>\n{dolive_icon}    توکن: {token}\n{dbrown_icon}    کانترکت / آیدی توکن: <code>{contract}</code>\n{dnavy_icon}    از: <code>{sender}</code>\n{dblue_icon}    به: <code>{receiver}</code>\n{dred_icon}    کارمزد: <code>{fee}</code>\n{dbrown_icon}    بلاک: <code>{block}</code>\n{dgreen_icon}    تاییدها: <code>{confirmations}</code>\n{dnavy_icon}    زمان: {time}</blockquote>\n#️⃣ <code>{hash}</code>\n🔎 <a href=\"{explorer}\">مشاهده در اکسپلورر</a>",
+  "text": "🧾 <b>نتیجه چکر هش تراکنش</b>\n\n<blockquote>{dblue_icon} شبکه: <b>{network}</b>\n{status_icon} وضعیت: {status}\n{dorange_icon} مقدار: <code>{amount}</code>\n{dgreen_icon} ارزش دلاری: <code>{usd}</code> $\n{dpeach_icon} ارزش تومانی: <code>{toman}</code>\n{dolive_icon} توکن: {token}\n{dbrown_icon} کانترکت / آیدی توکن: <code>{contract}</code>\n{dnavy_icon} از: <code>{sender}</code>\n{dblue_icon} به: <code>{receiver}</code>\n{dred_icon} کارمزد: <code>{fee}</code>\n{dbrown_icon} بلاک: <code>{block}</code>\n{dgreen_icon} تاییدها: <code>{confirmations}</code>\n{dnavy_icon} زمان: {time}</blockquote>\n#️⃣ <code>{hash}</code>\n🔎 <a href=\"{explorer}\">مشاهده در اکسپلورر</a>",
   "desc": "نتیجه چک هش ({network} {status} {amount} {usd} {toman} {sender} {receiver} {fee} {block} {confirmations} {time} {hash} {explorer})"
  },
  "tx_not_found": {
@@ -104,7 +104,7 @@
   "desc": "لیست تراکنش‌های TRC20 ({address} {page} {pages} {total} {items})"
  },
  "tron_transfer_item": {
-  "text": "<blockquote>{dir_icon}    {kind}: <b>{amount} {symbol}</b>\n{dnavy_icon}    زمان: {time}\n{dblue_icon}    {side}: <code>{party}</code>\n{dorange_icon}    <a href=\"https://tronscan.org/#/transaction/{hash}\">مشاهده تراکنش</a></blockquote>",
+  "text": "<blockquote>{dir_icon} {kind}: <b>{amount} {symbol}</b>\n{dnavy_icon} زمان: {time}\n{dblue_icon} {side}: <code>{party}</code>\n{dorange_icon} <a href=\"https://tronscan.org/#/transaction/{hash}\">مشاهده تراکنش</a></blockquote>",
   "desc": "هر تراکنش در لیست TRC20 ({direction} {amount} {symbol} {time} {party} {hash})"
  },
  "tron_transfers_empty": {

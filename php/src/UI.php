@@ -40,6 +40,9 @@ final class UI
         return [array_column($opened, 1), $closing];
     }
 
+    const DOTS = ['5143130625795951140' => 1, '5145802018144651327' => 1, '5143378316559911157' => 1, '5143282547379144501' => 1, '5143403880205256993' => 1,
+        '5143315038806738992' => 1, '5143612160349309608' => 1, '5143573900780635800' => 1, '5143392099109964060' => 1];
+
     const ICONS = ['toman' => '🇮🇷', 'usd' => '🇺🇸', 'usdt' => '💵', 'ton' => '💠', 'trx' => '🔴', 'btc' => '🪙', 'eth' => '💎', 'sol' => '🌟',
         'nft' => '🎞', 'premium' => '💫', 'gold' => '🏅', 'wallet' => '👛', 'irr' => '💰',
         'dorange' => '🟠', 'dpeach' => '🟠', 'dgreen' => '🟢', 'dblue' => '🔵', 'dbrown' => '🟤', 'dolive' => '🟤', 'dred' => '🔴', 'dblack' => '⚫️', 'dnavy' => '🔵'];
@@ -348,23 +351,29 @@ final class UI
                 $follow = $chunks[$j];
                 break;
             }
-            $out .= preg_replace_callback('/\n|' . substr($rx, 1, -2) . '/u', function ($m) use ($lookup, $quote, &$used, $c, $follow) {
-                [$e, $at] = $m[0];
-                if ($e === "\n") {
+            $out .= preg_replace_callback('/\n|(?:' . substr($rx, 1, -2) . ')[ \t]*/u', function ($m) use ($lookup, $quote, &$used, $c, $follow) {
+                [$full, $at] = $m[0];
+                if ($full === "\n") {
                     $used = false;
-                    return $e;
+                    return $full;
                 }
-                $after = substr($c, $at + strlen($e));
-                $sp = strspn($after, ' ');
-                $next = substr($after, $sp, 1);
+                $e = rtrim($full, " \t");
+                $spaces = substr($full, strlen($e));
+                $id = $lookup[str_replace("\u{FE0F}", '', $e)] ?? '';
+                $after = substr($c, $at + strlen($full));
+                $next = substr($after, 0, 1);
+                $sp = strlen($spaces);
                 if ($next === '') {
                     $sp += strspn($follow, ' ');
                     $next = substr($follow, strspn($follow, ' '), 1);
                 }
-                $pad = ($quote && $next !== '' && $next !== "\n") ? str_repeat(' ', max(0, 4 - $sp)) : '';
                 $used = true;
-                $id = $lookup[str_replace("\u{FE0F}", '', $e)] ?? '';
-                return '<tg-emoji emoji-id="' . $id . '">' . $e . '</tg-emoji>' . $pad;
+                $tag = '<tg-emoji emoji-id="' . $id . '">' . $e . '</tg-emoji>';
+                if (isset(self::DOTS[$id])) {
+                    return $tag . ($next !== '' && $next !== "\n" && ($spaces !== '' || $quote) ? ' ' : '');
+                }
+                $pad = ($quote && $next !== '' && $next !== "\n") ? str_repeat(' ', max(0, 4 - $sp)) : '';
+                return $tag . $spaces . $pad;
             }, $c, -1, $n, PREG_OFFSET_CAPTURE);
         }
         return $out;
