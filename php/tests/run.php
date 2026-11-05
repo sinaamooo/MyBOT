@@ -655,16 +655,17 @@ Config::set('INSTAGRAM_API_KEY', 'K');
 $GLOBALS['http']['api.codesazan.ir/Instagram'] = ['status' => 200, 'result' => ['medias' => [['url' => 'https://x/1.jpg', 'extension' => 'jpg'], ['url' => 'https://x/2.mp4', 'extension' => 'mp4']]]];
 reset_calls();
 feed(msg('https://www.instagram.com/reel/ABC123/', -900, 96));
-$vid = array_values(array_filter($GLOBALS['calls'], fn($c) => $c[0] === 'sendVideo'));
-$pho = array_values(array_filter($GLOBALS['calls'], fn($c) => $c[0] === 'sendPhoto' && ($c[1]['photo'] ?? '') === 'https://x/1.jpg'));
-check($vid && $pho && str_contains($vid[0][1]['caption'], '(2/2)'), 'instagram download');
+$grp = array_values(array_filter($GLOBALS['calls'], fn($c) => $c[0] === 'sendMediaGroup'));
+$media = $grp[0][1]['media'] ?? [];
+check(count($grp) === 1 && ($media[0]['media'] ?? '') === 'https://x/1.jpg' && ($media[1]['type'] ?? '') === 'video' && str_contains($media[0]['caption'] ?? '', '@TestBot')
+    && !array_filter($GLOBALS['calls'], fn($c) => $c[0] === 'sendMessage' || $c[0] === 'editMessageText'), 'instagram album in one go, no extra messages');
 
 Config::set('INSTAGRAM_API_KEY', '');
 $GLOBALS['http']['instagram.com/graphql/query'] = ['data' => ['xdt_shortcode_media' => ['is_video' => true, 'video_url' => 'https://cdn/v.mp4', 'display_url' => 'https://cdn/v.jpg']]];
 reset_calls();
 feed(msg('https://www.instagram.com/reel/XYZ987/?igsh=abc', -900, 97));
 $vid = array_values(array_filter($GLOBALS['calls'], fn($c) => $c[0] === 'sendVideo' && ($c[1]['video'] ?? '') === 'https://cdn/v.mp4'));
-check(count($vid) === 1, 'instagram download without key');
+check(count($vid) === 1 && str_contains($vid[0][1]['caption'], 'ریلز اینستاگرام') && buttons($vid[0]) && !array_filter($GLOBALS['calls'], fn($c) => in_array($c[0], ['sendMessage', 'editMessageText'], true)), 'instagram single video with caption and button only');
 unset($GLOBALS['http']['instagram.com/graphql/query']);
 $GLOBALS['http']['/embed/captioned/'] = '<div><img class="EmbeddedMediaImage" alt="x" src="https://cdn/p.jpg?a=1&amp;b=2"></div>';
 reset_calls();
@@ -677,9 +678,9 @@ $GLOBALS['http']['i.instagram.com/api/v1/media/' . Instagram::mediaId('MOB123') 
     ['image_versions2' => ['candidates' => [['url' => 'https://cdn/c2.jpg', 'width' => 1080, 'height' => 1080], ['url' => 'https://cdn/c2s.jpg', 'width' => 320, 'height' => 320]]]]]]]];
 reset_calls();
 feed(msg('https://www.instagram.com/p/MOB123/', -900, 99));
-$v = array_values(array_filter($GLOBALS['calls'], fn($c) => $c[0] === 'sendVideo' && ($c[1]['video'] ?? '') === 'https://cdn/big.mp4'));
-$p = array_values(array_filter($GLOBALS['calls'], fn($c) => $c[0] === 'sendPhoto' && ($c[1]['photo'] ?? '') === 'https://cdn/c2.jpg'));
-check(count($v) === 1 && count($p) === 1, 'instagram mobile api carousel');
+$grp = array_values(array_filter($GLOBALS['calls'], fn($c) => $c[0] === 'sendMediaGroup'));
+$media = $grp[0][1]['media'] ?? [];
+check(($media[0]['media'] ?? '') === 'https://cdn/big.mp4' && ($media[1]['media'] ?? '') === 'https://cdn/c2.jpg', 'instagram mobile api carousel');
 $ctx = json_encode(['gql_data' => ['shortcode_media' => ['is_video' => true, 'video_url' => 'https://cdn/e.mp4']]]);
 $GLOBALS['http']['/p/EMB777/embed/captioned/'] = '<script>s.handle({"require":[["X","init",[],[' . json_encode(['contextJSON' => $ctx]) . ']],1]})</script>';
 reset_calls();

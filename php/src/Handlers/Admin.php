@@ -68,7 +68,7 @@ final class Admin
         'scam' => ['🚨', 'کلاهبرداری', ['scam_keyword_warn', 'scam_known', 'scam_usage', 'scam_go_private', 'scam_ask_evidence', 'scam_evidence_saved', 'scam_need_evidence', 'scam_submitted', 'scam_cancelled', 'scam_admin', 'scam_approved_user', 'scam_rejected_user', 'scam_broadcast', 'scam_check_clean', 'scam_check_found']],
         'tools' => ['🧩', 'ابزارها', ['uid', 'account', 'emoji_item', 'emoji_none', 'calc_result', 'translate_choose', 'translate_result', 'translate_not_yours', 'translate_used', 'translate_need_reply', 'translate_failed']],
         'bank' => ['💳', 'بانک و شماره', ['card_result', 'iban_result', 'phone_result', 'phone_invalid', 'phone_failed']],
-        'insta' => ['🎞', 'اینستاگرام', ['insta_loading', 'insta_count', 'insta_media_caption', 'insta_not_found', 'insta_private', 'insta_no_story', 'insta_no_highlight', 'insta_no_key', 'insta_highlights', 'insta_info']],
+        'insta' => ['🎞', 'اینستاگرام', ['insta_loading', 'insta_count', 'insta_media_caption', 'insta_story_caption', 'insta_not_found', 'insta_private', 'insta_no_story', 'insta_no_highlight', 'insta_no_key', 'insta_highlights', 'insta_info']],
     ];
     const NUMBERS = [
         'usdt_toman_manual' => 'نرخ دستی تتر (تومان، 0 = خودکار)', 'star_usd' => 'قیمت هر استار (دلار)',

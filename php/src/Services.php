@@ -583,8 +583,28 @@ final class Instagram
         return self::$lastStatus === 200 ? $d : null;
     }
 
+    public static array $meta = [];
+
+    private static function meta(array $n): void
+    {
+        $num = fn(...$v) => ($x = array_values(array_filter($v, fn($y) => is_numeric($y)))) ? (int)$x[0] : null;
+        $cap = $n['caption']['text'] ?? ($n['edge_media_to_caption']['edges'][0]['node']['text'] ?? null);
+        self::$meta = [
+            'owner' => $n['user']['username'] ?? $n['owner']['username'] ?? null,
+            'name' => $n['user']['full_name'] ?? $n['owner']['full_name'] ?? null,
+            'text' => is_string($cap) ? $cap : null,
+            'likes' => $num($n['like_count'] ?? null, $n['edge_media_preview_like']['count'] ?? null, $n['edge_liked_by']['count'] ?? null),
+            'comments' => $num($n['comment_count'] ?? null, $n['edge_media_to_comment']['count'] ?? null, $n['edge_media_preview_comment']['count'] ?? null),
+            'views' => $num($n['play_count'] ?? null, $n['ig_play_count'] ?? null, $n['video_play_count'] ?? null, $n['view_count'] ?? null, $n['video_view_count'] ?? null),
+            'duration' => is_numeric($n['video_duration'] ?? null) ? (float)$n['video_duration'] : null,
+            'date' => $num($n['taken_at'] ?? null, $n['taken_at_timestamp'] ?? null),
+            'reel' => in_array($n['product_type'] ?? '', ['clips', 'igtv'], true) || !empty($n['is_video']) || !empty($n['video_versions']),
+        ];
+    }
+
     public static function post(string $link): ?array
     {
+        self::$meta = [];
         $out = [];
         if (self::enabled() && ($d = self::call(['type' => 'postdownloader', 'link' => $link]))) {
             foreach ($d['result']['medias'] ?? [] as $m) {
@@ -660,6 +680,7 @@ final class Instagram
         if (!$n) {
             return [];
         }
+        self::meta($n);
         $out = [];
         if (!empty($n['carousel_media']) || !empty($n['video_versions']) || !empty($n['image_versions2'])) {
             foreach (!empty($n['carousel_media']) ? $n['carousel_media'] : [$n] as $x) {

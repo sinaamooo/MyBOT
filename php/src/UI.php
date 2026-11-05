@@ -65,11 +65,15 @@ final class UI
             }
             if ($drop) {
                 [$opening, $closing] = self::unbalanced($line);
-                if ($closing) {
-                    if ($out) {
-                        $out[count($out) - 1] .= implode('', $closing);
+                foreach ($closing as $ct) {
+                    $name = strtolower(trim(substr($ct, 2, -1)));
+                    if (preg_match_all('/<' . preg_quote($name, '/') . '\b[^>]*>/i', $carry, $cm, PREG_OFFSET_CAPTURE)) {
+                        $last = end($cm[0]);
+                        $carry = substr($carry, 0, $last[1]) . substr($carry, $last[1] + strlen($last[0]));
+                    } elseif ($out) {
+                        $out[count($out) - 1] .= $ct;
                     } else {
-                        $carry .= implode('', $closing);
+                        $carry .= $ct;
                     }
                 }
                 $carry .= implode('', $opening);

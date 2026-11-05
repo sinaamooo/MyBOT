@@ -500,12 +500,66 @@ final class Extras
         return [451 => 'insta_private', 452 => 'insta_no_story', 453 => 'insta_no_highlight'][$code] ?? 'insta_not_found';
     }
 
+    private static function upload(array $m, array $it, array $p): ?array
+    {
+        $method = $it['kind'] === 'video' ? 'sendVideo' : 'sendPhoto';
+        $field = $it['kind'] === 'video' ? 'video' : 'photo';
+        $p = ['chat_id' => $m['chat']['id']] + $p;
+        if ($it['kind'] === 'video') {
+            $p['supports_streaming'] = true;
+        }
+        if (($r = TG::api($method, [$field => $it['url']] + $p)) !== null) {
+            return $r;
+        }
+        $d = Http::request(['url' => $it['url'], 'timeout' => 90, 'headers' => ['User-Agent' => Http::UA, 'Accept' => '*/*', 'Referer' => 'https://www.instagram.com/']]);
+        if ($d['status'] >= 200 && $d['status'] < 300 && strlen($d['body']) > 0 && strlen($d['body']) < 49 * 1048576) {
+            return TG::api($method, [$field => ['__bytes' => $d['body'], 'name' => $it['kind'] === 'video' ? 'media.mp4' : 'media.jpg']] + $p);
+        }
+        return null;
+    }
+
+    private static function instaCaption(array $x, int $count): string
+    {
+        $dur = isset($x['duration']) && $x['duration'] > 0 ? sprintf('%d:%02d', intdiv((int)round($x['duration']), 60), (int)round($x['duration']) % 60) : null;
+        $text = trim(preg_replace('/\s+/u', ' ', (string)($x['text'] ?? '')));
+        if (mb_strlen($text) > 300) {
+            $text = mb_substr($text, 0, 300) . '…';
+        }
+        $n = fn($v) => $v === null ? null : Fmt::int($v);
+        return UI::t('insta_media_caption', [
+            'title' => !empty($x['reel']) ? 'ریلز اینستاگرام' : 'پست اینستاگرام', 'owner' => !empty($x['owner']) ? '@' . UI::esc($x['owner']) : null,
+            'likes' => $n($x['likes'] ?? null), 'comments' => $n($x['comments'] ?? null), 'views' => $n($x['views'] ?? null), 'duration' => $dur,
+            'date' => !empty($x['date']) ? Fmt::jalali((int)$x['date']) : null, 'count' => $count > 1 ? Fmt::int($count) : null,
+            'text' => $text !== '' ? UI::esc($text) : null, 'bot' => TG::username(),
+        ]);
+    }
+
+    private static function sendPost(array $m, array $items, string $cap): void
+    {
+        $extra = !Bot::isPrivate($m) ? ['reply_parameters' => Bot::replyParams($m)] : [];
+        $items = array_slice($items, 0, 10);
+        if (count($items) === 1) {
+            self::upload($m, $items[0], ['caption' => $cap, 'reply_markup' => UI::footer()] + $extra);
+            return;
+        }
+        $group = [];
+        foreach ($items as $i => $it) {
+            $group[] = ['type' => $it['kind'] === 'video' ? 'video' : 'photo', 'media' => $it['url']] + ($i === 0 ? ['caption' => $cap, 'parse_mode' => 'HTML'] : []);
+        }
+        if (TG::api('sendMediaGroup', ['chat_id' => $m['chat']['id'], 'media' => $group] + $extra) !== null) {
+            return;
+        }
+        foreach ($items as $i => $it) {
+            self::upload($m, $it, $i === 0 ? ['caption' => $cap, 'reply_markup' => UI::footer()] + $extra : []);
+        }
+    }
+
     private static function sendMedia(array $m, array $items, bool $reply = true): void
     {
         $n = count($items);
         $extra = ($reply && !Bot::isPrivate($m)) ? ['reply_parameters' => Bot::replyParams($m)] : [];
         foreach ($items as $i => $it) {
-            $cap = UI::t('insta_media_caption', ['index' => $i + 1, 'count' => $n, 'bot' => TG::username()]);
+            $cap = UI::t('insta_story_caption', ['index' => $i + 1, 'count' => $n, 'bot' => TG::username()]);
             $method = $it['kind'] === 'video' ? 'sendVideo' : 'sendPhoto';
             $field = $it['kind'] === 'video' ? 'video' : 'photo';
             if (TG::api($method, ['chat_id' => $m['chat']['id'], $field => $it['url'], 'caption' => $cap] + $extra) !== null) {
@@ -527,15 +581,13 @@ final class Extras
             }
             return;
         }
-        $wait = Bot::send($m, UI::t('insta_loading'), null);
+        TG::api('sendChatAction', ['chat_id' => $m['chat']['id'], 'action' => 'upload_video', '__quick' => true]);
         $media = Instagram::post($link);
-        $chat = $m['chat']['id'];
         if (!$media) {
-            TG::edit($chat, $wait['message_id'] ?? 0, UI::t(self::err(Instagram::$lastStatus)));
+            Bot::send($m, UI::t(self::err(Instagram::$lastStatus)), null);
             return;
         }
-        TG::edit($chat, $wait['message_id'] ?? 0, UI::t('insta_count', ['count' => count($media)]));
-        self::sendMedia($m, $media);
+        self::sendPost($m, $media, self::instaCaption(Instagram::$meta, count($media)));
     }
 
     public static function instaProfile(array $m, string $username): void

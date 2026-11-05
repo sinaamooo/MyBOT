@@ -156,8 +156,8 @@
   "desc": "تعداد مدیا ({count})"
  },
  "insta_media_caption": {
-  "text": "({index}/{count})\n👻 ارسال شده توسط: @{bot}",
-  "desc": "کپشن هر مدیا ({index} {count} {bot})"
+  "text": "🎞 <b>{title}</b>\n<blockquote>👤    پیج: <b>{owner}</b>\n🔥    لایک: <code>{likes}</code>\n💬    کامنت: <code>{comments}</code>\n👁    بازدید: <code>{views}</code>\n⏳    مدت: <code>{duration}</code>\n🧩    تعداد: <code>{count}</code>\n🗓    تاریخ: {date}</blockquote>\n<blockquote expandable>✏️    {text}</blockquote>\n🤖 @{bot}",
+  "desc": "کپشن پست و ریلز اینستاگرام"
  },
  "insta_not_found": {
   "text": "⛔️ دریافت این پست ممکن نشد.\n💬 پست باید عمومی باشد؛ چند لحظه بعد دوباره امتحان کنید.",
@@ -582,5 +582,9 @@
  "gm_mine_need_join": {
   "text": "اول روی «پیوستن» بزن.",
   "desc": "اول پیوستن"
+ },
+ "insta_story_caption": {
+  "text": "({index}/{count})\n👻 ارسال شده توسط: @{bot}",
+  "desc": "کپشن استوری و هایلایت اینستاگرام"
  }
 }
