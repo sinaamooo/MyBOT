@@ -160,9 +160,8 @@ final class Gifts
         return trim(html_entity_decode(strip_tags($s), ENT_QUOTES, 'UTF-8'));
     }
 
-    private static function fromTme(string $slug, int $n): ?array
+    private static function fromTme(string $slug, int $n, ?string $page): ?array
     {
-        $page = Http::text("https://t.me/nft/$slug-$n", ['timeout' => 10]);
         if (!$page) {
             return null;
         }
@@ -203,9 +202,8 @@ final class Gifts
         return $found ? $meta : null;
     }
 
-    private static function fromFragment(string $slug, int $n): ?array
+    private static function fromFragment(string $slug, int $n, $d): ?array
     {
-        $d = Http::json('https://nft.fragment.com/gift/' . strtolower($slug) . "-$n.json", ['timeout' => 10]);
         if (!is_array($d) || empty($d['attributes'])) {
             return null;
         }
@@ -223,12 +221,25 @@ final class Gifts
 
     public static function meta(string $slug, int $n): ?array
     {
-        return Cache::remember("gift_meta:$slug-$n", 300, function () use ($slug, $n) {
-            $t = self::fromTme($slug, $n);
+        return Cache::remember("gift_meta:$slug-$n", 1800, function () use ($slug, $n) {
+            $reqs = [
+                'tme' => ['url' => "https://t.me/nft/$slug-$n", 'timeout' => 6, 'headers' => ['Accept' => 'text/html']],
+                'frag' => ['url' => 'https://nft.fragment.com/gift/' . strtolower($slug) . "-$n.json", 'timeout' => 6],
+            ];
+            $short = self::dataset()['index'][self::norm($slug)]['short_name'] ?? null;
+            if ($short && !FileCache::has('gift_attr:' . $short, 7 * 86400)) {
+                $reqs['attr'] = ['url' => self::RAW . "/main/models/$short/prices.json", 'timeout' => 6];
+            }
+            $res = Http::multi($reqs);
+            if (isset($res['attr']) && ($ad = Http::decode($res['attr']))) {
+                FileCache::put('gift_attr:' . $short, self::attrsFrom($ad));
+            }
+            $tb = $res['tme'];
+            $t = self::fromTme($slug, $n, $tb['status'] >= 200 && $tb['status'] < 400 ? $tb['body'] : null);
             if ($t && $t['model']) {
                 return $t;
             }
-            $f = self::fromFragment($slug, $n);
+            $f = self::fromFragment($slug, $n, Http::decode($res['frag']));
             if ($f) {
                 if ($t) {
                     $f['owner'] = $t['owner'];
@@ -904,6 +915,9 @@ final class Resolver
         }
         if ($row = DB::userByUsername($username)) {
             return ['kind' => 'user', 'id' => (int)$row['id'], 'name' => trim(($row['first_name'] ?? '') . ' ' . ($row['last_name'] ?? '')) ?: $username, 'username' => $username];
+        }
+        if (MTProto::enabled() && ($mt = MTProto::resolve($username))) {
+            return $mt;
         }
         $c = TG::api('getChat', ['chat_id' => '@' . $username]);
         if ($c) {

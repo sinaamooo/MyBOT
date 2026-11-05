@@ -95,10 +95,49 @@ final class UI
     public static function template(string $key): string
     {
         $o = DB::textOverride($key);
-        if ($o !== null) {
-            return $o;
+        return self::kashida($o ?? (Config::data('texts')[$key]['text'] ?? $key));
+    }
+
+    public static function stretch(string $s): string
+    {
+        static $dual = null;
+        $dual ??= array_flip(mb_str_split('بپتثجچحخسشصضطظعغفقکگلمنهیئيكە'));
+        $join = $dual + array_flip(mb_str_split('اآأإدذرزژوؤة'));
+        $chars = mb_str_split($s);
+        $out = '';
+        $n = count($chars);
+        for ($i = 0; $i < $n; $i++) {
+            $out .= $chars[$i];
+            if ($i + 1 < $n && isset($dual[$chars[$i]]) && isset($join[$chars[$i + 1]])) {
+                $out .= "\u{0640}";
+            }
         }
-        return Config::data('texts')[$key]['text'] ?? $key;
+        return $out;
+    }
+
+    public static function kashida(string $text): string
+    {
+        if (Config::get('KASHIDA', '1') === '0' || !preg_match('/\p{Arabic}/u', $text)) {
+            return $text;
+        }
+        $parts = preg_split('/(<[^>]+>|\{[a-z_]+\})/u', $text, -1, PREG_SPLIT_DELIM_CAPTURE);
+        $skip = 0;
+        foreach ($parts as &$p) {
+            if ($p === '' || $p[0] === '{') {
+                continue;
+            }
+            if ($p[0] === '<') {
+                if (preg_match('~^<(/?)(code|pre)\b~i', $p, $m)) {
+                    $skip = max(0, $skip + ($m[1] === '/' ? -1 : 1));
+                }
+                continue;
+            }
+            if (!$skip) {
+                $p = self::stretch($p);
+            }
+        }
+        unset($p);
+        return implode('', $parts);
     }
 
     public static function t(string $key, array $values = []): string
@@ -373,7 +412,7 @@ final class UI
     {
         $conf = (Settings::get('buttons') ?: [])[$key] ?? [];
         $def = Config::data('buttons')[$key] ?? ['text' => $key, 'style' => null];
-        $text = self::fill(($conf['text'] ?? '') !== '' ? $conf['text'] : $def['text'], $values);
+        $text = self::fill(self::kashida(($conf['text'] ?? '') !== '' ? $conf['text'] : $def['text']), $values);
         $style = array_key_exists('style', $conf) ? $conf['style'] : $def['style'];
         if (in_array($style, ['', 'none', null], true)) {
             $style = null;

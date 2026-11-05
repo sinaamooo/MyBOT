@@ -1069,7 +1069,7 @@ final class MTProto
         return $out;
     }
 
-    public static function gifts(array $t, int $max = 500): ?array
+    public static function gifts(array $t, int $max = 400): ?array
     {
         $peer = $t['type'] === 'channel'
             ? ['_' => 'inputPeerChannel', 'channel_id' => $t['id'], 'access_hash' => $t['access_hash']]

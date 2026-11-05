@@ -396,7 +396,7 @@
   "desc": "هر خط استارز ({stars} {toman})"
  },
  "dm_win": {
-  "text": "💎 <b>الماس!</b> {name}\n\n<blockquote>✨    +{reward} الماس\n💰    موجودی: {points}\n🏅    سطح: {level}</blockquote>\n🆙 <b>لول آپ!</b> به سطح {new_level} رسیدی!",
+  "text": "💎 <b>الماس!</b> {name}\n\n<blockquote>✨    <b>{reward}</b> الماس دریافت کردید\n💰    موجودی: {points}\n🏅    سطح: {level}</blockquote>\n🆙 <b>لول آپ!</b> به سطح {new_level} رسیدی!",
   "desc": "الماس زدن ({name} {reward} {points} {level} {total} {new_level})"
  },
  "dm_wait": {

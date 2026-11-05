@@ -29,7 +29,8 @@ final class GiftsH
             'est_toman' => $est && $tonToman ? Fmt::toman($est * $tonToman) : null,
             'est_stars' => $est && $tonUsd ? Fmt::int($est * $tonUsd / Prices::starUsd()) : null, 'link' => $link,
         ]);
-        Bot::send($m, $text, UI::footer([[UI::button('btn_gift_open', ['url' => $link])]]), null, true, $link);
+        TG::send($m['chat']['id'], $text, UI::footer([[UI::button('btn_gift_open', ['url' => $link])]]), ['__quick' => true,
+            'link_preview_options' => ['url' => $link, 'prefer_large_media' => true, 'show_above_text' => true]] + (!Bot::isPrivate($m) ? ['reply_parameters' => Bot::replyParams($m)] : []));
     }
 
     private static function target(array $m, string $args): ?array
@@ -89,7 +90,7 @@ final class GiftsH
         $items = [];
         $total = 0;
         $offset = null;
-        for ($i = 0; $i < 6; $i++) {
+        for ($i = 0; $i < 4; $i++) {
             $p = ['limit' => 100] + ($offset ? ['offset' => $offset] : []);
             $r = $t['kind'] === 'chat' ? TG::api('getChatGifts', ['chat_id' => $t['id']] + $p) : TG::api('getUserGifts', ['user_id' => $t['id']] + $p);
             if ($r === null) {
