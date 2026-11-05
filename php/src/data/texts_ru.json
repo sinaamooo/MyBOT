@@ -156,7 +156,7 @@
   "text": "📢 <b>Сообщение от администрации</b>\n\n{text}"
  },
  "gift_link": {
-  "text": "🎁 <b>{name} #{number}</b>\n\n<blockquote>🎨 Модель: <b>{model}</b> {model_rarity}\n🖼 Фон: <b>{backdrop}</b> {backdrop_rarity}\n✨ Символ: <b>{symbol}</b> {symbol_rarity}\n👤 Владелец: {owner}\n🔢 Выпущено: {quantity}</blockquote>\n<blockquote>📉 Флор коллекции: <code>{floor_ton}</code> TON\n🎨 Флор модели: <code>{model_floor}</code> TON\n🖼 Флор фона: <code>{backdrop_floor}</code> TON\n✨ Флор символа: <code>{symbol_floor}</code> TON</blockquote>\n🏷 <b>Оценочная стоимость:</b>\n{ton_icon} <code>{est_ton}</code> TON\n{usd_icon} <code>{est_usd}</code> $\n{toman_icon} <code>{est_toman}</code> томан\n⭐️ <code>{est_stars}</code> Stars\n🔗 {link}"
+  "text": "🎁 <b>{name} #{number}</b>\n\n<blockquote>🎨 Модель: <b>{model}</b> {model_rarity}\n🖼 Фон: <b>{backdrop}</b> {backdrop_rarity}\n✨ Символ: <b>{symbol}</b> {symbol_rarity}\n👤 Владелец: {owner}\n🔢 Выпущено: {quantity}</blockquote>\n<blockquote>📉 Флор коллекции: <code>{floor_ton}</code> TON\n🎨 Флор модели: <code>{model_floor}</code> TON\n🖼 Флор фона: <code>{backdrop_floor}</code> TON\n✨ Флор символа: <code>{symbol_floor}</code> TON</blockquote>\n🏷 <b>Оценочная стоимость:</b>\n<blockquote>{ton_icon} <code>{est_ton}</code> TON\n{usd_icon} <code>{est_usd}</code> $</blockquote>\n{toman_icon} <code>{est_toman}</code> томан\n⭐️ <code>{est_stars}</code> Stars\n<blockquote>🔗 {link}</blockquote>"
  },
  "gift_user_caption": {
   "text": "🎁 <b>Коллекция подарков {name}</b>\n\n{pl_line}\n{change_line}\n<blockquote>🔢 Подарков: <b>{count}</b> (уникальных: {unique_count})</blockquote>\n<blockquote>{ton_icon} Общая стоимость: <code>{total_ton}</code> TON</blockquote>\n<blockquote>{usd_icon} В долларах: <code>{total_usd}</code> $</blockquote>\n<blockquote>{toman_icon} В томанах: <code>{total_toman}</code> томан</blockquote>\n<blockquote>{links}</blockquote>"
@@ -369,7 +369,7 @@
   "text": "💤 <b>Игра не завершена</b>\nСтавки обоих игроков возвращены."
  },
  "gm_low": {
-  "text": "❌ Недостаточно алмазов.\n💎 Ваш баланс: <b>{points}</b> · нужно: <b>{need}</b>"
+  "text": "❌ Недостаточно алмазов.\n\n<blockquote>💎 Нужно: <b>{need}</b></blockquote>\n<blockquote>👛 Ваш баланс: <b>{points}</b></blockquote>"
  },
  "gm_bad_stake": {
   "text": "❌ Ставка должна быть от <b>{min}</b> до <b>{max}</b> алмазов."
@@ -423,7 +423,7 @@
   "text": "❌ Игра отменена. С вас ничего не списано."
  },
  "gm_mine_low": {
-  "text": "❌ Недостаточно алмазов.\n\n<blockquote>💎 Нужно: <b>{need}</b>\n👛 Ваш баланс: <b>{wallet}</b></blockquote>"
+  "text": "❌ Недостаточно алмазов.\n\n<blockquote>💎 Нужно: <b>{need}</b></blockquote>\n<blockquote>👛 Ваш баланс: <b>{wallet}</b></blockquote>"
  },
  "gm_mine_pop_low": {
   "text": "Недостаточно алмазов, нужно {need}."

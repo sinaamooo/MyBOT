@@ -156,7 +156,7 @@
   "text": "📢 <b>Message from the admins</b>\n\n{text}"
  },
  "gift_link": {
-  "text": "🎁 <b>{name} #{number}</b>\n\n<blockquote>🎨 Model: <b>{model}</b> {model_rarity}\n🖼 Backdrop: <b>{backdrop}</b> {backdrop_rarity}\n✨ Symbol: <b>{symbol}</b> {symbol_rarity}\n👤 Owner: {owner}\n🔢 Issued: {quantity}</blockquote>\n<blockquote>📉 Collection floor: <code>{floor_ton}</code> TON\n🎨 Model floor: <code>{model_floor}</code> TON\n🖼 Backdrop floor: <code>{backdrop_floor}</code> TON\n✨ Symbol floor: <code>{symbol_floor}</code> TON</blockquote>\n🏷 <b>Estimated value:</b>\n{ton_icon} <code>{est_ton}</code> TON\n{usd_icon} <code>{est_usd}</code> $\n{toman_icon} <code>{est_toman}</code> Toman\n⭐️ <code>{est_stars}</code> Stars\n🔗 {link}"
+  "text": "🎁 <b>{name} #{number}</b>\n\n<blockquote>🎨 Model: <b>{model}</b> {model_rarity}\n🖼 Backdrop: <b>{backdrop}</b> {backdrop_rarity}\n✨ Symbol: <b>{symbol}</b> {symbol_rarity}\n👤 Owner: {owner}\n🔢 Issued: {quantity}</blockquote>\n<blockquote>📉 Collection floor: <code>{floor_ton}</code> TON\n🎨 Model floor: <code>{model_floor}</code> TON\n🖼 Backdrop floor: <code>{backdrop_floor}</code> TON\n✨ Symbol floor: <code>{symbol_floor}</code> TON</blockquote>\n🏷 <b>Estimated value:</b>\n<blockquote>{ton_icon} <code>{est_ton}</code> TON\n{usd_icon} <code>{est_usd}</code> $</blockquote>\n{toman_icon} <code>{est_toman}</code> Toman\n⭐️ <code>{est_stars}</code> Stars\n<blockquote>🔗 {link}</blockquote>"
  },
  "gift_user_caption": {
   "text": "🎁 <b>Gift collection of {name}</b>\n\n{pl_line}\n{change_line}\n<blockquote>🔢 Gifts: <b>{count}</b> (unique: {unique_count})</blockquote>\n<blockquote>{ton_icon} Total value: <code>{total_ton}</code> TON</blockquote>\n<blockquote>{usd_icon} USD value: <code>{total_usd}</code> $</blockquote>\n<blockquote>{toman_icon} Toman value: <code>{total_toman}</code> Toman</blockquote>\n<blockquote>{links}</blockquote>"
@@ -369,7 +369,7 @@
   "text": "💤 <b>The game was left unfinished</b>\nBoth bets were returned."
  },
  "gm_low": {
-  "text": "❌ You don't have enough diamonds.\n💎 Your balance: <b>{points}</b> · needed: <b>{need}</b>"
+  "text": "❌ You don't have enough diamonds.\n\n<blockquote>💎 Needed: <b>{need}</b></blockquote>\n<blockquote>👛 Your balance: <b>{points}</b></blockquote>"
  },
  "gm_bad_stake": {
   "text": "❌ The bet must be between <b>{min}</b> and <b>{max}</b> diamonds."
@@ -423,7 +423,7 @@
   "text": "❌ The game was cancelled. Nothing was taken from you."
  },
  "gm_mine_low": {
-  "text": "❌ You don't have enough diamonds.\n\n<blockquote>💎 Needed: <b>{need}</b>\n👛 Your balance: <b>{wallet}</b></blockquote>"
+  "text": "❌ You don't have enough diamonds.\n\n<blockquote>💎 Needed: <b>{need}</b></blockquote>\n<blockquote>👛 Your balance: <b>{wallet}</b></blockquote>"
  },
  "gm_mine_pop_low": {
   "text": "Not enough diamonds, {need} diamonds are needed."

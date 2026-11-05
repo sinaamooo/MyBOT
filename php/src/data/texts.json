@@ -208,7 +208,7 @@
   "desc": "پیام مدیر به کاربر ({text})"
  },
  "gift_link": {
-  "text": "🎁 <b>{name} #{number}</b>\n\n<blockquote>🎨    مدل: <b>{model}</b> {model_rarity}\n🖼    بک‌دراپ: <b>{backdrop}</b> {backdrop_rarity}\n✨    سیمبل: <b>{symbol}</b> {symbol_rarity}\n👤    مالک: {owner}\n🔢    تعداد: {quantity}</blockquote>\n<blockquote>📉    کف کالکشن: <code>{floor_ton}</code> TON\n🎨    کف مدل: <code>{model_floor}</code> TON\n🖼    کف بک‌دراپ: <code>{backdrop_floor}</code> TON\n✨    کف سیمبل: <code>{symbol_floor}</code> TON</blockquote>\n🏷 <b>ارزش تخمینی:</b>\n{ton_icon} <code>{est_ton}</code> TON\n{usd_icon} <code>{est_usd}</code> $\n{toman_icon} <code>{est_toman}</code> تومان\n⭐️ <code>{est_stars}</code> Stars\n🔗 {link}",
+  "text": "🎁 <b>{name} #{number}</b>\n\n<blockquote>🎨    مدل: <b>{model}</b> {model_rarity}\n🖼    بک‌دراپ: <b>{backdrop}</b> {backdrop_rarity}\n✨    سیمبل: <b>{symbol}</b> {symbol_rarity}\n👤    مالک: {owner}\n🔢    تعداد: {quantity}</blockquote>\n<blockquote>📉    کف کالکشن: <code>{floor_ton}</code> TON\n🎨    کف مدل: <code>{model_floor}</code> TON\n🖼    کف بک‌دراپ: <code>{backdrop_floor}</code> TON\n✨    کف سیمبل: <code>{symbol_floor}</code> TON</blockquote>\n🏷 <b>ارزش تخمینی:</b>\n<blockquote>{ton_icon} <code>{est_ton}</code> TON\n{usd_icon} <code>{est_usd}</code> $</blockquote>\n{toman_icon}  <code>{est_toman}</code> تومان\n⭐️ <code>{est_stars}</code> Stars\n<blockquote>🔗 {link}</blockquote>",
   "desc": "قیمت لینک گیفت ({name} {number} {model} {model_rarity} {backdrop} {backdrop_rarity} {symbol} {symbol_rarity} {owner} {quantity} {floor_ton} {model_floor} {backdrop_floor} {symbol_floor} {est_ton} {est_usd} {est_toman} {est_stars} {link})"
  },
  "gift_user_caption": {
@@ -492,7 +492,7 @@
   "desc": "دوز نیمه‌کاره"
  },
  "gm_low": {
-  "text": "❌ الماس کافی نداری.\n💎 موجودی تو: <b>{points}</b> · لازم: <b>{need}</b>",
+  "text": "❌ الماس کافی نداری.\n\n<blockquote>💎    لازم: <b>{need}</b></blockquote>\n<blockquote>👛    موجودی تو: <b>{points}</b></blockquote>",
   "desc": "الماس کم ({points} {need})"
  },
  "gm_bad_stake": {
@@ -564,7 +564,7 @@
   "desc": "لغو مین"
  },
  "gm_mine_low": {
-  "text": "❌ الماس کافی نداری.\n\n<blockquote>💎    لازم: <b>{need}</b>\n👛    موجودی تو: <b>{wallet}</b></blockquote>",
+  "text": "❌ الماس کافی نداری.\n\n<blockquote>💎    لازم: <b>{need}</b></blockquote>\n<blockquote>👛    موجودی تو: <b>{wallet}</b></blockquote>",
   "desc": "الماس کم برای مین ({need} {wallet})"
  },
  "gm_mine_pop_low": {
