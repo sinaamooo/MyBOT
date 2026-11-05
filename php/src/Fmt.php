@@ -204,6 +204,9 @@ final class Parse
             && !preg_match("/^(?P<unit>[^\d]{1,30}?)\s*(?P<num>$num)\s*(?P<mult>$m)?$/iu", $t, $mm)) {
             return null;
         }
+        if (strlen(strstr($mm['num'] . '.', '.', true)) > 18) {
+            return null;
+        }
         $amount = (float)$mm['num'];
         $mult = mb_strtolower($mm['mult'] ?? '');
         if ($mult !== '') {
@@ -257,7 +260,7 @@ final class Parse
         if (!preg_match('/^[\d\s.+\-*\/×÷x^%()=]+$/iu', $t)) {
             return null;
         }
-        if (preg_match('/^\d{2,4}[\/\-]\d{1,2}[\/\-]\d{1,4}$/', $t) || preg_match('/^(?:\+?\d{1,3}[\s-]?)?0?\d{3}[\s-]\d{3,4}[\s-]?\d{0,4}$/', $t)) {
+        if (preg_match('/^\d{4}(?:[\s\-]\d{4}){3}$/', $t) || preg_match('/^\d{2,4}[\/\-]\d{1,2}[\/\-]\d{1,4}$/', $t) || preg_match('/^(?:\+?\d{1,3}[\s-]?)?0?\d{3}[\s-]\d{3,4}[\s-]?\d{0,4}$/', $t)) {
             return null;
         }
         if (!preg_match('/\d/', $t)) {

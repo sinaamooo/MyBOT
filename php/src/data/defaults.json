@@ -11,8 +11,6 @@
   "gifts": true,
   "calculator": true,
   "translate": true,
-  "cardinfo": true,
-  "phone_check": true,
   "instagram": true,
   "bot_enabled": true,
   "force_channels": [],
@@ -316,8 +314,6 @@
   "gifts": "قیمت گیفت",
   "calculator": "ماشین حساب",
   "translate": "ترجمه",
-  "cardinfo": "استعلام کارت و شبا",
-  "phone_check": "چکر شماره",
   "instagram": "دانلود اینستاگرام",
   "games": "بازی‌ها"
  }

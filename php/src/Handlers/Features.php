@@ -415,52 +415,6 @@ final class Extras
 {
     const ARZ = ['USD', 'EUR', 'GBP', 'AED', 'TRY', 'CNY', 'IQD', 'AFN', 'CAD', 'AUD', 'RUB', 'SAR', 'KWD', 'OMR', 'QAR', 'CHF', 'JPY', 'INR', 'AMD', 'GEL', 'AZN'];
 
-    public static function answerCard(array $m, string $d): void
-    {
-        $i = Banking::lookup($d);
-        $extra = implode("\n", array_map(fn($k, $v) => '🔹    ' . UI::esc($k) . ': <code>' . UI::esc($v) . '</code>', array_keys($i['extra']), $i['extra']));
-        Bot::send($m, UI::t('card_result', ['card' => Banking::format($d), 'bank' => $i['bank'] ? UI::esc($i['bank']) : null, 'owner' => $i['owner'] ? UI::esc($i['owner']) : null,
-            'iban' => $i['iban'] ? UI::esc($i['iban']) : null, 'valid' => UI::l($i['valid'] ? '✅ معتبر' : '❌ نامعتبر'), 'extra' => $extra !== '' ? $extra : null]),
-            UI::footer([[UI::button('btn_copy_id', ['copy' => $d])]]));
-    }
-
-    public static function answerIban(array $m, string $iban): void
-    {
-        $b = Banking::bankOfIban($iban);
-        Bot::send($m, UI::t('iban_result', ['iban' => $iban, 'bank' => $b ? UI::esc($b) : null, 'valid' => UI::l(Banking::ibanOk($iban) ? '✅ معتبر' : '❌ نامعتبر')]),
-            UI::footer([[UI::button('btn_copy_id', ['copy' => $iban])]]));
-    }
-
-    public static function card(array $m, string $args): void
-    {
-        if ($d = Banking::card($args)) {
-            self::answerCard($m, $d);
-        } elseif ($i = Banking::iban($args)) {
-            self::answerIban($m, $i);
-        } else {
-            Bot::send($m, UI::t('card_result', ['card' => '—', 'bank' => null, 'owner' => null, 'iban' => null, 'valid' => UI::l('❌ نامعتبر'), 'extra' => null]));
-        }
-    }
-
-    public static function answerPhone(array $m, string $num): void
-    {
-        $wait = Bot::send($m, UI::t('loading'), null);
-        $r = Phone::check($num);
-        Bot::deleteMsg($wait);
-        if (!$r) {
-            Bot::send($m, UI::t('phone_failed'));
-            return;
-        }
-        Bot::send($m, UI::t('phone_result', ['phone' => UI::esc($num), 'status' => self::PHONE_ICON[$r[0]] ?? '📶', 'description' => $r[1]]));
-    }
-
-    public static function phone(array $m, string $args): void
-    {
-        $n = Phone::clean($args);
-        $n ? self::answerPhone($m, $n) : Bot::send($m, UI::t('phone_invalid'), null);
-    }
-
-    const PHONE_ICON = ['🟢' => '🟢', '⚪' => '✅', '🟡' => '⏳', '🔴' => '🔴', '⚫' => '⛔️', '🟣' => '❌', '🔵' => '🔵'];
     private static function arzIcon(string $code, string $cc): string
     {
         $flag = Currencies::flag($cc);
@@ -771,21 +725,6 @@ final class TextRouter
         }
         if (($f = Chain::extract($text, !$priv)) && $on('checkers')) {
             Tools::runChecker($m, $f[0], $f[1]);
-            return;
-        }
-        if ($d = Banking::card($text)) {
-            if ((Banking::luhn($d) || $priv) && $on('cardinfo')) {
-                Extras::answerCard($m, $d);
-            }
-            return;
-        }
-        if (($i = Banking::iban($text)) && $on('cardinfo')) {
-            Extras::answerIban($m, $i);
-            return;
-        }
-        $num = preg_match('/^(?:phone|چک شماره|شماره|number)\s+(.+)$/iu', $text, $pm) ? Phone::clean($pm[1]) : (($priv && str_starts_with($text, '+')) ? Phone::clean($text) : null);
-        if ($num && $on('phone_check')) {
-            Extras::answerPhone($m, $num);
             return;
         }
         if ($priv && str_starts_with($text, '@') && Instagram::enabled() && preg_match('/^@?([A-Za-z0-9_.]{1,30})$/', $text, $um)) {

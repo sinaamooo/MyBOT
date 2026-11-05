@@ -17,8 +17,6 @@ final class Bot
         'settings' => ['Groups', 'settings'], 'تنظیمات' => ['Groups', 'settings'],
         'panel' => ['Admin', 'panel'], 'admin' => ['Admin', 'panel'], 'پنل' => ['Admin', 'panel'], 'emojis' => ['Admin', 'emojiStatus'], 'ایموجی‌ها' => ['Admin', 'emojiStatus'],
         'unscam' => ['Admin', 'unscam'], 'setrate' => ['Admin', 'setRate'],
-        'card' => ['Extras', 'card'], 'cart' => ['Extras', 'card'], 'kart' => ['Extras', 'card'], 'کارت' => ['Extras', 'card'],
-        'phone' => ['Extras', 'phone'], 'number' => ['Extras', 'phone'], 'shomare' => ['Extras', 'phone'], 'شماره' => ['Extras', 'phone'],
         'arz' => ['Extras', 'arz'], 'ارز' => ['Extras', 'arz'], 'dollar' => ['Extras', 'arz'],
         'insta' => ['Extras', 'insta'], 'instagram' => ['Extras', 'insta'], 'اینستا' => ['Extras', 'insta'],
     ];

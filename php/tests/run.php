@@ -9,8 +9,6 @@ Config::set('KASHIDA', '0');
 Config::set('ADMIN_IDS', '999');
 Config::set('DB_PATH', $dbFile);
 Config::set('CACHE_DIR', sys_get_temp_dir() . '/mybot_cache_' . getmypid());
-Config::set('CARDINFO_API_URL', 'http://cardinfo.test/api/');
-Config::set('PHONE_CHECK_API_URL', 'https://phone.test/check.php');
 DB::connect();
 SpotDir::reset(['at' => time(), 's' => []]);
 Market::reset([]);
@@ -255,9 +253,6 @@ check(Chain::extract('https://etherscan.io/tx/0x' . str_repeat('b', 64), true) =
 check(Fmt::jalaliParts(2026, 10, 30) === [1405, 8, 8] && Fmt::jalaliParts(2024, 3, 20) === [1403, 1, 1], 'jalali');
 check(Fmt::num(1234567.891) === '1,234,568' && Fmt::num(0.0000123456) === '0.00001235' && Fmt::toman(1050000.4) === '1,050,000', 'number format');
 check(UI::fill("<b>T</b>\n<blockquote>A: {a}\nB: {b}\nC: {c}</blockquote>\nend {d}", ['a' => null, 'b' => '2', 'c' => null, 'd' => 'x']) === "<b>T</b>\n<blockquote>B: 2</blockquote>\nend x", 'fill drops lines');
-check(Banking::luhn('6037997599503209') && !Banking::luhn('6037997599503201') && Banking::bankOfCard('6037997599503209') === 'ملی', 'card helpers');
-check(Banking::ibanOk('IR820540102680020817909002') && !Banking::ibanOk('IR820540102680020817909003') && Banking::bankOfIban('IR820540102680020817909002') === 'پارسیان', 'iban');
-check(Phone::clean('09121234567') === '+989121234567' && Phone::clean('+1 500 555 0006') === '+15005550006', 'phone clean');
 check(Guard::scammy('بیا پیوی حرف بزنیم') && Guard::scammy('pv bia') && !Guard::scammy('سلام قیمت تتر چنده؟'), 'scam phrases');
 check(Guard::clockInName('Ali | 12:45') === [12, 45] && Guard::clockInName('𝟏𝟐:𝟑𝟎 Sara') === [12, 30], 'clock in name');
 $tg = Tgju::parse('<tr id="f-diff_usd"><th>USD دلار</th><td>1,050,000</td><td>1</td><td>0.1%</td></tr><tr id="f-diff_try"><th>لیر ترکیه</th><td>24,800</td></tr>');
@@ -604,20 +599,13 @@ Start::registerCommands();
 $cmds = array_values(array_filter($GLOBALS['calls'], fn($c) => $c[0] === 'setMyCommands'));
 check(count($cmds) === 3 && array_column($cmds[2][1]['commands'], 'command') === ['gift', 'account', 'emoji', 'help'] && array_column($cmds[0][1]['commands'], 'command') === ['gift', 'account', 'emoji', 'help'] && (int)DB::kvGet('commands_v') === Start::COMMANDS_V, 'command menu registered');
 
-$GLOBALS['http']['cardinfo.test'] = ['result' => ['name' => 'علی رضایی']];
 reset_calls();
-feed(msg('6037-9975-9950-3209', -600, 80));
-check(str_contains(last_text(), 'ملی') && str_contains(last_text(), 'علی رضایی'), 'card info');
-reset_calls();
-feed(msg('6037-9975-9950-3201', -600, 80));
-check(!sent(), 'invalid card silent in group');
-feed(msg('IR820540102680020817909002', -600, 80));
-check(str_contains(last_text(), 'پارسیان'), 'iban');
-
-$GLOBALS['http']['phone.test'] = ['status' => '⚫️'];
-reset_calls();
-feed(msg('/phone +15005550006'));
-check(str_contains(last_text(), 'بن شده'), 'phone checker');
+foreach (['6037-9975-9950-3209', 'IR820540102680020817909002', 'شماره 09121234567', '/phone +15005550006', '/card 6037997599503209'] as $i => $ex) {
+    feed(msg($ex, -600, 80));
+    feed(msg($ex, 80 + $i, 80 + $i));
+}
+$gone = array_filter($GLOBALS['calls'], fn($c) => in_array($c[0], ['sendMessage', 'sendPhoto'], true));
+check(!$gone && Parse::expression('6037-9975-9950-3209') === null && Parse::expression('6037 9975 9950 3209') === null, 'card, iban and phone checkers removed: ' . implode(' | ', array_map(fn($c) => mb_substr(strip_tags((string)($c[1]['text'] ?? $c[1]['caption'] ?? '')), 0, 60), $gone)));
 
 $sender = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
 $recv = 'TKHuVq1oKVruCGLvqVexFs6dawKv6fQgFs';
@@ -1039,7 +1027,7 @@ check(!$miss && Currencies::bareAsset('طلا') === ['gold', 'GOLD18'] && Curren
 reset_calls();
 feed(msg('/help', -4600, 850));
 $hp = (string)last_text();
-check(substr_count($hp, '<blockquote>') === 29 && str_contains($hp, 'دوز') && str_contains($hp, 'اینستاگرام') && str_contains($hp, '/lang') && str_contains($hp, '/arz'), 'help lists every feature');
+check(substr_count($hp, '<blockquote>') === 27 && !str_contains($hp, 'شبا') && !str_contains($hp, 'شماره') && str_contains($hp, 'دوز') && str_contains($hp, 'اینستاگرام') && str_contains($hp, '/lang') && str_contains($hp, '/arz'), 'help lists every feature');
 $spotFile = Config::$root . '/data/spot.json';
 $spotPrev = is_file($spotFile) ? file_get_contents($spotFile) : null;
 SpotDir::reset(['at' => 0, 's' => []]);
