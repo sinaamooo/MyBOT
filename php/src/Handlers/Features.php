@@ -23,33 +23,18 @@ final class Waiter
             $w->frames[] = trim($lead . ' ' . implode(' ', array_slice($words, 0, $n + 1)));
         }
         $w->reply = !Bot::isPrivate($m) && isset($m['message_id']) ? ['reply_parameters' => Bot::replyParams($m)] : [];
-        $w->last = microtime(true);
-        if ($prompt) {
+        if ($prompt && TG::api('editMessageText', ['chat_id' => $w->chat, 'message_id' => $prompt, 'text' => $w->frames[0], 'reply_markup' => UI::footer()]) !== null) {
             $w->mid = $prompt;
-            TG::async('editMessageText', ['chat_id' => $w->chat, 'message_id' => $prompt, 'text' => $w->frames[0], 'reply_markup' => UI::footer()], function ($r) use ($w, $prompt) {
-                if (!empty($r['ok'])) {
-                    $w->busy = false;
-                    return;
-                }
-                TG::async('deleteMessage', ['chat_id' => $w->chat, 'message_id' => $prompt]);
-                $w->mid = null;
-                $w->send();
-            });
         } else {
-            $w->send();
-        }
-        return $w;
-    }
-
-    private function send(): void
-    {
-        TG::async('sendMessage', ['chat_id' => $this->chat, 'text' => $this->frames[0], 'reply_markup' => UI::footer()] + $this->reply, function ($r) {
-            $this->mid = isset($r['result']['message_id']) ? (int)$r['result']['message_id'] : null;
-            $this->busy = false;
-            if ($this->done && $this->mid) {
-                TG::async('deleteMessage', ['chat_id' => $this->chat, 'message_id' => $this->mid]);
+            if ($prompt) {
+                TG::async('deleteMessage', ['chat_id' => $w->chat, 'message_id' => $prompt]);
             }
-        });
+            $r = TG::api('sendMessage', ['chat_id' => $w->chat, 'text' => $w->frames[0], 'reply_markup' => UI::footer()] + $w->reply);
+            $w->mid = isset($r['message_id']) ? (int)$r['message_id'] : null;
+        }
+        $w->busy = false;
+        $w->last = microtime(true);
+        return $w;
     }
 
     public function tick(): void
@@ -186,6 +171,10 @@ final class GiftsH
                 return;
             }
             self::portfolio($m, $t);
+        } catch (Throwable $e) {
+            error_log('gift: ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
+            Perf::flush('gift-error');
+            self::say($m, UI::t('error'));
         } finally {
             self::$wait?->finish();
             self::$wait = null;
