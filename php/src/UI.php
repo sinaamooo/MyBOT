@@ -612,7 +612,7 @@ final class Lang
     public static function of($chat): string
     {
         $c = (int)$chat;
-        if ($c >= 0) {
+        if ($c === 0) {
             return 'fa';
         }
         if (!isset(self::$memo[$c])) {

@@ -3,7 +3,7 @@
 final class Bot
 {
     const COMMANDS = [
-        'start' => ['Start', 'start'], 'help' => ['Start', 'help'], 'راهنما' => ['Start', 'help'],
+        'start' => ['Start', 'start'], 'lang' => ['Start', 'language'], 'language' => ['Start', 'language'], 'زبان' => ['Start', 'language'], 'help' => ['Start', 'help'], 'راهنما' => ['Start', 'help'],
         'p' => ['Tools', 'price'], 'price' => ['Tools', 'price'], 'قیمت' => ['Tools', 'price'], 'nerkh' => ['Tools', 'price'],
         'wallet' => ['Tools', 'walletCmd'], 'w' => ['Tools', 'walletCmd'], 'tx' => ['Tools', 'walletCmd'], 'hash' => ['Tools', 'walletCmd'], 'check_wallet' => ['Tools', 'walletCmd'],
         'uid' => ['Tools', 'uid'], 'id' => ['Tools', 'uid'],
@@ -23,7 +23,7 @@ final class Bot
         'insta' => ['Extras', 'insta'], 'instagram' => ['Extras', 'insta'], 'اینستا' => ['Extras', 'insta'],
     ];
     const CALLBACKS = [
-        'fj:' => ['Bot', 'forceJoinCheck'], 'unmute:' => ['Bot', 'unmuteCb'], 'tr:' => ['Tools', 'translateCb'], 'gs:' => ['Groups', 'toggle'], 'gl:' => ['Groups', 'lang'],
+        'fj:' => ['Bot', 'forceJoinCheck'], 'unmute:' => ['Bot', 'unmuteCb'], 'tr:' => ['Tools', 'translateCb'], 'gs:' => ['Groups', 'toggle'], 'ul:' => ['Start', 'langCb'],
         'scam:' => ['Scam', 'buttons'], 'scamadm:' => ['Scam', 'decision'], 'adm:' => ['Admin', 'callback'], 'wl:' => ['Tools', 'walletButton'],
         'tt:' => ['Tools', 'transfers'], 'tp:' => ['Tools', 'transfers'], 'is:' => ['Extras', 'story'],
         'ih:' => ['Extras', 'highlights'], 'hi:' => ['Extras', 'highlightItems'], 'gd:' => ['Games', 'doozCb'], 'gn:' => ['Games', 'mineCb'], 'gj:' => ['Diamonds', 'jailCb'], 'gb:' => ['Diamonds', 'accountCb'],
@@ -510,7 +510,7 @@ final class Bot
         $msg = $cq['message'];
         self::deleteMsg($msg);
         if (self::isPrivate($msg)) {
-            TG::send($msg['chat']['id'], UI::t('start_private', ['name' => UI::esc($cq['from']['first_name'] ?? ''), 'bot_username' => TG::username()]), UI::footer());
+            Start::welcome((int)$msg['chat']['id'], $cq['from']);
         }
     }
 
@@ -557,13 +557,11 @@ final class Bot
         if (!$key) {
             return;
         }
-        if (!Lang::chosen((int)$chat['id'])) {
-            Cache::set('lang_next:' . $chat['id'], $key, 86400);
-            if (!Cache::throttled('lang_ask:' . $chat['id'], 600)) {
-                TG::send($chat['id'], UI::t('lang_choose'), Groups::langKb((int)$chat['id'], 'gl:'));
-            }
-            return;
+        $by = (int)($e['from']['id'] ?? 0);
+        if (!Lang::chosen((int)$chat['id']) && $by > 0 && Lang::chosen($by)) {
+            Lang::set((int)$chat['id'], Lang::of($by));
         }
+        Lang::use($chat['id']);
         TG::send($chat['id'], UI::t($key), UI::footer());
     }
 
@@ -638,8 +636,38 @@ final class Start
             Scam::beginEvidence($m, (int)substr($args, 5));
             return;
         }
-        TG::send($m['chat']['id'], UI::t('start_private', ['name' => UI::esc($m['from']['first_name'] ?? ''), 'bot_username' => TG::username()]),
-            UI::footer(), ['__quick' => true]);
+        self::welcome((int)$m['chat']['id'], $m['from']);
+    }
+
+    public static function welcome(int $chat, array $u): void
+    {
+        if (!Lang::chosen($chat)) {
+            TG::send($chat, UI::t('lang_choose'), Groups::langKb($chat, 'ul:'), ['__quick' => true]);
+            return;
+        }
+        Lang::use($chat);
+        TG::send($chat, UI::t('start_private', ['name' => UI::esc($u['first_name'] ?? ''), 'bot_username' => TG::username()]), UI::footer(), ['__quick' => true]);
+    }
+
+    public static function language(array $m, string $args): void
+    {
+        if (Bot::isPrivate($m)) {
+            TG::send($m['chat']['id'], UI::t('lang_choose'), Groups::langKb((int)$m['chat']['id'], 'ul:'), ['__quick' => true]);
+        }
+    }
+
+    public static function langCb(array $cq, string $l): void
+    {
+        $chat = (int)($cq['message']['chat']['id'] ?? 0);
+        if ($chat <= 0 || $chat !== (int)$cq['from']['id'] || !in_array($l, Lang::ALL, true)) {
+            TG::answer($cq['id']);
+            return;
+        }
+        Lang::set($chat, $l);
+        UI::$lang = $l;
+        TG::answer($cq['id'], '✅');
+        TG::edit($chat, $cq['message']['message_id'], UI::t('lang_set'), null);
+        self::welcome($chat, $cq['from']);
     }
 
     public static function help(array $m, string $args): void
@@ -665,7 +693,6 @@ final class Groups
         if ($row) {
             $rows[] = $row;
         }
-        $rows[] = self::langKb($chat, 'gs:lang:')['inline_keyboard'][0];
         $rows[] = [UI::raw(UI::l('⛔️ بستن'), 'gs:close')];
         return UI::kb($rows);
     }
@@ -680,26 +707,6 @@ final class Groups
             $row[] = $b;
         }
         return UI::kb([$row]);
-    }
-
-    public static function lang(array $cq, string $l): void
-    {
-        $chat = (int)$cq['message']['chat']['id'];
-        if (!in_array($l, Lang::ALL, true)) {
-            TG::answer($cq['id']);
-            return;
-        }
-        if (!Bot::isChatAdmin($chat, $cq['from']['id'])) {
-            TG::answer($cq['id'], UI::plain('only_group_admins'), true);
-            return;
-        }
-        Lang::set($chat, $l);
-        UI::$lang = $l;
-        TG::answer($cq['id'], '✅');
-        TG::edit($chat, $cq['message']['message_id'], UI::t('lang_set'), null);
-        $next = Cache::get('lang_next:' . $chat);
-        Cache::forget('lang_next:' . $chat);
-        TG::send($chat, UI::t(is_string($next) ? $next : 'bot_promoted'), UI::footer());
     }
 
     public static function settings(array $m, string $args): void
@@ -722,16 +729,6 @@ final class Groups
         if ($key === 'close') {
             TG::answer($cq['id']);
             TG::delete($chat, $cq['message']['message_id']);
-            return;
-        }
-        if (str_starts_with($key, 'lang:')) {
-            $l = substr($key, 5);
-            if (in_array($l, Lang::ALL, true)) {
-                Lang::set($chat, $l);
-                UI::$lang = $l;
-            }
-            TG::answer($cq['id'], '✅');
-            TG::edit($chat, $cq['message']['message_id'], UI::t('group_settings', ['title' => UI::esc($cq['message']['chat']['title'] ?? '')]), self::kb($chat));
             return;
         }
         if (!isset(Settings::groupFeatures()[$key])) {

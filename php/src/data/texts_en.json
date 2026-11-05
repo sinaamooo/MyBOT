@@ -60,7 +60,7 @@
   "text": "👛 <b>Wallet checker result</b>\n📍 <code>{address}</code>\n🌐 Networks found: <b>{count}</b>"
  },
  "wallet_chain": {
-  "text": "{chain_icon} <b>{chain}</b>\n\n<blockquote>{dorange_icon} Balance: <code>{balance}</code> {symbol}\n{dgreen_icon} USD value: <code>{usd}</code> $\n{dpeach_icon} Toman value: <code>{toman}</code>\n{dblue_icon} Transactions: <code>{txs}</code>\n{dolive_icon} NFT: <code>{nfts}</code>\n{dbrown_icon} Wallet created: {created}\n{status_icon} Status: {status}\n{dnavy_icon} <a href=\"{explorer}\">View in explorer</a></blockquote>"
+  "text": "<blockquote>{chain_icon} Network: <b>{chain}</b>\n{dorange_icon} Balance: <code>{balance}</code> {symbol}\n{dgreen_icon} USD value: <code>{usd}</code> $\n{dpeach_icon} Toman value: <code>{toman}</code>\n{dblue_icon} Transactions: <code>{txs}</code>\n{dolive_icon} NFT: <code>{nfts}</code>\n{dbrown_icon} Wallet created: {created}\n{status_icon} Status: {status}\n{dnavy_icon} <a href=\"{explorer}\">View in explorer</a></blockquote>"
  },
  "wallet_footer": {
   "text": "📊 <b>Total assets</b>\n\n<blockquote>{dgreen_icon} Dollar: <code>{total_usd}</code> $\n{dpeach_icon} Toman: <code>{total_toman}</code></blockquote>\n🗓 {time}"
@@ -72,7 +72,7 @@
   "text": "🔍 Searching for the transaction on all networks..."
  },
  "tx_result": {
-  "text": "🧾 <b>Transaction hash result</b>\n\n<blockquote>{dblue_icon} Network: <b>{network}</b>\n{status_icon} Status: {status}\n{dorange_icon} Amount: <code>{amount}</code>\n{dgreen_icon} USD value: <code>{usd}</code> $\n{dpeach_icon} Toman value: <code>{toman}</code>\n{dolive_icon} Token: {token}\n{dbrown_icon} Contract / token ID: <code>{contract}</code>\n{dnavy_icon} From: <code>{sender}</code>\n{dblue_icon} To: <code>{receiver}</code>\n{dred_icon} Fee: <code>{fee}</code>\n{dbrown_icon} Block: <code>{block}</code>\n{dgreen_icon} Confirmations: <code>{confirmations}</code>\n{dnavy_icon} Time: {time}</blockquote>\n#️⃣ <code>{hash}</code>\n🔎 <a href=\"{explorer}\">View in explorer</a>"
+  "text": "🧾 <b>Transaction hash result</b>\n\n<blockquote>{dblue_icon} Network: <b>{network}</b></blockquote>\n<blockquote>{status_icon} Status: {status}\n{dorange_icon} Amount: <code>{amount}</code></blockquote>\n<blockquote>{dgreen_icon} USD value: <code>{usd}</code> $\n{dpeach_icon} Toman value: <code>{toman}</code></blockquote>\n{dolive_icon} Token: {token}\n{dbrown_icon} Contract / token ID: <code>{contract}</code>\n{dnavy_icon} From: <code>{sender}</code>\n{dblue_icon} To: <code>{receiver}</code>\n{dred_icon} Fee: <code>{fee}</code>\n<blockquote>{dbrown_icon} Block: <code>{block}</code>\n{dgreen_icon} Confirmations: <code>{confirmations}</code></blockquote>\n{dnavy_icon} Time: {time}\n#️⃣ <code>{hash}</code>\n<blockquote>🔎 <a href=\"{explorer}\">View in explorer</a></blockquote>"
  },
  "tx_not_found": {
   "text": "❌ This hash was not found on any supported network.\n#️⃣ <code>{hash}</code>"
@@ -288,10 +288,10 @@
   "text": "{icon} <b>{amount} {name}</b> = <b>{toman}</b> Toman\n\n<blockquote>{usd_icon} Dollar: <code>{usd}</code> $\n📈 24h change: {change}</blockquote>\n🗓 {time}"
  },
  "premium_prices": {
-  "text": "{icon} <b>Telegram Premium prices</b>\n\n<blockquote>{lines}</blockquote>\n🗓 {time}"
+  "text": "{icon} <b>Telegram Premium prices</b>\n\n{lines}\n🗓 {time}"
  },
  "premium_line": {
-  "text": "👑 <b>{months} months</b>  <code>{toman}</code> Toman  ·  <code>{ton}</code> TON"
+  "text": "<blockquote>👑 <b>{months} months</b>  <code>{toman}</code> Toman  ·  <code>{ton}</code> TON</blockquote>"
  },
  "stars_prices": {
   "text": "⭐️ <b>Telegram Stars prices</b>\n\n<blockquote>{lines}</blockquote>\n💰 Per star: <code>{each}</code> Toman\n🗓 {time}"
@@ -300,7 +300,7 @@
   "text": "⭐️ <b>{stars}</b> Stars  <code>{toman}</code> Toman"
  },
  "dm_win": {
-  "text": "💎 <b>Diamond!</b> {name}\n\n<blockquote>✨ You received <b>{reward}</b> diamonds\n💰 Balance: {points}\n🏅 Level: {level}</blockquote>\n🆙 <b>Level up!</b> You reached level {new_level}!"
+  "text": "💎 <b>Diamond!</b> {name}\n\n✨ You received <b>{reward}</b> diamonds\n<blockquote>💰 Balance: {points}\n🏅 Level: {level}</blockquote>\n🆙 <b>Level up!</b> You reached level {new_level}!"
  },
  "dm_wait": {
   "text": "⏳ {name}, it's too early!\n⌛️ You can mine diamonds again in {m} min {s} sec."

@@ -268,8 +268,13 @@ check(Account::created(100000000) < Account::created(6000000000) && Account::lev
 
 reset_calls();
 feed(msg('/start'));
-$s = sent()[0] ?? null;
-check($s && str_contains($s[1]['text'], 'خوش اومدی'), 'start text');
+$lp = sent()[0] ?? null;
+check($lp && str_contains($lp[1]['text'], 'Choose the bot language') && array_column(buttons($lp), 'callback_data') === ['ul:fa', 'ul:en', 'ul:ru'], 'language asked on first start');
+reset_calls();
+cb('ul:fa', 5, 5);
+$s = sent(['sendMessage'])[0] ?? null;
+check(Lang::of(5) === 'fa' && $s && str_contains($s[1]['text'], 'خوش اومدی'), 'start text');
+Lang::set(6, 'fa');
 check($s && array_filter(buttons($s), fn($b) => str_contains($b['url'] ?? '', 'startgroup')), 'start footer');
 
 reset_calls();
@@ -792,40 +797,47 @@ reset_calls();
 $GLOBALS['user_gifts'] = ['total_count' => 0, 'gifts' => []];
 Bot::handle(['update_id' => ++$GLOBALS['mid'], 'my_chat_member' => ['chat' => ['id' => -1234, 'type' => 'supergroup', 'title' => 'New'], 'from' => ['id' => 1, 'is_bot' => false, 'first_name' => 'x'],
     'date' => time(), 'old_chat_member' => ['status' => 'left', 'user' => BOT], 'new_chat_member' => ['status' => 'member', 'user' => BOT]]]);
-$lp = sent(['sendMessage']);
-$lpb = buttons($lp[0] ?? [0, []]);
-check($lp && str_contains($lp[0][1]['text'], 'Choose the bot language') && array_column($lpb, 'callback_data') === ['gl:fa', 'gl:en', 'gl:ru']
-    && ($lpb[1]['icon_custom_emoji_id'] ?? '') !== '' && str_contains($lpb[1]['text'] ?? '', '𝗘𝗡'), 'language picker after bot is added');
+check(str_contains((string)last_text(), 'اضافه شد') && !str_contains((string)last_text(), 'Choose the bot language'), 'bot added message without language picker');
 reset_calls();
 Bot::handle(['update_id' => ++$GLOBALS['mid'], 'my_chat_member' => ['chat' => ['id' => -1234, 'type' => 'supergroup', 'title' => 'New'], 'from' => ['id' => 1, 'is_bot' => false, 'first_name' => 'x'],
     'date' => time(), 'old_chat_member' => ['status' => 'member', 'user' => BOT], 'new_chat_member' => ['status' => 'administrator', 'user' => BOT]]]);
-check(!sent(['sendMessage']), 'language picker not repeated');
+check(str_contains((string)last_text(), 'ادمین شد'), 'bot promoted message');
 reset_calls();
-cb('gl:en', 2, -1234);
-check(str_contains(implode(' ', array_map(fn($c) => $c[1]['text'] ?? '', $GLOBALS['calls'])), 'only group admins') || true, 'non-admin can not pick language');
+feed(msg('/start', 3001, 3001));
+$lp = sent(['sendMessage'])[0] ?? null;
+$lpb = buttons($lp ?? [0, []]);
+check($lp && str_contains($lp[1]['text'], 'Choose the bot language') && array_column($lpb, 'callback_data') === ['ul:fa', 'ul:en', 'ul:ru']
+    && ($lpb[1]['icon_custom_emoji_id'] ?? '') !== '' && str_contains($lpb[1]['text'] ?? '', '𝗘𝗡'), 'language picker in private start');
 reset_calls();
-cb('gl:en', 999, -1234);
+cb('ul:en', 3001, 3001);
 $texts = implode("\n", array_map(fn($c) => (string)($c[1]['text'] ?? ''), array_filter($GLOBALS['calls'], fn($c) => in_array($c[0], ['sendMessage', 'editMessageText'], true))));
-check(Lang::of(-1234) === 'en' && str_contains($texts, 'English') && str_contains($texts, 'The bot is now an admin in this group'), 'english chosen, welcome in english');
+check(Lang::of(3001) === 'en' && str_contains($texts, 'English') && str_contains($texts, 'welcome') && (bool)array_filter(buttons(end($GLOBALS['calls'])), fn($b) => str_contains($b['url'] ?? '', 'startgroup')), 'english start after choosing');
 reset_calls();
-feed(msg('10 usdt', -1234, 77));
+Bot::handle(['update_id' => ++$GLOBALS['mid'], 'my_chat_member' => ['chat' => ['id' => -2234, 'type' => 'supergroup', 'title' => 'EN'], 'from' => ['id' => 3001, 'is_bot' => false, 'first_name' => 'x'],
+    'date' => time(), 'old_chat_member' => ['status' => 'left', 'user' => BOT], 'new_chat_member' => ['status' => 'administrator', 'user' => BOT]]]);
+check(Lang::of(-2234) === 'en' && str_contains((string)last_text(), 'The bot is now an admin in this group'), 'group takes the language of the user who added the bot');
+reset_calls();
+feed(msg('10 usdt', -2234, 77));
 $en = sent(['sendPhoto']) ?: sent(['sendMessage']);
 $ent = (string)($en[0][1]['caption'] ?? $en[0][1]['text'] ?? '');
 check($en && str_contains($ent, 'Toman') && !preg_match('/\p{Arabic}/u', strip_tags(preg_replace('/<tg-emoji[^>]*>.*?<\/tg-emoji>/u', '', $ent))) && !str_contains($ent, '  '), 'english group price reply has no persian and single spaces');
 reset_calls();
-feed(msg('/help', -1234, 77));
+feed(msg('/help', -2234, 77));
 check(str_contains((string)last_text(), 'Bot guide'), 'english help');
 reset_calls();
-feed(msg('/panel', -1234, 999));
+feed(msg('/panel', -2234, 999));
 $gp = sent(['sendMessage'])[0] ?? null;
 $gpb = array_merge(...($gp[1]['reply_markup']['inline_keyboard'] ?? [[]]));
-check($gp && str_contains($gp[1]['text'], 'Group settings') && (bool)array_filter($gpb, fn($b) => ($b['callback_data'] ?? '') === 'gs:lang:ru') && (bool)array_filter($gpb, fn($b) => str_contains($b['text'] ?? '', 'Anti-scam')), 'english group settings with language row');
+check($gp && str_contains($gp[1]['text'], 'Group settings') && !array_filter($gpb, fn($b) => str_contains($b['callback_data'] ?? '', 'lang')) && (bool)array_filter($gpb, fn($b) => str_contains($b['text'] ?? '', 'Anti-scam')), 'english group settings without language buttons');
 reset_calls();
-cb('gs:lang:ru', 999, -1234);
-check(Lang::of(-1234) === 'ru' && str_contains((string)last_text(), 'Настройки группы'), 'switch to russian from settings');
+feed(msg('/start', 3002, 3002));
+cb('ul:ru', 3002, 3002);
+Bot::handle(['update_id' => ++$GLOBALS['mid'], 'my_chat_member' => ['chat' => ['id' => -2235, 'type' => 'supergroup', 'title' => 'RU'], 'from' => ['id' => 3002, 'is_bot' => false, 'first_name' => 'y'],
+    'date' => time(), 'old_chat_member' => ['status' => 'left', 'user' => BOT], 'new_chat_member' => ['status' => 'member', 'user' => BOT]]]);
+check(Lang::of(-2235) === 'ru' && str_contains((string)last_text(), 'Бот добавлен'), 'russian group from russian adder');
 reset_calls();
-feed(msg('алмаз', -1234, 78));
-check(str_contains((string)last_text(), 'Алмаз') || str_contains((string)last_text(), 'алмаз'), 'russian diamond word');
+feed(msg('алмаз', -2235, 78));
+check(str_contains((string)last_text(), 'Вы получили'), 'russian diamond word and reply');
 UI::$lang = 'fa';
 
 reset_calls();
