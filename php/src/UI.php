@@ -404,6 +404,9 @@ final class UI
         return substr($html, 0, $first + 1) . preg_replace('/\n{2,}(?=<blockquote)/', "\n", substr($html, $first + 1));
     }
 
+    const DOTS = ['5143130625795951140' => 1, '5145802018144651327' => 1, '5143378316559911157' => 1, '5143282547379144501' => 1, '5143403880205256993' => 1,
+        '5143315038806738992' => 1, '5143612160349309608' => 1, '5143573900780635800' => 1, '5143392099109964060' => 1];
+
     public static function align(string $html, int $quoteGap = 2, bool $caption = false): string
     {
         if (!str_contains($html, '<tg-emoji') && !str_contains($html, '</blockquote>')) {
@@ -432,7 +435,8 @@ final class UI
                 $rest = substr($line, strlen($m[0]));
                 $plain = html_entity_decode(strip_tags(preg_replace('/<tg-emoji[^>]*>.*?<\/tg-emoji>/u', '', $rest)), ENT_QUOTES, 'UTF-8');
                 $rtl = $m[2] !== '' || (preg_match('/\p{L}/u', $plain, $lm) && preg_match('/\p{Arabic}/u', $lm[0]));
-                $gap = $rest !== '' && !str_starts_with($rest, '</blockquote') ? str_repeat(' ', $quote && $rtl ? $quoteGap : 1) : '';
+                $dot = preg_match('/emoji-id="(\d+)"/', $m[3], $em) && isset(self::DOTS[$em[1]]);
+                $gap = $rest !== '' && !str_starts_with($rest, '</blockquote') ? str_repeat(' ', $quote && $rtl ? ($dot ? $quoteGap : 4) : 1) : '';
                 $line = $m[1] . $m[2] . $m[3] . $gap . $rest;
             }
             $depth = max(0, $depth + preg_match_all('/<blockquote/', $line) - substr_count($line, '</blockquote>'));

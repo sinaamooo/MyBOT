@@ -867,12 +867,13 @@ Config::set('KASHIDA', '0');
 check(UI::quoteGaps("سر\n\n<blockquote>a</blockquote>\n\nجمع\n\n<blockquote>b</blockquote>\n<blockquote>c</blockquote>") === "سر\n\n<blockquote>a</blockquote>\nجمع\n<blockquote>b</blockquote>\n<blockquote>c</blockquote>"
     && UI::quoteGaps("سر\n\n<blockquote>a</blockquote>") === "سر\n\n<blockquote>a</blockquote>", 'only first quote keeps blank line above');
 $E = fn($id) => '<tg-emoji emoji-id="' . $id . '">x</tg-emoji>';
-$al = UI::align($E(1) . " <b>عنوان</b>\n" . $E(2) . "<code>UQB1</code>\n<blockquote>" . $E(3) . "    NFT: 5\n" . $E(4) . "        موجودی: 1</blockquote>\n" . $E(5) . "   1405/08/14");
-check($al === $E(1) . " <b>عنوان</b>\n" . $E(2) . " <code>UQB1</code>\n<blockquote>" . $E(3) . " NFT: 5\n" . $E(4) . "  موجودی: 1</blockquote>\n\u{200E}" . $E(5) . " 1405/08/14"
-    && UI::align('<blockquote>' . $E(4) . ' موجودی: 1</blockquote>', 4) === '<blockquote>' . $E(4) . '    موجودی: 1</blockquote>'
+$D = '<tg-emoji emoji-id="5143130625795951140">x</tg-emoji>';
+$al = UI::align($E(1) . " <b>عنوان</b>\n" . $E(2) . "<code>UQB1</code>\n<blockquote>" . $E(3) . "    NFT: 5\n" . $D . "        موجودی: 1\n" . $E(9) . " الماس: 1</blockquote>\n" . $E(5) . "   1405/08/14");
+check($al === $E(1) . " <b>عنوان</b>\n" . $E(2) . " <code>UQB1</code>\n<blockquote>" . $E(3) . " NFT: 5\n" . $D . "  موجودی: 1\n" . $E(9) . "    الماس: 1</blockquote>\n\u{200E}" . $E(5) . " 1405/08/14"
+    && UI::align('<blockquote>' . $D . ' موجودی: 1</blockquote>', 4) === '<blockquote>' . $D . '    موجودی: 1</blockquote>'
     && UI::align('<blockquote>' . $E(6) . '    <b>370,185</b></blockquote>') === '<blockquote>' . $E(6) . ' <b>370,185</b></blockquote>'
     && UI::align("\u{200F}" . $E(7) . '   <b>800 POL</b>') === "\u{200F}" . $E(7) . ' <b>800 POL</b>' && UI::align($E(8) . '    @HashpriceBot') === $E(8) . ' @HashpriceBot'
-    && UI::align('<b>hello</b> ' . $E(1)) === '<b>hello</b> ' . $E(1), 'emoji spacing: 2 in message quotes, 4 in caption quotes, 1 elsewhere');
+    && UI::align('<b>hello</b> ' . $E(1)) === '<b>hello</b> ' . $E(1), 'emoji spacing: dots 2 and icons 4 in message quotes, 4 in caption quotes, 1 elsewhere');
 $ft = UI::align("<blockquote>" . $E(1) . " a</blockquote>\n\n" . $E(2) . " رتبه‌ی شما: <b>5</b> " . $E(3));
 check($ft === "<blockquote>" . $E(1) . " a</blockquote>\n\n\u{200E}" . $E(2) . " رتبه‌ی شما: <b>5</b> " . $E(3) . "\u{200F}" && UI::align($ft) === $ft
     && UI::align("سلام\n" . $E(2) . ' دنیا') === "سلام\n" . $E(2) . ' دنیا', 'lines after the last quote stay on the left');
