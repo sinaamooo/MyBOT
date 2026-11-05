@@ -464,7 +464,7 @@
   "desc": "راهنمای مین ({min} {max})"
  },
  "gm_dooz_open": {
-  "text": "🎮 <b>دوز {stake} الماسی</b>\n\n<blockquote>👤    سازنده: {host}\n🏆    جایزه برنده: <b>{prize}</b> الماس\n🧾    مالیات: <b>{tax}</b> الماس</blockquote>\nنفر دوم که روی پیوستن بزند، صفحه دوز باز می‌شود.",
+  "text": "🎮 <b>دوز {stake} الماسی</b>\n\n👤  سازنده: {host}\n<blockquote>🏆    جایزه برنده: <b>{prize}</b> الماس</blockquote>\n<blockquote>🧾    مالیات: <b>{tax}</b> الماس</blockquote>\nنفر دوم که روی پیوستن بزند، صفحه دوز باز می‌شود.",
   "desc": "دوز باز ({stake} {host} {prize} {tax})"
  },
  "gm_dooz_turn": {

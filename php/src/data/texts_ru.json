@@ -348,7 +348,7 @@
   "text": "💣 <code>mine 100</code>  вход от {min} до {max} алмазов"
  },
  "gm_dooz_open": {
-  "text": "🎮 <b>Крестики-нолики на {stake} алмазов</b>\n\n<blockquote>👤 Создатель: {host}\n🏆 Приз победителю: <b>{prize}</b> алмазов\n🧾 Налог: <b>{tax}</b> алмазов</blockquote>\nПоле откроется, когда второй игрок нажмёт «Присоединиться»."
+  "text": "🎮 <b>Крестики-нолики на {stake} алмазов</b>\n\n👤 Создатель: {host}\n<blockquote>🏆 Приз победителю: <b>{prize}</b> алмазов</blockquote>\n<blockquote>🧾 Налог: <b>{tax}</b> алмазов</blockquote>\nПоле откроется, когда второй игрок нажмёт «Присоединиться»."
  },
  "gm_dooz_turn": {
   "text": "🎮 <b>Крестики-нолики на {stake} алмазов</b>\n\n<blockquote>{p1}\n{p2}\n🏆 Приз: <b>{prize}</b> алмазов</blockquote>\n👉 Ход: {turn}"

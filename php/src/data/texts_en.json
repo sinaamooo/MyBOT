@@ -348,7 +348,7 @@
   "text": "💣 <code>mine 100</code>  entry between {min} and {max} diamonds"
  },
  "gm_dooz_open": {
-  "text": "🎮 <b>Tic-tac-toe for {stake} diamonds</b>\n\n<blockquote>👤 Host: {host}\n🏆 Winner's prize: <b>{prize}</b> diamonds\n🧾 Tax: <b>{tax}</b> diamonds</blockquote>\nThe board opens when a second player taps join."
+  "text": "🎮 <b>Tic-tac-toe for {stake} diamonds</b>\n\n👤 Host: {host}\n<blockquote>🏆 Winner's prize: <b>{prize}</b> diamonds</blockquote>\n<blockquote>🧾 Tax: <b>{tax}</b> diamonds</blockquote>\nThe board opens when a second player taps join."
  },
  "gm_dooz_turn": {
   "text": "🎮 <b>Tic-tac-toe for {stake} diamonds</b>\n\n<blockquote>{p1}\n{p2}\n🏆 Prize: <b>{prize}</b> diamonds</blockquote>\n👉 Turn: {turn}"
