@@ -404,14 +404,29 @@ final class UI
         return substr($html, 0, $first + 1) . preg_replace('/\n{2,}(?=<blockquote)/', "\n", substr($html, $first + 1));
     }
 
-    public static function align(string $html, int $quoteGap = 2): string
+    public static function align(string $html, int $quoteGap = 2, bool $caption = false): string
     {
-        if (!str_contains($html, '<tg-emoji')) {
+        if (!str_contains($html, '<tg-emoji') && !str_contains($html, '</blockquote>')) {
             return $html;
         }
         $depth = 0;
         $lines = explode("\n", $html);
-        foreach ($lines as &$line) {
+        $last = -1;
+        foreach ($lines as $i => $line) {
+            if (str_contains($line, '</blockquote>')) {
+                $last = $i;
+            }
+        }
+        if ($last < 0 && $caption) {
+            for ($i = count($lines) - 1; $i > 0; $i--) {
+                if (trim(strip_tags($lines[$i])) !== '') {
+                    $last = $i - 1;
+                    break;
+                }
+            }
+        }
+        foreach ($lines as $i => &$line) {
+            $line = preg_replace('/^\x{200E}|\x{200F}$/u', '', $line);
             if (preg_match('/^((?:<(?!tg-emoji|\/)[a-z][^>]*>)*)(\x{200F}?)(<tg-emoji[^>]*>.*?<\/tg-emoji>)[ \t]*/u', $line, $m)) {
                 $quote = $depth > 0 || str_contains($m[1], '<blockquote');
                 $rest = substr($line, strlen($m[0]));
@@ -421,6 +436,9 @@ final class UI
                 $line = $m[1] . $m[2] . $m[3] . $gap . $rest;
             }
             $depth = max(0, $depth + preg_match_all('/<blockquote/', $line) - substr_count($line, '</blockquote>'));
+            if ($last >= 0 && $i > $last && trim(strip_tags($line)) !== '') {
+                $line = "\u{200E}" . $line . (preg_match('/\p{Arabic}/u', strip_tags(preg_replace('/<tg-emoji[^>]*>.*?<\/tg-emoji>/u', '', $line))) ? "\u{200F}" : '');
+            }
         }
         unset($line);
         return implode("\n", $lines);
@@ -507,6 +525,18 @@ final class UI
     public static function footerRows(): array
     {
         $rows = [];
+        foreach (Settings::get('extra_buttons') ?: [] as $b) {
+            if (!empty($b['text']) && !empty($b['url'])) {
+                $btn = ['text' => (string)$b['text'], 'url' => (string)$b['url']];
+                if (!empty($b['icon'])) {
+                    $btn['icon_custom_emoji_id'] = (string)$b['icon'];
+                }
+                if (!empty($b['style']) && $b['style'] !== 'none') {
+                    $btn['style'] = $b['style'];
+                }
+                $rows[] = [self::iconize($btn)];
+            }
+        }
         $row = [];
         $u = TG::username();
         if ($u !== '') {
@@ -517,11 +547,6 @@ final class UI
         }
         if ($row) {
             $rows[] = $row;
-        }
-        foreach (Settings::get('extra_buttons') ?: [] as $b) {
-            if (!empty($b['text']) && !empty($b['url'])) {
-                $rows[] = [self::iconize(['text' => (string)$b['text'], 'url' => (string)$b['url']] + (!empty($b['style']) ? ['style' => $b['style']] : []))];
-            }
         }
         return $rows;
     }

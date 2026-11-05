@@ -142,9 +142,9 @@ final class Admin
         }
         $rows = [[UI::raw('🔗 لینک کانال اصلی', 'adm:sbval:channel_url', 'primary')],
             [UI::raw('📋 متن دکمه افزودن', 'adm:sbtext:btn_add_group'), UI::raw('📋 متن دکمه کانال', 'adm:sbtext:btn_channel')],
-            [UI::raw('👥 افزودن دکمه جدید', 'adm:xbadd', 'success')]];
+            [UI::raw('👥 افزودن دکمه تبلیغ', 'adm:xbadd', 'success')]];
         foreach ($extra as $i => $b) {
-            $rows[] = [UI::raw('❌ حذف دکمه ' . ($i + 1), "adm:xbdel:$i", 'danger')];
+            $rows[] = [UI::raw('🎨 تنظیم دکمه ' . ($i + 1), "adm:xbview:$i", 'primary'), UI::raw('❌ حذف دکمه ' . ($i + 1), "adm:xbdel:$i", 'danger')];
         }
         $rows[] = self::back();
         $kb = UI::kb($rows);
@@ -530,7 +530,24 @@ final class Admin
                 self::editOrSend($cq, Diamonds::topText(), UI::kb([self::back()]));
                 return;
             case 'xbadd':
-                self::wait($cq, 'xbadd', "👥 متن و لینک دکمه را در دو خط بفرستید:\n<code>💎 کانال دوم</code>\n<code>https://t.me/yourchannel</code>\n\nایموجی اول متن خودکار پریمیوم می‌شود.");
+                self::wait($cq, 'xbadd', "👥 متن و لینک دکمه را در دو خط بفرستید:\n<code>💎 کانال دوم</code>\n<code>https://t.me/yourchannel</code>\n\nاگر اول متن ایموجی پریمیوم بفرستید، همان روی دکمه می‌نشیند. بعد از ارسال، رنگ دکمه را انتخاب می‌کنید.");
+                return;
+            case 'xbview':
+                TG::answer($cq['id']);
+                self::extraView($chat, (int)($p[1] ?? -1), $cq);
+                return;
+            case 'xbstyle':
+                $list = Settings::get('extra_buttons') ?: [];
+                $i = (int)($p[1] ?? -1);
+                if (isset($list[$i])) {
+                    $list[$i]['style'] = in_array($p[2] ?? '', ['primary', 'success', 'danger'], true) ? $p[2] : null;
+                    Settings::set('extra_buttons', $list);
+                }
+                TG::answer($cq['id'], '✅');
+                self::extraView($chat, $i, $cq);
+                return;
+            case 'xbtext':
+                self::wait($cq, 'xbtext', '📋 متن جدید دکمه را بفرستید. اگر اول متن ایموجی پریمیوم بفرستید، همان روی دکمه می‌نشیند.', ['key' => (string)(int)($p[1] ?? -1)]);
                 return;
             case 'xbdel':
                 $list = Settings::get('extra_buttons') ?: [];
@@ -600,6 +617,45 @@ final class Admin
         }
         $kb = UI::kb([[UI::button($key, ['cb' => 'noop'], ['title' => 'نمونه'])], [UI::raw('📋 ویرایش متن', "adm:btext:$key", 'primary')],
             $styles, [UI::raw('⛔️ پیش‌فرض', "adm:breset:$key", 'danger'), UI::raw('🏠 بازگشت', 'adm:btns')]]);
+        $cq ? self::editOrSend($cq, $text, $kb) : TG::send($chat, $text, $kb);
+    }
+
+    private static function premiumLabel(array $m, string $label): array
+    {
+        $raw = (string)($m['text'] ?? '');
+        $u16 = mb_convert_encoding($raw, 'UTF-16LE', 'UTF-8');
+        foreach ($m['entities'] ?? [] as $e) {
+            if (($e['type'] ?? '') !== 'custom_emoji' || empty($e['custom_emoji_id'])) {
+                continue;
+            }
+            $emo = mb_convert_encoding(substr($u16, (int)$e['offset'] * 2, (int)$e['length'] * 2), 'UTF-8', 'UTF-16LE');
+            if ($emo !== '' && ($pos = mb_strpos($label, $emo)) !== false) {
+                $rest = trim(mb_substr($label, 0, $pos) . mb_substr($label, $pos + mb_strlen($emo)));
+                return [mb_substr($rest !== '' ? $rest : "\u{3164}", 0, 64), (string)$e['custom_emoji_id']];
+            }
+        }
+        return [mb_substr($label, 0, 64), null];
+    }
+
+    private static function extraView(int|string $chat, int $i, ?array $cq = null): void
+    {
+        $list = Settings::get('extra_buttons') ?: [];
+        if (!isset($list[$i])) {
+            self::startView($chat, $cq);
+            return;
+        }
+        $b = $list[$i];
+        $style = $b['style'] ?? null;
+        $text = '📢 <b>دکمه تبلیغ ' . ($i + 1) . "</b>\n📋 متن: <code>" . UI::esc($b['text']) . "</code>\n🔗 لینک: " . UI::esc($b['url'])
+            . "\n💎 ایموجی پریمیوم: " . (!empty($b['icon']) ? '<tg-emoji emoji-id="' . UI::esc((string)$b['icon']) . '">⭐</tg-emoji>' : 'ندارد')
+            . "\n🧩 رنگ: " . (self::STYLES[$style ?: 'none'] ?? $style) . "\n\n⬇️ پیش‌نمایش زیر پیام‌ها:";
+        $styles = [];
+        foreach (self::STYLES as $s => $l) {
+            $styles[] = UI::raw(($s === ($style ?: 'none') ? '✅ ' : '') . $l, "adm:xbstyle:$i:$s", $s === 'none' ? null : $s);
+        }
+        $preview = UI::footerRows()[$i] ?? [];
+        $kb = UI::kb([$preview, $styles, [UI::raw('📋 ویرایش متن و ایموجی', "adm:xbtext:$i", 'primary')],
+            [UI::raw('❌ حذف', "adm:xbdel:$i", 'danger'), UI::raw('🏠 بازگشت', 'adm:startbtn')]]);
         $cq ? self::editOrSend($cq, $text, $kb) : TG::send($chat, $text, $kb);
     }
 
@@ -838,12 +894,27 @@ final class Admin
                     TG::send($chat, '⚠️ متن در خط اول و لینک (https://...) در خط دوم.');
                     return;
                 }
+                [$label, $icon] = self::premiumLabel($m, $label);
                 $list = Settings::get('extra_buttons') ?: [];
-                $list[] = ['text' => mb_substr($label, 0, 64), 'url' => $url];
-                Settings::set('extra_buttons', array_slice($list, 0, 8));
+                $list[] = ['text' => $label, 'url' => $url, 'icon' => $icon, 'style' => null];
+                $list = array_slice($list, 0, 8);
+                Settings::set('extra_buttons', $list);
                 State::clear($uid);
-                TG::send($chat, '✅ دکمه اضافه شد.');
-                self::startView($chat);
+                self::extraView($chat, count($list) - 1);
+                return;
+            case 'xbtext':
+                $list = Settings::get('extra_buttons') ?: [];
+                $i = (int)$key;
+                $first = trim((string)(preg_split('/\R/u', $text)[0] ?? ''));
+                if (!isset($list[$i]) || $first === '') {
+                    State::clear($uid);
+                    TG::send($chat, '⚠️ متن خالی است.');
+                    return;
+                }
+                [$list[$i]['text'], $list[$i]['icon']] = self::premiumLabel($m, $first);
+                Settings::set('extra_buttons', $list);
+                State::clear($uid);
+                self::extraView($chat, $i);
                 return;
             case 'sbtext':
                 if (!isset(Config::data('buttons')[$key]) || $text === '') {

@@ -134,7 +134,7 @@ final class Diamonds
         }
         $new = self::level($points);
         Bot::reply($m, UI::t('dm_win', ['name' => self::name($u), 'reward' => Fmt::int($reward), 'points' => Fmt::int($points), 'level' => $new,
-            'total' => Fmt::int($total), 'new_level' => $new > $level ? $new : null]), null);
+            'total' => Fmt::int($total), 'new_level' => $new > $level ? $new : null]));
     }
 
     public static function meText(array $u): string

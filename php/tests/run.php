@@ -473,11 +473,18 @@ DB::touchUser(['id' => 4242, 'first_name' => 's']);
 check((int)DB::user(4242)['started'] === 1, 'started flag survives later updates');
 
 cb('adm:xbadd', 999, 999);
-feed(msg("💎 کانال دوم\nhttps://t.me/second", 999, 999));
+feed(msg("💎 کانال دوم\nhttps://t.me/second", 999, 999, null, [['type' => 'custom_emoji', 'offset' => 0, 'length' => 2, 'custom_emoji_id' => '5400000000000000001']]));
+$xb = (Settings::get('extra_buttons') ?: [])[0] ?? [];
+check(($xb['text'] ?? '') === 'کانال دوم' && ($xb['icon'] ?? '') === '5400000000000000001' && str_contains((string)last_text(), 'دکمه تبلیغ 1'), 'ad button keeps sent premium emoji');
+cb('adm:xbstyle:0:success', 999, 999);
+check(((Settings::get('extra_buttons') ?: [])[0]['style'] ?? '') === 'success', 'ad button color');
 reset_calls();
 feed(msg('/start', 6, 6));
-$bs = buttons(sent(['sendMessage'])[0]);
-check((bool)array_filter($bs, fn($b) => ($b['url'] ?? '') === 'https://t.me/second' && str_contains($b['text'] ?? '', 'کانال دوم')), 'extra footer button');
+$kbr = sent(['sendMessage'])[0][1]['reply_markup']['inline_keyboard'] ?? [];
+$xi = array_key_first(array_filter($kbr, fn($r) => ($r[0]['url'] ?? '') === 'https://t.me/second'));
+$gi = array_key_first(array_filter($kbr, fn($r) => str_contains($r[0]['url'] ?? '', 'startgroup=true')));
+check($xi !== null && $gi !== null && $xi < $gi && ($kbr[$xi][0]['icon_custom_emoji_id'] ?? '') === '5400000000000000001' && ($kbr[$xi][0]['style'] ?? '') === 'success'
+    && ($kbr[$xi][0]['text'] ?? '') === 'کانال دوم', 'ad button above add-to-group with emoji and color');
 cb('adm:xbdel:0', 999, 999);
 check(!(Settings::get('extra_buttons') ?: []), 'extra button removed');
 reset_calls();
@@ -488,6 +495,8 @@ reset_calls();
 feed(msg('الماس', -7100, 501, null, null, 'Ali'));
 $r1 = Diamonds::points(501);
 check($r1 >= Diamonds::MIN && str_contains((string)last_text(), 'الماس'), 'diamond hit');
+$dmb = buttons(end($GLOBALS['calls']));
+check(str_contains($dmb[0]['url'] ?? '', 'startgroup=true'), 'diamond reply has add-to-group button');
 reset_calls();
 feed(msg('الماس', -7100, 501, null, null, 'Ali'));
 check(Diamonds::points(501) === $r1 && str_contains((string)last_text(), 'زود'), 'diamond cooldown');
@@ -859,11 +868,15 @@ check(UI::quoteGaps("سر\n\n<blockquote>a</blockquote>\n\nجمع\n\n<blockquote
     && UI::quoteGaps("سر\n\n<blockquote>a</blockquote>") === "سر\n\n<blockquote>a</blockquote>", 'only first quote keeps blank line above');
 $E = fn($id) => '<tg-emoji emoji-id="' . $id . '">x</tg-emoji>';
 $al = UI::align($E(1) . " <b>عنوان</b>\n" . $E(2) . "<code>UQB1</code>\n<blockquote>" . $E(3) . "    NFT: 5\n" . $E(4) . "        موجودی: 1</blockquote>\n" . $E(5) . "   1405/08/14");
-check($al === $E(1) . " <b>عنوان</b>\n" . $E(2) . " <code>UQB1</code>\n<blockquote>" . $E(3) . " NFT: 5\n" . $E(4) . "  موجودی: 1</blockquote>\n" . $E(5) . " 1405/08/14"
+check($al === $E(1) . " <b>عنوان</b>\n" . $E(2) . " <code>UQB1</code>\n<blockquote>" . $E(3) . " NFT: 5\n" . $E(4) . "  موجودی: 1</blockquote>\n\u{200E}" . $E(5) . " 1405/08/14"
     && UI::align('<blockquote>' . $E(4) . ' موجودی: 1</blockquote>', 4) === '<blockquote>' . $E(4) . '    موجودی: 1</blockquote>'
     && UI::align('<blockquote>' . $E(6) . '    <b>370,185</b></blockquote>') === '<blockquote>' . $E(6) . ' <b>370,185</b></blockquote>'
     && UI::align("\u{200F}" . $E(7) . '   <b>800 POL</b>') === "\u{200F}" . $E(7) . ' <b>800 POL</b>' && UI::align($E(8) . '    @HashpriceBot') === $E(8) . ' @HashpriceBot'
     && UI::align('<b>hello</b> ' . $E(1)) === '<b>hello</b> ' . $E(1), 'emoji spacing: 2 in message quotes, 4 in caption quotes, 1 elsewhere');
+$ft = UI::align("<blockquote>" . $E(1) . " a</blockquote>\n\n" . $E(2) . " رتبه‌ی شما: <b>5</b> " . $E(3));
+check($ft === "<blockquote>" . $E(1) . " a</blockquote>\n\n\u{200E}" . $E(2) . " رتبه‌ی شما: <b>5</b> " . $E(3) . "\u{200F}" && UI::align($ft) === $ft
+    && UI::align("سلام\n" . $E(2) . ' دنیا') === "سلام\n" . $E(2) . ' دنیا', 'lines after the last quote stay on the left');
+check(UI::align($E(1) . " تاپ\n\n" . $E(2) . ' رتبه', 2, true) === $E(1) . " تاپ\n\n\u{200E}" . $E(2) . " رتبه\u{200F}" && UI::align($E(1) . ' تاپ', 2, true) === $E(1) . ' تاپ', 'caption without quote keeps last line on the left');
 $dm2 = Settings::get('emoji_map');
 Settings::set('emoji_invalid', []);
 Settings::set('emoji_map', ['🇮🇷' => '5143448346001671955']);
