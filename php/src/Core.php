@@ -500,9 +500,47 @@ final class Cache
     }
 }
 
+final class Perf
+{
+    private static float $t0 = 0.0;
+    private static array $marks = [];
+
+    public static function start(): void
+    {
+        self::$t0 = microtime(true);
+        self::$marks = [];
+    }
+
+    public static function mark(string $k): void
+    {
+        if (self::$t0) {
+            self::$marks[] = $k . '=' . (int)round((microtime(true) - self::$t0) * 1000);
+        }
+    }
+
+    public static function flush(string $tag): void
+    {
+        if (!self::$t0) {
+            return;
+        }
+        $line = date('m-d H:i:s') . " $tag " . implode(' ', self::$marks) . ' total=' . (int)round((microtime(true) - self::$t0) * 1000) . "ms\n";
+        self::$t0 = 0.0;
+        if (TG::$fake) {
+            return;
+        }
+        $f = Config::$root . '/data/perf.log';
+        if (@filesize($f) > 200000) {
+            @file_put_contents($f, substr((string)@file_get_contents($f), -100000));
+        }
+        @file_put_contents($f, $line, FILE_APPEND);
+    }
+}
+
 final class FileCache
 {
     private static array $mem = [];
+    private static array $queued = [];
+    public static bool $inline = false;
 
     private static function path(string $k): string
     {
@@ -528,6 +566,46 @@ final class FileCache
         $v = $fn();
         self::put($k, $v);
         return $v;
+    }
+
+    public static function swr(string $k, int $ttl, callable $fn)
+    {
+        if (array_key_exists($k, self::$mem)) {
+            return self::$mem[$k];
+        }
+        $f = self::path($k);
+        $v = is_file($f) ? json_decode((string)@file_get_contents($f), true) : null;
+        if (!is_array($v) || !array_key_exists('v', $v)) {
+            $x = $fn();
+            if ($x === null) {
+                return self::$mem[$k] = null;
+            }
+            self::put($k, $x);
+            return $x;
+        }
+        if (time() - (int)@filemtime($f) >= $ttl) {
+            if (self::$inline) {
+                $x = $fn();
+                if ($x) {
+                    self::put($k, $x);
+                    return $x;
+                }
+            } elseif (!isset(self::$queued[$k]) && count(self::$queued) < 6) {
+                self::$queued[$k] = true;
+                @touch($f);
+                register_shutdown_function(function () use ($k, $fn) {
+                    try {
+                        $x = $fn();
+                        if ($x) {
+                            self::put($k, $x);
+                        }
+                    } catch (Throwable $e) {
+                        error_log('cache refresh ' . $k . ': ' . $e->getMessage());
+                    }
+                });
+            }
+        }
+        return self::$mem[$k] = $v['v'];
     }
 
     public static function put(string $k, $v): void

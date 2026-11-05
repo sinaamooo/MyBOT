@@ -66,6 +66,12 @@ if (is_file($data . '/last_update.txt')) {
 } else {
     echo "last update handled: none yet\n";
 }
+$perf = $data . '/perf.log';
+if (is_file($perf)) {
+    echo "\n--- timings (ms) ---\n";
+    $lines = file($perf, FILE_IGNORE_NEW_LINES);
+    echo implode("\n", array_slice($lines, -15)) . "\n";
+}
 $log = $data . '/php-error.log';
 if (is_file($log)) {
     echo "\n--- last errors ---\n";

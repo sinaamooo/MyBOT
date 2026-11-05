@@ -26,13 +26,18 @@ final class Tick
                 error_log('tick market: ' . $e->getMessage());
             }
             try {
+                FileCache::$inline = true;
                 if (!FileCache::has('gift_dataset', 540)) {
                     FileCache::forget();
                     Gifts::dataset();
                     Gifts::floorsDaysAgo();
                 }
+                $names = array_values(array_unique(array_filter(array_map(fn($it) => $it['full_name'] ?? null, Gifts::dataset()['index'] ?? []))));
+                Gifts::prefetch($names, 48, false);
             } catch (Throwable $e) {
                 error_log('tick gifts: ' . $e->getMessage());
+            } finally {
+                FileCache::$inline = false;
             }
             if (time() - (int)DB::kvGet('emoji_checked_at', 0) > 86400) {
                 UI::validateEmoji();

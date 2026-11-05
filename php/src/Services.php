@@ -32,8 +32,11 @@ final class Gifts
 
     public static function dataset(): array
     {
-        return FileCache::remember('gift_dataset', 600, function () {
-            $d = Http::json(self::RAW . '/main/Gifts_Details.json', ['timeout' => 20]) ?: [];
+        return FileCache::swr('gift_dataset', 600, function () {
+            $d = Http::json(self::RAW . '/main/Gifts_Details.json', ['timeout' => 15]);
+            if (!is_array($d) || empty($d['upgraded'])) {
+                return null;
+            }
             $index = [];
             $byId = [];
             foreach ($d['upgraded'] ?? [] as $it) {
@@ -53,12 +56,12 @@ final class Gifts
                 }
             }
             return ['index' => $index, 'by_id' => $byId, 'unupgraded' => $un, 'updated' => $d['last_updated'] ?? null];
-        });
+        }) ?? ['index' => [], 'by_id' => [], 'unupgraded' => [], 'updated' => null];
     }
 
     public static function attributeFloors(string $short): array
     {
-        return FileCache::remember('gift_attr:' . $short, 1800, fn() => self::attrsFrom(Http::json(self::RAW . "/main/models/$short/prices.json", ['timeout' => 10])));
+        return FileCache::swr('gift_attr:' . $short, 1800, fn() => self::attrsFrom(Http::json(self::RAW . "/main/models/$short/prices.json", ['timeout' => 8])));
     }
 
     private static function attrsFrom($d): array
@@ -75,27 +78,34 @@ final class Gifts
         return $out;
     }
 
-    public static function prefetch(array $collections): void
+    public static function prefetch(array $collections, int $cap = 0, bool $old = true): void
     {
         $ds = self::dataset();
         $reqs = [];
         foreach (array_unique($collections) as $c) {
             $short = $ds['index'][self::norm($c)]['short_name'] ?? null;
-            if ($short && !FileCache::has('gift_attr:' . $short, 1800)) {
-                $reqs[$short] = ['url' => self::RAW . "/main/models/$short/prices.json", 'timeout' => 10];
+            if ($short && !isset($reqs[$short]) && !FileCache::has('gift_attr:' . $short, FileCache::$inline ? 1800 : 7 * 86400)) {
+                $reqs[$short] = ['url' => self::RAW . "/main/models/$short/prices.json", 'timeout' => 8];
             }
         }
-        foreach (array_chunk($reqs, 16, true) as $chunk) {
+        if ($cap > 0) {
+            $reqs = array_slice($reqs, 0, $cap, true);
+        }
+        foreach (array_chunk($reqs, 24, true) as $chunk) {
             foreach (Http::multiJson($chunk) as $short => $d) {
-                FileCache::put('gift_attr:' . $short, self::attrsFrom($d));
+                if (is_array($d) || !FileCache::has('gift_attr:' . $short, 7 * 86400)) {
+                    FileCache::put('gift_attr:' . $short, self::attrsFrom($d));
+                }
             }
         }
-        self::floorsDaysAgo();
+        if ($old) {
+            self::floorsDaysAgo();
+        }
     }
 
     public static function floorsDaysAgo(int $days = 7): array
     {
-        return FileCache::remember('gift_old:' . $days, 6 * 3600, function () use ($days) {
+        return FileCache::swr('gift_old:' . $days, 6 * 3600, function () use ($days) {
             $until = gmdate('Y-m-d\TH:i:s\Z', time() - $days * 86400);
             $c = Http::json('https://api.github.com/repos/' . self::REPO . '/commits', ['params' => ['until' => $until, 'per_page' => 1, 'path' => 'Gifts_Details.json'], 'timeout' => 15]);
             $sha = $c[0]['sha'] ?? null;
@@ -119,7 +129,7 @@ final class Gifts
         if ($auth === '') {
             return null;
         }
-        $f = FileCache::remember('portals_floors', 300, fn() => Http::json('https://portals-market.com/api/collections/floors', ['headers' => ['Authorization' => $auth], 'timeout' => 10])['floorPrices'] ?? []);
+        $f = FileCache::swr('portals_floors', 300, fn() => Http::json('https://portals-market.com/api/collections/floors', ['headers' => ['Authorization' => $auth], 'timeout' => 10])['floorPrices'] ?? []);
         $v = $f[$short] ?? $f[str_replace('_', '', $short)] ?? null;
         return is_numeric($v) ? (float)$v : null;
     }
@@ -247,7 +257,7 @@ final class Gifts
                 $out[$k] = $b;
                 continue;
             }
-            $reqs[$k] = ['url' => 'https://nft.fragment.com/gift/' . strtolower($n) . '.small.jpg', 'timeout' => 6];
+            $reqs[$k] = ['url' => 'https://nft.fragment.com/gift/' . strtolower($n) . '.small.jpg', 'timeout' => 4];
         }
         foreach ($reqs ? Http::multi($reqs) : [] as $k => $r) {
             if ($r['status'] >= 200 && $r['status'] < 300 && strlen($r['body']) > 500) {

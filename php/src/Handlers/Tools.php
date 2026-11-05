@@ -134,6 +134,7 @@ final class Tools
         $owner = $owner ?? ($m['from']['id'] ?? 0);
         $isHash = in_array($kind, Chain::HASH_KINDS, true);
         $wait = Bot::send($m, UI::t($isHash ? 'tx_checking' : 'wallet_checking'), null);
+        Perf::start();
         try {
             if ($isHash) {
                 $tx = Txs::check($kind, $token);
@@ -159,6 +160,7 @@ final class Tools
             Bot::send($m, UI::t('error'));
         } finally {
             Bot::deleteMsg($wait);
+            Perf::flush('checker:' . $kind);
         }
     }
 

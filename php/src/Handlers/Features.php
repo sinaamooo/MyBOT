@@ -70,8 +70,11 @@ final class GiftsH
             return;
         }
         TG::api('sendChatAction', ['chat_id' => $m['chat']['id'], 'action' => 'upload_photo', '__quick' => true]);
+        Perf::start();
         $t = self::target($m, $args);
+        Perf::mark('resolve');
         if (!$t) {
+            Perf::flush('gift');
             Bot::send($m, UI::t('gift_user_unknown'));
             return;
         }
@@ -112,8 +115,18 @@ final class GiftsH
 
     private static function portfolio(array $m, array $t): void
     {
+        $extra = Bot::isPrivate($m) ? [] : ['reply_parameters' => Bot::replyParams($m)];
+        $ck = 'gpc:' . ($t['kind'] ?? '') . ':' . ($t['id'] ?? '');
+        $hit = Cache::get($ck);
+        if (!empty($hit['f']) && TG::photo($m['chat']['id'], $hit['f'], $hit['c'], UI::footer(), $extra) !== null) {
+            Perf::mark('cached');
+            Perf::flush('gift');
+            return;
+        }
         $res = self::owned($t);
+        Perf::mark('owned:' . count($res[0] ?? []));
         if ($res === null) {
+            Perf::flush('gift');
             Bot::send($m, UI::t('gift_user_unknown'));
             return;
         }
@@ -126,7 +139,9 @@ final class GiftsH
         $tonUsd = $s['ton'];
         $tonToman = $tonUsd && $s['toman'] ? $tonUsd * $s['toman'] : null;
         $ds = Gifts::dataset();
+        Perf::mark('dataset');
         Gifts::prefetch(array_map(fn($og) => (string)($og['gift']['base_name'] ?? ''), array_filter($owned, fn($og) => ($og['type'] ?? '') === 'unique')));
+        Perf::mark('floors');
         $starTon = $tonUsd ? Prices::starUsd() / $tonUsd : null;
         $tiles = [];
         $now = 0.0;
@@ -163,7 +178,9 @@ final class GiftsH
             }
         }
         usort($tiles, fn($a, $b) => ($b['value'] ?? 0) <=> ($a['value'] ?? 0));
+        Perf::mark('values');
         $imgs = Gifts::images(array_map(fn($x) => $x['name'], array_slice($tiles, 0, 12)));
+        Perf::mark('images');
         foreach ($imgs as $i => $bytes) {
             $tiles[$i]['image'] = $bytes;
         }
@@ -174,6 +191,7 @@ final class GiftsH
         $plShow = ($pl !== null && abs($pl) > 0.0001) ? $pl : null;
         $png = PriceCard::gift($t['name'], $t['username'], $tiles, $now, $tonUsd ? $now * $tonUsd : null, $tonToman ? $now * $tonToman : null, $plShow, $pct, (int)$count, TG::username())
             ?? Cards::gift($t['name'], $t['username'], $tiles, $now, $tonUsd ? $now * $tonUsd : null, $tonToman ? $now * $tonToman : null, $plShow, $pct, (int)$count, TG::username());
+        Perf::mark('render');
         $plLine = $plShow !== null ? UI::fill(UI::template($pl >= 0 ? 'gift_profit' : 'gift_loss'), ['ton' => Fmt::num(abs($pl)), 'percent' => sprintf('%.2f', abs($pct ?? 0)), 'toman' => $tonToman ? Fmt::toman(abs($pl) * $tonToman) : '—']) : null;
         $change = null;
         if ($last && (float)$last['value_ton']) {
@@ -189,8 +207,14 @@ final class GiftsH
         $caption = UI::t('gift_user_caption', ['name' => UI::esc($t['name']), 'count' => Fmt::int($count), 'unique_count' => Fmt::int($unique),
             'total_ton' => Fmt::num($now), 'total_usd' => $tonUsd ? Fmt::usd($now * $tonUsd) : '—', 'total_toman' => $tonToman ? Fmt::toman($now * $tonToman) : '—',
             'pl_line' => $plLine, 'change_line' => $change, 'links' => $top ? implode("\n", array_map(fn($l) => "🔗 $l", $top)) : null]);
-        $extra = Bot::isPrivate($m) ? [] : ['reply_parameters' => Bot::replyParams($m)];
-        TG::photo($m['chat']['id'], $png, mb_substr($caption, 0, 1024), UI::footer(), $extra);
+        $caption = mb_substr($caption, 0, 1024);
+        $sent = TG::photo($m['chat']['id'], $png, $caption, UI::footer(), $extra);
+        $ph = $sent['photo'] ?? [];
+        if ($ph && !empty(end($ph)['file_id'])) {
+            Cache::set($ck, ['f' => end($ph)['file_id'], 'c' => $caption], 300);
+        }
+        Perf::mark('sent');
+        Perf::flush('gift');
     }
 }
 
