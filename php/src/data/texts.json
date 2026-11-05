@@ -592,15 +592,15 @@
   "desc": "کپشن استوری و هایلایت اینستاگرام"
  },
  "dm_board": {
-  "text": "🏆 <b>تاپ الماسی</b>\n\n{global}\n\n{group}\n\n{me}",
+  "text": "🏆 <b>تاپ الماسی</b>\n{global}\n{group}\n{me}",
   "desc": "پیام تاپ الماسی"
  },
  "dm_board_global": {
-  "text": "🌍 <b>برترین‌های کل ربات</b>\n<blockquote>{lines}</blockquote>",
+  "text": "🌍 <b>برترین‌های کل ربات</b>\n\n<blockquote>{lines}</blockquote>",
   "desc": "بخش برترین‌های کل ربات"
  },
  "dm_board_group": {
-  "text": "👥 <b>برترین‌های این گروه</b>\n<blockquote>{lines}</blockquote>",
+  "text": "👥 <b>برترین‌های این گروه</b>\n\n<blockquote>{lines}</blockquote>",
   "desc": "بخش برترین‌های گروه"
  },
  "dm_board_group_none": {
