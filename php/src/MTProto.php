@@ -471,14 +471,54 @@ final class MTConn
     private int $seq = 0;
     private int $lastId = 0;
     private bool $inited = false;
+    private ?string $url = null;
+    private $curl = null;
+    private array $queue = [];
 
-    public function __construct(int $dc, string $ip, int $port = 443)
+    public function __construct(int $dc, string $ip, int $port = 443, ?string $url = null)
     {
         $this->dc = $dc;
         $this->session = random_bytes(8);
+        if ($url !== null) {
+            $this->url = $url;
+            return;
+        }
         $this->sock = self::open($ip, $port);
         stream_set_timeout($this->sock, 6);
         fwrite($this->sock, "\xee\xee\xee\xee");
+    }
+
+    public function transport(): string
+    {
+        return $this->url !== null ? 'http' : 'tcp';
+    }
+
+    private function post(string $data): void
+    {
+        if ($this->curl === null) {
+            $this->curl = curl_init();
+        }
+        $proxy = Config::get('MTPROTO_PROXY') ?: Config::get('TELEGRAM_PROXY') ?: Config::get('PROXY');
+        curl_setopt_array($this->curl, [CURLOPT_URL => $this->url, CURLOPT_POST => true, CURLOPT_POSTFIELDS => $data, CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => 20, CURLOPT_CONNECTTIMEOUT => 6, CURLOPT_HTTPHEADER => ['Content-Type: application/octet-stream', 'Expect:'],
+            CURLOPT_USERAGENT => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36']
+            + ($proxy !== '' ? [CURLOPT_PROXY => $proxy] : []));
+        $body = curl_exec($this->curl);
+        $code = (int)curl_getinfo($this->curl, CURLINFO_RESPONSE_CODE);
+        if ($body === false) {
+            throw new RuntimeException('mtproto http: ' . curl_error($this->curl));
+        }
+        if ($code === 404 || strlen($body) === 4) {
+            $c = strlen($body) === 4 ? unpack('V', $body)[1] : 404;
+            $c = $c >= 0x80000000 ? $c - 0x100000000 : $c;
+            throw new MTError($c, 'TRANSPORT_' . abs($c));
+        }
+        if ($code !== 200) {
+            throw new RuntimeException("mtproto http: status $code");
+        }
+        if ($body !== '') {
+            $this->queue[] = $body;
+        }
     }
 
     private static function open(string $ip, int $port)
@@ -532,6 +572,10 @@ final class MTConn
 
     public function close(): void
     {
+        if ($this->curl !== null) {
+            curl_close($this->curl);
+            $this->curl = null;
+        }
         if ($this->sock) {
             @fclose($this->sock);
             $this->sock = null;
@@ -540,6 +584,10 @@ final class MTConn
 
     private function sendPacket(string $data): void
     {
+        if ($this->url !== null) {
+            $this->post($data);
+            return;
+        }
         $buf = pack('V', strlen($data)) . $data;
         while ($buf !== '') {
             $w = @fwrite($this->sock, $buf);
@@ -566,6 +614,15 @@ final class MTConn
 
     private function recvPacket(): string
     {
+        if ($this->url !== null) {
+            if (!$this->queue && $this->keyId !== '') {
+                $this->sendEncrypted(TL::int(0x9299359f) . TL::int(0) . TL::int(0) . TL::int(15000), false);
+            }
+            if (!$this->queue) {
+                throw new RuntimeException('mtproto: timeout');
+            }
+            return array_shift($this->queue);
+        }
         $len = unpack('V', $this->readN(4))[1];
         if ($len > 16 * 1024 * 1024) {
             throw new RuntimeException('mtproto: bad length');
@@ -921,11 +978,18 @@ final class MTProto
         DB::kvSet('mtproto', $s);
     }
 
+    const WEB = [1 => 'pluto', 2 => 'venus', 3 => 'aurora', 4 => 'vesta', 5 => 'flora'];
+    public static ?string $web = null;
+
     private static function connect(array &$s, int $dc): MTConn
     {
         [$ip, $port] = self::$addr[$dc] ?? [self::DCS[$dc] ?? self::DCS[2], (int)($s['port'] ?? 443)];
         $ports = isset(self::$addr[$dc]) || Config::get('MTPROTO_PROXY') || Config::get('TELEGRAM_PROXY') ? [$port] : array_values(array_unique([$port, 443, 80, 5222]));
         $c = null;
+        if (($s['tr'] ?? 'http') === 'http' && (!isset(self::$addr[$dc]) || self::$web !== null)) {
+            $c = new MTConn($dc, '', 0, self::$web !== null ? sprintf(self::$web, $dc) : 'https://' . (self::WEB[$dc] ?? 'venus') . '.web.telegram.org/apiw1');
+            $ports = [];
+        }
         foreach ($ports as $i => $pt) {
             try {
                 $c = new MTConn($dc, $ip, $pt);
@@ -1085,6 +1149,9 @@ final class MTProto
                     Cache::set('mtp_down', $e->getMessage(), 600);
                     throw $e;
                 }
+                $s = self::state();
+                $s['tr'] = ($s['tr'] ?? 'http') === 'http' ? 'tcp' : 'http';
+                self::save($s);
             }
         }
         throw new RuntimeException('mtproto: giving up');

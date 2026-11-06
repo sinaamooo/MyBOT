@@ -18,6 +18,10 @@ final class Bot
         $c = $u['message']['chat']['id'] ?? $u['edited_message']['chat']['id'] ?? $u['callback_query']['message']['chat']['id'] ?? $u['my_chat_member']['chat']['id'] ?? $u['chat_member']['chat']['id'] ?? 0;
         UI::$lang = 'fa';
         $t0 = microtime(true);
+        $msg = $u['message'] ?? $u['edited_message'] ?? null;
+        if ($msg && isset($msg['date']) && ((int)$msg['date'] < time() - 120 || (int)$msg['date'] < (int)(Settings::get('on_at') ?? 0))) {
+            return;
+        }
         try {
             if ($c < 0 && ($gc = $u['message']['chat'] ?? $u['callback_query']['message']['chat'] ?? null)) {
                 Lang::adopt($gc);
@@ -382,6 +386,15 @@ final class Bot
         $f = $m['from'] ?? null;
         if (!$f || !empty($f['is_bot'])) {
             return;
+        }
+        foreach (array_filter([$f, $m['reply_to_message']['from'] ?? null, $m['forward_from'] ?? null]) as $who) {
+            $un = strtolower((string)($who['username'] ?? ''));
+            if ($un !== '' && empty($who['is_bot'])) {
+                $row = [(int)$who['id'], UI::fullName($who), $who['username']];
+                if (Cache::get('un:' . $un) !== $row) {
+                    Cache::set('un:' . $un, $row, 30 * 86400);
+                }
+            }
         }
         if (self::isPrivate($m)) {
             DB::touchUser($f, false, true);

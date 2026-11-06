@@ -942,6 +942,10 @@ final class Resolver
         if ($username === '') {
             return null;
         }
+        $seen = Cache::get('un:' . strtolower($username));
+        if (is_array($seen) && !empty($seen[0])) {
+            return ['kind' => 'user', 'id' => (int)$seen[0], 'name' => (string)($seen[1] ?: $username), 'username' => $seen[2] ?? $username];
+        }
         if (MTProto::enabled() && ($mt = MTProto::resolve($username))) {
             return $mt;
         }
@@ -1402,6 +1406,39 @@ final class GiftMarket
             'form' => http_build_query(['type' => 'gifts', 'query' => '', 'collection' => $collection, 'sort' => 'price_asc', 'filter' => 'sale', 'method' => 'searchAuctions']),
             'headers' => ['User-Agent' => Hls::UA, 'Accept' => 'application/json, text/javascript, */*; q=0.01', 'Content-Type' => 'application/x-www-form-urlencoded; charset=UTF-8',
                 'Origin' => Fragment::BASE, 'Referer' => Fragment::BASE . '/gifts/' . $collection, 'X-Requested-With' => 'XMLHttpRequest']];
+    }
+
+    public static function fragmentFloors(array $names): array
+    {
+        $out = [];
+        $need = [];
+        foreach (array_unique(array_filter($names)) as $n) {
+            $col = Gifts::norm($n);
+            $v = Cache::get('ff:' . $col, $hit);
+            if ($hit) {
+                if ($v) {
+                    $out[$col] = (float)$v;
+                }
+            } else {
+                $need[$col] = true;
+            }
+        }
+        if ($need && ($hash = self::fragmentHash())) {
+            $reqs = [];
+            foreach (array_keys($need) as $col) {
+                $reqs[$col] = self::fragmentReq($hash, $col);
+            }
+            foreach (Http::multi($reqs, 5) as $col => $r) {
+                $j = json_decode((string)$r['body'], true);
+                $items = is_array($j) && empty($j['error']) ? self::fragmentItems((string)($j['html'] ?? (($j['body'] ?? '') . ($j['foot'] ?? '')))) : [];
+                $v = $items[0]['ton'] ?? null;
+                Cache::set('ff:' . $col, $v, $v ? 120 : 60);
+                if ($v) {
+                    $out[$col] = (float)$v;
+                }
+            }
+        }
+        return $out;
     }
 
     public static function fragmentItems(string $html): array

@@ -242,16 +242,19 @@ final class GiftsH
         $tiles = [];
         $now = 0.0;
         $then = 0.0;
+        $live = GiftMarket::fragmentFloors(array_map(fn($og) => (string)($og['gift']['base_name'] ?? ''), $owned));
+        self::tick();
+        Perf::mark('fragment:' . count($live));
         foreach ($owned as $og) {
             $g = $og['gift'] ?? [];
             $v = Gifts::valueOf($g['base_name'] ?? '', null, null, null);
-            $val = $v['floor'];
+            $val = $live[Gifts::norm($g['base_name'] ?? '')] ?? $v['floor'];
             if (!$val && !empty($og['value_usd']) && $tonUsd) {
                 $val = $og['value_usd'] / $tonUsd;
             }
             if ($val) {
                 $now += $val;
-                $then += $v['floor'] && $v['floor_7d'] ? $v['floor_7d'] : $val;
+                $then += $v['floor'] && $v['floor_7d'] ? $val * $v['floor_7d'] / $v['floor'] : $val;
             }
             $c = $g['backdrop']['colors'] ?? [];
             $tiles[] = ['title' => ($g['base_name'] ?? 'Gift') . ' #' . ($g['number'] ?? ''), 'subtitle' => implode(' • ', array_filter([$g['model']['name'] ?? null, $g['backdrop']['name'] ?? null])),

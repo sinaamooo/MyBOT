@@ -46,7 +46,9 @@ $ok = TG::api('setWebhook', [
     'secret_token' => $secret,
     'allowed_updates' => ['message', 'edited_message', 'callback_query', 'my_chat_member', 'chat_member'],
     'max_connections' => max(1, min(100, (int)Config::get('WEBHOOK_MAX_CONN', '12'))),
+    'drop_pending_updates' => true,
 ]);
+Settings::set('on_at', time());
 echo 'version: ' . Config::version() . "\n";
 echo 'bot: @' . $me['username'] . "\n";
 echo 'webhook: ' . ($ok ? 'OK' : 'FAILED ' . TG::$lastError) . " -> $url\n";

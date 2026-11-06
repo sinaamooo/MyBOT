@@ -595,6 +595,9 @@ final class Admin
                 return;
             case 'power':
                 Settings::set('bot_enabled', !Settings::get('bot_enabled'));
+                if (Settings::get('bot_enabled')) {
+                    Settings::set('on_at', time());
+                }
                 TG::answer($cq['id'], Settings::get('bot_enabled') ? '🟢 ربات روشن شد' : '🔴 ربات خاموش شد', true);
                 if (($p[1] ?? '') === 'set') {
                     self::settingsView($chat, $cq, 1);
