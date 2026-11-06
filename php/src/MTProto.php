@@ -477,7 +477,7 @@ final class MTConn
         $this->dc = $dc;
         $this->session = random_bytes(8);
         $this->sock = self::open($ip, $port);
-        stream_set_timeout($this->sock, 10);
+        stream_set_timeout($this->sock, 6);
         fwrite($this->sock, "\xee\xee\xee\xee");
     }
 
@@ -523,9 +523,9 @@ final class MTConn
             }
             return $s;
         }
-        $s = @stream_socket_client("tcp://$ip:$port", $en, $es, 6);
+        $s = @stream_socket_client("tcp://$ip:$port", $en, $es, 4);
         if (!$s) {
-            throw new RuntimeException("connect $ip: $es");
+            throw new RuntimeException("connect $ip:$port: $es");
         }
         return $s;
     }
@@ -923,8 +923,23 @@ final class MTProto
 
     private static function connect(array &$s, int $dc): MTConn
     {
-        [$ip, $port] = self::$addr[$dc] ?? [self::DCS[$dc] ?? self::DCS[2], 443];
-        $c = new MTConn($dc, $ip, $port);
+        [$ip, $port] = self::$addr[$dc] ?? [self::DCS[$dc] ?? self::DCS[2], (int)($s['port'] ?? 443)];
+        $ports = isset(self::$addr[$dc]) || Config::get('MTPROTO_PROXY') || Config::get('TELEGRAM_PROXY') ? [$port] : array_values(array_unique([$port, 443, 80, 5222]));
+        $c = null;
+        foreach ($ports as $i => $pt) {
+            try {
+                $c = new MTConn($dc, $ip, $pt);
+                if ($pt !== (int)($s['port'] ?? 443) && !isset(self::$addr[$dc])) {
+                    $s['port'] = $pt;
+                    self::save($s);
+                }
+                break;
+            } catch (RuntimeException $e) {
+                if ($i === count($ports) - 1) {
+                    throw $e;
+                }
+            }
+        }
         $k = $s['keys'][$dc] ?? null;
         if ($k && !empty($k['k'])) {
             $c->setKey(base64_decode($k['k']));
@@ -1022,6 +1037,9 @@ final class MTProto
         if (!self::enabled()) {
             throw new RuntimeException('mtproto disabled');
         }
+        if (($down = Cache::get('mtp_down')) !== null) {
+            throw new RuntimeException('mtproto paused: ' . $down);
+        }
         $s = self::state();
         $dc = (int)($s['dc'] ?? 2);
         $relogin = $rekey = false;
@@ -1064,6 +1082,7 @@ final class MTProto
                 self::$conn?->close();
                 self::$conn = null;
                 if ($attempt >= 1) {
+                    Cache::set('mtp_down', $e->getMessage(), 600);
                     throw $e;
                 }
             }

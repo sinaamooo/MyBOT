@@ -74,6 +74,9 @@ TG::$fake = function (string $method, array $p) {
         case 'getUserProfilePhotos':
             return ['ok' => true, 'result' => ['total_count' => 0, 'photos' => []]];
         case 'getUserGifts':
+            if (in_array($p['user_id'], $GLOBALS['gifts_api_down'] ?? [], true)) {
+                return ['ok' => false, 'description' => 'Bad Request: internal error'];
+            }
             return ['ok' => true, 'result' => $GLOBALS['user_gifts']];
         case 'getCustomEmojiStickers':
             return ['ok' => true, 'result' => array_values(array_filter(array_map(fn($id) => isset($GLOBALS['alts'][$id]) ? ['custom_emoji_id' => $id, 'emoji' => $GLOBALS['alts'][$id]] : null, $p['custom_emoji_ids'])))];
@@ -455,13 +458,24 @@ check(count($fr) === 1 && str_starts_with($fr[0], '<tg-emoji emoji-id="538636753
 Config::set('API_ID', '12345');
 Config::set('API_HASH', 'hash');
 mt_fake();
+$GLOBALS['gifts_api_down'] = [777000111];
 reset_calls();
 feed(msg('/gift @tofan', -500, 71, null, null, 'Sina'));
 $ph = sent(['sendPhoto']);
 $cap = $ph[0][1]['caption'] ?? '';
-check(str_contains($cap, 'https://t.me/nft/PlushPepe-1') && str_contains($cap, 'Tofan'), 'gift by username via mtproto');
+check(str_contains($cap, 'https://t.me/nft/PlushPepe-1') && str_contains($cap, 'Tofan'), 'gift by username via mtproto when the bot api cannot list them');
 $ws = array_values(array_filter(sent(['sendMessage']), fn($c) => str_contains($c[1]['text'], 'کمی منتظر بمانید')));
 check($ws && sent(['deleteMessage']), 'direct /gift shows a waiting message and removes it');
+$GLOBALS['gifts_api_down'] = [];
+Cache::forget('giftcmd:71');
+Cache::forget('thr:giftcmd:71');
+$GLOBALS['mt_calls'] = [];
+Cache::forget('gpc:mt:777000111');
+reset_calls();
+feed(msg('/gift @tofan', -500, 75, null, null, 'Sina'));
+$gu = array_values(array_filter($GLOBALS['calls'], fn($c) => $c[0] === 'getUserGifts'));
+check($gu && $gu[0][1]['user_id'] === 777000111 && !in_array('payments.getSavedStarGifts', array_column($GLOBALS['mt_calls'], 0), true) && sent(['sendPhoto']),
+    'username found with mtproto, gifts read through the bot api');
 reset_calls();
 feed(msg('/gift', -500, 73, null, null, 'Reza'));
 reset_calls();
@@ -480,6 +494,16 @@ reset_calls();
 feed(msg('/gift @nobody_x', -500, 72, null, null, 'Sina'));
 check(!sent(), 'gift command throttled');
 MTProto::$fake = null;
+Cache::set('mtp_down', 'connect 149.154.167.51:443: timed out', 600);
+$t0 = microtime(true);
+try {
+    MTProto::call('contacts.resolveUsername', ['flags' => 0, 'username' => 'telegram']);
+    $paused = false;
+} catch (RuntimeException $e) {
+    $paused = str_contains($e->getMessage(), 'paused');
+}
+check($paused && microtime(true) - $t0 < 0.2, 'mtproto is skipped right away for a while after it fails, so gift checks do not hang');
+Cache::forget('mtp_down');
 Config::set('API_ID', '');
 
 reset_calls();

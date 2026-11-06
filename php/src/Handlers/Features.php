@@ -181,7 +181,8 @@ final class GiftsH
     private static function owned(array $t): ?array
     {
         if ($t['kind'] === 'mt') {
-            return MTProto::gifts($t, 400, fn() => self::tick());
+            $api = self::owned(['kind' => $t['type'] === 'channel' ? 'chat' : 'user', 'id' => $t['type'] === 'channel' ? (int)('-100' . $t['id']) : $t['id'], 'username' => null]);
+            return $api ?? MTProto::gifts($t, 400, fn() => self::tick());
         }
         $items = [];
         $total = 0;

@@ -83,3 +83,41 @@ if (is_file($log)) {
     $lines = file($log, FILE_IGNORE_NEW_LINES);
     echo implode("\n", array_slice($lines, -15)) . "\n";
 }
+if (!empty($env['BOT_TOKEN']) && is_file($root . '/src/bootstrap.php')) {
+    try {
+        require $root . '/src/bootstrap.php';
+        DB::connect();
+        echo "\n--- live checks ---\n";
+        $urls = array('coingecko' => 'https://api.coingecko.com/api/v3/ping', 'okx' => 'https://www.okx.com/api/v5/market/ticker?instId=BTC-USDT',
+            'cryptocompare' => 'https://min-api.cryptocompare.com/data/price?fsym=BTC&tsyms=USD', 'binance' => 'https://api.binance.com/api/v3/ping',
+            'wallex' => 'https://api.wallex.ir/v1/markets', 'nobitex' => 'https://api.nobitex.ir/market/stats?srcCurrency=usdt&dstCurrency=rls',
+            'bitpin' => 'https://api.bitpin.org/api/v1/mkt/tickers/', 'tgju' => 'https://call1.tgju.org/ajax.json', 'er-api' => 'https://open.er-api.com/v6/latest/USD',
+            'fragment' => 'https://fragment.com/', 'pinterest' => 'https://www.pinterest.com/', 'pinimg' => 'https://i.pinimg.com/favicon.ico');
+        $reqs = array();
+        foreach ($urls as $k => $u) {
+            $reqs[$k] = array('url' => $u, 'timeout' => 8);
+        }
+        $t0 = microtime(true);
+        foreach (Http::multi($reqs, 9) as $k => $r) {
+            echo str_pad($k, 14) . ($r['status'] >= 200 && $r['status'] < 400 ? 'OK' : 'FAIL') . ' ' . $r['status'] . "\n";
+        }
+        echo 'all sources: ' . (int)round((microtime(true) - $t0) * 1000) . " ms\n";
+        $mk = Market::refresh(array(), true, true);
+        $ton = Market::coin('TON');
+        echo 'TON/GRAM: ' . ($ton ? '$' . $ton['price'] : 'none') . ' | BTC: ' . (($b = Market::coin('BTC')) ? '$' . $b['price'] : 'none') . ' | USDT: ' . (Prices::usdtToman() ?: 'none') . " toman\n";
+        if (MTProto::enabled()) {
+            Cache::forget('mtp_down');
+            $t0 = microtime(true);
+            try {
+                $r = MTProto::call('contacts.resolveUsername', array('flags' => 0, 'username' => 'telegram'));
+                echo 'mtproto: OK resolved @telegram in ' . (int)round((microtime(true) - $t0) * 1000) . " ms\n";
+            } catch (Throwable $e) {
+                echo 'mtproto: FAIL ' . $e->getMessage() . "\n";
+            }
+        } else {
+            echo "mtproto: off (API_ID / API_HASH missing)\n";
+        }
+    } catch (Throwable $e) {
+        echo 'live checks: ' . $e->getMessage() . "\n";
+    }
+}
