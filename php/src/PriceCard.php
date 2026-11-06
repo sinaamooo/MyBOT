@@ -633,13 +633,15 @@ final class PriceCard
         $val = (string)$o['value'];
         $pre = (string)($o['prefix'] ?? '');
         $unit = UI::l((string)($o['unit'] ?? ''));
-        $size = self::fit($lat, 58, $pre . $val, 520 - ($unit !== '' ? self::sayW(22, $unit) + 18 : 0), 28);
+        $size = self::fit($lat, 58, $pre . $val, 520 - ($unit !== '' ? self::sayW(22, $unit) + 18 : 0) - (($o['suffix'] ?? '') !== '' ? 110 : 0), 28);
         $base = 350 - (58 - $size) * 0.3;
         $pw = $pre !== '' ? self::inkW($lat, $size, $pre) + 4 : 0;
         $w = self::inkW($lat, $size, $val);
         $us = max(15, 22 * $size / 58);
         $uw = $unit !== '' ? self::sayW($us, $unit) + 16 : 0;
-        $x0 = 600 - ($uw + $pw + $w) / 2;
+        $suf = (string)($o['suffix'] ?? '');
+        $sw = $suf !== '' ? self::inkW($lat, $us * 1.3, $suf) + 18 : 0;
+        $x0 = 600 - ($uw + $pw + $w + $sw) / 2;
         if ($unit !== '') {
             self::say($im, $us, $x0, $base, $gray, $unit, 'l');
         }
@@ -647,10 +649,15 @@ final class PriceCard
             self::put($im, $lat, $size, $x0 + $uw, $base, $gray, $pre);
         }
         self::put($im, $lat, $size, $x0 + $uw + $pw, $base, $white, $val);
+        if ($suf !== '') {
+            self::put($im, $lat, $us * 1.3, $x0 + $uw + $pw + $w + 18, $base, $gray, $suf);
+        }
         imagefilledrectangle($im, 232 * $S, 412 * $S, 968 * $S, 412 * $S + 1, self::col($im, 'FFFFFF', 0.08));
         $tone = $up ? '86EBC9' : 'F7A1B4';
         $pct = self::signed(number_format(abs((float)$o['chg']), 2), !$up) . '%';
-        foreach ([[844, UI::l('۲۴ ساعت پیش'), (string)$o['prev'], 'E4E6EB'], [600, UI::l('تغییر'), (string)$o['diff'], $tone], [356, UI::l('درصد تغییر'), $pct, $tone]] as [$cx, $lab, $v, $hex]) {
+        $cols = $o['cols'] ?? [[UI::l('۲۴ ساعت پیش'), (string)$o['prev'], 'E4E6EB'], [UI::l('تغییر'), (string)$o['diff'], $tone], [UI::l('درصد تغییر'), $pct, $tone]];
+        foreach ($cols as $i => [$lab, $v, $hex]) {
+            $cx = [844, 600, 356][$i] ?? 600;
             self::say($im, 15.5, $cx, 462, $gray, $lab, 'c');
             self::put($im, $lat, self::fit($lat, 22, $v, 220, 12), $cx, 510, self::col($im, $hex), $v, 'c');
         }
@@ -717,6 +724,34 @@ final class PriceCard
             'prev' => $pre . self::like($prev, $vs),
             'diff' => self::signed($pre . self::like(abs($v - $prev), $vs), $v < $prev),
             'bot' => (string)($o['bot'] ?? ''),
+        ]);
+    }
+
+    public static function giftFloor(array $o): ?string
+    {
+        if (!self::ready()) {
+            return null;
+        }
+        $disc = null;
+        $glow = 'F5B300';
+        if (!empty($o['image']) && ($src = @imagecreatefromstring((string)$o['image']))) {
+            $one = imagecreatetruecolor(1, 1);
+            imagecopyresampled($one, $src, 0, 0, 0, 0, 1, 1, imagesx($src), imagesy($src));
+            $c = imagecolorat($one, 0, 0);
+            imagedestroy($one);
+            $glow = self::glowHex(sprintf('%02X%02X%02X', ($c >> 16) & 255, ($c >> 8) & 255, $c & 255));
+            $disc = self::disc(self::square($src), 48 * self::SS);
+        }
+        $chg = $o['chg'] ?? null;
+        $up = $chg === null || $chg >= 0;
+        $cols = [[UI::l('دلار'), !empty($o['usd']) ? '$' . number_format(round((float)$o['usd'])) : '—', 'E4E6EB'],
+            [UI::l('تومان'), !empty($o['toman']) ? number_format(round((float)$o['toman'])) : '—', 'E4E6EB'],
+            [UI::l('تغییر ۷ روز'), $chg !== null ? self::signed(number_format(abs((float)$chg), 1), !$up) . '%' : '—', $up ? '86EBC9' : 'F7A1B4']];
+        return self::render([
+            'a' => $glow, 'b' => $up ? '12C488' : 'E5486A', 'rtl' => false, 'disc' => $disc ?? ['F5B300', 'NFT'],
+            'title' => (string)($o['title'] ?? 'GIFT'), 'tag' => 'FLOOR', 'label' => 'کف قیمت',
+            'value' => self::valueStr((float)($o['floor'] ?? 0), 'TON'), 'prefix' => '', 'unit' => '', 'suffix' => 'TON', 'chg' => (float)($chg ?? 0),
+            'cols' => $cols, 'bot' => (string)($o['bot'] ?? ''),
         ]);
     }
 

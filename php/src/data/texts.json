@@ -248,8 +248,8 @@
   "desc": "خطای فرگمنت ({username})"
  },
  "nft_caption": {
-  "text": "{emoji} <b>{name}</b>  {fa}\n\n<blockquote>💎 کف قیمت: <code>{floor}</code> TON\n💵 دلار: <code>{usd}</code> $\n💰 تومان: <code>{toman}</code></blockquote>\n<blockquote>{markets}</blockquote>\n<blockquote>📊 تغییر ۷ روز: {change}</blockquote>\n🔗 {links}\n🗓 {time}",
-  "desc": "کپشن کف قیمت گیفت ({emoji} {name} {fa} {floor} {usd} {toman} {markets} {change} {links} {time})"
+  "text": "{emoji} <b>{name}</b>  {fa}\n\n<blockquote>💎 کف قیمت: <code>{floor}</code> TON  {market}\n💵 دلار: <code>{usd}</code> $\n💰 تومان: <code>{toman}</code>\n📊 تغییر ۷ روز: {change}</blockquote>\n<blockquote>{markets}</blockquote>\n🗓 {time}",
+  "desc": "کپشن کف قیمت گیفت ({emoji} {name} {fa} {floor} {market} {usd} {toman} {change} {markets} {time})"
  },
  "nft_usage": {
   "text": "🎁 اسم گیفت را بعد از دستور بنویسید.\nمثال: <code>/nft پلاش پپه</code>",

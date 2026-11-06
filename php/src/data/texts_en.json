@@ -186,7 +186,7 @@
   "text": "❌ Couldn't get {username} from Fragment. Try again in a moment."
  },
  "nft_caption": {
-  "text": "{emoji} <b>{name}</b>{fa}\n\n<blockquote>💎 Floor: <code>{floor}</code> TON\n💵 Dollar: <code>{usd}</code> $\n💰 Toman: <code>{toman}</code></blockquote>\n<blockquote>{markets}</blockquote>\n<blockquote>📊 7-day change: {change}</blockquote>\n🔗 {links}\n🗓 {time}"
+  "text": "{emoji} <b>{name}</b>{fa}\n\n<blockquote>💎 Floor: <code>{floor}</code> TON  {market}\n💵 Dollar: <code>{usd}</code> $\n💰 Toman: <code>{toman}</code>\n📊 7-day change: {change}</blockquote>\n<blockquote>{markets}</blockquote>\n🗓 {time}"
  },
  "nft_usage": {
   "text": "🎁 Write the gift name after the command.\nExample: <code>/nft Plush Pepe</code>"

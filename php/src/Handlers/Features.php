@@ -1207,27 +1207,23 @@ final class NftH
         $old = Gifts::floorsDaysAgo()[Gifts::norm($name)] ?? null;
         $chg = $f['floor'] && $old ? ($f['floor'] - $old) / $old * 100 : null;
         $fa = UI::$lang === 'fa' ? (Config::data('gifts_fa')[$name][0] ?? '') : '';
-        $lines = [];
-        $links = [];
+        $rows = [];
         foreach (self::MARKETS as [$k, $label, $icon, $url]) {
             if (!$f[$k]) {
                 continue;
             }
-            $best = abs($f[$k] - (float)$f['floor']) < 0.0001;
-            $lines[] = "$icon $label: <code>" . Fmt::num($f[$k]) . '</code> TON' . ($best ? ' ✅' : '');
-            $url ??= Fragment::BASE . "/gifts/$col?sort=price_asc&filter=sale";
-            $links[] = '<a href="' . UI::attr($url) . '">' . $label . '</a>';
+            $num = $f[$k . '_num'] ?? null;
+            $url = $num ? "https://t.me/nft/$slug-$num" : ($url ?? Fragment::BASE . "/gifts/$col?sort=price_asc&filter=sale");
+            $rows[] = ['ton' => $f[$k], 'link' => '<a href="' . UI::attr($url) . '">' . $label . ($num ? " #$num" : '') . '</a>', 'icon' => $icon];
         }
-        foreach (['fragment' => 'Fragment', 'tonnel' => 'Tonnel'] as $k => $label) {
-            if (!empty($f[$k . '_num'])) {
-                array_unshift($links, '<a href="https://t.me/nft/' . $slug . '-' . $f[$k . '_num'] . '">🎁 ' . $label . ' #' . $f[$k . '_num'] . '</a>');
-            }
-        }
+        usort($rows, fn($x, $y) => $x['ton'] <=> $y['ton']);
+        $top = $rows ? array_shift($rows) : null;
+        $lines = array_map(fn($r) => $r['icon'] . ' ' . $r['link'] . ': <code>' . Fmt::num($r['ton']) . '</code> TON', $rows);
         $emoji = !empty($it['custom_emoji_id']) ? '<tg-emoji emoji-id="' . UI::attr($it['custom_emoji_id']) . '">🎁</tg-emoji>' : '🎁';
         $cap = UI::t('nft_caption', ['emoji' => $emoji, 'name' => UI::esc($name), 'fa' => UI::esc($fa),
             'floor' => $f['floor'] ? Fmt::num($f['floor']) : null, 'usd' => $usd ? Fmt::usd($usd) : null, 'toman' => $usd && $usdt ? Fmt::toman($usd * $usdt) : null,
-            'markets' => $lines ? implode("\n", $lines) : null, 'change' => $chg !== null ? ($chg >= 0 ? '+' : '') . sprintf('%.1f', $chg) . '%' : null,
-            'links' => $links ? implode(' • ', $links) : null, 'time' => Fmt::now()]);
+            'market' => $top ? $top['link'] : '', 'markets' => $lines ? implode("\n", $lines) : null,
+            'change' => $chg !== null ? ($chg >= 0 ? '+' : '') . sprintf('%.1f', $chg) . '%' : null, 'time' => Fmt::now()]);
         $fk = 'nftf:' . md5($col . '|' . json_encode($f) . '|' . date('YmdHi') . '|' . round((float)$usdt) . '|' . UI::$lang);
         if ($fid = Cache::get($fk)) {
             Bot::reply($m, $cap, false, $fid);
@@ -1237,8 +1233,8 @@ final class NftH
         if (PriceCard::ready()) {
             try {
                 $img = Gifts::images(['g' => $col . '-' . ($f['fragment_num'] ?: 1)])['g'] ?? Gifts::images(['g' => $col . '-1'])['g'] ?? null;
-                $photo = Cards::nft(['name' => $name, 'fa' => $fa, 'image' => $img, 'floor' => $f['floor'], 'usd' => $usd, 'toman' => $usd && $usdt ? $usd * $usdt : null,
-                    'markets' => array_map(fn($x) => [$x[1], $f[$x[0]]], self::MARKETS), 'change' => $chg, 'bot' => TG::username()]);
+                $photo = PriceCard::giftFloor(['title' => mb_strtoupper(str_replace('’', "'", $name)), 'image' => $img, 'floor' => $f['floor'], 'usd' => $usd,
+                    'toman' => $usd && $usdt ? $usd * $usdt : null, 'chg' => $chg, 'bot' => TG::username()]);
             } catch (Throwable $e) {
                 error_log('nft card: ' . $e->getMessage());
             }

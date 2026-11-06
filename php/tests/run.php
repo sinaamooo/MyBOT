@@ -1486,13 +1486,16 @@ reset_calls();
 feed(msg('/nft کپ پپه', -4530, 831));
 $np = sent(['sendPhoto']);
 $nc = (string)($np[0][1]['caption'] ?? '');
-check($np && str_starts_with((string)($np[0][1]['photo']['__bytes'] ?? ''), "\x89PNG") && str_contains($nc, 'Plush Pepe') && str_contains($nc, 'پلاش پپه') && str_contains($nc, '6,850')
+check($np && str_starts_with((string)($np[0][1]['photo']['__bytes'] ?? ''), "\xFF\xD8") && str_contains($nc, 'Plush Pepe') && str_contains($nc, 'پلاش پپه') && str_contains($nc, '6,850')
     && str_contains($nc, 'Portals') && str_contains($nc, '6,900') && str_contains($nc, 'MRKT') && str_contains($nc, '7,650') && str_contains($nc, 'Tonnel') && str_contains($nc, '6,950')
     && str_contains($nc, 'GetGems') && str_contains($nc, 'https://t.me/nft/PlushPepe-1234') && str_contains($nc, 'https://t.me/nft/PlushPepe-55') && str_contains($nc, '5893256632661449678')
     && array_filter(buttons($np[0]), fn($b) => str_contains($b['url'] ?? '', 'startgroup')) && !empty($np[0][1]['reply_parameters']), 'nft floor card from all markets with gift links, premium emoji and add-to-group button');
 check(($nftForms[0]['type'] ?? '') === 'gifts' && ($nftForms[0]['collection'] ?? '') === 'plushpepe' && ($nftForms[0]['sort'] ?? '') === 'price_asc' && ($nftForms[0]['filter'] ?? '') === 'sale'
     && str_contains((string)($tonnelBody['filter'] ?? ''), '"gift_name":"Plush Pepe"') && ($tonnelBody['sort'] ?? '') === '{"price":1,"gift_id":-1}', 'nft asks Fragment and Tonnel for the cheapest listing');
-check(preg_match('/Fragment: <code>6,850<\/code> TON ✅/u', preg_replace('/<tg-emoji[^>]*>(.*?)<\/tg-emoji>/u', '$1', $nc)) === 1, 'cheapest market is marked');
+$plain = preg_replace('/<tg-emoji[^>]*>(.*?)<\/tg-emoji>/u', '$1', $nc);
+check(preg_match('~کف قیمت: <code>6,850</code> TON\s+<a href="https://t.me/nft/PlushPepe-1234">Fragment #1234</a>\n~u', $plain) === 1
+    && preg_match('~<blockquote>🔵 <a href="https://t.me/portals">Portals</a>: <code>6,900</code> TON\n🟠 <a href="https://t.me/nft/PlushPepe-55">Tonnel #55</a>: <code>6,950</code> TON\n🔷 <a href="https://getgems.io/">GetGems</a>: <code>7,099</code> TON\n🟡 <a href="https://t.me/mrkt">MRKT</a>: <code>7,650</code> TON</blockquote>~u', $plain) === 1,
+    'floor first with its market, then the other markets in a quote, cheapest first, each linked');
 reset_calls();
 feed(msg('/nft کلاه دورف', -4530, 832));
 check(str_contains((string)(sent(['sendPhoto'])[0][1]['caption'] ?? ''), 'Durov’s Cap'), 'nft finds Durov’s Cap from its Persian name');
