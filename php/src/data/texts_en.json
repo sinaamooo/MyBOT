@@ -26,6 +26,12 @@
  "force_join_not_yet": {
   "text": "❌ You haven't joined all the channels yet!"
  },
+ "force_join_not_yours": {
+  "text": "⛔️ This button isn't for you."
+ },
+ "force_join_done": {
+  "text": "✅ User {mention} joined {channels}.\n\n<blockquote>💬 Now you have access to send messages.</blockquote>"
+ },
  "conv_crypto": {
   "text": "{coin_icon} {amount} {title} = {toman} Toman\n\n<blockquote>{trx_icon} Tron: <code>{trx}</code> TRX\n{ton_icon} Toncoin: <code>{ton}</code> TON\n{usd_icon} Dollar: <code>{usd}</code> $\n⭐️ Stars: <code>{stars}</code> Stars</blockquote>\n🗓 {time}"
  },
@@ -519,7 +525,7 @@
   "text": "<blockquote>📢 {title}\n🔗 {url}</blockquote>"
  },
  "group_fj_ask": {
-  "text": "📢 {mention} reply to this message with the channel username or link.\nExample: <code>@mychannel</code>"
+  "text": "📢 {mention} send the channel username or link.\nExample: <code>@mychannel</code>"
  },
  "group_fj_added": {
   "text": "✅ Channel “{title}” added."

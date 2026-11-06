@@ -180,16 +180,25 @@ final class Bot
         if ($hit) {
             return (bool)$v;
         }
-        $m = TG::api('getChatMember', ['chat_id' => $channel, 'user_id' => $user]);
+        return self::memberSave($channel, $user, TG::api('getChatMember', ['chat_id' => $channel, 'user_id' => $user]));
+    }
+
+    private static function memberOk(array $m): bool
+    {
+        $st = $m['status'] ?? 'left';
+        return !in_array($st, ['left', 'kicked'], true) && !($st === 'restricted' && empty($m['is_member']));
+    }
+
+    private static function memberSave($channel, int $user, ?array $m): bool
+    {
         if ($m === null) {
             if (!Cache::throttled("badch:$channel", 600)) {
                 error_log("cannot check membership in $channel: " . TG::$lastError);
             }
             return true;
         }
-        $st = $m['status'] ?? 'left';
-        $ok = !in_array($st, ['left', 'kicked'], true) && !($st === 'restricted' && empty($m['is_member']));
-        Cache::set($k, $ok, $ok ? 600 : 20);
+        $ok = self::memberOk($m);
+        Cache::set("mem:$channel:$user", $ok, $ok ? 600 : 20);
         return $ok;
     }
 
@@ -205,15 +214,116 @@ final class Bot
         return array_values($out);
     }
 
-    public static function missing(int $user, ?array $channels = null): array
+    public static function missing(int $user, ?array $channels = null, int $chat = 0): array
     {
+        $channels = array_values($channels ?? (Settings::get('force_channels') ?: []));
+        $ok = [];
+        $calls = [];
+        foreach ($channels as $i => $ch) {
+            $v = Cache::get("mem:{$ch['id']}:$user", $hit);
+            if ($hit) {
+                $ok[$i] = (bool)$v;
+            } else {
+                $calls[$i] = ['getChatMember', ['chat_id' => $ch['id'], 'user_id' => $user]];
+            }
+        }
+        if (count($calls) === 1 && !$chat) {
+            $i = array_key_first($calls);
+            $ok[$i] = self::memberSave($channels[$i]['id'], $user, TG::api(...$calls[$i]));
+        } elseif ($calls) {
+            if ($chat) {
+                Cache::get("adm:$chat:$user", $hit);
+                if (!$hit) {
+                    $calls['adm'] = ['getChatMember', ['chat_id' => $chat, 'user_id' => $user]];
+                }
+            }
+            foreach (TG::multi($calls) as $i => $r) {
+                if ($i === 'adm') {
+                    if ($r !== null) {
+                        Cache::set("adm:$chat:$user", in_array($r['status'] ?? '', ['administrator', 'creator'], true), 300);
+                    }
+                    continue;
+                }
+                $ok[$i] = self::memberSave($channels[$i]['id'], $user, $r);
+            }
+        }
         $out = [];
-        foreach ($channels ?? (Settings::get('force_channels') ?: []) as $ch) {
-            if (!self::isMember($ch['id'], $user)) {
+        foreach ($channels as $i => $ch) {
+            if (!($ok[$i] ?? true)) {
                 $out[] = $ch;
             }
         }
         return $out;
+    }
+
+    private static function fjWarn(array $m, array $missing): void
+    {
+        $chat = (int)$m['chat']['id'];
+        $u = $m['from'];
+        $uid = (int)$u['id'];
+        $calls = ['del' => ['deleteMessage', ['chat_id' => $chat, 'message_id' => $m['message_id']]]];
+        $old = (int)(Cache::get("fjw:$chat:$uid") ?? 0);
+        if (Cache::throttled("fjt:$chat:$uid", 20) && $old) {
+            TG::multi($calls);
+            return;
+        }
+        if ($old) {
+            $calls['old'] = ['deleteMessage', ['chat_id' => $chat, 'message_id' => $old]];
+        }
+        $p = ['chat_id' => $chat, 'text' => UI::t('force_join_group', ['mention' => UI::mention($u)]), 'reply_markup' => self::forceJoinKb($uid, $missing)];
+        $calls['warn'] = ['sendMessage', TG::prep('sendMessage', $p)];
+        $sent = TG::multi($calls)['warn'] ?? TG::api('sendMessage', $p);
+        if (!isset($sent['message_id'])) {
+            return;
+        }
+        Cache::set("fjw:$chat:$uid", (int)$sent['message_id'], 172800);
+        $g = Cache::get("fjwu:$uid") ?: [];
+        $g[(string)$chat] = 1;
+        Cache::set("fjwu:$uid", $g, 172800);
+    }
+
+    private static function fjDone(int $chat, array $user, int $mid, array $chs): void
+    {
+        $uid = (int)$user['id'];
+        Cache::forget("fjw:$chat:$uid");
+        $names = array_map(fn($c) => !empty($c['url']) ? '<a href="' . UI::attr($c['url']) . '">' . UI::esc($c['title'] ?? '') . '</a>' : UI::esc($c['title'] ?? ''), $chs);
+        TG::edit($chat, $mid, UI::t('force_join_done', ['mention' => UI::mention($user), 'channels' => implode(UI::$lang === 'fa' ? '، ' : ', ', $names)]), null);
+        self::deleteLater(['chat' => ['id' => $chat], 'message_id' => $mid], 30);
+    }
+
+    private static function channelMember(array $e): void
+    {
+        $user = $e['new_chat_member']['user'] ?? null;
+        if (!$user || !empty($user['is_bot'])) {
+            return;
+        }
+        $uid = (int)$user['id'];
+        $ok = self::memberOk($e['new_chat_member']);
+        $ch = $e['chat'];
+        foreach (array_filter([(string)$ch['id'], !empty($ch['username']) ? '@' . $ch['username'] : null]) as $id) {
+            Cache::set("mem:$id:$uid", $ok, $ok ? 600 : 20);
+        }
+        $groups = $ok ? (Cache::get("fjwu:$uid") ?: []) : [];
+        if (!$groups) {
+            return;
+        }
+        foreach (array_keys($groups) as $g) {
+            $g = (int)$g;
+            $mid = (int)(Cache::get("fjw:$g:$uid") ?? 0);
+            $chs = $mid ? self::groupChannels($g) : [];
+            if (!$chs) {
+                unset($groups[$g]);
+                continue;
+            }
+            Lang::use($g);
+            if ($missing = self::missing($uid, $chs)) {
+                TG::api('editMessageReplyMarkup', ['chat_id' => $g, 'message_id' => $mid, 'reply_markup' => self::forceJoinKb($uid, $missing)]);
+                continue;
+            }
+            self::fjDone($g, $user, $mid, $chs);
+            unset($groups[$g]);
+        }
+        $groups ? Cache::set("fjwu:$uid", $groups, 172800) : Cache::forget("fjwu:$uid");
     }
 
     public static function forceJoinKb(int $user, array $channels): array
@@ -324,12 +434,9 @@ final class Bot
             }
         }
         if ($fc = self::groupChannels($chat)) {
-            $missing = self::missing($u['id'], $fc);
+            $missing = self::missing($u['id'], $fc, $chat);
             if ($missing && !$admin()) {
-                self::deleteMsg($m);
-                if (!Cache::throttled("$chat:{$u['id']}:fj", 45)) {
-                    self::deleteLater(TG::send($chat, UI::t('force_join_group', ['mention' => UI::mention($u)]), self::forceJoinKb($u['id'], $missing)), 90);
-                }
+                self::fjWarn($m, $missing);
                 return false;
             }
         }
@@ -418,6 +525,9 @@ final class Bot
         if ($priv && Config::isAdmin($uid) && !State::get($uid) && !empty($m['entities']) && Admin::emojiPairs($m)) {
             return;
         }
+        if (!$priv && $uid && Groups::pending($m, $text)) {
+            return;
+        }
         if ($uid && ($text === '' || $text[0] !== '/') && isset($m['reply_to_message']) && self::answered($m, $text)) {
             return;
         }
@@ -498,24 +608,32 @@ final class Bot
     {
         $owner = (int)$arg;
         if ($cq['from']['id'] !== $owner) {
-            TG::answer($cq['id'], UI::plain('translate_not_yours'), true);
+            TG::answer($cq['id'], UI::plain('force_join_not_yours'), true);
             return;
         }
-        $gc = (int)($cq['message']['chat']['id'] ?? 0);
+        $msg = $cq['message'];
+        $gc = (int)($msg['chat']['id'] ?? 0);
         $chs = $gc < 0 ? self::groupChannels($gc) : (Settings::get('force_channels') ?: []);
         foreach ($chs as $ch) {
             Cache::forget("mem:{$ch['id']}:$owner");
         }
-        if (self::missing($owner, $chs)) {
+        if ($missing = self::missing($owner, $chs)) {
             TG::answer($cq['id'], UI::plain('force_join_not_yet'), true);
+            if (count($missing) < count($chs)) {
+                TG::api('editMessageReplyMarkup', ['chat_id' => $gc, 'message_id' => $msg['message_id'], 'reply_markup' => self::forceJoinKb($owner, $missing)]);
+            }
             return;
         }
-        TG::answer($cq['id'], UI::plain('force_join_ok'), true);
-        $msg = $cq['message'];
-        self::deleteMsg($msg);
+        TG::answer($cq['id'], UI::plain('force_join_ok'));
         if (self::isPrivate($msg)) {
-            Start::welcome((int)$msg['chat']['id'], $cq['from']);
+            self::deleteMsg($msg);
+            Start::welcome($gc, $cq['from']);
+            return;
         }
+        self::fjDone($gc, $cq['from'], (int)$msg['message_id'], $chs);
+        $g = Cache::get("fjwu:$owner") ?: [];
+        unset($g[(string)$gc]);
+        $g ? Cache::set("fjwu:$owner", $g, 172800) : Cache::forget("fjwu:$owner");
     }
 
     public static function unmuteCb(array $cq, string $arg): void
@@ -571,6 +689,10 @@ final class Bot
 
     private static function chatMember(array $e): void
     {
+        if (($e['chat']['type'] ?? '') === 'channel') {
+            self::channelMember($e);
+            return;
+        }
         $old = $e['old_chat_member']['status'] ?? '';
         $new = $e['new_chat_member']['status'] ?? '';
         $user = $e['new_chat_member']['user'];
@@ -675,13 +797,18 @@ final class Start
 
 final class Groups
 {
+    const SHORT = [
+        'force_join_groups' => 'عضویت', 'anti_self' => 'ضد سلف', 'anti_tabchi' => 'ضد تبچی', 'anti_scam' => 'ضد اسکم', 'conversions' => 'قیمت', 'checkers' => 'چکر',
+        'gifts' => 'گیفت', 'calculator' => 'محاسبه', 'translate' => 'ترجمه', 'instagram' => 'اینستا', 'pinterest' => 'پینترست', 'games' => 'بازی',
+    ];
+
     private static function kb(int $chat): array
     {
         $rows = [];
         $row = [];
         foreach (Settings::groupFeatures() as $k => $label) {
             $on = Settings::on($chat, $k);
-            $row[] = UI::raw(($on ? '✅ ' : '❌ ') . UI::l($label), "gs:$k", $on ? 'success' : 'danger');
+            $row[] = UI::raw(($on ? '✅ ' : '❌ ') . UI::l(self::SHORT[$k] ?? $label), "gs:$k", $on ? 'success' : 'danger');
             if (count($row) === 2) {
                 $rows[] = $row;
                 $row = [];
@@ -710,19 +837,63 @@ final class Groups
         return [UI::t('group_fj', ['lines' => $lines ? implode("\n", $lines) : UI::l('— کانالی ثبت نشده —')]), UI::kb($rows)];
     }
 
-    public static function addChannel(array $m, string $text): void
+    private static function askView(array $from): array
+    {
+        return [UI::t('group_fj_ask', ['mention' => UI::mention($from)]), UI::kb([[UI::button('btn_gfj_cancel', ['cb' => 'gs:fj'])]])];
+    }
+
+    public static function pending(array $m, string $text): bool
+    {
+        if (($m['forward_origin']['type'] ?? '') !== 'channel' && !preg_match('~^(?:@[A-Za-z][A-Za-z0-9_]{3,31}|(?:https?://)?(?:t|telegram)\.me/\S+|-100\d{5,})(?:\s|$)~iu', $text)) {
+            return false;
+        }
+        $panel = (int)(Cache::get('gfjp:' . $m['chat']['id'] . ':' . $m['from']['id']) ?? 0);
+        if (!$panel) {
+            return false;
+        }
+        self::addChannel($m, $text, $panel);
+        return true;
+    }
+
+    private static function show(array $m, int $panel, string $text, array $kb): void
     {
         $chat = (int)$m['chat']['id'];
-        if ($chat >= 0 || !Bot::isChatAdmin($chat, (int)$m['from']['id'])) {
+        $calls = ['del' => ['deleteMessage', ['chat_id' => $chat, 'message_id' => $m['message_id']]]];
+        if (!empty($m['__prompt'])) {
+            $calls['prompt'] = ['deleteMessage', ['chat_id' => $chat, 'message_id' => $m['__prompt']]];
+        }
+        if ($panel) {
+            $calls['edit'] = ['editMessageText', TG::prep('editMessageText', ['chat_id' => $chat, 'message_id' => $panel, 'text' => $text, 'reply_markup' => $kb])];
+        }
+        $r = TG::multi($calls);
+        if ($panel && (($r['edit'] ?? null) !== null || TG::edit($chat, $panel, $text, $kb) !== null || str_contains(TG::$lastError, 'not modified'))) {
             return;
         }
+        TG::send($chat, $text, $kb);
+    }
+
+    public static function addChannel(array $m, string $text, int $panel = 0): void
+    {
+        $chat = (int)$m['chat']['id'];
+        $uid = (int)$m['from']['id'];
+        if ($chat >= 0 || !Bot::isChatAdmin($chat, $uid)) {
+            return;
+        }
+        $k = 'gfjp:' . $chat . ':' . $uid;
+        $fail = function (string $line) use ($m, $panel, $k) {
+            if ($panel) {
+                Cache::set($k, $panel, 600);
+            }
+            [$t, $kb] = self::askView($m['from']);
+            self::show($m, $panel, $line . "\n\n" . $t, $kb);
+        };
         $ref = null;
         $invite = null;
         if (!empty($m['forward_origin']['chat']['id'])) {
             $ref = $m['forward_origin']['chat']['id'];
         } else {
             $parts = preg_split('/\s+/', trim($text));
-            $first = str_replace(['https://t.me/', 'http://t.me/', 't.me/'], '@', $parts[0] ?? '');
+            $first = preg_replace('~^(?:https?://)?(?:t|telegram)\.me/~i', '@', $parts[0] ?? '');
             if ($first !== '' && $first !== '@') {
                 $ref = preg_match('/^-?\d+$/', $first) ? (int)$first : (str_starts_with($first, '@') ? $first : '@' . $first);
             }
@@ -732,25 +903,26 @@ final class Groups
         }
         $c = $ref !== null ? TG::api('getChat', ['chat_id' => $ref]) : null;
         if (!$c || !in_array($c['type'] ?? '', ['channel', 'supergroup'], true)) {
-            Bot::reply($m, UI::t('group_fj_not_found'), null);
+            $fail(UI::t('group_fj_not_found'));
             return;
         }
         $me = TG::api('getChatMember', ['chat_id' => $c['id'], 'user_id' => TG::botId()]);
         if (!in_array($me['status'] ?? '', ['administrator', 'creator'], true)) {
-            Bot::reply($m, UI::t('group_fj_not_admin', ['title' => UI::esc($c['title'] ?? '')]), null);
+            $fail(UI::t('group_fj_not_admin', ['title' => UI::esc($c['title'] ?? '')]));
             return;
         }
         $url = $invite ?: (!empty($c['username']) ? 'https://t.me/' . $c['username'] : ($c['invite_link'] ?? null));
         $url ??= TG::api('createChatInviteLink', ['chat_id' => $c['id'], 'name' => 'force-join'])['invite_link'] ?? null;
         if (!$url) {
-            Bot::reply($m, UI::t('group_fj_not_found'), null);
+            $fail(UI::t('group_fj_not_found'));
             return;
         }
+        Cache::forget($k);
         $list = array_values(array_filter(self::channels($chat), fn($x) => (string)$x['id'] !== (string)$c['id']));
         $list[] = ['id' => $c['id'], 'title' => $c['title'] ?? ($c['username'] ?? (string)$c['id']), 'url' => $url];
         DB::setChatSetting($chat, 'fj_channels', array_slice($list, -5));
         [$t, $kb] = self::fjView($chat);
-        Bot::reply($m, UI::t('group_fj_added', ['title' => UI::esc($c['title'] ?? '')]) . "\n\n" . $t, $kb);
+        self::show($m, $panel, UI::t('group_fj_added', ['title' => UI::esc($c['title'] ?? '')]) . "\n\n" . $t, $kb);
     }
 
     public static function langKb(int $chat, string $prefix): array
@@ -788,6 +960,7 @@ final class Groups
             return;
         }
         if ($key === 'fj' || str_starts_with($key, 'fjdel:')) {
+            Cache::forget('gfjp:' . $chat . ':' . $cq['from']['id']);
             if (str_starts_with($key, 'fjdel:')) {
                 $list = self::channels($chat);
                 array_splice($list, (int)substr($key, 6), 1);
@@ -800,11 +973,13 @@ final class Groups
         }
         if ($key === 'fjadd') {
             TG::answer($cq['id']);
-            Cache::set('ask:' . $chat . ':' . $cq['from']['id'], 'gfj', 600);
-            TG::send($chat, UI::t('group_fj_ask', ['mention' => UI::mention($cq['from'])]), ['force_reply' => true, 'selective' => true, 'input_field_placeholder' => '@channel']);
+            Cache::set('gfjp:' . $chat . ':' . $cq['from']['id'], (int)$cq['message']['message_id'], 600);
+            [$t, $kb] = self::askView($cq['from']);
+            TG::edit($chat, $cq['message']['message_id'], $t, $kb);
             return;
         }
         if ($key === 'back') {
+            Cache::forget('gfjp:' . $chat . ':' . $cq['from']['id']);
             TG::answer($cq['id']);
             TG::edit($chat, $cq['message']['message_id'], UI::t('group_settings', ['title' => UI::esc($cq['message']['chat']['title'] ?? '')]), self::kb($chat));
             return;

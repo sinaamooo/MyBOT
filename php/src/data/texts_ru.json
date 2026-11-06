@@ -26,6 +26,12 @@
  "force_join_not_yet": {
   "text": "❌ Вы ещё не подписались на все каналы!"
  },
+ "force_join_not_yours": {
+  "text": "⛔️ Эта кнопка не для вас."
+ },
+ "force_join_done": {
+  "text": "✅ Пользователь {mention} подписался на {channels}.\n\n<blockquote>💬 Теперь вы можете отправлять сообщения.</blockquote>"
+ },
  "conv_crypto": {
   "text": "{coin_icon} {amount} {title} = {toman} томан\n\n<blockquote>{trx_icon} Трон: <code>{trx}</code> TRX\n{ton_icon} Тонкоин: <code>{ton}</code> TON\n{usd_icon} Доллар: <code>{usd}</code> $\n⭐️ Звёзды: <code>{stars}</code> Stars</blockquote>\n🗓 {time}"
  },
@@ -519,7 +525,7 @@
   "text": "<blockquote>📢 {title}\n🔗 {url}</blockquote>"
  },
  "group_fj_ask": {
-  "text": "📢 {mention} ответьте на это сообщение юзернеймом или ссылкой канала.\nПример: <code>@mychannel</code>"
+  "text": "📢 {mention} отправьте юзернейм или ссылку канала.\nПример: <code>@mychannel</code>"
  },
  "group_fj_added": {
   "text": "✅ Канал «{title}» добавлен."

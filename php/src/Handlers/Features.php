@@ -417,7 +417,7 @@ final class Scam
         $r = DB::scam($id);
         $uid = $cq['from']['id'];
         if (!$r || (int)$r['reporter_id'] !== $uid) {
-            TG::answer($cq['id'], UI::plain('translate_not_yours'), true);
+            TG::answer($cq['id'], UI::plain('not_your_button'), true);
             return;
         }
         $chat = $cq['message']['chat']['id'];

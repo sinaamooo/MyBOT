@@ -35,6 +35,14 @@
   "text": "❌ هنوز در همه کانال‌ها عضو نشده‌اید!",
   "desc": "عدم عضویت (پاپ‌آپ)"
  },
+ "force_join_not_yours": {
+  "text": "⛔️ این دکمه مربوط به شما نیست.",
+  "desc": "دکمه عضویت مال کاربر دیگر (پاپ‌آپ)"
+ },
+ "force_join_done": {
+  "text": "✅ کاربر {mention} در کانال {channels} عضو شد.\n\n<blockquote>💬 حالا شما دسترسی به ارسال پیام را دارید.</blockquote>",
+  "desc": "عضو کانال شد ({mention} {channels})"
+ },
  "conv_crypto": {
   "text": "‏{coin_icon} {amount} {title} = {toman} تومان\n\n<blockquote>{trx_icon}     ترون: <code>{trx}</code> TRX\n{ton_icon}     تون: <code>{ton}</code> TON\n{usd_icon}     دلار: <code>{usd}</code> $\n⭐️     استارز: <code>{stars}</code> Stars</blockquote>\n🗓 {time}",
   "desc": "تبدیل ارز دیجیتال ({coin_icon} {amount} {symbol} {title} {name} {toman} {trx} {ton} {usd} {stars} {price_usd} {price_toman} {change} {time})"
@@ -692,7 +700,7 @@
   "desc": "هر کانال در پنل ({title} {url})"
  },
  "group_fj_ask": {
-  "text": "📢 {mention} یوزرنیم یا لینک کانال را روی همین پیام ریپلای کنید.\nمثال: <code>@mychannel</code>",
+  "text": "📢 {mention} یوزرنیم یا لینک کانال را بفرستید.\nمثال: <code>@mychannel</code>",
   "desc": "درخواست کانال اجباری ({mention})"
  },
  "group_fj_added": {
