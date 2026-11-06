@@ -1199,6 +1199,38 @@ final class MTProto
         return $out;
     }
 
+    public static function fullUser(int $id, int $hash): ?array
+    {
+        $hit = Cache::get('mtfu:' . $id, $found);
+        if ($found) {
+            return $hit ?: null;
+        }
+        try {
+            $r = self::call('users.getFullUser', ['id' => ['_' => 'inputUser', 'user_id' => $id, 'access_hash' => $hash]]);
+        } catch (Throwable $e) {
+            error_log('mtproto full user: ' . $e->getMessage());
+            return null;
+        }
+        $f = $r['full_user'] ?? [];
+        $u = [];
+        foreach ($r['users'] ?? [] as $usr) {
+            if (($usr['id'] ?? null) === $id) {
+                $u = $usr;
+            }
+        }
+        $sr = $f['stars_rating'] ?? null;
+        $b = $f['birthday'] ?? null;
+        $out = [
+            'premium' => !empty($u['premium']), 'bot' => !empty($u['bot']), 'first_name' => $u['first_name'] ?? null, 'last_name' => $u['last_name'] ?? null,
+            'username' => $u['username'] ?? ($u['usernames'][0]['username'] ?? null), 'lang' => $u['lang_code'] ?? null,
+            'about' => $f['about'] ?? null, 'dc' => $u['photo']['dc_id'] ?? null, 'gifts' => $f['stargifts_count'] ?? null,
+            'birthday' => $b ? ['day' => $b['day'], 'month' => $b['month']] + (isset($b['year']) ? ['year' => $b['year']] : []) : null,
+            'rating' => $sr ? ['level' => $sr['level'], 'rating' => $sr['stars'], 'next_level_rating' => $sr['next_level_stars'] ?? null] : null,
+        ];
+        Cache::set('mtfu:' . $id, $out, 600);
+        return $out;
+    }
+
     public static function gifts(array $t, int $max = 400, ?callable $tick = null): ?array
     {
         $peer = $t['type'] === 'channel'

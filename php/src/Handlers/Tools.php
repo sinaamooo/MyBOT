@@ -382,21 +382,83 @@ final class Tools
         Bot::reply($m, mb_substr(implode("\n", $parts), 0, 4000));
     }
 
-    public static function account(array $m, string $args = ''): void
+    private static function accountTarget(array $m, string $args)
     {
-        $t = $m['from'];
-        if (!empty($m['reply_to_message']['from'])) {
-            $t = $m['reply_to_message']['from'];
-        } elseif (preg_match('/^-?\d+$/', $args)) {
-            $mem = TG::api('getChatMember', ['chat_id' => $m['chat']['id'], 'user_id' => (int)$args]);
-            if ($mem) {
-                $t = $mem['user'];
+        $me = $m['from'];
+        $rf = $m['reply_to_message']['from'] ?? null;
+        $arg = $args !== '' ? preg_split('/\s+/u', $args)[0] : '';
+        if ($arg === '') {
+            return $rf ?: $me;
+        }
+        if (in_array(mb_strtolower($arg), ['من', 'me'], true)) {
+            return $me;
+        }
+        if (preg_match('/^\d{3,15}$/', Fmt::en($arg))) {
+            $id = (int)Fmt::en($arg);
+            $mem = TG::api('getChatMember', ['chat_id' => $m['chat']['id'], 'user_id' => $id]);
+            return !empty($mem['user']) ? $mem['user'] : ['id' => $id, 'first_name' => (string)$id, '__lookup' => true];
+        }
+        $u = rtrim(ltrim(preg_replace('~^(?:https?://)?(?:t|telegram)\.me/~i', '', $arg), '@'), '/');
+        if (!preg_match('/^[A-Za-z][A-Za-z0-9_]{3,31}$/', $u)) {
+            return null;
+        }
+        foreach ([$me, $rf] as $who) {
+            if ($who && !empty($who['username']) && strcasecmp($u, $who['username']) === 0) {
+                return $who;
             }
         }
-        ['info' => $info, 'photos' => $photos, 'gifts' => $gifts] = TG::multi(['info' => ['getChat', ['chat_id' => $t['id']]],
-            'photos' => ['getUserProfilePhotos', ['user_id' => $t['id'], 'limit' => 1]], 'gifts' => ['getUserGifts', ['user_id' => $t['id'], 'limit' => 1]]]);
+        $r = Resolver::resolve($u);
+        if (!$r) {
+            return null;
+        }
+        if (($r['kind'] ?? '') === 'chat' || ($r['type'] ?? 'user') !== 'user') {
+            return false;
+        }
+        return ['id' => (int)$r['id'], 'first_name' => (string)$r['name'], 'username' => $r['username'] ?? $u, 'access_hash' => $r['access_hash'] ?? null, '__lookup' => true];
+    }
+
+    public static function account(array $m, string $args = ''): void
+    {
+        $t = self::accountTarget($m, trim($args));
+        if (!$t) {
+            Bot::reply($m, UI::t($t === false ? 'account_not_user' : 'account_user_unknown'), null);
+            return;
+        }
+        $look = !empty($t['__lookup']);
+        $calls = ['info' => ['getChat', ['chat_id' => $t['id']]], 'photos' => ['getUserProfilePhotos', ['user_id' => $t['id'], 'limit' => 1]],
+            'gifts' => ['getUserGifts', ['user_id' => $t['id'], 'limit' => 1]]];
+        if ($look && !Bot::isPrivate($m)) {
+            $calls['mem'] = ['getChatMember', ['chat_id' => $m['chat']['id'], 'user_id' => $t['id']]];
+        }
+        $res = TG::multi($calls);
+        ['info' => $info, 'photos' => $photos, 'gifts' => $gifts] = $res;
+        $mtDc = null;
+        if ($look) {
+            $mu = $res['mem']['user'] ?? null;
+            if ($mu && (int)($mu['id'] ?? 0) === (int)$t['id']) {
+                $t = ['is_premium' => !empty($mu['is_premium'])] + $mu + $t;
+            } elseif (is_array($info)) {
+                $t = array_filter(['first_name' => $info['first_name'] ?? null, 'last_name' => $info['last_name'] ?? null, 'username' => $info['username'] ?? null]) + $t;
+            }
+            $hash = $t['access_hash'] ?? null;
+            if ($hash === null && !empty($t['username']) && MTProto::enabled()) {
+                $hash = MTProto::resolve($t['username'])['access_hash'] ?? null;
+            }
+            $full = !isset($t['is_premium']) && $hash !== null && MTProto::enabled() ? MTProto::fullUser((int)$t['id'], (int)$hash) : null;
+            if ($full) {
+                $t = ['is_premium' => $full['premium']] + array_filter(['first_name' => $full['first_name'], 'last_name' => $full['last_name'], 'username' => $full['username']]) + $t;
+                if (!empty($full['lang'])) {
+                    $t['language_code'] = $full['lang'];
+                }
+                $info = (is_array($info) ? $info : []) + array_filter(['bio' => $full['about'], 'birthdate' => $full['birthday'], 'rating' => $full['rating']]);
+                if (!$gifts && $full['gifts'] !== null) {
+                    $gifts = ['total_count' => $full['gifts']];
+                }
+                $mtDc = $full['dc'];
+            }
+        }
         $photo = !empty($photos['total_count']) ? end($photos['photos'][0])['file_id'] : null;
-        $dc = $photo ? Account::dc($photo) : null;
+        $dc = ($photo ? Account::dc($photo) : null) ?? $mtDc;
         $level = null;
         if (!empty($info['rating'])) {
             $r = $info['rating'];
@@ -409,7 +471,7 @@ final class Tools
         }
         $text = UI::t('account', [
             'name' => UI::mention($t), 'id' => $t['id'], 'username' => UI::uname($t['username'] ?? null),
-            'premium_icon' => UI::badge('PREMIUM', '💫'), 'premium' => UI::l(!empty($t['is_premium']) ? '✅   دارد' : '❌   ندارد'), 'level' => $level,
+            'premium_icon' => UI::badge('PREMIUM', '💫'), 'premium' => $look && !isset($t['is_premium']) ? null : UI::l(!empty($t['is_premium']) ? '✅   دارد' : '❌   ندارد'), 'level' => $level,
             'created' => '≈ ' . Fmt::monthYear(min(time(), Account::created((int)$t['id']))), 'dc' => $dc ? "DC$dc • " . (Account::DC[$dc] ?? '') : null,
             'lang' => !empty($t['language_code']) ? strtoupper($t['language_code']) : null, 'birthdate' => $bd,
             'bio' => !empty($info['bio']) ? UI::esc($info['bio']) : null, 'gifts' => $gifts ? Fmt::int($gifts['total_count'] ?? 0) : null,

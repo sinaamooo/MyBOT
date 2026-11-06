@@ -137,6 +137,11 @@ function mt_fake(): void
             return ['_' => 'contacts.resolvedPeer', 'peer' => ['_' => 'peerUser', 'user_id' => 777000111], 'chats' => [],
                 'users' => [['_' => 'user', 'id' => 777000111, 'access_hash' => -55, 'first_name' => 'Tofan', 'username' => 'tofan']]];
         }
+        if ($method === 'users.getFullUser') {
+            return ['_' => 'users.userFull', 'full_user' => ['_' => 'userFull', 'id' => 777000111, 'about' => 'Gift trader', 'stargifts_count' => 42,
+                'birthday' => ['_' => 'birthday', 'day' => 5, 'month' => 3, 'year' => 1999], 'stars_rating' => ['_' => 'starsRating', 'level' => 7, 'current_level_stars' => 900, 'stars' => 1200, 'next_level_stars' => 5000]],
+                'chats' => [], 'users' => [['_' => 'user', 'id' => 777000111, 'access_hash' => -55, 'premium' => true, 'first_name' => 'Tofan', 'username' => 'tofan', 'photo' => ['_' => 'userProfilePhoto', 'photo_id' => 1, 'dc_id' => 4]]]];
+        }
         if ($method === 'payments.getSavedStarGifts') {
             return ['_' => 'payments.savedStarGifts', 'count' => 2, 'gifts' => [
                 ['_' => 'savedStarGift', 'gift' => ['_' => 'starGiftUnique', 'title' => 'Plush Pepe', 'slug' => 'PlushPepe-1', 'num' => 1, 'value_usd_amount' => 300000,
@@ -495,6 +500,11 @@ $gu = array_values(array_filter($GLOBALS['calls'], fn($c) => $c[0] === 'getUserG
 check($gu && $gu[0][1]['user_id'] === 777000111 && !in_array('payments.getSavedStarGifts', array_column($GLOBALS['mt_calls'], 0), true) && sent(['sendPhoto']),
     'username found with mtproto, gifts read through the bot api');
 reset_calls();
+feed(msg('/account @tofan', 76, 76, null, null, 'Sina'));
+$at = (string)last_text();
+check(str_contains($at, '<code>777000111</code>') && str_contains($at, 'Tofan') && str_contains($at, 'دارد') && str_contains($at, 'Gift trader') && str_contains($at, '1999/03/05')
+    && str_contains($at, '1,200/5,000') && str_contains($at, 'DC4'), 'account by username filled from mtproto full user');
+reset_calls();
 feed(msg('/gift', -500, 73, null, null, 'Reza'));
 reset_calls();
 feed(msg('@nobody_y', -500, 73, ['message_id' => 2, 'date' => time(), 'chat' => ['id' => -500, 'type' => 'supergroup'], 'from' => BOT, 'text' => 'x'], null, 'Reza'));
@@ -635,6 +645,28 @@ check($acc && count($rows) >= 2 && count($rows[0]) === 1 && count($rows[1]) === 
 reset_calls();
 cb($ab[0]['callback_data'], 502, -7100);
 check(!empty($GLOBALS['calls'][0][1]['show_alert']) && str_contains($GLOBALS['calls'][0][1]['text'] ?? '', $p502), 'account button alert');
+$seen = msg('سلام', -7100, 5501, null, null, 'Monk');
+$seen['from']['username'] = 'monkey_x';
+feed($seen);
+reset_calls();
+feed(msg('/account @monkey_x', -7100, 502, null, null, 'Reza'));
+$at = (string)last_text();
+check(str_contains($at, '<code>5501</code>') && !str_contains($at, '<code>502</code>') && str_contains($at, 'monkey_x'), 'account of another user by username');
+reset_calls();
+feed(msg('/account https://t.me/monkey_x', -7100, 502, null, null, 'Reza'));
+check(str_contains((string)last_text(), '<code>5501</code>'), 'account of another user by link');
+reset_calls();
+feed(msg('/account 70707', -7100, 502, null, null, 'Reza'));
+check(str_contains((string)last_text(), '<code>70707</code>'), 'account of another user by numeric id');
+reset_calls();
+feed(msg('/account @mychan', -7100, 502, null, null, 'Reza'));
+check(str_contains((string)last_text(), 'کانال') && !str_contains((string)last_text(), '<code>502</code>'), 'account of a channel username is refused');
+reset_calls();
+feed(msg('/account @nobody_zz9', -7100, 502, null, null, 'Reza'));
+check(str_contains((string)last_text(), 'پیدا') && !str_contains((string)last_text(), '<code>502</code>'), 'unknown username does not show the sender account');
+reset_calls();
+feed(msg('/account', -7100, 502, null, null, 'Reza'));
+check(str_contains((string)last_text(), '<code>502</code>'), 'bare account shows own account');
 Diamonds::adjust(501, 500);
 $a0 = Diamonds::points(501);
 reset_calls();
