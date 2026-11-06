@@ -439,13 +439,11 @@ check(str_starts_with($ph[0][1]['photo']['__bytes'] ?? '', "\xFF\xD8"), 'gift ca
 $names = array_column($GLOBALS['calls'], 0);
 $we = array_values(array_filter($GLOBALS['calls'], fn($c) => $c[0] === 'editMessageText' && ($c[1]['message_id'] ?? 0) === 1));
 $wd = array_search('deleteMessage', $names, true);
-check($we && str_contains($we[0][1]['text'], '5386367538735104399') && str_contains($we[0][1]['text'], 'منتـظـر بمـانید دارم چـک') && (bool)array_filter(buttons($we[0]), fn($b) => str_contains($b['url'] ?? '', 'startgroup'))
+check($we && str_contains($we[0][1]['text'], '5386367538735104399') && str_contains($we[0][1]['text'], 'لطفاً کمی منتظر بمانید') && (bool)array_filter(buttons($we[0]), fn($b) => str_contains($b['url'] ?? '', 'startgroup'))
     && $wd !== false && $wd > array_search('sendPhoto', $names, true) && ($GLOBALS['calls'][$wd][1]['message_id'] ?? 0) === 1, 'prompt turns into the waiting message and is removed after the card');
 $wr = new ReflectionProperty('Waiter', 'frames');
-Config::set('KASHIDA', '1');
 $fr = $wr->getValue(Waiter::start(msg('x', -500, 70), 'gift_wait', 1));
-Config::set('KASHIDA', '0');
-check(count($fr) === 1 && str_starts_with($fr[0], '<tg-emoji emoji-id="5386367538735104399">') && str_ends_with($fr[0], 'لـطـفاً منتـظـر بمـانید دارم چـک مـی‌کنـم'), 'waiting text is shown whole, exactly as written');
+check(count($fr) === 1 && str_starts_with($fr[0], '<tg-emoji emoji-id="5386367538735104399">') && str_ends_with($fr[0], 'لطفاً کمی منتظر بمانید'), 'waiting text is shown whole, exactly as written');
 
 Config::set('API_ID', '12345');
 Config::set('API_HASH', 'hash');
@@ -455,7 +453,7 @@ feed(msg('/gift @tofan', -500, 71, null, null, 'Sina'));
 $ph = sent(['sendPhoto']);
 $cap = $ph[0][1]['caption'] ?? '';
 check(str_contains($cap, 'https://t.me/nft/PlushPepe-1') && str_contains($cap, 'Tofan'), 'gift by username via mtproto');
-$ws = array_values(array_filter(sent(['sendMessage']), fn($c) => str_contains($c[1]['text'], 'لـطـفاً')));
+$ws = array_values(array_filter(sent(['sendMessage']), fn($c) => str_contains($c[1]['text'], 'کمی منتظر بمانید')));
 check($ws && sent(['deleteMessage']), 'direct /gift shows a waiting message and removes it');
 reset_calls();
 feed(msg('/gift', -500, 73, null, null, 'Reza'));

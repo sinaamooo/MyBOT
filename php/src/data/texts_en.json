@@ -162,7 +162,7 @@
   "text": "🎁 Send a username or a gift link.\n👤 For your own gifts: <b>me</b>"
  },
  "gift_wait": {
-  "text": "<tg-emoji emoji-id=\"5386367538735104399\">⏳</tg-emoji> Please wait, checking…"
+  "text": "<tg-emoji emoji-id=\"5386367538735104399\">⏳</tg-emoji> Please wait a moment"
  },
  "gift_not_found": {
   "text": "❌ No data was found for this gift."
