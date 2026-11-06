@@ -666,7 +666,7 @@ final class Extras
         }
         $n = fn($v) => $v === null ? null : Fmt::int($v);
         return UI::t('insta_media_caption', [
-            'title' => UI::l(!empty($x['reel']) ? 'ریلز اینستاگرام' : 'پست اینستاگرام'), 'owner' => !empty($x['owner']) ? '@' . UI::esc($x['owner']) : null,
+            'title' => UI::l(!empty($x['reel']) ? 'ریلز اینستاگرام' : 'پست اینستاگرام'), 'owner' => null,
             'likes' => $n($x['likes'] ?? null), 'comments' => $n($x['comments'] ?? null), 'views' => $n($x['views'] ?? null), 'duration' => $dur,
             'date' => !empty($x['date']) ? Fmt::jalali((int)$x['date']) : null, 'count' => $count > 1 ? Fmt::int($count) : null,
             'text' => $text !== '' ? UI::esc($text) : null, 'bot' => TG::username(),
@@ -682,15 +682,22 @@ final class Extras
             return;
         }
         $group = [];
-        foreach ($items as $i => $it) {
-            $group[] = ['type' => $it['kind'] === 'video' ? 'video' : 'photo', 'media' => $it['url']] + ($i === 0 ? ['caption' => $cap, 'parse_mode' => 'HTML'] : []);
+        foreach ($items as $it) {
+            $group[] = ['type' => $it['kind'] === 'video' ? 'video' : 'photo', 'media' => $it['url']] + ($it['kind'] === 'video' ? ['supports_streaming' => true] : []);
         }
-        if (TG::api('sendMediaGroup', ['chat_id' => $m['chat']['id'], 'media' => $group] + $extra) !== null) {
-            return;
+        if (TG::api('sendMediaGroup', ['chat_id' => $m['chat']['id'], 'media' => $group] + $extra) === null) {
+            $ok = 0;
+            foreach ($items as $it) {
+                if (self::upload($m, $it, $extra) !== null) {
+                    $ok++;
+                }
+            }
+            if (!$ok) {
+                Bot::send($m, UI::t('insta_not_found'), null);
+                return;
+            }
         }
-        foreach ($items as $i => $it) {
-            self::upload($m, $it, $i === 0 ? ['caption' => $cap, 'reply_markup' => UI::footer()] + $extra : $extra);
-        }
+        Bot::send($m, $cap);
     }
 
     private static function sendMedia(array $m, array $items): void

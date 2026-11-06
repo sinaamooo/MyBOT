@@ -876,8 +876,10 @@ reset_calls();
 feed(msg('https://www.instagram.com/reel/ABC123/', -900, 96));
 $grp = array_values(array_filter($GLOBALS['calls'], fn($c) => $c[0] === 'sendMediaGroup'));
 $media = $grp[0][1]['media'] ?? [];
-check(count($grp) === 1 && ($media[0]['media'] ?? '') === 'https://x/1.jpg' && ($media[1]['type'] ?? '') === 'video' && str_contains($media[0]['caption'] ?? '', '@TestBot')
-    && !array_filter($GLOBALS['calls'], fn($c) => $c[0] === 'sendMessage' || $c[0] === 'editMessageText'), 'instagram album in one go, no extra messages');
+$capm = sent(['sendMessage']);
+check(count($grp) === 1 && ($media[0]['media'] ?? '') === 'https://x/1.jpg' && ($media[1]['type'] ?? '') === 'video' && !isset($media[0]['caption']) && ($grp[0][1]['reply_parameters']['message_id'] ?? 0) > 0
+    && count($capm) === 1 && str_contains($capm[0][1]['text'], '@TestBot') && ($capm[0][1]['reply_parameters']['message_id'] ?? 0) > 0
+    && array_filter(buttons($capm[0]), fn($b) => str_contains($b['url'] ?? '', 'startgroup')) && !sent(['editMessageText']), 'instagram album then caption with add-to-group button');
 
 Config::set('INSTAGRAM_API_KEY', '');
 $GLOBALS['http']['instagram.com/graphql/query'] = ['data' => ['xdt_shortcode_media' => ['is_video' => true, 'video_url' => 'https://cdn/v.mp4', 'display_url' => 'https://cdn/v.jpg']]];
@@ -899,7 +901,7 @@ reset_calls();
 feed(msg('https://www.instagram.com/reel/RRR555/', -900, 101));
 $rv = array_values(array_filter($GLOBALS['calls'], fn($c) => $c[0] === 'sendVideo'));
 $rcap = $rv[0][1]['caption'] ?? '';
-check(($rv[0][1]['video'] ?? '') === 'https://cdn/reel.mp4' && !array_filter($GLOBALS['calls'], fn($c) => $c[0] === 'sendPhoto') && str_contains($rcap, 'Deadlifts All day #gym') && !str_contains($rcap, '🏆') && !str_contains($rcap, '- - -'), 'reel prefers video over thumbnail, clean caption');
+check(($rv[0][1]['video'] ?? '') === 'https://cdn/reel.mp4' && !array_filter($GLOBALS['calls'], fn($c) => $c[0] === 'sendPhoto') && str_contains($rcap, 'Deadlifts All day #gym') && !str_contains($rcap, '🏆') && !str_contains($rcap, '- - -') && !str_contains($rcap, 'coach') && !str_contains($rcap, 'پیج'), 'reel prefers video over thumbnail, clean caption without page id');
 unset($GLOBALS['http']['/embed/captioned/'], $GLOBALS['http']['instagram.com/graphql/query']);
 $GLOBALS['http']['i.instagram.com/api/v1/media/' . Instagram::mediaId('MOB123') . '/info/'] = ['items' => [['carousel_media' => [
     ['video_versions' => [['url' => 'https://cdn/small.mp4', 'width' => 320, 'height' => 240], ['url' => 'https://cdn/big.mp4', 'width' => 1080, 'height' => 1920]], 'image_versions2' => ['candidates' => [['url' => 'https://cdn/t.jpg']]]],

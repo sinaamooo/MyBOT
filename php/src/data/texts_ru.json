@@ -108,7 +108,7 @@
   "text": "⏳ Пожалуйста, подождите\n🖼 Фото и видео: {count}"
  },
  "insta_media_caption": {
-  "text": "👤 Страница: <b>{owner}</b>\n\n<blockquote>❤️ Лайки: <code>{likes}</code></blockquote>\n<blockquote>💬 Комментарии: <code>{comments}</code></blockquote>\n👁 Просмотры: <code>{views}</code>\n⏱ Длительность: <code>{duration}</code>\n🖼 Файлов: <code>{count}</code>\n🗓 Дата: {date}\n<blockquote expandable>📝 {text}</blockquote>\n🤖 @{bot}"
+  "text": "<blockquote>❤️ Лайки: <code>{likes}</code></blockquote>\n<blockquote>💬 Комментарии: <code>{comments}</code></blockquote>\n👁 Просмотры: <code>{views}</code>\n⏱ Длительность: <code>{duration}</code>\n🖼 Файлов: <code>{count}</code>\n🗓 Дата: {date}\n<blockquote expandable>📝 {text}</blockquote>\n🤖 @{bot}"
  },
  "insta_not_found": {
   "text": "⛔️ Не удалось получить этот пост.\n💬 Пост должен быть публичным; попробуйте ещё раз через минуту."
