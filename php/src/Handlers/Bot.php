@@ -98,6 +98,8 @@ final class Bot
         unset($m['reply_to_message']);
         if ($cmd === 'gift') {
             GiftsH::cmd($m, $text);
+        } elseif ($cmd === 'gfj') {
+            Groups::addChannel($m, $text);
         } else {
             Tools::emoji($m);
         }
@@ -191,10 +193,22 @@ final class Bot
         return $ok;
     }
 
-    public static function missing(int $user): array
+    public static function groupChannels(int $chat): array
+    {
+        if ($chat >= 0 || !Settings::on($chat, 'force_join_groups')) {
+            return [];
+        }
+        $out = [];
+        foreach (array_merge(Settings::get('force_channels') ?: [], DB::chatSettings($chat)['fj_channels'] ?? []) as $ch) {
+            $out[(string)$ch['id']] = $ch;
+        }
+        return array_values($out);
+    }
+
+    public static function missing(int $user, ?array $channels = null): array
     {
         $out = [];
-        foreach (Settings::get('force_channels') ?: [] as $ch) {
+        foreach ($channels ?? (Settings::get('force_channels') ?: []) as $ch) {
             if (!self::isMember($ch['id'], $user)) {
                 $out[] = $ch;
             }
@@ -309,8 +323,8 @@ final class Bot
                 self::send($m, UI::t('scam_known', ['mention' => UI::mention($u), 'reason' => UI::esc($sc['reason'] ?: '—')]), null);
             }
         }
-        if (Settings::get('force_channels') && Settings::on($chat, 'force_join_groups')) {
-            $missing = self::missing($u['id']);
+        if ($fc = self::groupChannels($chat)) {
+            $missing = self::missing($u['id'], $fc);
             if ($missing && !$admin()) {
                 self::deleteMsg($m);
                 if (!Cache::throttled("$chat:{$u['id']}:fj", 45)) {
@@ -487,10 +501,12 @@ final class Bot
             TG::answer($cq['id'], UI::plain('translate_not_yours'), true);
             return;
         }
-        foreach (Settings::get('force_channels') ?: [] as $ch) {
+        $gc = (int)($cq['message']['chat']['id'] ?? 0);
+        $chs = $gc < 0 ? self::groupChannels($gc) : (Settings::get('force_channels') ?: []);
+        foreach ($chs as $ch) {
             Cache::forget("mem:{$ch['id']}:$owner");
         }
-        if (self::missing($owner)) {
+        if (self::missing($owner, $chs)) {
             TG::answer($cq['id'], UI::plain('force_join_not_yet'), true);
             return;
         }
@@ -674,8 +690,67 @@ final class Groups
         if ($row) {
             $rows[] = $row;
         }
+        $rows[] = [UI::button('btn_gfj', ['cb' => 'gs:fj'])];
         $rows[] = [UI::raw(UI::l('⛔️ بستن'), 'gs:close')];
         return UI::kb($rows);
+    }
+
+    private static function channels(int $chat): array
+    {
+        return array_values(DB::chatSettings($chat)['fj_channels'] ?? []);
+    }
+
+    private static function fjView(int $chat): array
+    {
+        $list = self::channels($chat);
+        $lines = array_map(fn($c) => UI::fill(UI::template('group_fj_line'), ['title' => UI::esc($c['title'] ?? ''), 'url' => UI::esc($c['url'] ?? '')]), $list);
+        $rows = array_map(fn($i, $c) => [UI::raw('❌ ' . mb_substr((string)($c['title'] ?? ''), 0, 30), "gs:fjdel:$i", 'danger')], array_keys($list), $list);
+        $rows[] = [UI::button('btn_gfj_add', ['cb' => 'gs:fjadd'])];
+        $rows[] = [UI::button('btn_gfj_back', ['cb' => 'gs:back'])];
+        return [UI::t('group_fj', ['lines' => $lines ? implode("\n", $lines) : UI::l('— کانالی ثبت نشده —')]), UI::kb($rows)];
+    }
+
+    public static function addChannel(array $m, string $text): void
+    {
+        $chat = (int)$m['chat']['id'];
+        if ($chat >= 0 || !Bot::isChatAdmin($chat, (int)$m['from']['id'])) {
+            return;
+        }
+        $ref = null;
+        $invite = null;
+        if (!empty($m['forward_origin']['chat']['id'])) {
+            $ref = $m['forward_origin']['chat']['id'];
+        } else {
+            $parts = preg_split('/\s+/', trim($text));
+            $first = str_replace(['https://t.me/', 'http://t.me/', 't.me/'], '@', $parts[0] ?? '');
+            if ($first !== '' && $first !== '@') {
+                $ref = preg_match('/^-?\d+$/', $first) ? (int)$first : (str_starts_with($first, '@') ? $first : '@' . $first);
+            }
+            if (isset($parts[1]) && str_contains($parts[1], 't.me/')) {
+                $invite = $parts[1];
+            }
+        }
+        $c = $ref !== null ? TG::api('getChat', ['chat_id' => $ref]) : null;
+        if (!$c || !in_array($c['type'] ?? '', ['channel', 'supergroup'], true)) {
+            Bot::reply($m, UI::t('group_fj_not_found'), null);
+            return;
+        }
+        $me = TG::api('getChatMember', ['chat_id' => $c['id'], 'user_id' => TG::botId()]);
+        if (!in_array($me['status'] ?? '', ['administrator', 'creator'], true)) {
+            Bot::reply($m, UI::t('group_fj_not_admin', ['title' => UI::esc($c['title'] ?? '')]), null);
+            return;
+        }
+        $url = $invite ?: (!empty($c['username']) ? 'https://t.me/' . $c['username'] : ($c['invite_link'] ?? null));
+        $url ??= TG::api('createChatInviteLink', ['chat_id' => $c['id'], 'name' => 'force-join'])['invite_link'] ?? null;
+        if (!$url) {
+            Bot::reply($m, UI::t('group_fj_not_found'), null);
+            return;
+        }
+        $list = array_values(array_filter(self::channels($chat), fn($x) => (string)$x['id'] !== (string)$c['id']));
+        $list[] = ['id' => $c['id'], 'title' => $c['title'] ?? ($c['username'] ?? (string)$c['id']), 'url' => $url];
+        DB::setChatSetting($chat, 'fj_channels', array_slice($list, -5));
+        [$t, $kb] = self::fjView($chat);
+        Bot::reply($m, UI::t('group_fj_added', ['title' => UI::esc($c['title'] ?? '')]) . "\n\n" . $t, $kb);
     }
 
     public static function langKb(int $chat, string $prefix): array
@@ -710,6 +785,28 @@ final class Groups
         if ($key === 'close') {
             TG::answer($cq['id']);
             TG::delete($chat, $cq['message']['message_id']);
+            return;
+        }
+        if ($key === 'fj' || str_starts_with($key, 'fjdel:')) {
+            if (str_starts_with($key, 'fjdel:')) {
+                $list = self::channels($chat);
+                array_splice($list, (int)substr($key, 6), 1);
+                DB::setChatSetting($chat, 'fj_channels', array_values($list));
+            }
+            TG::answer($cq['id']);
+            [$t, $kb] = self::fjView($chat);
+            TG::edit($chat, $cq['message']['message_id'], $t, $kb);
+            return;
+        }
+        if ($key === 'fjadd') {
+            TG::answer($cq['id']);
+            Cache::set('ask:' . $chat . ':' . $cq['from']['id'], 'gfj', 600);
+            TG::send($chat, UI::t('group_fj_ask', ['mention' => UI::mention($cq['from'])]), ['force_reply' => true, 'selective' => true, 'input_field_placeholder' => '@channel']);
+            return;
+        }
+        if ($key === 'back') {
+            TG::answer($cq['id']);
+            TG::edit($chat, $cq['message']['message_id'], UI::t('group_settings', ['title' => UI::esc($cq['message']['chat']['title'] ?? '')]), self::kb($chat));
             return;
         }
         if (!isset(Settings::groupFeatures()[$key])) {

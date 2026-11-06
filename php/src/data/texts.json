@@ -652,8 +652,8 @@
   "desc": "حذف مدیر ({target} {by})"
  },
  "mod_vip": {
-  "text": "✨ <b>کـاربـر عـضـو ویـژه شـد</b>\n\n<blockquote>👤    کـاربـر: {target}</blockquote>\n<blockquote>🔑    دسـتـرسـی: سـکـوت {minutes} دقـیـقـه‌ای و {warns} اخـطـار</blockquote>\n<blockquote>🛡    تـوسـط: {by}</blockquote>",
-  "desc": "تنظیم ویژه ({target} {minutes} {warns} {by})"
+  "text": "✨ <b>کـاربـر عـضـو ویـژه شـد</b>\n\n<blockquote>👤    کـاربـر: {target}</blockquote>\n<blockquote>🏷    لـقـب: <b>{title}</b></blockquote>\n<blockquote>🔑    دسـتـرسـی: سـکـوت {minutes} دقـیـقـه‌ای و {warns} اخـطـار</blockquote>\n<blockquote>🛡    تـوسـط: {by}</blockquote>",
+  "desc": "تنظیم ویژه ({target} {title} {minutes} {warns} {by})"
  },
  "mod_unvip": {
   "text": "✅ <b>کـاربـر از اعـضـای ویـژه حـذف شـد</b>\n\n<blockquote>👤    کـاربـر: {target}</blockquote>\n<blockquote>🛡    تـوسـط: {by}</blockquote>",
@@ -682,5 +682,29 @@
  "pin_not_found": {
   "text": "⚠️ پین پیدا نشد یا قابل دانلود نیست.",
   "desc": "پین پیدا نشد"
+ },
+ "group_fj": {
+  "text": "📢 <b>کانال‌های اجباری این گروه</b>\n\n{lines}\n\n🔒 اعضا تا عضو این کانال‌ها نشوند نمی‌توانند پیام بدهند. ربات باید در هر کانال ادمین باشد.",
+  "desc": "پنل کانال اجباری گروه ({lines})"
+ },
+ "group_fj_line": {
+  "text": "<blockquote>📢    {title}\n🔗    {url}</blockquote>",
+  "desc": "هر کانال در پنل ({title} {url})"
+ },
+ "group_fj_ask": {
+  "text": "📢 {mention} یوزرنیم یا لینک کانال را روی همین پیام ریپلای کنید.\nمثال: <code>@mychannel</code>",
+  "desc": "درخواست کانال اجباری ({mention})"
+ },
+ "group_fj_added": {
+  "text": "✅ کانال «{title}» اضافه شد.",
+  "desc": "کانال اضافه شد ({title})"
+ },
+ "group_fj_not_admin": {
+  "text": "⚠️ ربات در کانال «{title}» ادمین نیست. اول ربات را در کانال ادمین کنید و دوباره بفرستید.",
+  "desc": "ربات در کانال ادمین نیست ({title})"
+ },
+ "group_fj_not_found": {
+  "text": "❌ کانال پیدا نشد. یوزرنیم یا لینک درست بفرستید و ربات را در کانال ادمین کنید.",
+  "desc": "کانال پیدا نشد"
  }
 }

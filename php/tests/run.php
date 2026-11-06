@@ -51,11 +51,18 @@ TG::$fake = function (string $method, array $p) {
             return ['ok' => true, 'result' => $msg($p['chat_id'], null, $p['caption'] ?? null)];
         case 'getChatMember':
             $u = $p['user_id'];
+            if ($p['chat_id'] == -100777 || $p['chat_id'] == -100778) {
+                $st = $u == BOT['id'] ? ($p['chat_id'] == -100777 ? 'administrator' : 'member') : ($u == 6060 ? 'left' : 'member');
+                return ['ok' => true, 'result' => ['status' => $st, 'user' => ['id' => $u, 'is_bot' => false, 'first_name' => 'u']]];
+            }
             if ($p['chat_id'] == NON_MEMBER) {
                 return ['ok' => true, 'result' => ['status' => 'left', 'user' => ['id' => $u, 'is_bot' => false, 'first_name' => 'u']]];
             }
             return ['ok' => true, 'result' => ['status' => $u == 777 ? 'administrator' : 'member', 'user' => ['id' => $u, 'is_bot' => false, 'first_name' => 'u']]];
         case 'getChat':
+            if (in_array($p['chat_id'], ['@mychan', '@otherchan'], true)) {
+                return ['ok' => true, 'result' => ['id' => $p['chat_id'] === '@mychan' ? -100777 : -100778, 'type' => 'channel', 'title' => $p['chat_id'] === '@mychan' ? 'My Chan' : 'Other', 'username' => ltrim($p['chat_id'], '@')]];
+            }
             return ['ok' => false, 'description' => 'Bad Request: chat not found'];
         case 'getChatAdministrators':
             return ['ok' => true, 'result' => [['status' => 'creator', 'user' => ['id' => 777, 'is_bot' => false, 'first_name' => 'adm']]]];
@@ -1230,7 +1237,9 @@ feed(msg('تنظیم ویژه', $G, 777, $tgt(5002, 'Vip')));
 check(!Moderation::isVip($G, 5002), 'group admins cannot set special members');
 reset_calls();
 feed(msg('تنظیم ویژه', $G, 999, $tgt(5002, 'Vip')));
-check(Moderation::isVip($G, 5002) && str_contains((string)last_text(), 'ویـژه'), 'set special member');
+$vt = $mcall('setChatMemberTag');
+check(Moderation::isVip($G, 5002) && str_contains((string)last_text(), 'ویـژه') && ($vt[0][1]['tag'] ?? '') === '𝗩𝗜𝗣' && ($vt[0][1]['user_id'] ?? 0) === 5002
+    && !$mcall('promoteChatMember') && str_contains((string)last_text(), '𝗩𝗜𝗣'), 'special member gets the bold VIP tag without becoming an admin');
 reset_calls();
 feed(msg('بن', $G, 777, $tgt(5002)));
 check(!$mcall('banChatMember') && str_contains((string)last_text(), 'مـدیـر یـا عـضـو ویـژه'), 'special members cannot be banned');
@@ -1256,7 +1265,7 @@ $gl = (string)(end($GLOBALS['calls'])[1]['text'] ?? '');
 check(str_contains($vl, 'کاربران ویژه') && str_contains($vl, '5002') && str_contains($gl, '5002'), 'panel lists special members, all groups and per group');
 reset_calls();
 feed(msg('حذف ویژه', $G, 999, $tgt(5002)));
-check(!Moderation::isVip($G, 5002), 'remove special member');
+check(!Moderation::isVip($G, 5002) && ($mcall('setChatMemberTag')[0][1]['tag'] ?? null) === '', 'remove special member and its tag');
 $ib = UI::iconize(['text' => '🔴', 'callback_data' => 'x']);
 check($ib['text'] === "\u{200B}" && !empty($ib['icon_custom_emoji_id']), 'icon-only button uses a zero-width label so the icon is centered');
 $GLOBALS['reject_blank'] = true;
@@ -1327,5 +1336,36 @@ reset_calls();
 feed(msg('https://www.pinterest.com/pin/444444444/', -9100, 904));
 check(str_contains((string)last_text(), 'پین پیدا نشد'), 'pinterest pin not found');
 unset($GLOBALS['http']['pinterest.com/resource/PinResource/get/'], $GLOBALS['http']['pin.it/vid1']);
+
+$FG = -9300;
+reset_calls();
+feed(msg('/panel', $FG, 777));
+$gpb = array_merge(...(sent(['sendMessage'])[0][1]['reply_markup']['inline_keyboard'] ?? [[]]));
+check((bool)array_filter($gpb, fn($b) => ($b['callback_data'] ?? '') === 'gs:fj'), 'group panel has required channels button');
+reset_calls();
+cb('gs:fj', 777, $FG);
+check(str_contains((string)(end($GLOBALS['calls'])[1]['text'] ?? ''), 'کانالی ثبت نشده'), 'required channels view starts empty');
+reset_calls();
+cb('gs:fjadd', 777, $FG);
+check((sent(['sendMessage'])[0][1]['reply_markup']['force_reply'] ?? false) === true, 'add channel asks with force reply');
+reset_calls();
+feed(msg('@otherchan', $FG, 777, ['message_id' => 3, 'date' => time(), 'chat' => ['id' => $FG, 'type' => 'supergroup'], 'from' => BOT, 'text' => 'x']));
+check(str_contains((string)last_text(), 'ادمین نیست') && !(DB::chatSettings($FG)['fj_channels'] ?? []), 'channel where the bot is not admin is refused');
+cb('gs:fjadd', 777, $FG);
+reset_calls();
+feed(msg('https://t.me/mychan', $FG, 777, ['message_id' => 3, 'date' => time(), 'chat' => ['id' => $FG, 'type' => 'supergroup'], 'from' => BOT, 'text' => 'x']));
+check(str_contains((string)last_text(), 'My Chan') && (DB::chatSettings($FG)['fj_channels'][0]['id'] ?? 0) === -100777, 'channel added from the group panel');
+reset_calls();
+feed(msg('سلام', $FG, 6060));
+$fjw = sent(['sendMessage']);
+check(sent(['deleteMessage']) && $fjw && in_array('https://t.me/mychan', array_column(buttons($fjw[0]), 'url'), true), 'non-member message removed with join button for the group channel');
+reset_calls();
+feed(msg('سلام', $FG, 6061));
+check(!sent(['deleteMessage']), 'member of the group channel can chat');
+cb('gs:fjdel:0', 777, $FG);
+Cache::forget("mem:-100777:6060");
+reset_calls();
+feed(msg('سلام', $FG, 6060));
+check(!sent(['deleteMessage']) && !(DB::chatSettings($FG)['fj_channels'] ?? []), 'removed channel is no longer required');
 echo "passed: $pass, failed: $fail\n";
 exit($fail ? 1 : 0);

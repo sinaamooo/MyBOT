@@ -489,7 +489,7 @@
   "text": "✅ <b>Пользователь снят с админки</b>\n\n<blockquote>👤 Пользователь: {target}</blockquote>\n<blockquote>🛡 Кем: {by}</blockquote>"
  },
  "mod_vip": {
-  "text": "✨ <b>Пользователь стал особым участником</b>\n\n<blockquote>👤 Пользователь: {target}</blockquote>\n<blockquote>🔑 Доступ: мут на {minutes} мин и {warns} предупреждение</blockquote>\n<blockquote>🛡 Кем: {by}</blockquote>"
+  "text": "✨ <b>Пользователь стал особым участником</b>\n\n<blockquote>👤 Пользователь: {target}</blockquote>\n<blockquote>🏷 Тег: <b>{title}</b></blockquote>\n<blockquote>🔑 Доступ: мут на {minutes} мин и {warns} предупреждение</blockquote>\n<blockquote>🛡 Кем: {by}</blockquote>"
  },
  "mod_unvip": {
   "text": "✅ <b>Пользователь больше не особый участник</b>\n\n<blockquote>👤 Пользователь: {target}</blockquote>\n<blockquote>🛡 Кем: {by}</blockquote>"
@@ -511,5 +511,23 @@
  },
  "pin_not_found": {
   "text": "⚠️ Пин не найден или его нельзя скачать."
+ },
+ "group_fj": {
+  "text": "📢 <b>Обязательные каналы этой группы</b>\n\n{lines}\n\n🔒 Участники не смогут писать, пока не подпишутся на эти каналы. Бот должен быть админом в каждом канале."
+ },
+ "group_fj_line": {
+  "text": "<blockquote>📢 {title}\n🔗 {url}</blockquote>"
+ },
+ "group_fj_ask": {
+  "text": "📢 {mention} ответьте на это сообщение юзернеймом или ссылкой канала.\nПример: <code>@mychannel</code>"
+ },
+ "group_fj_added": {
+  "text": "✅ Канал «{title}» добавлен."
+ },
+ "group_fj_not_admin": {
+  "text": "⚠️ Бот не админ в канале «{title}». Сделайте бота админом и отправьте снова."
+ },
+ "group_fj_not_found": {
+  "text": "❌ Канал не найден. Отправьте правильный юзернейм или ссылку и сделайте бота админом канала."
  }
 }

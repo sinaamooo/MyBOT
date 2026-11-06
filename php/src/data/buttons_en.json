@@ -30,5 +30,8 @@
  "btn_md_unmute": "🔊 Unmute",
  "btn_md_unwarn": "❌ Clear warnings",
  "btn_md_unadmin": "❌ Remove admin",
- "btn_md_unvip": "❌ Remove special"
+ "btn_md_unvip": "❌ Remove special",
+ "btn_gfj": "📢 Required channels",
+ "btn_gfj_add": "✅ Add channel",
+ "btn_gfj_back": "⚙️ Back to settings"
 }

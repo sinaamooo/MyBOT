@@ -489,7 +489,7 @@
   "text": "✅ <b>User removed from admins</b>\n\n<blockquote>👤 User: {target}</blockquote>\n<blockquote>🛡 By: {by}</blockquote>"
  },
  "mod_vip": {
-  "text": "✨ <b>User is now a special member</b>\n\n<blockquote>👤 User: {target}</blockquote>\n<blockquote>🔑 Access: {minutes}-minute mute and {warns} warning</blockquote>\n<blockquote>🛡 By: {by}</blockquote>"
+  "text": "✨ <b>User is now a special member</b>\n\n<blockquote>👤 User: {target}</blockquote>\n<blockquote>🏷 Tag: <b>{title}</b></blockquote>\n<blockquote>🔑 Access: {minutes}-minute mute and {warns} warning</blockquote>\n<blockquote>🛡 By: {by}</blockquote>"
  },
  "mod_unvip": {
   "text": "✅ <b>User removed from special members</b>\n\n<blockquote>👤 User: {target}</blockquote>\n<blockquote>🛡 By: {by}</blockquote>"
@@ -511,5 +511,23 @@
  },
  "pin_not_found": {
   "text": "⚠️ Pin not found or cannot be downloaded."
+ },
+ "group_fj": {
+  "text": "📢 <b>This group's required channels</b>\n\n{lines}\n\n🔒 Members cannot chat until they join these channels. The bot must be an admin in each channel."
+ },
+ "group_fj_line": {
+  "text": "<blockquote>📢 {title}\n🔗 {url}</blockquote>"
+ },
+ "group_fj_ask": {
+  "text": "📢 {mention} reply to this message with the channel username or link.\nExample: <code>@mychannel</code>"
+ },
+ "group_fj_added": {
+  "text": "✅ Channel “{title}” added."
+ },
+ "group_fj_not_admin": {
+  "text": "⚠️ The bot is not an admin in “{title}”. Make the bot an admin there and send it again."
+ },
+ "group_fj_not_found": {
+  "text": "❌ Channel not found. Send a correct username or link and make the bot an admin in the channel."
  }
 }

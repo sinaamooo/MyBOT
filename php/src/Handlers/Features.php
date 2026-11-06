@@ -863,6 +863,7 @@ final class Moderation
     const VIP_MUTE = 10;
     const VIP_WARNS = 1;
     const TITLE = '𝗔𝗗𝗠𝗜𝗡';
+    const VIP_TAG = '𝗩𝗜𝗣';
     const WORDS = [
         'ban' => ['بن', 'ban', 'бан'],
         'unban' => ['رفع بن', 'آن بن', 'انبن', 'unban', 'разбан'],
@@ -1016,9 +1017,17 @@ final class Moderation
                 return $ok ? ['mod_unadmin', [], null] : [null, [], null];
             case 'vip':
                 self::setVip($chat, $uid, true);
-                return ['mod_vip', ['minutes' => self::VIP_MUTE, 'warns' => self::VIP_WARNS], $undo('btn_md_unvip', 'unvip')];
+                $tag = null;
+                foreach ([self::VIP_TAG, 'VIP'] as $t) {
+                    if (TG::api('setChatMemberTag', ['chat_id' => $chat, 'user_id' => $uid, 'tag' => $t]) !== null) {
+                        $tag = $t;
+                        break;
+                    }
+                }
+                return ['mod_vip', ['minutes' => self::VIP_MUTE, 'warns' => self::VIP_WARNS, 'title' => $tag], $undo('btn_md_unvip', 'unvip')];
             case 'unvip':
                 self::setVip($chat, $uid, false);
+                TG::api('setChatMemberTag', ['chat_id' => $chat, 'user_id' => $uid, 'tag' => '']);
                 return ['mod_unvip', [], null];
         }
         return [null, [], null];
