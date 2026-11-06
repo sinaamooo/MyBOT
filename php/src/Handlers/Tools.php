@@ -32,6 +32,7 @@ final class Tools
             || ($r[0] === 'crypto' && $loose && in_array($r[1], SpotDir::CHAT_WORDS, true) && !Currencies::knownCrypto($r[1]))) {
             return false;
         }
+        self::react($m);
         $a = Convert::run($amount, $r[0], $r[1]);
         if (!$a) {
             if (!$silent) {
@@ -46,6 +47,7 @@ final class Tools
 
     public static function answerPair(array $m, float $amount, array $from, array $to): bool
     {
+        self::react($m);
         $a = $to[0] === 'toman' ? Convert::run($amount, $from[0], $from[1]) : Convert::pair($amount, $from, $to);
         if (!$a) {
             return false;
@@ -86,12 +88,18 @@ final class Tools
 
     const REACTIONS = ['price' => ['💱', '⚡'], 'wallet' => ['🔰', '👌'], 'hash' => ['🔍', '👀'], 'board' => ['🏆']];
 
+    private static array $reacted = [];
+
     public static function react(array $m, string $kind = 'price'): void
     {
         if (empty($m['message_id']) || !empty($m['from']['is_bot'])) {
             return;
         }
         $chat = $m['chat']['id'];
+        if (isset(self::$reacted["$chat:{$m['message_id']}"])) {
+            return;
+        }
+        self::$reacted["$chat:{$m['message_id']}"] = true;
         $want = $kind === 'price' ? Config::get('PRICE_REACTION') : '';
         $list = [];
         foreach (array_merge(array_filter(array_map('trim', explode(',', $want))), self::REACTIONS[$kind] ?? self::REACTIONS['price'], ['🐳']) as $r) {
@@ -408,8 +416,7 @@ final class Tools
             'diamonds' => Fmt::int($pts = Diamonds::points((int)$t['id'])), 'dlevel' => Diamonds::level($pts),
         ]);
         if ($photo && UI::textLen($text) <= 1000) {
-            $extra = Bot::isPrivate($m) ? [] : ['reply_parameters' => Bot::replyParams($m)];
-            if (TG::photo($m['chat']['id'], $photo, $text, UI::footer(), $extra)) {
+            if (TG::photo($m['chat']['id'], $photo, $text, UI::footer())) {
                 return;
             }
         }

@@ -810,57 +810,114 @@ final class Pinterest
         }
         $data = json_encode(['options' => ['id' => $id, 'field_set_key' => 'detailed'], 'context' => new stdClass()]);
         $h = ['User-Agent' => self::UA, 'Accept-Language' => 'en-US,en;q=0.9'];
-        $hit = Http::race([
+        $reqs = [
             'api' => ['url' => 'https://www.pinterest.com/resource/PinResource/get/', 'params' => ['source_url' => "/pin/$id/", 'data' => $data], 'timeout' => 8,
                 'headers' => $h + ['Accept' => 'application/json', 'X-Requested-With' => 'XMLHttpRequest', 'X-Pinterest-PWS-Handler' => 'www/pin/[id].js']],
             'page' => ['url' => "https://www.pinterest.com/pin/$id/", 'timeout' => 8, 'headers' => $h + ['Accept' => 'text/html']],
-        ], function ($k, $d) use ($id) {
+        ];
+        $out = Http::collect($reqs, fn($k) => $k, function ($k, $d) use ($id) {
             $p = $k === 'api' ? ($d['resource_response']['data'] ?? null) : (is_string($d) ? self::fromPage($d, $id) : null);
             return is_array($p) && self::media($p) ? $p : null;
-        }, 9);
-        return $hit ? $hit[1] + ['id' => $id] : null;
+        }, 9, fn($o) => isset($o['api']) || isset($o['page']) && self::media($o['page'])[0]['kind'] === 'video');
+        $p = $out['api'] ?? $out['page'] ?? null;
+        if ($p && isset($out['api'], $out['page']) && self::media($out['api'])[0]['kind'] !== 'video' && self::media($out['page'])[0]['kind'] === 'video') {
+            $p = $out['page'];
+        }
+        return $p ? $p + ['id' => $id] : null;
     }
 
-    private static function best(array $list): ?string
+    private static function vurl($v): ?array
     {
-        $url = null;
-        $w = -1;
-        foreach ($list as $v) {
-            $u = (string)($v['url'] ?? '');
-            if ($u !== '' && str_ends_with(strtolower(strtok($u, '?')), '.mp4') && (int)($v['width'] ?? 0) > $w) {
-                $w = (int)($v['width'] ?? 0);
-                $url = $u;
+        $u = is_array($v) ? ($v['url'] ?? null) : null;
+        return is_string($u) && preg_match('~^https?://[a-z0-9.-]*pinimg\.com/\S+?\.(mp4|m3u8)(?:\?\S*)?$~i', $u, $mm) ? [$u, strtolower($mm[1]), (int)($v['width'] ?? 0)] : null;
+    }
+
+    private static function scan($node, array &$out): void
+    {
+        if (!is_array($node)) {
+            return;
+        }
+        $list = array_values(array_filter(array_map([self::class, 'vurl'], $node)));
+        if (!$list && ($one = self::vurl($node))) {
+            $list = [$one];
+        }
+        if ($list) {
+            $key = preg_replace('~(?:_t\d+|_\d+w)?\.(?:mp4|m3u8)$~i', '', basename((string)parse_url($list[0][0], PHP_URL_PATH)));
+            $out[$key] = array_merge($out[$key] ?? [], $list);
+            return;
+        }
+        foreach ($node as $v) {
+            if (is_array($v)) {
+                self::scan($v, $out);
             }
         }
-        return $url;
+    }
+
+    private static function video(array $list): array
+    {
+        $best = null;
+        $w = -1;
+        foreach ($list as [$u, $ext, $width]) {
+            if ($ext === 'mp4' && $width >= $w) {
+                $w = $width;
+                $best = $u;
+            }
+        }
+        $alts = [];
+        foreach ($list as [$u, $ext]) {
+            if ($ext === 'm3u8') {
+                $alts[] = preg_replace(['~/hls/~i', '~\.m3u8(?:\?\S*)?$~i'], ['/720p/', '.mp4'], $u);
+            }
+        }
+        $alts = array_values(array_unique(array_diff($alts, [$best])));
+        return ['kind' => 'video', 'url' => $best ?? array_shift($alts), 'alts' => $alts];
+    }
+
+    private static function photo(array $images): ?array
+    {
+        $img = $images['originals']['url'] ?? $images['orig']['url'] ?? $images['736x']['url'] ?? null;
+        return $img ? ['kind' => 'photo', 'url' => $img, 'alts' => array_values(array_filter([$images['736x']['url'] ?? null], fn($u) => $u !== $img))] : null;
     }
 
     public static function media(array $p): array
     {
-        if ($u = self::best((array)($p['videos']['video_list'] ?? []))) {
-            return [['kind' => 'video', 'url' => $u]];
+        $v = [];
+        self::scan($p['videos'] ?? $p['video'] ?? null, $v);
+        if ($v) {
+            return [self::video(reset($v))];
         }
         $items = [];
         foreach ((array)($p['story_pin_data']['pages'] ?? []) as $pg) {
+            $v = [];
+            self::scan($pg, $v);
+            if ($v) {
+                array_push($items, ...array_map([self::class, 'video'], array_values($v)));
+                continue;
+            }
             foreach ((array)($pg['blocks'] ?? []) as $b) {
-                if ($u = self::best((array)($b['video']['video_list'] ?? []))) {
-                    $items[] = ['kind' => 'video', 'url' => $u];
-                } elseif ($img = $b['image']['images']['originals']['url'] ?? $b['image']['images']['736x']['url'] ?? null) {
-                    $items[] = ['kind' => 'photo', 'url' => $img, 'alt' => $b['image']['images']['736x']['url'] ?? null];
+                if ($ph = self::photo((array)($b['image']['images'] ?? []))) {
+                    $items[] = $ph;
                 }
             }
         }
-        if (!$items) {
-            foreach ((array)($p['carousel_data']['carousel_slots'] ?? []) as $sl) {
-                if ($img = $sl['images']['orig']['url'] ?? $sl['images']['736x']['url'] ?? null) {
-                    $items[] = ['kind' => 'photo', 'url' => $img, 'alt' => $sl['images']['736x']['url'] ?? null];
-                }
+        if ($items) {
+            return array_slice($items, 0, 10);
+        }
+        $v = [];
+        self::scan(array_diff_key($p, array_flip(['pinner', 'native_creator', 'board', 'origin_pinner', 'closeup_attribution', 'rich_metadata', 'attribution'])), $v);
+        if ($v) {
+            return array_slice(array_map([self::class, 'video'], array_values($v)), 0, 10);
+        }
+        $pics = [];
+        foreach ((array)($p['carousel_data']['carousel_slots'] ?? []) as $sl) {
+            if ($ph = self::photo((array)($sl['images'] ?? []))) {
+                $pics[] = $ph;
             }
         }
-        if (!$items && ($img = $p['images']['orig']['url'] ?? $p['images']['736x']['url'] ?? null)) {
-            $items[] = ['kind' => 'photo', 'url' => $img, 'alt' => $p['images']['736x']['url'] ?? null];
+        if (!$pics && ($ph = self::photo((array)($p['images'] ?? [])))) {
+            $pics[] = $ph;
         }
-        return array_slice($items, 0, 10);
+        return array_slice($pics, 0, 10);
     }
 
     public static function info(array $p): array
@@ -868,7 +925,6 @@ final class Pinterest
         $text = trim((string)($p['description'] ?? '') ?: (string)($p['closeup_unified_description'] ?? ''));
         return [
             'title' => trim((string)($p['title'] ?? '') ?: (string)($p['grid_title'] ?? '')),
-            'owner' => $p['pinner']['username'] ?? $p['native_creator']['username'] ?? null,
             'saves' => $p['aggregated_pin_data']['aggregated_stats']['saves'] ?? $p['repin_count'] ?? null,
             'date' => !empty($p['created_at']) ? (strtotime((string)$p['created_at']) ?: null) : null,
             'text' => $text,

@@ -61,13 +61,13 @@ final class Bot
             $markup = UI::footer();
         }
         $extra = ['__quick' => true];
-        if (!self::isPrivate($m) && isset($m['message_id'])) {
-            $extra['reply_parameters'] = self::replyParams($m);
-        }
         $chat = $m['chat']['id'];
         if ($photo !== null && UI::textLen($text) <= 1000) {
             TG::photo($chat, $photo, $text, $markup, $extra);
             return;
+        }
+        if (!self::isPrivate($m) && isset($m['message_id'])) {
+            $extra['reply_parameters'] = self::replyParams($m);
         }
         TG::send($chat, $text, $markup, $extra);
     }
@@ -112,17 +112,17 @@ final class Bot
             $markup = UI::footer();
         }
         $extra = [];
-        if ($reply && !self::isPrivate($m) && isset($m['message_id'])) {
-            $extra['reply_parameters'] = self::replyParams($m);
-        }
         $chat = $m['chat']['id'];
         if ($photo !== null) {
             if (UI::textLen($text) > 1000) {
-                $sent = TG::photo($chat, $photo, null, null, $extra);
+                $sent = TG::photo($chat, $photo);
                 TG::send($chat, $text, $markup);
                 return $sent;
             }
-            return TG::photo($chat, $photo, $text, $markup, $extra);
+            return TG::photo($chat, $photo, $text, $markup);
+        }
+        if ($reply && !self::isPrivate($m) && isset($m['message_id'])) {
+            $extra['reply_parameters'] = self::replyParams($m);
         }
         if ($preview) {
             $extra['link_preview_options'] = ['url' => $preview, 'prefer_large_media' => true, 'show_above_text' => true];
@@ -198,7 +198,7 @@ final class Bot
             return true;
         }
         $ok = self::memberOk($m);
-        Cache::set("mem:$channel:$user", $ok, $ok ? 600 : 20);
+        Cache::set("mem:$channel:$user", $ok, $ok ? 21600 : 20);
         return $ok;
     }
 
@@ -301,7 +301,7 @@ final class Bot
         $ok = self::memberOk($e['new_chat_member']);
         $ch = $e['chat'];
         foreach (array_filter([(string)$ch['id'], !empty($ch['username']) ? '@' . $ch['username'] : null]) as $id) {
-            Cache::set("mem:$id:$uid", $ok, $ok ? 600 : 20);
+            Cache::set("mem:$id:$uid", $ok, $ok ? 21600 : 20);
         }
         $groups = $ok ? (Cache::get("fjwu:$uid") ?: []) : [];
         if (!$groups) {

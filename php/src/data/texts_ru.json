@@ -513,7 +513,7 @@
   "text": "⛔️ Назначать админов и особых участников может только владелец бота."
  },
  "pin_caption": {
-  "text": "👤 Автор: <b>{owner}</b>\n\n<blockquote>📍 Название: {title}</blockquote>\n<blockquote>📥 Сохранений: <code>{saves}</code></blockquote>\n🖼 Файлов: {count}\n🗓 Дата: {date}\n<blockquote expandable>📝 {text}</blockquote>\n🤖 @{bot}"
+  "text": "<blockquote>📍 Название: {title}</blockquote>\n<blockquote>📥 Сохранений: <code>{saves}</code></blockquote>\n🖼 Файлов: {count}\n🗓 Дата: {date}\n<blockquote expandable>📝 {text}</blockquote>\n🤖 @{bot}"
  },
  "pin_not_found": {
   "text": "⚠️ Пин не найден или его нельзя скачать."

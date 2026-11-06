@@ -684,8 +684,8 @@
   "desc": "دستور فقط برای مدیر ربات"
  },
  "pin_caption": {
-  "text": "👤  سازنده: <b>{owner}</b>\n\n<blockquote>📍    عنوان: {title}</blockquote>\n<blockquote>📥    ذخیره: <code>{saves}</code></blockquote>\n🖼  تعداد: {count}\n🗓  تاریخ: {date}\n<blockquote expandable>📝    {text}</blockquote>\n🤖 @{bot}",
-  "desc": "کپشن دانلود پینترست ({owner} {title} {saves} {count} {date} {text} {bot})"
+  "text": "<blockquote>📍    عنوان: {title}</blockquote>\n<blockquote>📥    ذخیره: <code>{saves}</code></blockquote>\n🖼  تعداد: {count}\n🗓  تاریخ: {date}\n<blockquote expandable>📝    {text}</blockquote>\n🤖 @{bot}",
+  "desc": "کپشن دانلود پینترست ({title} {saves} {count} {date} {text} {bot})"
  },
  "pin_not_found": {
   "text": "⚠️ پین پیدا نشد یا قابل دانلود نیست.",

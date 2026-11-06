@@ -513,7 +513,7 @@
   "text": "⛔️ Only the bot owner can set admins and special members."
  },
  "pin_caption": {
-  "text": "👤 Creator: <b>{owner}</b>\n\n<blockquote>📍 Title: {title}</blockquote>\n<blockquote>📥 Saves: <code>{saves}</code></blockquote>\n🖼 Items: {count}\n🗓 Date: {date}\n<blockquote expandable>📝 {text}</blockquote>\n🤖 @{bot}"
+  "text": "<blockquote>📍 Title: {title}</blockquote>\n<blockquote>📥 Saves: <code>{saves}</code></blockquote>\n🖼 Items: {count}\n🗓 Date: {date}\n<blockquote expandable>📝 {text}</blockquote>\n🤖 @{bot}"
  },
  "pin_not_found": {
   "text": "⚠️ Pin not found or cannot be downloaded."

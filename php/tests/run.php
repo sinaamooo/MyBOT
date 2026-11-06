@@ -1313,6 +1313,13 @@ $pinApi = function ($r) {
         '222222222' => $base + ['images' => ['orig' => ['url' => 'https://i.pinimg.com/originals/x.jpg'], '736x' => ['url' => 'https://i.pinimg.com/736x/x.jpg']]],
         '333333333' => $base + ['story_pin_data' => ['pages' => [['blocks' => [['image' => ['images' => ['originals' => ['url' => 'https://i.pinimg.com/originals/p1.jpg']]]]]],
             ['blocks' => [['video' => ['video_list' => ['V_EXP7' => ['url' => 'https://v.pinimg.com/p2.mp4', 'width' => 720]]]]]]]]],
+        '555555555' => $base + ['videos' => ['video_list' => ['V_HLSV3_MOBILE' => ['url' => 'https://v1.pinimg.com/videos/mc/hls/ab/cd/ef/abc123.m3u8', 'width' => 720]]],
+            'story_pin_data' => ['pages' => [['blocks' => [['image' => ['images' => ['originals' => ['url' => 'https://i.pinimg.com/originals/cover.jpg']]]]]]]]],
+        '666666666' => $base + ['videos' => null, 'story_pin_data' => ['pages' => [
+            ['blocks' => [['type' => 'story_pin_video_block', 'video' => ['video_list' => ['V_HLSV3_MOBILE' => ['url' => 'https://v1.pinimg.com/videos/iht/hls/11/22/33/clip1.m3u8']]],
+                'image' => ['images' => ['originals' => ['url' => 'https://i.pinimg.com/originals/c1.png']]]]]],
+            ['blocks' => [['type' => 'story_pin_video_block', 'video' => ['video_list' => ['V_EXP4' => ['url' => 'https://v1.pinimg.com/videos/iht/expMp4/44/55/66/clip2_t2.mp4', 'width' => 360],
+                'V_EXP7' => ['url' => 'https://v1.pinimg.com/videos/iht/expMp4/44/55/66/clip2_t4.mp4', 'width' => 720]]], 'image' => ['images' => ['originals' => ['url' => 'https://i.pinimg.com/originals/c2.png']]]]]]]]],
         default => null,
     };
     return $pin ? ['resource_response' => ['data' => $pin]] : ['resource_response' => ['data' => null]];
@@ -1322,8 +1329,9 @@ $GLOBALS['http']['pin.it/vid1'] = '<html><a href="https://www.pinterest.com/pin/
 reset_calls();
 feed(msg('https://pin.it/vid1', -9100, 901));
 $pv = sent(['sendVideo']);
-check($pv && $pv[0][1]['video'] === 'https://v.pinimg.com/720.mp4' && str_contains($pv[0][1]['caption'], '@artist') && str_contains($pv[0][1]['caption'], '1,234')
-    && str_contains($pv[0][1]['caption'], 'Sunset &lt;b&gt;') && buttons($pv[0]), 'pinterest short link video in best mp4 with caption and button');
+check($pv && $pv[0][1]['video'] === 'https://v.pinimg.com/720.mp4' && !str_contains($pv[0][1]['caption'], '@artist') && str_contains($pv[0][1]['caption'], '1,234')
+    && str_contains($pv[0][1]['caption'], 'Sunset &lt;b&gt;') && array_filter(buttons($pv[0]), fn($b) => str_contains($b['url'] ?? '', 'startgroup')) && empty($pv[0][1]['reply_parameters']),
+    'pinterest short link video in best mp4 with caption, add-to-group button and no creator');
 reset_calls();
 feed(msg('https://www.pinterest.com/pin/222222222/', -9100, 902));
 $pp = sent(['sendPhoto']);
@@ -1331,12 +1339,30 @@ check($pp && $pp[0][1]['photo'] === 'https://i.pinimg.com/originals/x.jpg', 'pin
 reset_calls();
 feed(msg('https://www.pinterest.com/pin/333333333/', -9100, 903));
 $pg = sent(['sendMediaGroup']);
-check($pg && count($pg[0][1]['media']) === 2 && $pg[0][1]['media'][1]['type'] === 'video', 'pinterest story pin as an album');
+$pc = sent(['sendMessage']);
+check($pg && count($pg[0][1]['media']) === 2 && $pg[0][1]['media'][1]['type'] === 'video' && empty($pg[0][1]['reply_parameters']) && empty($pg[0][1]['media'][0]['caption']), 'pinterest story pin as an album without reply');
+check($pc && str_contains($pc[0][1]['text'], '1,234') && array_filter(buttons($pc[0]), fn($b) => str_contains($b['url'] ?? '', 'startgroup')) && ($pc[0][1]['reply_parameters']['message_id'] ?? 0) > 0,
+    'pinterest album caption comes with the add-to-group button');
+reset_calls();
+feed(msg('https://www.pinterest.com/pin/555555555/', -9100, 905));
+$pv = sent(['sendVideo']);
+check($pv && $pv[0][1]['video'] === 'https://v1.pinimg.com/videos/mc/720p/ab/cd/ef/abc123.mp4' && !sent(['sendPhoto', 'sendMediaGroup']), 'pinterest stream-only video sent as one mp4');
+reset_calls();
+feed(msg('https://www.pinterest.com/pin/666666666/', -9100, 906));
+$pg = sent(['sendMediaGroup']);
+check($pg && array_column($pg[0][1]['media'], 'type') === ['video', 'video'] && $pg[0][1]['media'][0]['media'] === 'https://v1.pinimg.com/videos/iht/720p/11/22/33/clip1.mp4'
+    && $pg[0][1]['media'][1]['media'] === 'https://v1.pinimg.com/videos/iht/expMp4/44/55/66/clip2_t4.mp4', 'pinterest video pages sent as videos, not their cover pictures');
 reset_calls();
 feed(msg('https://www.pinterest.com/pin/444444444/', -9100, 904));
 check(str_contains((string)last_text(), 'پین پیدا نشد'), 'pinterest pin not found');
 unset($GLOBALS['http']['pinterest.com/resource/PinResource/get/'], $GLOBALS['http']['pin.it/vid1']);
 
+reset_calls();
+feed(msg('733 درهم', -4510, 811));
+$names = array_column($GLOBALS['calls'], 0);
+$ph = sent(['sendPhoto']);
+check(($ri = array_search('setMessageReaction', $names, true)) !== false && $ph && $ri < array_search('sendPhoto', $names, true) && empty($ph[0][1]['reply_parameters']),
+    'group price reaction comes first and the card photo is not sent as a reply');
 $FG = -9300;
 reset_calls();
 feed(msg('/panel', $FG, 777));
