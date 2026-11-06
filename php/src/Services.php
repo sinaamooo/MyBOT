@@ -857,20 +857,22 @@ final class Pinterest
     {
         $best = null;
         $w = -1;
+        $hls = null;
+        $hw = -1;
+        $alts = [];
         foreach ($list as [$u, $ext, $width]) {
             if ($ext === 'mp4' && $width >= $w) {
                 $w = $width;
                 $best = $u;
-            }
-        }
-        $alts = [];
-        foreach ($list as [$u, $ext]) {
-            if ($ext === 'm3u8') {
+            } elseif ($ext === 'm3u8') {
                 $alts[] = preg_replace(['~/hls/~i', '~\.m3u8(?:\?\S*)?$~i'], ['/720p/', '.mp4'], $u);
+                if ($width >= $hw) {
+                    $hw = $width;
+                    $hls = $u;
+                }
             }
         }
-        $alts = array_values(array_unique(array_diff($alts, [$best])));
-        return ['kind' => 'video', 'url' => $best ?? array_shift($alts), 'alts' => $alts];
+        return ['kind' => 'video', 'url' => $best, 'alts' => $best ? [] : array_values(array_unique($alts)), 'hls' => $hls];
     }
 
     private static function photo(array $images): ?array

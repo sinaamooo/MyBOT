@@ -114,7 +114,7 @@ https://yourdomain.com/MyBOT/check.php?key=SETUP_KEY
 
 | بخش | سرویس اصلی | جایگزین |
 |---|---|---|
-| قیمت ارز دیجیتال | بایننس | Binance Vision، OKX، بای‌بیت، کوکوین، گیت، MEXC، CoinGecko، CryptoCompare |
+| قیمت ارز دیجیتال | OKX، CoinGecko، CryptoCompare، والکس، بیت‌پین، نوبیتکس با هم مقایسه می‌شوند و قیمتی که بیشتر منابع تأیید کنند انتخاب می‌شود. قیمت قدیمی‌تر از ۱۰ دقیقه استفاده نمی‌شود. تون کوین با هر دو نماد TON و GRAM پیدا می‌شود | بایننس، Binance Vision، بای‌بیت، کوکوین، گیت، MEXC |
 | تتر به تومان | نوبیتکس | والکس، بیت‌پین، تبدیل، رمزینکس |
 | ارز کشورها | open.er-api | Frankfurter، tgju |
 | ولت و هش EVM (۸ شبکه) | publicnode | ۱ تا ۳ RPC دیگر برای هر شبکه |
@@ -131,7 +131,7 @@ https://yourdomain.com/MyBOT/check.php?key=SETUP_KEY
 | آپتوس | fullnode.mainnet.aptoslabs | api.mainnet.aptoslabs |
 | گیفت | دیتای گیت‌هاب TelegramGiftsAssests | Fragment، ارزش خود تلگرام |
 | ترجمه | Google (بعد از خطای محدودیت ۱۰ دقیقه کنار گذاشته می‌شود) | Lingva، MyMemory |
-| پینترست | PinResource خود پینترست | صفحه پین |
+| پینترست | PinResource خود پینترست (ویدیوهای استریمی دانلود، رمزگشایی و به mp4 تبدیل می‌شوند) | صفحه پین |
 
 اگر سرویسی جواب ندهد ربات سراغ جایگزین می‌رود. درخواست‌های قیمت و چکرها حداکثر ۵ ثانیه منتظر هر سرویس می‌مانند.
 

@@ -17,6 +17,13 @@ final class Market
         'MESGHAL' => ['mesghal', 'مثقال طلا', 'MESGHAL'],
     ];
 
+    const PIN = ['TON' => ['the-open-network', ['GRAM']], 'NOT' => ['notcoin', []], 'DOGS' => ['dogs-2', []], 'TRX' => ['tron', []], 'BTC' => ['bitcoin', []],
+        'ETH' => ['ethereum', []], 'BNB' => ['binancecoin', []], 'SOL' => ['solana', []], 'DOGE' => ['dogecoin', []], 'XRP' => ['ripple', []]];
+    const TOP = ['BTC', 'ETH', 'TON', 'GRAM', 'TRX', 'BNB', 'SOL', 'DOGE', 'NOT', 'XRP', 'ADA', 'LTC', 'DOGS', 'SHIB', 'PEPE', 'AVAX', 'DOT', 'LINK', 'BCH', 'ETC',
+        'XLM', 'ATOM', 'UNI', 'SUI', 'APT', 'NEAR', 'FIL', 'ARB', 'OP', 'TRUMP', 'HMSTR', 'CATI', 'MAJOR', 'USDC'];
+    const PRIO = ['okx' => 0, 'gecko' => 1, 'cc' => 2, 'wallex' => 3, 'bitpin' => 4, 'nobitex' => 5];
+    const COIN_TTL = 600;
+
     private static ?array $snap = null;
 
     private static function file(): string
@@ -116,6 +123,8 @@ final class Market
             'gecko' => ['url' => 'https://api.coingecko.com/api/v3/coins/markets', 'params' => ['vs_currency' => 'usd', 'order' => 'market_cap_desc', 'per_page' => 250, 'page' => 1, 'price_change_percentage' => '24h'], 'headers' => ['x-cg-demo-api-key' => $gk], 'timeout' => 7],
             'okx' => ['url' => 'https://www.okx.com/api/v5/market/tickers', 'params' => ['instType' => 'SPOT'], 'timeout' => 6],
             'nobitex' => ['url' => 'https://api.nobitex.ir/market/stats', 'params' => ['srcCurrency' => 'usdt,btc,eth,ton,trx', 'dstCurrency' => 'rls'], 'timeout' => 6],
+            'nobitexu' => ['url' => 'https://api.nobitex.ir/market/stats', 'params' => ['srcCurrency' => strtolower(implode(',', self::TOP)), 'dstCurrency' => 'usdt'], 'timeout' => 6],
+            'cc' => ['url' => 'https://min-api.cryptocompare.com/data/pricemultifull', 'params' => ['fsyms' => implode(',', self::TOP), 'tsyms' => 'USD'], 'timeout' => 6],
             'bitpin' => ['url' => 'https://api.bitpin.org/api/v1/mkt/tickers/', 'timeout' => 6],
             'tabdeal' => ['url' => 'https://api1.tabdeal.org/r/api/v1/ticker/price', 'params' => ['symbol' => 'USDTIRT'], 'timeout' => 6],
         ];
@@ -130,23 +139,54 @@ final class Market
             $reqs['fawaz'] = ['url' => 'https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json', 'timeout' => 7];
         }
         $res = Http::multiJson($reqs);
-        $coins = [];
+        $cand = [];
+        $add = function (string $src, string $sym, $price, $chg, ?string $name = null, $vol = 0, int $w = 1) use (&$cand) {
+            $sym = strtoupper(trim($sym));
+            $price = self::num($price);
+            if (!$price || $price <= 0 || !preg_match('/^[A-Z0-9]{1,12}$/', $sym)) {
+                return;
+            }
+            $cand[$sym][] = [$src, $price, $chg === null ? null : self::num($chg), $name, (float)(self::num($vol) ?? 0), $w];
+        };
+        $byId = [];
+        $seen = [];
         foreach ((array)($res['gecko'] ?? []) as $r) {
             $sym = strtoupper(trim((string)($r['symbol'] ?? '')));
-            $usd = self::num($r['current_price'] ?? null);
-            if (!preg_match('/^[A-Z0-9]{1,12}$/', $sym) || !$usd || isset($coins[$sym])) {
+            $row = ['gecko', self::num($r['current_price'] ?? null), self::num($r['price_change_percentage_24h'] ?? null), mb_substr((string)($r['name'] ?? $sym), 0, 40), (float)(self::num($r['total_volume'] ?? null) ?? 0), 1];
+            if (!$row[1]) {
                 continue;
             }
-            $coins[$sym] = [$usd, self::num($r['price_change_percentage_24h'] ?? null), mb_substr((string)($r['name'] ?? $sym), 0, 40)];
+            $byId[(string)($r['id'] ?? '')] = $row;
+            if (!isset($seen[$sym])) {
+                $seen[$sym] = true;
+                $add('gecko', $sym, $row[1], $row[2], $row[3], $row[4]);
+            }
         }
         foreach ((array)($res['okx']['data'] ?? []) as $r) {
-            if (!preg_match('/^([A-Z0-9]{1,12})-USDT$/', (string)($r['instId'] ?? ''), $mm) || isset($coins[$mm[1]])) {
+            if (!preg_match('/^([A-Z0-9]{1,12})-USDT$/', (string)($r['instId'] ?? ''), $mm)) {
                 continue;
             }
             $last = self::num($r['last'] ?? null);
             $open = self::num($r['open24h'] ?? null);
-            if ($last) {
-                $coins[$mm[1]] = [$last, $open ? ($last - $open) / $open * 100 : null, $mm[1]];
+            $ts = (int)(self::num($r['ts'] ?? null) ?? 0);
+            if ($last && (!$ts || $ts / 1000 > $now - 3600)) {
+                $add('okx', $mm[1], $last, $open ? ($last - $open) / $open * 100 : null, null, $r['volCcy24h'] ?? 0);
+            }
+        }
+        foreach ((array)($res['cc']['RAW'] ?? []) as $sym => $q) {
+            $u = $q['USD'] ?? null;
+            if (is_array($u) && (int)($u['LASTUPDATE'] ?? $now) > $now - 3600) {
+                $add('cc', (string)$sym, $u['PRICE'] ?? null, $u['CHANGEPCT24HOUR'] ?? null, null, $u['VOLUME24HOURTO'] ?? 0);
+            }
+        }
+        foreach ((array)($res['nobitexu']['stats'] ?? []) as $pair => $st) {
+            if (preg_match('/^([a-z0-9]+)-usdt$/', (string)$pair, $mm) && is_array($st) && empty($st['isClosed'])) {
+                $add('nobitex', $mm[1], $st['latest'] ?? null, $st['dayChange'] ?? null);
+            }
+        }
+        foreach ((array)(is_array($res['bitpin'] ?? null) ? (array_is_list($res['bitpin']) ? $res['bitpin'] : ($res['bitpin']['results'] ?? [])) : []) as $r) {
+            if (is_array($r) && preg_match('/^([A-Z0-9]+)_?USDT$/', strtoupper((string)($r['symbol'] ?? '')), $mm)) {
+                $add('bitpin', $mm[1], $r['price'] ?? null, $r['daily_change_price'] ?? null);
             }
         }
         $irts = [];
@@ -182,8 +222,8 @@ final class Market
                 $chg = self::num($st['24h_ch'] ?? $st['24h_change'] ?? null);
                 if (in_array($quote, ['TMN', 'IRT'], true)) {
                     $tmn[$base] = [$price, $chg];
-                } elseif ($quote === 'USDT' && $base !== '' && !isset($coins[$base])) {
-                    $coins[$base] = [$price, $chg, $base];
+                } elseif ($quote === 'USDT' && $base !== '') {
+                    $add('wallex', $base, $price, $chg);
                 }
             }
             if (!empty($tmn['USDT'][0])) {
@@ -215,11 +255,36 @@ final class Market
             $irts = array_values(array_filter($irts, fn($v) => abs($v - $med) / $med < 0.1)) ?: $irts;
             $irt = self::median($irts);
         }
+        foreach (self::PIN as $sym => [$id, $aliases]) {
+            $all = [];
+            foreach (array_merge([$sym], $aliases) as $k) {
+                array_push($all, ...($cand[$k] ?? []));
+            }
+            if (isset($byId[$id])) {
+                $all[] = array_replace($byId[$id], [5 => 3]);
+            }
+            if ($all) {
+                foreach (array_merge([$sym], $aliases) as $k) {
+                    $cand[$k] = $all;
+                }
+            }
+        }
+        $coins = [];
+        foreach ($cand as $sym => $list) {
+            if ($c = self::consensus($list)) {
+                $coins[$sym] = [$c[0], $c[1], $c[2] ?? $sym, $now];
+            }
+        }
+        foreach ((array)($old['c'] ?? []) as $sym => $r) {
+            if (!isset($coins[$sym]) && isset($r[3]) && $now - (int)$r[3] < 3600) {
+                $coins[$sym] = $r;
+            }
+        }
         $out = [
             'at' => $now,
             'irt' => $irt ?? ($old['irt'] ?? null),
             'irt_chg' => $irtChg ?? ($old['irt_chg'] ?? null),
-            'c' => $coins ?: ($old['c'] ?? []),
+            'c' => $coins,
             'a' => $old['a'] ?? [],
             'alt_at' => $old['alt_at'] ?? 0,
             'fx' => $old['fx'] ?? [],
@@ -252,6 +317,31 @@ final class Market
             }
         }
         return $out;
+    }
+
+    public static function consensus(array $list): ?array
+    {
+        $best = null;
+        $score = null;
+        foreach ($list as $c) {
+            $members = array_values(array_filter($list, fn($d) => abs($d[1] - $c[1]) / $c[1] <= 0.07));
+            $sc = [array_sum(array_map(fn($d) => $d[5] ?? 1, $members)), array_sum(array_map(fn($d) => $d[4] ?? 0, $members))];
+            if ($score === null || $sc > $score) {
+                $score = $sc;
+                $best = $members;
+            }
+        }
+        if (!$best) {
+            return null;
+        }
+        usort($best, fn($x, $y) => (self::PRIO[$x[0]] ?? 9) <=> (self::PRIO[$y[0]] ?? 9));
+        $chg = null;
+        $name = null;
+        foreach ($best as $b) {
+            $chg ??= $b[2];
+            $name ??= $b[3];
+        }
+        return [$best[0][1], $chg, $name];
     }
 
     public static function parseTgju(array $j): array
@@ -316,7 +406,10 @@ final class Market
     {
         $sym = strtoupper($sym);
         $c = self::snap()['c'][$sym] ?? null;
-        return $c ? ['price' => (float)$c[0], 'change' => $c[1] === null ? null : (float)$c[1], 'name' => $c[2] ?? $sym] : null;
+        if (!$c || !isset($c[3]) || time() - (int)$c[3] > self::COIN_TTL) {
+            return null;
+        }
+        return ['price' => (float)$c[0], 'change' => $c[1] === null ? null : (float)$c[1], 'name' => $c[2] ?? $sym];
     }
 
     public static function fx(): array

@@ -96,7 +96,7 @@ final class Convert
             default => $codeB,
         };
         $bot = self::bot();
-        $key = 'p|' . $codeA . '|' . $codeB . '|' . self::rnd($amount) . '|' . self::rnd($result) . '|' . round($chg, 2) . '|' . $bot;
+        $key = 'p|' . $codeA . '|' . $codeB . '|' . self::rnd($amount) . '|' . self::rnd($result) . '|' . round($chg, 2) . '|' . $bot . self::stamp();
         return ['text' => $text, 'key' => $key, 'card' => fn() => PriceCard::crypto([
             'sym' => $from[0] === 'crypto' ? $codeA : ($to[0] === 'crypto' ? $codeB : $codeA), 'title' => $codeA . '/' . $codeB,
             'pill' => Fmt::num($amount) . ' ' . $codeA, 'value' => $result, 'prefix' => $codeB === 'USD' ? '$' : '', 'unit' => $toUnit,
@@ -112,6 +112,11 @@ final class Convert
     private static function rnd(float $v): string
     {
         return sprintf('%.5g', $v);
+    }
+
+    private static function stamp(): string
+    {
+        return '|' . date('YmdHi') . '|' . self::rnd((float)Prices::usdtToman());
     }
 
     private static function ctx(): array
@@ -172,7 +177,7 @@ final class Convert
         } elseif ($pre === '$' && $usdt) {
             $label .= ' · ' . Fmt::toman($q['price'] * $usdt) . ' ' . UI::l('تومان');
         }
-        $key = 'c|' . $S . '|' . self::rnd($amount) . '|' . self::rnd($val) . '|' . round((float)$chg, 2) . '|' . self::bot();
+        $key = 'c|' . $S . '|' . self::rnd($amount) . '|' . self::rnd($val) . '|' . round((float)$chg, 2) . '|' . self::bot() . self::stamp();
         $bot = self::bot();
         return ['text' => $text, 'key' => $key, 'card' => fn() => PriceCard::crypto([
             'sym' => $S, 'title' => $one ? $S . ($pre === '$' ? '/USD' : '/IRT') : $S, 'pill' => $one ? '24H' : Fmt::num($amount) . ' ' . $S,
@@ -200,7 +205,7 @@ final class Convert
             'usdt_rate' => Fmt::toman($usdt),
             'time' => Fmt::now(),
         ]);
-        $key = 't|' . $tag . '|' . self::rnd($shown) . '|' . self::rnd($usd) . '|' . round($inv, 2) . '|' . self::bot();
+        $key = 't|' . $tag . '|' . self::rnd($shown) . '|' . self::rnd($usd) . '|' . round($inv, 2) . '|' . self::bot() . self::stamp();
         $bot = self::bot();
         return ['text' => $text, 'key' => $key, 'card' => fn() => PriceCard::crypto([
             'sym' => 'USDT', 'title' => 'USDT', 'pill' => Fmt::toman($shown) . ' ' . $tag, 'value' => $usd,
@@ -226,7 +231,7 @@ final class Convert
             return ['text' => $text, 'key' => null, 'card' => null];
         }
         $chg = (float)(Market::usdtChange() ?? 0);
-        $key = 's|' . self::rnd($amount) . '|' . self::rnd($toman) . '|' . round($chg, 2) . '|' . self::bot();
+        $key = 's|' . self::rnd($amount) . '|' . self::rnd($toman) . '|' . round($chg, 2) . '|' . self::bot() . self::stamp();
         $bot = self::bot();
         return ['text' => $text, 'key' => $key, 'card' => fn() => PriceCard::crypto([
             'sym' => 'STARS', 'title' => 'TELEGRAM STARS', 'pill' => Fmt::int($amount) . ' STARS', 'value' => $toman,
@@ -266,7 +271,7 @@ final class Convert
         }
         $chg = (float)($px['change'] ?? 0);
         $badge = $f['cc'] && is_file(Config::$root . '/assets/flags/' . strtolower($f['cc']) . '.png') ? 'flags/' . strtolower($f['cc']) . '.png' : '';
-        $key = 'f|' . $code . '|' . self::rnd($amount) . '|' . self::rnd($toman) . '|' . round($chg, 2) . '|' . self::bot();
+        $key = 'f|' . $code . '|' . self::rnd($amount) . '|' . self::rnd($toman) . '|' . round($chg, 2) . '|' . self::bot() . self::stamp();
         $bot = self::bot();
         $one = abs($amount - 1) < 1e-9;
         return ['text' => $text, 'key' => $key, 'card' => fn() => PriceCard::fiat([
@@ -297,7 +302,7 @@ final class Convert
             'time' => Fmt::now(),
         ]);
         $chg = (float)($g['change'] ?? 0);
-        $key = 'g|' . $code . '|' . self::rnd($amount) . '|' . self::rnd($total) . '|' . round($chg, 2) . '|' . self::bot();
+        $key = 'g|' . $code . '|' . self::rnd($amount) . '|' . self::rnd($total) . '|' . round($chg, 2) . '|' . self::bot() . self::stamp();
         $tag = Market::GOLD[$code][2] ?? 'XAU';
         $bot = self::bot();
         $one = abs($amount - 1) < 1e-9;

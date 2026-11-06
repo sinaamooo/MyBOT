@@ -323,7 +323,7 @@ final class Prices
             }
         }
         try {
-            $v = self::fetchQuote($sym);
+            $v = isset(Market::PIN[$sym]) ? self::pinned($sym) : self::fetchQuote($sym);
             Cache::set($k, $v, $v ? 45 : 600);
         } finally {
             if ($lock) {
@@ -331,6 +331,24 @@ final class Prices
             }
         }
         return $v;
+    }
+
+    private static function pinned(string $sym): ?array
+    {
+        [$id, $aliases] = Market::PIN[$sym];
+        $all = array_filter(self::fetchMany(array_merge([$sym], $aliases)));
+        $cg = Http::json('https://api.coingecko.com/api/v3/simple/price', ['params' => ['ids' => $id, 'vs_currencies' => 'usd', 'include_24hr_change' => 'true'],
+            'headers' => ['x-cg-demo-api-key' => Config::get('COINGECKO_API_KEY')], 'timeout' => 5]);
+        $anchor = self::f($cg[$id]['usd'] ?? null);
+        if ($anchor) {
+            foreach ($all as $q) {
+                if (abs($q['price'] - $anchor) / $anchor <= 0.07) {
+                    return ['symbol' => $sym] + $q;
+                }
+            }
+            return ['symbol' => $sym, 'price' => $anchor, 'change' => is_numeric($cg[$id]['usd_24h_change'] ?? null) ? (float)$cg[$id]['usd_24h_change'] : null, 'sources' => ['CoinGecko']];
+        }
+        return $all ? ['symbol' => $sym] + reset($all) : null;
     }
 
     private static function fetchQuote(string $sym): ?array

@@ -293,8 +293,9 @@ final class Diamonds
             return;
         }
         $sig = 'dmb:' . md5(json_encode(array_map(fn($r) => [$r['id'], (int)$r['points'], $r['name'], $r['username']], $global)) . TG::username() . UI::$lang);
+        $extra = !$priv ? ['reply_parameters' => Bot::replyParams($m)] : [];
         $fid = Cache::get($sig);
-        if ($fid && TG::photo($chat, $fid, $caption, UI::footer()) !== null) {
+        if ($fid && TG::photo($chat, $fid, $caption, UI::footer(), $extra) !== null) {
             return;
         }
         TG::api('sendChatAction', ['chat_id' => $chat, 'action' => 'upload_photo']);
@@ -308,7 +309,7 @@ final class Diamonds
             Bot::reply($m, $caption);
             return;
         }
-        $sent = TG::photo($chat, ['__bytes' => $jpg, 'name' => 'top.jpg', 'mime' => 'image/jpeg'], $caption, UI::footer());
+        $sent = TG::photo($chat, ['__bytes' => $jpg, 'name' => 'top.jpg', 'mime' => 'image/jpeg'], $caption, UI::footer(), $extra);
         $ph = $sent['photo'] ?? [];
         if ($ph && !empty(end($ph)['file_id'])) {
             Cache::set($sig, end($ph)['file_id'], 3600);

@@ -213,9 +213,10 @@ final class GiftsH
 
     private static function portfolio(array $m, array $t): void
     {
+        $extra = Bot::isPrivate($m) ? [] : ['reply_parameters' => Bot::replyParams($m)];
         $ck = 'gpc:' . ($t['kind'] ?? '') . ':' . ($t['id'] ?? '') . (UI::$lang !== 'fa' ? ':' . UI::$lang : '');
         $hit = Cache::get($ck);
-        if (!empty($hit['f']) && TG::photo($m['chat']['id'], $hit['f'], $hit['c'], UI::footer()) !== null) {
+        if (!empty($hit['f']) && TG::photo($m['chat']['id'], $hit['f'], $hit['c'], UI::footer(), $extra) !== null) {
             Perf::mark('cached');
             Perf::flush('gift');
             return;
@@ -316,7 +317,7 @@ final class GiftsH
                 break;
             }
         }
-        $sent = TG::photo($m['chat']['id'], $png, $caption, UI::footer());
+        $sent = TG::photo($m['chat']['id'], $png, $caption, UI::footer(), $extra);
         $ph = $sent['photo'] ?? [];
         if ($ph && !empty(end($ph)['file_id'])) {
             Cache::set($ck, ['f' => end($ph)['file_id'], 'c' => $caption], 1800);
@@ -551,28 +552,45 @@ final class Extras
             'saves' => $x['saves'] !== null ? Fmt::int((int)$x['saves']) : null, 'date' => $x['date'] ? Fmt::jalali((int)$x['date']) : null,
             'count' => count($items) > 1 ? Fmt::int(count($items)) : null, 'text' => $text !== '' ? UI::esc($text) : null, 'bot' => TG::username(),
         ]);
-        foreach ($items as &$it) {
-            $it['ref'] = 'https://www.pinterest.com/';
+        $items = self::pinResolve($items);
+        if (!$items) {
+            Bot::send($m, UI::t('pin_not_found'), null);
+            return;
         }
-        unset($it);
+        $extra = !Bot::isPrivate($m) ? ['reply_parameters' => Bot::replyParams($m)] : [];
         if (count($items) === 1) {
-            foreach (array_merge([$items[0]['url']], $items[0]['alts'] ?? []) as $u) {
-                if (self::upload($m, ['url' => $u] + $items[0], ['caption' => $cap, 'reply_markup' => UI::footer()]) !== null) {
-                    return;
-                }
+            $it = $items[0];
+            $p = ['caption' => $cap, 'reply_markup' => UI::footer()] + $extra;
+            if (!isset($it['bytes']) && self::upload($m, $it, $p) !== null) {
+                return;
+            }
+            if (!isset($it['bytes']) && !empty($it['hls']) && ($v = Hls::fetch($it['hls']))) {
+                $it = $v + $it;
+            }
+            if (isset($it['bytes']) && self::sendBytes($m, $it, $p) !== null) {
+                return;
             }
             Bot::send($m, UI::t('pin_not_found'), null);
             return;
         }
-        $group = array_map(fn($it) => ['type' => $it['kind'] === 'video' ? 'video' : 'photo', 'media' => $it['url']] + ($it['kind'] === 'video' ? ['supports_streaming' => true] : []), $items);
-        if (TG::api('sendMediaGroup', ['chat_id' => $m['chat']['id'], 'media' => $group]) === null) {
+        $group = [];
+        $files = [];
+        foreach ($items as $i => $it) {
+            $g = ['type' => $it['kind'] === 'video' ? 'video' : 'photo', 'media' => $it['url'] ?? null];
+            if (isset($it['bytes'])) {
+                $files["f$i"] = ['__bytes' => $it['bytes'], 'name' => "f$i.mp4", 'mime' => 'video/mp4'];
+                $g = ['type' => 'video', 'media' => "attach://f$i"] + array_filter(['width' => $it['width'] ?: null, 'height' => $it['height'] ?: null, 'duration' => $it['duration'] ?: null]);
+            }
+            if ($g['type'] === 'video') {
+                $g['supports_streaming'] = true;
+            }
+            $group[] = $g;
+        }
+        if (TG::api('sendMediaGroup', ['chat_id' => $m['chat']['id'], 'media' => $group] + $files + $extra) === null) {
             $ok = 0;
             foreach ($items as $it) {
-                foreach (array_merge([$it['url']], $it['alts'] ?? []) as $u) {
-                    if (self::upload($m, ['url' => $u] + $it, []) !== null) {
-                        $ok++;
-                        break;
-                    }
+                if ((isset($it['bytes']) ? self::sendBytes($m, $it, $extra) : self::upload($m, $it, $extra)) !== null) {
+                    $ok++;
                 }
             }
             if (!$ok) {
@@ -581,6 +599,46 @@ final class Extras
             }
         }
         Bot::send($m, $cap);
+    }
+
+    private static function pinResolve(array $items): array
+    {
+        $checks = [];
+        foreach ($items as $i => $it) {
+            if ($it['kind'] === 'video' && empty($it['url'])) {
+                foreach ($it['alts'] ?? [] as $j => $u) {
+                    $checks["$i:$j"] = ['url' => $u, 'timeout' => 5, 'headers' => ['Range' => 'bytes=0-1', 'User-Agent' => Hls::UA, 'Referer' => 'https://www.pinterest.com/']];
+                }
+            }
+        }
+        $res = $checks ? Http::multi($checks, 6) : [];
+        $out = [];
+        foreach ($items as $i => $it) {
+            $it['ref'] = 'https://www.pinterest.com/';
+            if ($it['kind'] === 'video' && empty($it['url'])) {
+                foreach ($it['alts'] ?? [] as $j => $u) {
+                    if (in_array($res["$i:$j"]['status'] ?? 0, [200, 206], true)) {
+                        $it['url'] = $u;
+                        break;
+                    }
+                }
+                if (empty($it['url']) && !empty($it['hls']) && ($v = Hls::fetch($it['hls']))) {
+                    $it = $v + $it;
+                    $it['hls'] = null;
+                }
+                if (empty($it['url']) && !isset($it['bytes'])) {
+                    continue;
+                }
+            }
+            $out[] = $it;
+        }
+        return array_slice($out, 0, 10);
+    }
+
+    private static function sendBytes(array $m, array $it, array $p): ?array
+    {
+        return TG::api('sendVideo', ['chat_id' => $m['chat']['id'], 'video' => ['__bytes' => $it['bytes'], 'name' => 'video.mp4', 'mime' => 'video/mp4'],
+            'supports_streaming' => true] + array_filter(['width' => $it['width'] ?? null, 'height' => $it['height'] ?? null, 'duration' => $it['duration'] ?? null]) + $p);
     }
 
     private static function err(int $code): string
@@ -595,6 +653,9 @@ final class Extras
         $p = ['chat_id' => $m['chat']['id']] + $p;
         if ($it['kind'] === 'video') {
             $p['supports_streaming'] = true;
+        }
+        if (empty($it['url'])) {
+            return null;
         }
         if (($r = TG::api($method, [$field => $it['url']] + $p)) !== null) {
             return $r;
@@ -626,20 +687,21 @@ final class Extras
 
     private static function sendPost(array $m, array $items, string $cap): void
     {
+        $extra = !Bot::isPrivate($m) ? ['reply_parameters' => Bot::replyParams($m)] : [];
         $items = array_slice($items, 0, 10);
         if (count($items) === 1) {
-            self::upload($m, $items[0], ['caption' => $cap, 'reply_markup' => UI::footer()]);
+            self::upload($m, $items[0], ['caption' => $cap, 'reply_markup' => UI::footer()] + $extra);
             return;
         }
         $group = [];
         foreach ($items as $i => $it) {
             $group[] = ['type' => $it['kind'] === 'video' ? 'video' : 'photo', 'media' => $it['url']] + ($i === 0 ? ['caption' => $cap, 'parse_mode' => 'HTML'] : []);
         }
-        if (TG::api('sendMediaGroup', ['chat_id' => $m['chat']['id'], 'media' => $group]) !== null) {
+        if (TG::api('sendMediaGroup', ['chat_id' => $m['chat']['id'], 'media' => $group] + $extra) !== null) {
             return;
         }
         foreach ($items as $i => $it) {
-            self::upload($m, $it, $i === 0 ? ['caption' => $cap, 'reply_markup' => UI::footer()] : []);
+            self::upload($m, $it, $i === 0 ? ['caption' => $cap, 'reply_markup' => UI::footer()] + $extra : $extra);
         }
     }
 
@@ -704,7 +766,7 @@ final class Extras
             $rows = [[UI::button('btn_insta_story', ['cb' => "is:$k"])], [UI::button('btn_insta_highlight', ['cb' => "ih:$k"])]];
         }
         if (!empty($info['profile']) && UI::textLen($text) <= 1000) {
-            if (TG::photo($m['chat']['id'], $info['profile'], $text, UI::footer($rows))) {
+            if (TG::photo($m['chat']['id'], $info['profile'], $text, UI::footer($rows), Bot::isPrivate($m) ? [] : ['reply_parameters' => Bot::replyParams($m)])) {
                 return;
             }
         }

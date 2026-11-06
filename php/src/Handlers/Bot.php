@@ -61,13 +61,13 @@ final class Bot
             $markup = UI::footer();
         }
         $extra = ['__quick' => true];
+        if (!self::isPrivate($m) && isset($m['message_id'])) {
+            $extra['reply_parameters'] = self::replyParams($m);
+        }
         $chat = $m['chat']['id'];
         if ($photo !== null && UI::textLen($text) <= 1000) {
             TG::photo($chat, $photo, $text, $markup, $extra);
             return;
-        }
-        if (!self::isPrivate($m) && isset($m['message_id'])) {
-            $extra['reply_parameters'] = self::replyParams($m);
         }
         TG::send($chat, $text, $markup, $extra);
     }
@@ -93,6 +93,12 @@ final class Bot
         if (!$cmd) {
             return false;
         }
+        if ($cmd === 'gift' && !Gifts::findLinks($text) && !preg_match('~^(?:@?[A-Za-z][A-Za-z0-9_]{3,31}|(?:https?://)?t\.me/[A-Za-z0-9_]{4,32}/?|-?\d{5,15}|من|me)$~iu', trim($text))) {
+            return false;
+        }
+        if ($cmd === 'emoji' && empty($m['entities']) && empty($m['caption_entities']) && empty($m['sticker'])) {
+            return false;
+        }
         Cache::forget($k);
         $m['__prompt'] = (int)($r['message_id'] ?? 0);
         unset($m['reply_to_message']);
@@ -112,17 +118,17 @@ final class Bot
             $markup = UI::footer();
         }
         $extra = [];
+        if ($reply && !self::isPrivate($m) && isset($m['message_id'])) {
+            $extra['reply_parameters'] = self::replyParams($m);
+        }
         $chat = $m['chat']['id'];
         if ($photo !== null) {
             if (UI::textLen($text) > 1000) {
-                $sent = TG::photo($chat, $photo);
+                $sent = TG::photo($chat, $photo, null, null, $extra);
                 TG::send($chat, $text, $markup);
                 return $sent;
             }
-            return TG::photo($chat, $photo, $text, $markup);
-        }
-        if ($reply && !self::isPrivate($m) && isset($m['message_id'])) {
-            $extra['reply_parameters'] = self::replyParams($m);
+            return TG::photo($chat, $photo, $text, $markup, $extra);
         }
         if ($preview) {
             $extra['link_preview_options'] = ['url' => $preview, 'prefer_large_media' => true, 'show_above_text' => true];

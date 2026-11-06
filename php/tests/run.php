@@ -469,6 +469,11 @@ feed(msg('@nobody_y', -500, 73, ['message_id' => 2, 'date' => time(), 'chat' => 
 $ue = array_values(array_filter($GLOBALS['calls'], fn($c) => $c[0] === 'editMessageText' && ($c[1]['message_id'] ?? 0) === 2));
 check(count($ue) >= 2 && str_contains(end($ue)[1]['text'], 'نتوانستم') && !sent(['sendMessage']), 'unknown user turns the waiting message into the error');
 reset_calls();
+feed(msg('/gift', -500, 74, null, null, 'Ali'));
+reset_calls();
+feed(msg('5876*6464', -500, 74, ['message_id' => 3, 'date' => time(), 'chat' => ['id' => -500, 'type' => 'supergroup'], 'from' => BOT, 'text' => 'x'], null, 'Ali'));
+check(str_contains((string)last_text(), '37,982,464') && !array_filter($GLOBALS['calls'], fn($c) => str_contains((string)($c[1]['text'] ?? ''), 'نتوانستم')), 'math sent as a reply to the gift question is calculated, not looked up as a user');
+reset_calls();
 feed(msg('/gift @nobody_x', -500, 72, null, null, 'Sina'));
 check(str_contains((string)last_text(), 'نتوانستم'), 'gift unknown username');
 reset_calls();
@@ -1315,6 +1320,7 @@ $pinApi = function ($r) {
             ['blocks' => [['video' => ['video_list' => ['V_EXP7' => ['url' => 'https://v.pinimg.com/p2.mp4', 'width' => 720]]]]]]]]],
         '555555555' => $base + ['videos' => ['video_list' => ['V_HLSV3_MOBILE' => ['url' => 'https://v1.pinimg.com/videos/mc/hls/ab/cd/ef/abc123.m3u8', 'width' => 720]]],
             'story_pin_data' => ['pages' => [['blocks' => [['image' => ['images' => ['originals' => ['url' => 'https://i.pinimg.com/originals/cover.jpg']]]]]]]]],
+        '777777777' => $base + ['videos' => ['video_list' => ['V_HLSV4' => ['url' => 'https://v1.pinimg.com/videos/test/hls/master.m3u8', 'width' => 160]]]],
         '666666666' => $base + ['videos' => null, 'story_pin_data' => ['pages' => [
             ['blocks' => [['type' => 'story_pin_video_block', 'video' => ['video_list' => ['V_HLSV3_MOBILE' => ['url' => 'https://v1.pinimg.com/videos/iht/hls/11/22/33/clip1.m3u8']]],
                 'image' => ['images' => ['originals' => ['url' => 'https://i.pinimg.com/originals/c1.png']]]]]],
@@ -1330,7 +1336,7 @@ reset_calls();
 feed(msg('https://pin.it/vid1', -9100, 901));
 $pv = sent(['sendVideo']);
 check($pv && $pv[0][1]['video'] === 'https://v.pinimg.com/720.mp4' && !str_contains($pv[0][1]['caption'], '@artist') && str_contains($pv[0][1]['caption'], '1,234')
-    && str_contains($pv[0][1]['caption'], 'Sunset &lt;b&gt;') && array_filter(buttons($pv[0]), fn($b) => str_contains($b['url'] ?? '', 'startgroup')) && empty($pv[0][1]['reply_parameters']),
+    && str_contains($pv[0][1]['caption'], 'Sunset &lt;b&gt;') && array_filter(buttons($pv[0]), fn($b) => str_contains($b['url'] ?? '', 'startgroup')) && !empty($pv[0][1]['reply_parameters']),
     'pinterest short link video in best mp4 with caption, add-to-group button and no creator');
 reset_calls();
 feed(msg('https://www.pinterest.com/pin/222222222/', -9100, 902));
@@ -1340,9 +1346,20 @@ reset_calls();
 feed(msg('https://www.pinterest.com/pin/333333333/', -9100, 903));
 $pg = sent(['sendMediaGroup']);
 $pc = sent(['sendMessage']);
-check($pg && count($pg[0][1]['media']) === 2 && $pg[0][1]['media'][1]['type'] === 'video' && empty($pg[0][1]['reply_parameters']) && empty($pg[0][1]['media'][0]['caption']), 'pinterest story pin as an album without reply');
+check($pg && count($pg[0][1]['media']) === 2 && $pg[0][1]['media'][1]['type'] === 'video' && !empty($pg[0][1]['reply_parameters']) && empty($pg[0][1]['media'][0]['caption']), 'pinterest story pin as an album replying to the link');
 check($pc && str_contains($pc[0][1]['text'], '1,234') && array_filter(buttons($pc[0]), fn($b) => str_contains($b['url'] ?? '', 'startgroup')) && ($pc[0][1]['reply_parameters']['message_id'] ?? 0) > 0,
     'pinterest album caption comes with the add-to-group button');
+$GLOBALS['http']['v1.pinimg.com/videos/mc/720p/ab/cd/ef/abc123.mp4'] = 'ok';
+$GLOBALS['http']['v1.pinimg.com/videos/iht/720p/11/22/33/clip1.mp4'] = 'ok';
+foreach (['master.m3u8', 'v0.m3u8', 'v0_000.ts', 'v0_001.ts', 'k.key'] as $hf) {
+    $GLOBALS['http']['v1.pinimg.com/videos/test/hls/' . $hf] = file_get_contents(__DIR__ . '/fixtures/hls/' . $hf);
+}
+reset_calls();
+feed(msg('https://www.pinterest.com/pin/777777777/', -9100, 907));
+$pv = sent(['sendVideo']);
+$vb = $pv[0][1]['video']['__bytes'] ?? '';
+check($pv && substr($vb, 4, 4) === 'ftyp' && str_contains(substr($vb, 0, 4000), 'moov') && ($pv[0][1]['width'] ?? 0) === 160 && ($pv[0][1]['height'] ?? 0) === 96
+    && !empty($pv[0][1]['reply_parameters']) && str_contains((string)($pv[0][1]['caption'] ?? ''), '1,234'), 'pinterest stream video downloaded, decrypted and turned into one mp4');
 reset_calls();
 feed(msg('https://www.pinterest.com/pin/555555555/', -9100, 905));
 $pv = sent(['sendVideo']);
@@ -1358,11 +1375,36 @@ check(str_contains((string)last_text(), 'پین پیدا نشد'), 'pinterest pi
 unset($GLOBALS['http']['pinterest.com/resource/PinResource/get/'], $GLOBALS['http']['pin.it/vid1']);
 
 reset_calls();
-feed(msg('733 درهم', -4510, 811));
+$pm = msg('733 درهم', -4510, 811);
+feed($pm);
 $names = array_column($GLOBALS['calls'], 0);
 $ph = sent(['sendPhoto']);
-check(($ri = array_search('setMessageReaction', $names, true)) !== false && $ph && $ri < array_search('sendPhoto', $names, true) && empty($ph[0][1]['reply_parameters']),
-    'group price reaction comes first and the card photo is not sent as a reply');
+check(($ri = array_search('setMessageReaction', $names, true)) !== false && $ph && $ri < array_search('sendPhoto', $names, true) && ($ph[0][1]['reply_parameters']['message_id'] ?? 0) === $pm['message_id'],
+    'group price reaction comes first and the card replies to the message');
+$tok = ['okx', 1.6, 0.9, null, 9000.0, 1];
+check(abs(Market::consensus([$tok, ['gecko', 1.108, -5.7, 'Toncoin', 4e8, 3], ['wallex', 1.11, null, null, 0, 1], ['okx', 1.109, -5.5, null, 3e7, 1]])[0] - 1.109) < 0.001, 'price consensus ignores a different coin with the same ticker');
+$mk = Config::$root . '/data/market.json';
+@unlink($mk);
+$GLOBALS['http']['api.coingecko.com/api/v3/coins/markets'] = [['id' => 'tokamak-network', 'symbol' => 'ton', 'name' => 'Tokamak', 'current_price' => 1.6, 'price_change_percentage_24h' => 0.95, 'total_volume' => 5e6],
+    ['id' => 'the-open-network', 'symbol' => 'gram', 'name' => 'Toncoin', 'current_price' => 1.108, 'price_change_percentage_24h' => -5.78, 'total_volume' => 4e8],
+    ['id' => 'bitcoin', 'symbol' => 'btc', 'name' => 'Bitcoin', 'current_price' => 101000, 'price_change_percentage_24h' => 1.0, 'total_volume' => 3e10]];
+$GLOBALS['http']['okx.com/api/v5/market/tickers'] = ['data' => [['instId' => 'TON-USDT', 'last' => '1.6', 'open24h' => '1.59', 'ts' => (string)((time() - 90000) * 1000), 'volCcy24h' => '100'],
+    ['instId' => 'GRAM-USDT', 'last' => '1.107', 'open24h' => '1.17', 'ts' => (string)(time() * 1000), 'volCcy24h' => '3e7'], ['instId' => 'BTC-USDT', 'last' => '100990', 'open24h' => '100000', 'ts' => (string)(time() * 1000), 'volCcy24h' => '1e9']]];
+Market::refresh([], true, true);
+$ton = Market::coin('TON');
+check($ton && abs($ton['price'] - 1.107) < 0.002 && abs(Market::coin('GRAM')['price'] - 1.107) < 0.002 && abs(Market::coin('BTC')['price'] - 100990) < 1, 'TON is priced as Toncoin, listed now as GRAM, not another coin called TON');
+unset($GLOBALS['http']['api.coingecko.com/api/v3/coins/markets'], $GLOBALS['http']['okx.com/api/v5/market/tickers']);
+$old = json_decode((string)file_get_contents($mk), true);
+foreach ($old['c'] as &$row) {
+    $row[3] = time() - 7200;
+}
+unset($row);
+$old['at'] = time() - 600;
+file_put_contents($mk, json_encode($old));
+Market::refresh([], true, true);
+check(Market::coin('TON') === null && Market::coin('BTC') === null, 'old prices are never shown as live when the sources fail');
+@unlink($mk);
+Market::reset([]);
 $FG = -9300;
 reset_calls();
 feed(msg('/panel', $FG, 777));

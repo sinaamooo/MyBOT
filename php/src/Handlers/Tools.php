@@ -416,7 +416,7 @@ final class Tools
             'diamonds' => Fmt::int($pts = Diamonds::points((int)$t['id'])), 'dlevel' => Diamonds::level($pts),
         ]);
         if ($photo && UI::textLen($text) <= 1000) {
-            if (TG::photo($m['chat']['id'], $photo, $text, UI::footer())) {
+            if (TG::photo($m['chat']['id'], $photo, $text, UI::footer(), Bot::isPrivate($m) ? [] : ['reply_parameters' => Bot::replyParams($m)])) {
                 return;
             }
         }
