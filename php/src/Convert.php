@@ -146,7 +146,7 @@ final class Convert
             'stars' => $starUsd > 0 ? Fmt::int($usd / $starUsd) : null,
         ];
         if (count(array_filter($vals, fn($v) => $v !== null)) > 3) {
-            $vals['usd'] = null;
+            $vals['stars'] = null;
         }
         $name = Currencies::cryptoName($S) ?? ($q['name'] ?? null);
         $text = UI::t('conv_crypto', $vals + [

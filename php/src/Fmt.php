@@ -61,7 +61,7 @@ final class Fmt
         if ($x === null) {
             return '—';
         }
-        return abs($x) >= 1 ? self::fa(self::strip(number_format($x, 2))) : self::num($x);
+        return abs($x) >= 10 ? self::fa(self::strip(number_format($x, 2))) : (abs($x) >= 1 ? self::fa(self::strip(number_format($x, 3))) : self::num($x));
     }
 
     public static function int($x): string

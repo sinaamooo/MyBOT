@@ -1617,5 +1617,6 @@ Cache::forget("mem:-100777:6060");
 reset_calls();
 feed(msg('سلام', $FG, 6060));
 check(!sent(['deleteMessage']) && !(DB::chatSettings($FG)['fj_channels'] ?? []), 'removed channel is no longer required');
+require __DIR__ . '/prices_audit.php';
 echo "passed: $pass, failed: $fail\n";
 exit($fail ? 1 : 0);
