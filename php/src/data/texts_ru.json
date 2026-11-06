@@ -185,6 +185,15 @@
  "user_failed": {
   "text": "❌ Не удалось получить {username} с Fragment. Попробуйте чуть позже."
  },
+ "nft_caption": {
+  "text": "{emoji} <b>{name}</b>{fa}\n\n<blockquote>💎 Минимум: <code>{floor}</code> TON\n💵 Доллар: <code>{usd}</code> $\n💰 Томан: <code>{toman}</code></blockquote>\n<blockquote>{markets}</blockquote>\n<blockquote>📊 За 7 дней: {change}</blockquote>\n🔗 {links}\n🗓 {time}"
+ },
+ "nft_usage": {
+  "text": "🎁 Напишите название подарка после команды.\nПример: <code>/nft Plush Pepe</code>"
+ },
+ "nft_not_found": {
+  "text": "❌ Подарок «{query}» не найден."
+ },
  "self_warn": {
   "text": "⚠️ {mention}\n🤖 <b>На вашем аккаунте обнаружен селф-бот (автоуправление)!</b>\nПожалуйста, <b>выключите</b> селф-бот, иначе вы получите <b>мут</b>. ⛔️"
  },

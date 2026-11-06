@@ -1296,3 +1296,193 @@ final class Fragment
         return $info;
     }
 }
+
+final class GiftMarket
+{
+    const TONNEL = 'https://gifts2.tonnel.network/api/pageGifts';
+
+    public static function fa(string $t): string
+    {
+        $t = str_replace(['ي', 'ك', 'ة', 'ؤ', 'إ', 'أ', "\u{200C}", "\u{200F}", "\u{200E}", 'ـ'], ['ی', 'ک', 'ه', 'و', 'ا', 'ا', ' ', '', '', ''], mb_strtolower(trim($t)));
+        $t = preg_replace('/[\x{064B}-\x{065F}\x{0670}]/u', '', $t);
+        return trim(preg_replace('/[^\p{L}\p{N}]+/u', ' ', $t));
+    }
+
+    private static function skel(string $t): string
+    {
+        $t = self::fa($t);
+        if (preg_match('/\p{Arabic}/u', $t)) {
+            $t = strtr($t, ['خ' => 'kh', 'ش' => 'sh', 'چ' => 'ch', 'ژ' => 'zh', 'غ' => 'gh', 'ق' => 'g', 'ب' => 'b', 'پ' => 'p', 'ت' => 't', 'ث' => 's', 'ج' => 'j',
+                'ح' => 'h', 'د' => 'd', 'ذ' => 'z', 'ر' => 'r', 'ز' => 'z', 'س' => 's', 'ص' => 's', 'ض' => 'z', 'ط' => 't', 'ظ' => 'z', 'ع' => '', 'ف' => 'f', 'ک' => 'k',
+                'گ' => 'g', 'ل' => 'l', 'م' => 'm', 'ن' => 'n', 'و' => 'v', 'ه' => 'h', 'ی' => 'y', 'ا' => '', 'آ' => '', 'ئ' => 'y']);
+        } else {
+            $t = strtr($t, ['ph' => 'f', 'th' => 't', 'ck' => 'k', 'c' => 'k', 'q' => 'k', 'w' => 'v', 'x' => 'ks', 'ee' => 'y', 'oo' => 'v', 'u' => 'v', 'o' => 'v', 'i' => 'y',
+                'a' => '', 'e' => '']);
+        }
+        return preg_replace('/(.)\1+/', '$1', preg_replace('/[^a-z]/', '', $t));
+    }
+
+    public static function find(string $q): ?array
+    {
+        $ds = Gifts::dataset();
+        $all = [];
+        foreach ($ds['index'] as $it) {
+            $all[$it['full_name']] = $it;
+        }
+        if (!$all || trim($q) === '') {
+            return null;
+        }
+        $q = self::fa($q);
+        if (isset($ds['index'][Gifts::norm($q)])) {
+            return $ds['index'][Gifts::norm($q)];
+        }
+        $aliases = Config::data('gifts_fa');
+        foreach ($aliases as $name => $list) {
+            foreach ($list as $a) {
+                if (self::fa($a) === $q && isset($all[$name])) {
+                    return $all[$name];
+                }
+            }
+        }
+        $words = array_values(array_filter(explode(' ', $q), fn($w) => mb_strlen($w) >= 2));
+        $best = null;
+        $score = 0.0;
+        foreach ($all as $name => $it) {
+            $cands = array_merge([$name], $aliases[$name] ?? []);
+            $s = 0.0;
+            foreach ($cands as $c) {
+                $cw = explode(' ', self::fa($c));
+                $hit = 0.0;
+                foreach ($words as $w) {
+                    foreach ($cw as $x) {
+                        if ($x === $w) {
+                            $hit += mb_strlen($w) + 2;
+                        } elseif (mb_strlen($w) >= 3 && (str_starts_with($x, $w) || str_starts_with($w, $x) && mb_strlen($x) >= 3)) {
+                            $hit += mb_strlen($w);
+                        }
+                    }
+                }
+                $a = self::skel($c);
+                $b = self::skel($q);
+                if ($a !== '' && $b !== '') {
+                    similar_text($a, $b, $pct);
+                    $hit += max(0, $pct - 55) / 8;
+                }
+                $s = max($s, $hit);
+            }
+            if ($s > $score) {
+                $score = $s;
+                $best = $it;
+            }
+        }
+        return $score >= 3 ? $best : null;
+    }
+
+    public static function slug(string $name): string
+    {
+        return implode('', array_map('ucfirst', preg_split('/[^A-Za-z0-9]+/', str_replace(['’', "'"], '', $name), -1, PREG_SPLIT_NO_EMPTY)));
+    }
+
+    private static function fragmentHash(bool $fresh = false): ?string
+    {
+        if (!$fresh && ($h = Cache::get('frag_hash_gifts'))) {
+            return $h;
+        }
+        $r = Http::request(['url' => Fragment::BASE . '/gifts', 'timeout' => 6, 'headers' => ['User-Agent' => Hls::UA, 'Accept' => 'text/html']]);
+        if ($r['status'] !== 200 || !preg_match('~(?:https://fragment\.com)?\\\\?/api\?hash=([a-f0-9]+)~', $r['body'], $m)) {
+            return null;
+        }
+        Cache::set('frag_hash_gifts', $m[1], 1800);
+        return $m[1];
+    }
+
+    private static function fragmentReq(string $hash, string $collection): array
+    {
+        return ['url' => Fragment::BASE . '/api?hash=' . $hash, 'method' => 'POST', 'timeout' => 5,
+            'form' => http_build_query(['type' => 'gifts', 'query' => '', 'collection' => $collection, 'sort' => 'price_asc', 'filter' => 'sale', 'method' => 'searchAuctions']),
+            'headers' => ['User-Agent' => Hls::UA, 'Accept' => 'application/json, text/javascript, */*; q=0.01', 'Content-Type' => 'application/x-www-form-urlencoded; charset=UTF-8',
+                'Origin' => Fragment::BASE, 'Referer' => Fragment::BASE . '/gifts/' . $collection, 'X-Requested-With' => 'XMLHttpRequest']];
+    }
+
+    public static function fragmentItems(string $html): array
+    {
+        $out = [];
+        preg_match_all('~(<a\b[^>]*class="[^"]*\btm-grid-item\b[^"]*"[^>]*>.*?</a>)~s', $html, $cards);
+        foreach ($cards[1] as $c) {
+            if (!preg_match('~href="/gift/([a-z0-9]+)-(\d+)~i', $c, $h)
+                || !preg_match('~class="[^"]*\btm-grid-item-value\b[^"]*\bicon-ton\b[^"]*"[^>]*>\s*([0-9][^<]*?)\s*<~', $c, $p)) {
+                continue;
+            }
+            $out[] = ['num' => (int)$h[2], 'ton' => (float)str_replace(',', '', $p[1])];
+        }
+        return $out;
+    }
+
+    private static function tonnelReq(string $name): array
+    {
+        return ['url' => self::TONNEL, 'method' => 'POST', 'timeout' => 5, 'json' => [
+            'filter' => json_encode(['price' => ['$exists' => true], 'buyer' => ['$exists' => false], 'asset' => 'TON', 'refunded' => ['$ne' => true], 'export_at' => ['$exists' => true],
+                'gift_name' => str_replace('’', "'", $name)]),
+            'limit' => 3, 'page' => 1, 'sort' => '{"price":1,"gift_id":-1}', 'ref' => 0, 'price_range' => 0, 'user_auth' => ''],
+            'headers' => ['User-Agent' => Hls::UA, 'Accept' => '*/*', 'Origin' => 'https://market.tonnel.network', 'Referer' => 'https://market.tonnel.network/']];
+    }
+
+    public static function hot(?string $short = null): array
+    {
+        $h = Cache::get('nft_hot') ?: [];
+        if ($short !== null) {
+            $h = array_slice(array_values(array_unique(array_merge([$short], $h))), 0, 12);
+            Cache::set('nft_hot', $h, 86400);
+        }
+        return $h;
+    }
+
+    public static function floors(array $it, bool $fresh = false): array
+    {
+        $name = $it['full_name'];
+        $k = 'gm:' . $it['short_name'];
+        $v = $fresh ? null : Cache::get($k, $hit);
+        if (!$fresh && $hit) {
+            return $v;
+        }
+        $col = Gifts::norm($name);
+        $reqs = ['tonnel' => self::tonnelReq($name)];
+        $hash = self::fragmentHash();
+        if ($hash) {
+            $reqs['fragment'] = self::fragmentReq($hash, $col);
+        }
+        $auth = Config::get('PORTALS_AUTH');
+        if ($auth !== '') {
+            $reqs['portals'] = ['url' => 'https://portals-market.com/api/collections/floors', 'timeout' => 5, 'headers' => ['Authorization' => $auth]];
+        }
+        $res = Http::multi($reqs, 5);
+        $out = ['portals' => null, 'mrkt' => null, 'getgems' => null, 'fragment' => null, 'tonnel' => null, 'fragment_num' => null, 'tonnel_num' => null];
+        foreach (['portals' => 'portal_price_ton', 'mrkt' => 'tgmrkt_price_ton', 'getgems' => 'getgems_price_ton'] as $m => $f) {
+            $out[$m] = isset($it[$f]) && (float)$it[$f] > 0 ? (float)$it[$f] : null;
+        }
+        $j = json_decode((string)($res['fragment']['body'] ?? ''), true);
+        if (is_array($j) && !empty($j['error']) && $hash && ($hash = self::fragmentHash(true))) {
+            $j = json_decode((string)(Http::request(self::fragmentReq($hash, $col))['body'] ?? ''), true);
+        }
+        if (is_array($j) && ($items = self::fragmentItems((string)($j['html'] ?? (($j['body'] ?? '') . ($j['foot'] ?? '')))))) {
+            $out['fragment'] = $items[0]['ton'];
+            $out['fragment_num'] = $items[0]['num'];
+        }
+        $t = json_decode((string)($res['tonnel']['body'] ?? ''), true);
+        foreach (is_array($t) && array_is_list($t) ? $t : [] as $g) {
+            if (is_numeric($g['price'] ?? null) && (float)$g['price'] > 0) {
+                $out['tonnel'] = (float)$g['price'];
+                $out['tonnel_num'] = (int)($g['gift_num'] ?? 0) ?: null;
+                break;
+            }
+        }
+        $p = json_decode((string)($res['portals']['body'] ?? ''), true)['floorPrices'] ?? null;
+        if (is_array($p) && is_numeric($p[$it['short_name']] ?? null)) {
+            $out['portals'] = (float)$p[$it['short_name']];
+        }
+        $vals = array_filter([$out['portals'], $out['mrkt'], $out['getgems'], $out['fragment'], $out['tonnel']]);
+        $out['floor'] = $vals ? min($vals) : (isset($it['floor_price_ton']) ? (float)$it['floor_price_ton'] : null);
+        Cache::set($k, $out, 90);
+        return $out;
+    }
+}

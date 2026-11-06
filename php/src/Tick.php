@@ -23,7 +23,7 @@ final class Tick
             }
             try {
                 Market::refresh([], true, true);
-                if (time() - (int)DB::kvGet('prerender_at', 0) >= 120) {
+                if (time() - (int)DB::kvGet('prerender_at', 0) >= 55) {
                     Convert::prerender();
                     DB::kvSet('prerender_at', time());
                 }
@@ -45,6 +45,21 @@ final class Tick
                 error_log('tick gifts: ' . $e->getMessage());
             } finally {
                 FileCache::$inline = false;
+            }
+            if ($left() && ($hot = GiftMarket::hot())) {
+                $ds = Gifts::dataset()['index'] ?? [];
+                foreach ($hot as $short) {
+                    if (!$left()) {
+                        break;
+                    }
+                    if ($it = $ds[Gifts::norm($short)] ?? $ds[$short] ?? null) {
+                        try {
+                            GiftMarket::floors($it, true);
+                        } catch (Throwable $e) {
+                            error_log('tick nft: ' . $e->getMessage());
+                        }
+                    }
+                }
             }
             if ($left() && (time() - (int)DB::kvGet('emoji_checked_at', 0) > 86400 || !is_array(DB::kvGet('emoji_auto')))) {
                 UI::validateEmoji();

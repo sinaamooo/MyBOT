@@ -185,6 +185,15 @@
  "user_failed": {
   "text": "❌ Couldn't get {username} from Fragment. Try again in a moment."
  },
+ "nft_caption": {
+  "text": "{emoji} <b>{name}</b>{fa}\n\n<blockquote>💎 Floor: <code>{floor}</code> TON\n💵 Dollar: <code>{usd}</code> $\n💰 Toman: <code>{toman}</code></blockquote>\n<blockquote>{markets}</blockquote>\n<blockquote>📊 7-day change: {change}</blockquote>\n🔗 {links}\n🗓 {time}"
+ },
+ "nft_usage": {
+  "text": "🎁 Write the gift name after the command.\nExample: <code>/nft Plush Pepe</code>"
+ },
+ "nft_not_found": {
+  "text": "❌ No gift found for “{query}”."
+ },
  "self_warn": {
   "text": "⚠️ {mention}\n🤖 <b>A self-bot (auto control) was detected on your account!</b>\nPlease turn your self-bot <b>off</b>, otherwise you will be <b>muted</b>. ⛔️"
  },

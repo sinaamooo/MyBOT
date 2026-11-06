@@ -1424,6 +1424,7 @@ foreach ($old['c'] as &$row) {
 }
 unset($row);
 $old['at'] = time() - 600;
+$old['gk_at'] = time() - 7200;
 file_put_contents($mk, json_encode($old));
 Market::refresh([], true, true);
 check(Market::coin('TON') === null && Market::coin('BTC') === null, 'old prices are never shown as live when the sources fail');
@@ -1465,6 +1466,43 @@ reset_calls();
 feed(msg('/user @nofrag1', -4520, 822));
 check(str_contains((string)last_text(), 'فرگمنت'), 'username price reports a Fragment failure');
 unset($GLOBALS['http']['fragment.com/username/niktob'], $GLOBALS['http']['fragment.com/username/oldname']);
+$pp = ['full_name' => 'Plush Pepe', 'short_name' => 'plush_pepe', 'floor_price_ton' => 6900.0, 'portal_price_ton' => 6900.0, 'getgems_price_ton' => 7099.0, 'tgmrkt_price_ton' => 7650.0, 'custom_emoji_id' => '5893256632661449678'];
+$dc = ['full_name' => 'Durov’s Cap', 'short_name' => 'durovs_cap', 'floor_price_ton' => 900.0, 'portal_price_ton' => 900.0, 'tgmrkt_price_ton' => 950.0, 'custom_emoji_id' => '5893256632661449679'];
+FileCache::put('gift_dataset', ['index' => ['plushpepe' => $pp, 'plush_pepe' => $pp, 'durovscap' => $dc, 'durovs_cap' => $dc], 'by_id' => [], 'unupgraded' => [], 'updated' => time()]);
+$GLOBALS['http']['fragment.com/gifts'] = '<html><script>var x={"apiUrl":"\/api?hash=feed42"};</script></html>';
+$nftForms = [];
+$GLOBALS['http']['fragment.com/api'] = function ($r) use (&$nftForms) {
+    parse_str((string)($r['form'] ?? ''), $f);
+    $nftForms[] = $f;
+    return ['html' => '<a href="/gift/plushpepe-1234?collection=plushpepe" class="tm-grid-item"><div class="item-name">Plush Pepe</div><div class="item-num">#1234</div>'
+        . '<div class="tm-grid-item-value tm-value icon-before icon-ton">6,850</div></a><a href="/gift/plushpepe-99" class="tm-grid-item"><div class="tm-grid-item-value tm-value icon-before icon-ton">7,000</div></a>'];
+};
+$tonnelBody = null;
+$GLOBALS['http']['gifts2.tonnel.network/api/pageGifts'] = function ($r) use (&$tonnelBody) {
+    $tonnelBody = $r['json'] ?? null;
+    return [['gift_num' => 55, 'price' => 6950, 'gift_name' => 'Plush Pepe']];
+};
+reset_calls();
+feed(msg('/nft کپ پپه', -4530, 831));
+$np = sent(['sendPhoto']);
+$nc = (string)($np[0][1]['caption'] ?? '');
+check($np && str_starts_with((string)($np[0][1]['photo']['__bytes'] ?? ''), "\x89PNG") && str_contains($nc, 'Plush Pepe') && str_contains($nc, 'پلاش پپه') && str_contains($nc, '6,850')
+    && str_contains($nc, 'Portals') && str_contains($nc, '6,900') && str_contains($nc, 'MRKT') && str_contains($nc, '7,650') && str_contains($nc, 'Tonnel') && str_contains($nc, '6,950')
+    && str_contains($nc, 'GetGems') && str_contains($nc, 'https://t.me/nft/PlushPepe-1234') && str_contains($nc, 'https://t.me/nft/PlushPepe-55') && str_contains($nc, '5893256632661449678')
+    && array_filter(buttons($np[0]), fn($b) => str_contains($b['url'] ?? '', 'startgroup')) && !empty($np[0][1]['reply_parameters']), 'nft floor card from all markets with gift links, premium emoji and add-to-group button');
+check(($nftForms[0]['type'] ?? '') === 'gifts' && ($nftForms[0]['collection'] ?? '') === 'plushpepe' && ($nftForms[0]['sort'] ?? '') === 'price_asc' && ($nftForms[0]['filter'] ?? '') === 'sale'
+    && str_contains((string)($tonnelBody['filter'] ?? ''), '"gift_name":"Plush Pepe"') && ($tonnelBody['sort'] ?? '') === '{"price":1,"gift_id":-1}', 'nft asks Fragment and Tonnel for the cheapest listing');
+check(preg_match('/Fragment: <code>6,850<\/code> TON ✅/u', preg_replace('/<tg-emoji[^>]*>(.*?)<\/tg-emoji>/u', '$1', $nc)) === 1, 'cheapest market is marked');
+reset_calls();
+feed(msg('/nft کلاه دورف', -4530, 832));
+check(str_contains((string)(sent(['sendPhoto'])[0][1]['caption'] ?? ''), 'Durov’s Cap'), 'nft finds Durov’s Cap from its Persian name');
+reset_calls();
+feed(msg('/nft یه چیز رندوم', -4530, 833));
+check(str_contains((string)last_text(), 'پیدا نشد'), 'nft unknown gift');
+reset_calls();
+feed(msg('/nft', -4530, 834));
+check(str_contains((string)last_text(), '/nft پلاش پپه'), 'nft usage');
+unset($GLOBALS['http']['fragment.com/gifts'], $GLOBALS['http']['fragment.com/api'], $GLOBALS['http']['gifts2.tonnel.network/api/pageGifts']);
 $FG = -9300;
 reset_calls();
 feed(msg('/panel', $FG, 777));

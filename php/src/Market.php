@@ -118,6 +118,7 @@ final class Market
     {
         $now = time();
         $gk = Config::get('COINGECKO_API_KEY');
+        $geckoDue = $now - (int)($old['gk_at'] ?? 0) >= 55;
         $reqs = [
             'wallex' => ['url' => 'https://api.wallex.ir/v1/markets', 'timeout' => 6],
             'gecko' => ['url' => 'https://api.coingecko.com/api/v3/coins/markets', 'params' => ['vs_currency' => 'usd', 'order' => 'market_cap_desc', 'per_page' => 250, 'page' => 1, 'price_change_percentage' => '24h'], 'headers' => ['x-cg-demo-api-key' => $gk], 'timeout' => 7],
@@ -128,6 +129,9 @@ final class Market
             'bitpin' => ['url' => 'https://api.bitpin.org/api/v1/mkt/tickers/', 'timeout' => 6],
             'tabdeal' => ['url' => 'https://api1.tabdeal.org/r/api/v1/ticker/price', 'params' => ['symbol' => 'USDTIRT'], 'timeout' => 6],
         ];
+        if (!$geckoDue) {
+            unset($reqs['gecko']);
+        }
         $altDue = $now - (int)($old['alt_at'] ?? 0) > self::ALT_TTL;
         if ($altDue) {
             $reqs['tgju'] = ['url' => 'https://call1.tgju.org/ajax.json', 'timeout' => 7];
@@ -150,6 +154,17 @@ final class Market
         };
         $byId = [];
         $seen = [];
+        $gk = [];
+        $gid = [];
+        $pinIds = array_flip(array_column(self::PIN, 0));
+        if (!$geckoDue) {
+            foreach ((array)($old['gk'] ?? []) as $sym => $row) {
+                $add('gecko', (string)$sym, $row[0], $row[1], $row[2], $row[3]);
+            }
+            foreach ((array)($old['gid'] ?? []) as $id => $row) {
+                $byId[(string)$id] = ['gecko', $row[0], $row[1], $row[2], $row[3], 1];
+            }
+        }
         foreach ((array)($res['gecko'] ?? []) as $r) {
             $sym = strtoupper(trim((string)($r['symbol'] ?? '')));
             $row = ['gecko', self::num($r['current_price'] ?? null), self::num($r['price_change_percentage_24h'] ?? null), mb_substr((string)($r['name'] ?? $sym), 0, 40), (float)(self::num($r['total_volume'] ?? null) ?? 0), 1];
@@ -157,8 +172,12 @@ final class Market
                 continue;
             }
             $byId[(string)($r['id'] ?? '')] = $row;
+            if (isset($pinIds[(string)($r['id'] ?? '')])) {
+                $gid[(string)$r['id']] = array_slice($row, 1, 4);
+            }
             if (!isset($seen[$sym])) {
                 $seen[$sym] = true;
+                $gk[$sym] = array_slice($row, 1, 4);
                 $add('gecko', $sym, $row[1], $row[2], $row[3], $row[4]);
             }
         }
@@ -285,6 +304,9 @@ final class Market
             'irt' => $irt ?? ($old['irt'] ?? null),
             'irt_chg' => $irtChg ?? ($old['irt_chg'] ?? null),
             'c' => $coins,
+            'gk' => $geckoDue ? ($gk ?: ($old['gk'] ?? [])) : ($old['gk'] ?? []),
+            'gid' => $geckoDue ? ($gid ?: ($old['gid'] ?? [])) : ($old['gid'] ?? []),
+            'gk_at' => $geckoDue && $gk ? $now : (int)($old['gk_at'] ?? 0),
             'a' => $old['a'] ?? [],
             'alt_at' => $old['alt_at'] ?? 0,
             'fx' => $old['fx'] ?? [],

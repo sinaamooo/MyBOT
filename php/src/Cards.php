@@ -496,4 +496,72 @@ final class Cards
         imagedestroy($im);
         return $png;
     }
+
+    public static function nft(array $d): string
+    {
+        $W = 1280;
+        $H = 720;
+        $im = self::canvas($W, $H);
+        $img = !empty($d['image']) ? @imagecreatefromstring($d['image']) : null;
+        $tone = $img ? self::avg($img) : [124, 58, 237];
+        self::glow($im, 300, 330, 340, $tone, 70);
+        self::glow($im, $W - 220, 120, 260, [14, 165, 233], 90);
+        self::text($im, 60, 52, 'GIFT FLOOR', 26, 'Black', self::GOLD, 'la');
+        self::text($im, $W - 60, 52, UI::l('کف قیمت گیفت'), 28, 'Bold', self::MUTED, 'ra');
+        $box = 400;
+        if ($img) {
+            $sq = self::cover($img, $box, $box);
+            self::roundCorners($sq, 56);
+            imagecopy($im, $sq, 60, 150, 0, 0, $box, $box);
+            imagedestroy($sq);
+            imagedestroy($img);
+        } else {
+            self::disc($im, 60, 150, $box, $tone, [max(0, $tone[0] - 70), max(0, $tone[1] - 70), max(0, $tone[2] - 70)]);
+            self::text($im, 60 + $box / 2, 150 + $box / 2, 'GIFT', 72, 'Black', self::WHITE, 'mm');
+        }
+        $x1 = $W - 60;
+        $room = $W - 60 - 520;
+        self::text($im, $x1, 110, $d['name'], self::fit($d['name'], $room, 66, 'Black', 30), 'Black', self::WHITE, 'ra');
+        if (!empty($d['fa'])) {
+            self::text($im, $x1, 196, $d['fa'], self::fit($d['fa'], $room, 30, 'Medium', 16), 'Medium', self::MUTED, 'ra');
+        }
+        $floor = $d['floor'] ? Fmt::num($d['floor']) . ' TON' : '—';
+        self::glass($im, 520, 250, $x1, 400, 28);
+        self::text($im, $x1 - 28, 266, UI::l('کف قیمت'), 26, 'Bold', self::MUTED, 'ra');
+        self::text($im, 548, 318, $floor, self::fit($floor, 420, 64, 'Black', 26), 'Black', self::GOLD, 'lm');
+        if ($d['toman']) {
+            $tm = Fmt::num(round($d['toman'])) . ' ' . UI::l('تومان');
+            self::text($im, $x1 - 28, 372, $tm, self::fit($tm, 330, 28, 'Bold', 14), 'Bold', self::WHITE, 'rm');
+        }
+        if ($d['usd']) {
+            self::text($im, 548, 372, '$' . Fmt::num(round($d['usd'])), 28, 'Bold', self::GREEN, 'lm');
+        }
+        $markets = array_values(array_filter($d['markets'], fn($m) => $m[1]));
+        $n = max(1, count($markets));
+        $gap = 14;
+        $bw = (int)((($x1 - 520) - ($n - 1) * $gap) / $n);
+        foreach ($markets as $i => [$label, $ton]) {
+            $bx1 = $x1 - $i * ($bw + $gap);
+            $bx0 = $bx1 - $bw;
+            $best = abs($ton - (float)$d['floor']) < 0.0001;
+            self::glass($im, $bx0, 424, $bx1, 534, 22, $best ? 34 : 18, 55, $best ? self::GREEN : self::WHITE);
+            self::text($im, $bx0 + $bw / 2, 452, $label, self::fit($label, $bw - 16, 22, 'Bold', 12), 'Bold', $best ? self::GREEN : self::MUTED, 'mm');
+            $v = Fmt::num($ton);
+            self::text($im, $bx0 + $bw / 2, 500, $v, self::fit($v, $bw - 16, 34, 'Black', 14), 'Black', self::WHITE, 'mm');
+        }
+        if ($d['change'] !== null) {
+            $up = $d['change'] >= 0;
+            self::glass($im, 520, 556, $x1, 616, 22, 18);
+            self::text($im, $x1 - 28, 586, UI::l('تغییر ۷ روز'), 26, 'Bold', self::MUTED, 'rm');
+            self::text($im, 548, 586, ($up ? '+' : '') . sprintf('%.1f', $d['change']) . '%', 30, 'Black', $up ? self::GREEN : self::RED, 'lm');
+        }
+        $footer = Fmt::jalali();
+        if ($d['bot'] !== '') {
+            $footer = '@' . $d['bot'] . '  •  ' . $footer;
+        }
+        self::text($im, 60, $H - 50, $footer, 24, 'Medium', self::MUTED, 'lm');
+        $png = self::png($im);
+        imagedestroy($im);
+        return $png;
+    }
 }

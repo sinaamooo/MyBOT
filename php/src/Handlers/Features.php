@@ -1175,3 +1175,77 @@ final class Usernames
         Bot::reply($m, $text, UI::footer([[UI::button('btn_fragment', ['url' => Fragment::BASE . '/username/' . $name])]]));
     }
 }
+
+final class NftH
+{
+    const MARKETS = [['portals', 'Portals', '🔵', 'https://t.me/portals'], ['mrkt', 'MRKT', '🟡', 'https://t.me/mrkt'], ['tonnel', 'Tonnel', '🟠', 'https://t.me/tonnel_network_bot'],
+        ['fragment', 'Fragment', '💠', null], ['getgems', 'GetGems', '🔷', 'https://getgems.io/']];
+
+    public static function cmd(array $m, string $args): void
+    {
+        $q = trim($args);
+        if ($q === '') {
+            Bot::reply($m, UI::t('nft_usage'), null);
+            return;
+        }
+        Tools::react($m);
+        TG::warm();
+        $it = GiftMarket::find($q);
+        if (!$it) {
+            Bot::reply($m, UI::t('nft_not_found', ['query' => UI::esc(mb_substr($q, 0, 40))]), null);
+            return;
+        }
+        TG::api('sendChatAction', ['chat_id' => $m['chat']['id'], 'action' => 'upload_photo', '__quick' => true]);
+        $name = $it['full_name'];
+        $col = Gifts::norm($name);
+        $slug = GiftMarket::slug($name);
+        $f = GiftMarket::floors($it);
+        GiftMarket::hot($it['short_name']);
+        $ton = Prices::usd('TON');
+        $usdt = Prices::usdtToman();
+        $usd = $f['floor'] && $ton ? $f['floor'] * $ton : null;
+        $old = Gifts::floorsDaysAgo()[Gifts::norm($name)] ?? null;
+        $chg = $f['floor'] && $old ? ($f['floor'] - $old) / $old * 100 : null;
+        $fa = UI::$lang === 'fa' ? (Config::data('gifts_fa')[$name][0] ?? '') : '';
+        $lines = [];
+        $links = [];
+        foreach (self::MARKETS as [$k, $label, $icon, $url]) {
+            if (!$f[$k]) {
+                continue;
+            }
+            $best = abs($f[$k] - (float)$f['floor']) < 0.0001;
+            $lines[] = "$icon $label: <code>" . Fmt::num($f[$k]) . '</code> TON' . ($best ? ' ✅' : '');
+            $url ??= Fragment::BASE . "/gifts/$col?sort=price_asc&filter=sale";
+            $links[] = '<a href="' . UI::attr($url) . '">' . $label . '</a>';
+        }
+        foreach (['fragment' => 'Fragment', 'tonnel' => 'Tonnel'] as $k => $label) {
+            if (!empty($f[$k . '_num'])) {
+                array_unshift($links, '<a href="https://t.me/nft/' . $slug . '-' . $f[$k . '_num'] . '">🎁 ' . $label . ' #' . $f[$k . '_num'] . '</a>');
+            }
+        }
+        $emoji = !empty($it['custom_emoji_id']) ? '<tg-emoji emoji-id="' . UI::attr($it['custom_emoji_id']) . '">🎁</tg-emoji>' : '🎁';
+        $cap = UI::t('nft_caption', ['emoji' => $emoji, 'name' => UI::esc($name), 'fa' => UI::esc($fa),
+            'floor' => $f['floor'] ? Fmt::num($f['floor']) : null, 'usd' => $usd ? Fmt::usd($usd) : null, 'toman' => $usd && $usdt ? Fmt::toman($usd * $usdt) : null,
+            'markets' => $lines ? implode("\n", $lines) : null, 'change' => $chg !== null ? ($chg >= 0 ? '+' : '') . sprintf('%.1f', $chg) . '%' : null,
+            'links' => $links ? implode(' • ', $links) : null, 'time' => Fmt::now()]);
+        $fk = 'nftf:' . md5($col . '|' . json_encode($f) . '|' . date('YmdHi') . '|' . round((float)$usdt) . '|' . UI::$lang);
+        if ($fid = Cache::get($fk)) {
+            Bot::reply($m, $cap, false, $fid);
+            return;
+        }
+        $photo = null;
+        if (PriceCard::ready()) {
+            try {
+                $img = Gifts::images(['g' => $col . '-' . ($f['fragment_num'] ?: 1)])['g'] ?? Gifts::images(['g' => $col . '-1'])['g'] ?? null;
+                $photo = Cards::nft(['name' => $name, 'fa' => $fa, 'image' => $img, 'floor' => $f['floor'], 'usd' => $usd, 'toman' => $usd && $usdt ? $usd * $usdt : null,
+                    'markets' => array_map(fn($x) => [$x[1], $f[$x[0]]], self::MARKETS), 'change' => $chg, 'bot' => TG::username()]);
+            } catch (Throwable $e) {
+                error_log('nft card: ' . $e->getMessage());
+            }
+        }
+        $sent = Bot::send($m, $cap, false, $photo);
+        if (!empty($sent['photo']) && ($fid = end($sent['photo'])['file_id'] ?? null)) {
+            Cache::set($fk, $fid, 120);
+        }
+    }
+}

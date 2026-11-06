@@ -247,6 +247,18 @@
   "text": "❌ اطلاعات {username} از فرگمنت دریافت نشد. کمی بعد دوباره امتحان کنید.",
   "desc": "خطای فرگمنت ({username})"
  },
+ "nft_caption": {
+  "text": "{emoji} <b>{name}</b>  {fa}\n\n<blockquote>💎 کف قیمت: <code>{floor}</code> TON\n💵 دلار: <code>{usd}</code> $\n💰 تومان: <code>{toman}</code></blockquote>\n<blockquote>{markets}</blockquote>\n<blockquote>📊 تغییر ۷ روز: {change}</blockquote>\n🔗 {links}\n🗓 {time}",
+  "desc": "کپشن کف قیمت گیفت ({emoji} {name} {fa} {floor} {usd} {toman} {markets} {change} {links} {time})"
+ },
+ "nft_usage": {
+  "text": "🎁 اسم گیفت را بعد از دستور بنویسید.\nمثال: <code>/nft پلاش پپه</code>",
+  "desc": "راهنمای دستور کف قیمت گیفت"
+ },
+ "nft_not_found": {
+  "text": "❌ گیفتی با اسم «{query}» پیدا نشد.",
+  "desc": "گیفت پیدا نشد ({query})"
+ },
  "self_warn": {
   "text": "⚠️ {mention}\n🤖 <b>سلف (کنترل خودکار) روی اکانت شما شناسایی شد!</b>\nلطفا سلف خود را <b>خاموش</b> کنید، در غیر این صورت <b>سکوت</b> می‌شوید. ⛔️",
   "desc": "اخطار سلف ({mention})"
