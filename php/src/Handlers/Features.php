@@ -11,6 +11,7 @@ final class Waiter
     private bool $busy = true;
     private bool $done = false;
     private array $reply = [];
+    private ?string $restore = null;
 
     public static function start(array $m, string $key, ?int $prompt = null): self
     {
@@ -18,12 +19,11 @@ final class Waiter
         $w->chat = $m['chat']['id'];
         $w->frames = [trim(UI::t($key))];
         $w->reply = !Bot::isPrivate($m) && isset($m['message_id']) ? ['reply_parameters' => Bot::replyParams($m)] : [];
-        if ($prompt && TG::api('editMessageText', ['chat_id' => $w->chat, 'message_id' => $prompt, 'text' => $w->frames[0], 'reply_markup' => UI::footer()]) !== null) {
+        if ($prompt && (TG::api('editMessageText', ['chat_id' => $w->chat, 'message_id' => $prompt, 'text' => $w->frames[0], 'reply_markup' => UI::footer()]) !== null
+            || TG::api('editMessageText', ['chat_id' => $w->chat, 'message_id' => $prompt, 'text' => $w->frames[0]]) !== null)) {
             $w->mid = $prompt;
+            $w->restore = UI::t('gift_ask');
         } else {
-            if ($prompt) {
-                TG::async('deleteMessage', ['chat_id' => $w->chat, 'message_id' => $prompt]);
-            }
             $r = TG::api('sendMessage', ['chat_id' => $w->chat, 'text' => $w->frames[0], 'reply_markup' => UI::footer()] + $w->reply);
             $w->mid = isset($r['message_id']) ? (int)$r['message_id'] : null;
         }
@@ -59,9 +59,11 @@ final class Waiter
             }
             return;
         }
-        $html !== null
-            ? TG::async('editMessageText', ['chat_id' => $this->chat, 'message_id' => $this->mid, 'text' => $html, 'reply_markup' => UI::footer()])
-            : TG::async('deleteMessage', ['chat_id' => $this->chat, 'message_id' => $this->mid]);
+        if ($html !== null || $this->restore !== null) {
+            TG::async('editMessageText', ['chat_id' => $this->chat, 'message_id' => $this->mid, 'text' => $html ?? $this->restore] + ($this->restore === null ? ['reply_markup' => UI::footer()] : []));
+            return;
+        }
+        TG::async('deleteMessage', ['chat_id' => $this->chat, 'message_id' => $this->mid]);
     }
 }
 

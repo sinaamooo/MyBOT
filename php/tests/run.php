@@ -440,7 +440,7 @@ $names = array_column($GLOBALS['calls'], 0);
 $we = array_values(array_filter($GLOBALS['calls'], fn($c) => $c[0] === 'editMessageText' && ($c[1]['message_id'] ?? 0) === 1));
 $wd = array_search('deleteMessage', $names, true);
 check($we && str_contains($we[0][1]['text'], '5386367538735104399') && str_contains($we[0][1]['text'], 'لطفاً کمی منتظر بمانید') && (bool)array_filter(buttons($we[0]), fn($b) => str_contains($b['url'] ?? '', 'startgroup'))
-    && $wd !== false && $wd > array_search('sendPhoto', $names, true) && ($GLOBALS['calls'][$wd][1]['message_id'] ?? 0) === 1, 'prompt turns into the waiting message and is removed after the card');
+    && $wd === false && str_contains((string)(end($we)[1]['text'] ?? ''), 'یوزرنیم'), 'prompt turns into the waiting message and goes back to the question after the card, never deleted');
 $wr = new ReflectionProperty('Waiter', 'frames');
 $fr = $wr->getValue(Waiter::start(msg('x', -500, 70), 'gift_wait', 1));
 check(count($fr) === 1 && str_starts_with($fr[0], '<tg-emoji emoji-id="5386367538735104399">') && str_ends_with($fr[0], 'لطفاً کمی منتظر بمانید'), 'waiting text is shown whole, exactly as written');
