@@ -529,6 +529,41 @@ final class Scam
 
 final class Extras
 {
+    public static function pinLink(array $m, string $link): void
+    {
+        TG::warm();
+        TG::api('sendChatAction', ['chat_id' => $m['chat']['id'], 'action' => 'upload_photo', '__quick' => true]);
+        $p = Pinterest::pin($link);
+        $items = $p ? Pinterest::media($p) : [];
+        if (!$items) {
+            Bot::send($m, UI::t('pin_not_found'), null);
+            return;
+        }
+        $x = Pinterest::info($p);
+        $text = trim(preg_replace('/\s+/u', ' ', UI::stripEmoji($x['text'])));
+        if (mb_strlen($text) > 300) {
+            $text = mb_substr($text, 0, 300) . '…';
+        }
+        $title = UI::stripEmoji($x['title']);
+        $cap = UI::t('pin_caption', [
+            'owner' => $x['owner'] ? '@' . UI::esc($x['owner']) : null, 'title' => $title !== '' ? UI::esc(mb_substr($title, 0, 100)) : null,
+            'saves' => $x['saves'] !== null ? Fmt::int((int)$x['saves']) : null, 'date' => $x['date'] ? Fmt::jalali((int)$x['date']) : null,
+            'count' => count($items) > 1 ? Fmt::int(count($items)) : null, 'text' => $text !== '' ? UI::esc($text) : null, 'bot' => TG::username(),
+        ]);
+        foreach ($items as &$it) {
+            $it['ref'] = 'https://www.pinterest.com/';
+        }
+        unset($it);
+        if (count($items) === 1 && !empty($items[0]['alt'])) {
+            $extra = !Bot::isPrivate($m) ? ['reply_parameters' => Bot::replyParams($m)] : [];
+            if (self::upload($m, $items[0], ['caption' => $cap, 'reply_markup' => UI::footer()] + $extra) === null) {
+                self::upload($m, ['url' => $items[0]['alt']] + $items[0], ['caption' => $cap, 'reply_markup' => UI::footer()] + $extra);
+            }
+            return;
+        }
+        self::sendPost($m, $items, $cap);
+    }
+
     private static function err(int $code): string
     {
         return [451 => 'insta_private', 452 => 'insta_no_story', 453 => 'insta_no_highlight'][$code] ?? 'insta_not_found';
@@ -545,7 +580,7 @@ final class Extras
         if (($r = TG::api($method, [$field => $it['url']] + $p)) !== null) {
             return $r;
         }
-        $d = Http::request(['url' => $it['url'], 'timeout' => 90, 'headers' => ['User-Agent' => Http::UA, 'Accept' => '*/*', 'Referer' => 'https://www.instagram.com/']]);
+        $d = Http::request(['url' => $it['url'], 'timeout' => 90, 'headers' => ['User-Agent' => Http::UA, 'Accept' => '*/*', 'Referer' => $it['ref'] ?? 'https://www.instagram.com/']]);
         if ($d['status'] >= 200 && $d['status'] < 300 && strlen($d['body']) > 0 && strlen($d['body']) < 49 * 1048576) {
             return TG::api($method, [$field => ['__bytes' => $d['body'], 'name' => $it['kind'] === 'video' ? 'media.mp4' : 'media.jpg']] + $p);
         }
@@ -759,6 +794,10 @@ final class TextRouter
         }
         if (($l = Instagram::link($text)) && $on('instagram')) {
             Extras::instaLink($m, $l);
+            return;
+        }
+        if (($l = Pinterest::link($text)) && $on('pinterest')) {
+            Extras::pinLink($m, $l);
             return;
         }
         if (preg_match('/^(?:wallet|ولت|کیف پول|check|چک|hash|هش|tx)\s+(.+)$/isu', $text, $mm) && $on('checkers')) {

@@ -199,9 +199,10 @@ final class Http
         [$ch] = self::handle($r);
         $body = curl_exec($ch);
         $status = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+        $final = (string)curl_getinfo($ch, CURLINFO_EFFECTIVE_URL);
         $h = self::takeHeaders($ch);
         curl_close($ch);
-        return ['status' => $body === false ? 0 : $status, 'body' => $body === false ? '' : $body, 'headers' => $h];
+        return ['status' => $body === false ? 0 : $status, 'body' => $body === false ? '' : $body, 'headers' => $h, 'final' => $final];
     }
 
     public static function multi(array $reqs, float $deadline = 0.0): array

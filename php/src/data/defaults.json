@@ -12,6 +12,7 @@
   "calculator": true,
   "translate": true,
   "instagram": true,
+  "pinterest": true,
   "bot_enabled": true,
   "force_channels": [],
   "self_mute_minutes": 1440,
@@ -315,6 +316,7 @@
   "calculator": "ماشین حساب",
   "translate": "ترجمه",
   "instagram": "دانلود اینستاگرام",
+  "pinterest": "دانلود پینترست",
   "games": "بازی‌ها"
  }
 }

@@ -444,32 +444,50 @@ final class Wallets
         return self::utxo($a, ['https://litecoinspace.org'], 'ltc', 'Litecoin', 'LTC', 'https://litecoinspace.org');
     }
 
+    private static function chairParse($d, string $name, string $sym, string $explorer): ?array
+    {
+        $info = is_array($d['data'] ?? null) && $d['data'] ? (array_values($d['data'])[0]['address'] ?? null) : null;
+        if (!is_array($info) || !isset($info['balance'])) {
+            return null;
+        }
+        return self::result($name, $sym, $info['balance'] / 1e8, $explorer, ['txs' => $info['transaction_count'] ?? null]);
+    }
+
     public static function doge(string $a): array
     {
         $ex = "https://blockchair.com/dogecoin/address/$a";
         $r = self::first([
             'c' => ['url' => "https://api.blockcypher.com/v1/doge/main/addrs/$a/balance", 'timeout' => 5],
+            'b' => ['url' => "https://api.blockchair.com/dogecoin/dashboards/address/$a", 'timeout' => 5],
             'd' => ['url' => "https://dogechain.info/api/v1/address/balance/$a", 'timeout' => 5],
-        ], fn($k, $d) => $k === 'c' ? self::cypherParse($d, 'Dogecoin', 'DOGE', $ex) : (!empty($d['success']) ? self::result('Dogecoin', 'DOGE', (float)($d['balance'] ?? 0), $ex) : null));
+        ], fn($k, $d) => match ($k) {
+            'c' => self::cypherParse($d, 'Dogecoin', 'DOGE', $ex),
+            'b' => self::chairParse($d, 'Dogecoin', 'DOGE', $ex),
+            default => !empty($d['success']) ? self::result('Dogecoin', 'DOGE', (float)($d['balance'] ?? 0), $ex) : null,
+        });
         return $r ? [$r] : [];
     }
 
     public static function dash(string $a): array
     {
-        $d = Http::json("https://api.blockcypher.com/v1/dash/main/addrs/$a/balance", ['timeout' => 5]);
-        $r = self::cypherParse($d, 'Dash', 'DASH', "https://blockchair.com/dash/address/$a");
+        $ex = "https://blockchair.com/dash/address/$a";
+        $r = self::first([
+            'c' => ['url' => "https://api.blockcypher.com/v1/dash/main/addrs/$a/balance", 'timeout' => 5],
+            'b' => ['url' => "https://api.blockchair.com/dash/dashboards/address/$a", 'timeout' => 5],
+        ], fn($k, $d) => $k === 'c' ? self::cypherParse($d, 'Dash', 'DASH', $ex) : self::chairParse($d, 'Dash', 'DASH', $ex));
         return $r ? [$r] : [];
     }
 
     public static function bch(string $a): array
     {
         $addr = str_starts_with($a, 'bitcoincash:') ? $a : "bitcoincash:$a";
-        $d = Http::json("https://api.blockchair.com/bitcoin-cash/dashboards/address/$addr", ['timeout' => 5]);
-        $info = is_array($d['data'] ?? null) ? (array_values($d['data'])[0]['address'] ?? null) : null;
-        if (!$info) {
-            return [];
-        }
-        return [self::result('Bitcoin Cash', 'BCH', ($info['balance'] ?? 0) / 1e8, "https://blockchair.com/bitcoin-cash/address/$addr", ['txs' => $info['transaction_count'] ?? null])];
+        $ex = "https://blockchair.com/bitcoin-cash/address/$addr";
+        $r = self::first([
+            'b' => ['url' => "https://api.blockchair.com/bitcoin-cash/dashboards/address/$addr", 'timeout' => 5],
+            'h' => ['url' => "https://api.haskoin.com/bch/address/$addr/balance", 'timeout' => 5],
+        ], fn($k, $d) => $k === 'b' ? self::chairParse($d, 'Bitcoin Cash', 'BCH', $ex)
+            : (is_array($d) && isset($d['confirmed']) ? self::result('Bitcoin Cash', 'BCH', ((int)$d['confirmed'] + (int)($d['unconfirmed'] ?? 0)) / 1e8, $ex, ['txs' => $d['txs'] ?? null]) : null));
+        return $r ? [$r] : [];
     }
 
     public static function tronTokensReq(string $a): array
@@ -751,12 +769,17 @@ final class Wallets
 
     public static function aptos(string $a): array
     {
-        $base = 'https://fullnode.mainnet.aptoslabs.com/v1';
-        $res = Http::multiJson([
-            'bal' => ['url' => "$base/accounts/$a/balance/0x1::aptos_coin::AptosCoin", 'timeout' => 5],
-            'res' => ['url' => "$base/accounts/$a/resource/0x1::coin::CoinStore%3C0x1::aptos_coin::AptosCoin%3E", 'timeout' => 5],
-            'acc' => ['url' => "$base/accounts/$a", 'timeout' => 5],
-        ]);
+        $reqs = [];
+        foreach (['https://fullnode.mainnet.aptoslabs.com/v1', 'https://api.mainnet.aptoslabs.com/v1'] as $i => $base) {
+            $reqs["bal$i"] = ['url' => "$base/accounts/$a/balance/0x1::aptos_coin::AptosCoin", 'timeout' => 5];
+            $reqs["res$i"] = ['url' => "$base/accounts/$a/resource/0x1::coin::CoinStore%3C0x1::aptos_coin::AptosCoin%3E", 'timeout' => 5];
+            $reqs["acc$i"] = ['url' => "$base/accounts/$a", 'timeout' => 5];
+        }
+        $got = Http::multiJson($reqs, 5.5);
+        $res = [];
+        foreach (['bal', 'res', 'acc'] as $k) {
+            $res[$k] = $got["{$k}0"] ?? $got["{$k}1"] ?? null;
+        }
         $raw = $res['bal'] ?? ($res['res']['data']['coin']['value'] ?? null);
         if ($raw === null || !is_numeric($raw)) {
             return [];

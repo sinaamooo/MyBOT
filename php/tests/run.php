@@ -1121,7 +1121,7 @@ check(!$miss && Currencies::bareAsset('طلا') === ['gold', 'GOLD18'] && Curren
 reset_calls();
 feed(msg('/help', -4600, 850));
 $hp = (string)last_text();
-check(substr_count($hp, '<blockquote>') === 23 && !str_contains($hp, 'شبا') && !str_contains($hp, 'شماره') && str_contains($hp, 'دوز') && str_contains($hp, 'اینستاگرام')
+check(substr_count($hp, '<blockquote>') === 24 && str_contains($hp, 'پینترست') && !str_contains($hp, 'شبا') && !str_contains($hp, 'شماره') && str_contains($hp, 'دوز') && str_contains($hp, 'اینستاگرام')
     && !preg_match('~/(lang|arz|panel|settings|insta|p )~', $hp) && !str_contains($hp, 'محافظ گروه'), 'help lists every feature');
 $spotFile = Config::$root . '/data/spot.json';
 $spotPrev = is_file($spotFile) ? file_get_contents($spotFile) : null;
@@ -1268,5 +1268,66 @@ $bs = sent(['sendMessage']);
 check(count($bs) === 2 && (end($bs)[1]['reply_markup']['inline_keyboard'][0][0]['text'] ?? '') === "\u{3164}" && UI::blank() === "\u{3164}", 'falls back to the wide blank when telegram rejects the zero-width label');
 $GLOBALS['reject_blank'] = false;
 Cache::forget('btn_blank_wide');
+
+$prevHttp = Http::$fake;
+$GLOBALS['http']['api.blockchair.com/dash/dashboards/address/'] = fn($r) => ['data' => [basename($r['url']) => ['address' => ['balance' => 250000000, 'transaction_count' => 7]]]];
+$dw = Wallets::check('dash', 'XdashTestAddr1');
+$GLOBALS['http']['api.haskoin.com/bch/address/'] = ['address' => 'bitcoincash:qtest', 'confirmed' => 150000000, 'unconfirmed' => 50000000, 'txs' => 3];
+$bw = Wallets::check('bch', 'qtestaddr');
+check(($dw[0]['balance'] ?? 0) == 2.5 && ($dw[0]['txs'] ?? 0) == 7 && ($bw[0]['balance'] ?? 0) == 2.0 && ($bw[0]['symbol'] ?? '') === 'BCH', 'dash falls back to blockchair and bch to haskoin');
+unset($GLOBALS['http']['api.blockchair.com/dash/dashboards/address/'], $GLOBALS['http']['api.haskoin.com/bch/address/']);
+$gHits = 0;
+Http::$fake = function ($r) use ($prevHttp, &$gHits) {
+    if (str_contains($r['url'], 'translate.googleapis.com')) {
+        $gHits++;
+        return ['status' => 429, 'body' => '<html>Sorry...</html>'];
+    }
+    if (str_contains($r['url'], 'mymemory')) {
+        return ['status' => 200, 'body' => json_encode(['responseData' => ['translatedText' => 'Bonjour']])];
+    }
+    return $prevHttp($r);
+};
+Cache::forget('tr_google_cool');
+$t1 = Translate::run('Hello', 'fa');
+$t2 = Translate::run('Hello again', 'fa');
+Http::$fake = $prevHttp;
+Cache::forget('tr_google_cool');
+check($t1 === 'Bonjour' && $t2 === 'Bonjour' && $gHits === 1, 'translate skips google for a while after a 429 and uses the fallback');
+
+check(Pinterest::link('see https://pin.it/4AbCdEf ok') === 'https://pin.it/4AbCdEf' && Pinterest::link('https://www.pinterest.com/pin/123456789012/') !== null
+    && Pinterest::link('https://uk.pinterest.co.uk/pin/funny-cat--98765432101/') !== null && Pinterest::link('https://pinterest.com/user/board/') === null
+    && Pinterest::id('https://uk.pinterest.co.uk/pin/funny-cat--98765432101/') === '98765432101', 'pinterest links and ids');
+$pinApi = function ($r) {
+    $id = json_decode($r['params']['data'] ?? '{}', true)['options']['id'] ?? '';
+    $base = ['id' => $id, 'title' => 'Sunset <b>', 'description' => 'nice view', 'pinner' => ['username' => 'artist'], 'created_at' => 'Tue, 01 Sep 2025 01:10:33 +0000',
+        'aggregated_pin_data' => ['aggregated_stats' => ['saves' => 1234]]];
+    $pin = match ($id) {
+        '111111111' => $base + ['videos' => ['video_list' => ['V_HLSV4' => ['url' => 'https://v.pinimg.com/a.m3u8', 'width' => 1080], 'V_720P' => ['url' => 'https://v.pinimg.com/720.mp4', 'width' => 720], 'V_480P' => ['url' => 'https://v.pinimg.com/480.mp4', 'width' => 480]]]],
+        '222222222' => $base + ['images' => ['orig' => ['url' => 'https://i.pinimg.com/originals/x.jpg'], '736x' => ['url' => 'https://i.pinimg.com/736x/x.jpg']]],
+        '333333333' => $base + ['story_pin_data' => ['pages' => [['blocks' => [['image' => ['images' => ['originals' => ['url' => 'https://i.pinimg.com/originals/p1.jpg']]]]]],
+            ['blocks' => [['video' => ['video_list' => ['V_EXP7' => ['url' => 'https://v.pinimg.com/p2.mp4', 'width' => 720]]]]]]]]],
+        default => null,
+    };
+    return $pin ? ['resource_response' => ['data' => $pin]] : ['resource_response' => ['data' => null]];
+};
+$GLOBALS['http']['pinterest.com/resource/PinResource/get/'] = $pinApi;
+$GLOBALS['http']['pin.it/vid1'] = '<html><a href="https://www.pinterest.com/pin/111111111/sent/?x=1">x</a></html>';
+reset_calls();
+feed(msg('https://pin.it/vid1', -9100, 901));
+$pv = sent(['sendVideo']);
+check($pv && $pv[0][1]['video'] === 'https://v.pinimg.com/720.mp4' && str_contains($pv[0][1]['caption'], '@artist') && str_contains($pv[0][1]['caption'], '1,234')
+    && str_contains($pv[0][1]['caption'], 'Sunset &lt;b&gt;') && buttons($pv[0]), 'pinterest short link video in best mp4 with caption and button');
+reset_calls();
+feed(msg('https://www.pinterest.com/pin/222222222/', -9100, 902));
+$pp = sent(['sendPhoto']);
+check($pp && $pp[0][1]['photo'] === 'https://i.pinimg.com/originals/x.jpg', 'pinterest photo in original size');
+reset_calls();
+feed(msg('https://www.pinterest.com/pin/333333333/', -9100, 903));
+$pg = sent(['sendMediaGroup']);
+check($pg && count($pg[0][1]['media']) === 2 && $pg[0][1]['media'][1]['type'] === 'video', 'pinterest story pin as an album');
+reset_calls();
+feed(msg('https://www.pinterest.com/pin/444444444/', -9100, 904));
+check(str_contains((string)last_text(), 'پین پیدا نشد'), 'pinterest pin not found');
+unset($GLOBALS['http']['pinterest.com/resource/PinResource/get/'], $GLOBALS['http']['pin.it/vid1']);
 echo "passed: $pass, failed: $fail\n";
 exit($fail ? 1 : 0);

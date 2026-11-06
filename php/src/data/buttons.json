@@ -19,11 +19,6 @@
   "style": "success",
   "desc": "دکمه بررسی عضویت"
  },
- "btn_help": {
-  "text": "📖 راهنما",
-  "style": null,
-  "desc": "دکمه راهنما"
- },
  "lang_fa": {
   "text": "🇮🇷 𝗙𝗔",
   "style": "primary",
@@ -83,11 +78,6 @@
   "text": "🔊 رفع سکوت",
   "style": "success",
   "desc": "دکمه رفع سکوت (ادمین)"
- },
- "btn_explorer": {
-  "text": "🔎 اکسپلورر",
-  "style": null,
-  "desc": "دکمه اکسپلورر"
  },
  "btn_receiver_wallet": {
   "text": "👤 اطلاعات ولت مقصد",

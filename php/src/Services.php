@@ -301,9 +301,17 @@ final class Translate
 
     private static function google(string $t, string $tl): ?string
     {
+        if (Cache::get('tr_google_cool')) {
+            return null;
+        }
         $d = null;
         for ($try = 0; $try < 2 && !is_array($d); $try++) {
-            $d = Http::json('https://translate.googleapis.com/translate_a/single', ['params' => ['client' => 'gtx', 'sl' => 'auto', 'tl' => $tl, 'dt' => 't', 'q' => $t], 'timeout' => 10]);
+            $r = Http::request(['url' => 'https://translate.googleapis.com/translate_a/single', 'params' => ['client' => 'gtx', 'sl' => 'auto', 'tl' => $tl, 'dt' => 't', 'q' => $t], 'timeout' => 8]);
+            if ($r['status'] === 429) {
+                Cache::set('tr_google_cool', 1, 600);
+                return null;
+            }
+            $d = Http::decode($r);
         }
         if (!is_array($d) || !is_array($d[0] ?? null)) {
             return null;
@@ -745,6 +753,126 @@ final class Instagram
     {
         $d = self::call(['type' => 'gethightlight', 'id' => $id]);
         return $d ? array_values(array_map(fn($h) => ['url' => $h['highlite'], 'kind' => ($h['type'] ?? '') === 'video' ? 'video' : 'photo'], array_filter($d['result'] ?? [], fn($h) => !empty($h['highlite'])))) : null;
+    }
+}
+
+final class Pinterest
+{
+    const LINK = '~https?://(?:[a-z]{2,3}\.)?(?:www\.)?(?:pinterest\.[a-z]{2,3}(?:\.[a-z]{2})?/pin/[^\s/?#]+|pin\.it/[A-Za-z0-9]+)~i';
+    const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
+    public static array $meta = [];
+
+    public static function link(string $t): ?string
+    {
+        return preg_match(self::LINK, $t, $m) ? $m[0] : null;
+    }
+
+    public static function id(string $link): ?string
+    {
+        if (preg_match('~/pin/(?:[^/?#]*--)?(\d{5,})~', $link, $m)) {
+            return $m[1];
+        }
+        if (stripos($link, 'pin.it/') === false) {
+            return null;
+        }
+        $r = Http::request(['url' => $link, 'timeout' => 8, 'headers' => ['User-Agent' => self::UA]]);
+        foreach ([$r['final'] ?? '', $r['body']] as $hay) {
+            if (preg_match('~pinterest\.[a-z.]+/pin/(?:[^/?#"]*--)?(\d{5,})~', (string)$hay, $m)) {
+                return $m[1];
+            }
+        }
+        return null;
+    }
+
+    private static function fromPage(string $html, string $id): ?array
+    {
+        if (!preg_match_all('~<script[^>]*>(\{.*?\})</script>~s', $html, $mm)) {
+            return null;
+        }
+        foreach ($mm[1] as $js) {
+            if (!str_contains($js, 'initialReduxState')) {
+                continue;
+            }
+            $d = json_decode($js, true);
+            $pins = $d['props']['initialReduxState']['pins'] ?? $d['initialReduxState']['pins'] ?? null;
+            if (is_array($pins) && $pins) {
+                return $pins[$id] ?? reset($pins);
+            }
+        }
+        return null;
+    }
+
+    public static function pin(string $link): ?array
+    {
+        $id = self::id($link);
+        if (!$id) {
+            return null;
+        }
+        $data = json_encode(['options' => ['id' => $id, 'field_set_key' => 'detailed'], 'context' => new stdClass()]);
+        $h = ['User-Agent' => self::UA, 'Accept-Language' => 'en-US,en;q=0.9'];
+        $hit = Http::race([
+            'api' => ['url' => 'https://www.pinterest.com/resource/PinResource/get/', 'params' => ['source_url' => "/pin/$id/", 'data' => $data], 'timeout' => 8,
+                'headers' => $h + ['Accept' => 'application/json', 'X-Requested-With' => 'XMLHttpRequest', 'X-Pinterest-PWS-Handler' => 'www/pin/[id].js']],
+            'page' => ['url' => "https://www.pinterest.com/pin/$id/", 'timeout' => 8, 'headers' => $h + ['Accept' => 'text/html']],
+        ], function ($k, $d) use ($id) {
+            $p = $k === 'api' ? ($d['resource_response']['data'] ?? null) : (is_string($d) ? self::fromPage($d, $id) : null);
+            return is_array($p) && self::media($p) ? $p : null;
+        }, 9);
+        return $hit ? $hit[1] + ['id' => $id] : null;
+    }
+
+    private static function best(array $list): ?string
+    {
+        $url = null;
+        $w = -1;
+        foreach ($list as $v) {
+            $u = (string)($v['url'] ?? '');
+            if ($u !== '' && str_ends_with(strtolower(strtok($u, '?')), '.mp4') && (int)($v['width'] ?? 0) > $w) {
+                $w = (int)($v['width'] ?? 0);
+                $url = $u;
+            }
+        }
+        return $url;
+    }
+
+    public static function media(array $p): array
+    {
+        if ($u = self::best((array)($p['videos']['video_list'] ?? []))) {
+            return [['kind' => 'video', 'url' => $u]];
+        }
+        $items = [];
+        foreach ((array)($p['story_pin_data']['pages'] ?? []) as $pg) {
+            foreach ((array)($pg['blocks'] ?? []) as $b) {
+                if ($u = self::best((array)($b['video']['video_list'] ?? []))) {
+                    $items[] = ['kind' => 'video', 'url' => $u];
+                } elseif ($img = $b['image']['images']['originals']['url'] ?? $b['image']['images']['736x']['url'] ?? null) {
+                    $items[] = ['kind' => 'photo', 'url' => $img, 'alt' => $b['image']['images']['736x']['url'] ?? null];
+                }
+            }
+        }
+        if (!$items) {
+            foreach ((array)($p['carousel_data']['carousel_slots'] ?? []) as $sl) {
+                if ($img = $sl['images']['orig']['url'] ?? $sl['images']['736x']['url'] ?? null) {
+                    $items[] = ['kind' => 'photo', 'url' => $img, 'alt' => $sl['images']['736x']['url'] ?? null];
+                }
+            }
+        }
+        if (!$items && ($img = $p['images']['orig']['url'] ?? $p['images']['736x']['url'] ?? null)) {
+            $items[] = ['kind' => 'photo', 'url' => $img, 'alt' => $p['images']['736x']['url'] ?? null];
+        }
+        return array_slice($items, 0, 10);
+    }
+
+    public static function info(array $p): array
+    {
+        $text = trim((string)($p['description'] ?? '') ?: (string)($p['closeup_unified_description'] ?? ''));
+        return [
+            'title' => trim((string)($p['title'] ?? '') ?: (string)($p['grid_title'] ?? '')),
+            'owner' => $p['pinner']['username'] ?? $p['native_creator']['username'] ?? null,
+            'saves' => $p['aggregated_pin_data']['aggregated_stats']['saves'] ?? $p['repin_count'] ?? null,
+            'date' => !empty($p['created_at']) ? (strtotime((string)$p['created_at']) ?: null) : null,
+            'text' => $text,
+        ];
     }
 }
 
