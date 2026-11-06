@@ -176,7 +176,7 @@
   "desc": "اطلاعات پیج اینستاگرام ({id} {name} {username} {followers} {following} {posts} {verified} {private} {bio})"
  },
  "bot_off": {
-  "text": "⛔️ ربات در حال حاضر خاموش است.",
+  "text": "⛔️ ربات برای بروزرسانی موقتاً خاموش است. کمی بعد دوباره امتحان کنید.",
   "desc": "ربات خاموش"
  },
  "banned": {
@@ -196,8 +196,8 @@
   "desc": "قیمت لینک گیفت ({name} {number} {model} {model_rarity} {backdrop} {backdrop_rarity} {symbol} {symbol_rarity} {owner} {quantity} {floor_ton} {model_floor} {backdrop_floor} {symbol_floor} {est_ton} {est_usd} {est_toman} {est_stars} {link})"
  },
  "gift_user_caption": {
-  "text": "🎁 <b>کلکسیون گیفت {name}</b>\n\n<blockquote>🔢    تعداد: <b>{count}</b> (یونیک: {unique_count})</blockquote>\n{pl_line}\n{change_line}\n<blockquote>{ton_icon}    ارزش کل: <code>{total_ton}</code> TON</blockquote>\n<blockquote>{usd_icon}    ارزش دلاری: <code>{total_usd}</code> $</blockquote>\n<blockquote>{toman_icon}    ارزش تومانی: <code>{total_toman}</code> تومان</blockquote>\n<blockquote>{links}</blockquote>\n🗓 {time}",
-  "desc": "کپشن کارت گیفت‌های کاربر ({name} {count} {unique_count} {total_ton} {total_usd} {total_toman} {pl_line} {change_line} {links})"
+  "text": "🎁 <b>کلکسیون گیفت {name}</b>\n\n<blockquote>🔢    تعداد گیفت یونیک: <b>{count}</b></blockquote>\n{pl_line}\n{change_line}\n<blockquote>{ton_icon}    ارزش کل: <code>{total_ton}</code> TON</blockquote>\n<blockquote>{usd_icon}    ارزش دلاری: <code>{total_usd}</code> $</blockquote>\n<blockquote>{toman_icon}    ارزش تومانی: <code>{total_toman}</code> تومان</blockquote>\n<blockquote>{links}</blockquote>\n🗓 {time}",
+  "desc": "کپشن کارت گیفت‌های کاربر ({name} {count} {total_ton} {total_usd} {total_toman} {pl_line} {change_line} {links})"
  },
  "gift_profit": {
   "text": "📈 سود ۷ روز اخیر بازار: <b>+{ton} TON</b> (+{percent}%) ≈ {toman} ت",
@@ -212,7 +212,7 @@
   "desc": "تغییر نسبت به چک قبلی"
  },
  "gift_user_none": {
-  "text": "📭 هیچ گیفت عمومی برای {name} پیدا نشد.",
+  "text": "📭 هیچ گیفت یونیک عمومی برای {name} پیدا نشد.",
   "desc": "کاربر گیفت ندارد ({name})"
  },
  "gift_user_unknown": {
@@ -442,30 +442,6 @@
  "dm_top_none": {
   "text": "💎 هنوز کسی الماس نزده است.",
   "desc": "برترین خالی"
- },
- "dm_jail_hit": {
-  "text": "🚨 {name} به دام افتاد و باید بره زندان!\n👥 {need} نفر از اعضا باید تاییدش کنن.",
-  "desc": "شروع زندان ({name} {need})"
- },
- "dm_jail_prog": {
-  "text": "🚨 {name} به دام افتاد و باید بره زندان!\n✅ {got} از {need} نفر تایید کردن.",
-  "desc": "پیشرفت زندان ({name} {got} {need})"
- },
- "dm_jail_done": {
-  "text": "🔒 {name} به زندان افتاد!\n⏳ به مدت {dur} نمی‌تواند الماس بزند.",
-  "desc": "زندانی شد ({name} {dur})"
- },
- "dm_jail_self": {
-  "text": "نمی‌تونی خودتو بفرستی زندان",
-  "desc": "زندان خود"
- },
- "dm_jail_twice": {
-  "text": "قبلا تایید کرده بودی.",
-  "desc": "تایید تکراری"
- },
- "dm_jail_wait": {
-  "text": "⛔️ {name}، الان زندانی‌ای!\n⏳ {m} دقیقه و {s} ثانیه دیگر آزاد می‌شوی.",
-  "desc": "در زندان ({name} {m} {s})"
  },
  "gm_group_only": {
   "text": "🎮 بازی‌ها فقط داخل گروه کار می‌کنند.",

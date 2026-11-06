@@ -132,7 +132,7 @@
   "text": "📸 <b>Instagram page info</b>\n\n<blockquote>🆔 ID: <code>{id}</code>\n👤 Name: <b>{name}</b>\n🔗 Username: <code>{username}</code>\n👥 Followers: <code>{followers}</code>\n👀 Following: <code>{following}</code>\n🖼 Posts: <code>{posts}</code>\n✅ Verified: {verified}\n🔒 Private: {private}</blockquote>\n📝 Bio:\n<blockquote expandable>{bio}</blockquote>"
  },
  "bot_off": {
-  "text": "⛔️ The bot is currently turned off."
+  "text": "⛔️ The bot is off for an update. Please try again shortly."
  },
  "banned": {
   "text": "⛔️ You are banned from the bot."
@@ -147,7 +147,7 @@
   "text": "🎁 <b>{name} #{number}</b>\n\n<blockquote>🎨 Model: <b>{model}</b> {model_rarity}\n🖼 Backdrop: <b>{backdrop}</b> {backdrop_rarity}\n✨ Symbol: <b>{symbol}</b> {symbol_rarity}\n👤 Owner: {owner}\n🔢 Issued: {quantity}</blockquote>\n<blockquote>📉 Collection floor: <code>{floor_ton}</code> TON\n🎨 Model floor: <code>{model_floor}</code> TON\n🖼 Backdrop floor: <code>{backdrop_floor}</code> TON\n✨ Symbol floor: <code>{symbol_floor}</code> TON</blockquote>\n🏷 <b>Estimated value:</b>\n<blockquote>{ton_icon} <code>{est_ton}</code> TON\n{usd_icon} <code>{est_usd}</code> $</blockquote>\n{toman_icon} <code>{est_toman}</code> Toman\n⭐️ <code>{est_stars}</code> Stars\n<blockquote>🔗 {link}</blockquote>"
  },
  "gift_user_caption": {
-  "text": "🎁 <b>Gift collection of {name}</b>\n\n<blockquote>🔢 Gifts: <b>{count}</b> (unique: {unique_count})</blockquote>\n{pl_line}\n{change_line}\n<blockquote>{ton_icon} Total value: <code>{total_ton}</code> TON</blockquote>\n<blockquote>{usd_icon} USD value: <code>{total_usd}</code> $</blockquote>\n<blockquote>{toman_icon} Toman value: <code>{total_toman}</code> Toman</blockquote>\n<blockquote>{links}</blockquote>\n🗓 {time}"
+  "text": "🎁 <b>Gift collection of {name}</b>\n\n<blockquote>🔢 Unique gifts: <b>{count}</b></blockquote>\n{pl_line}\n{change_line}\n<blockquote>{ton_icon} Total value: <code>{total_ton}</code> TON</blockquote>\n<blockquote>{usd_icon} USD value: <code>{total_usd}</code> $</blockquote>\n<blockquote>{toman_icon} Toman value: <code>{total_toman}</code> Toman</blockquote>\n<blockquote>{links}</blockquote>\n🗓 {time}"
  },
  "gift_profit": {
   "text": "📈 Market profit, last 7 days: <b>+{ton} TON</b> (+{percent}%) ≈ {toman} T"
@@ -159,7 +159,7 @@
   "text": "🔄 Since the last check: <b>{sign}{ton} TON</b> ({sign}{percent}%)"
  },
  "gift_user_none": {
-  "text": "📭 No public gifts were found for {name}."
+  "text": "📭 No public unique gifts were found for {name}."
  },
  "gift_user_unknown": {
   "text": "❌ I couldn't find this user.\n💬 The user must have written at least once in a group with the bot, or started the bot.\n💡 You can reply to their message and send <code>/gift</code>."
@@ -331,24 +331,6 @@
  },
  "dm_top_none": {
   "text": "💎 Nobody has mined diamonds yet."
- },
- "dm_jail_hit": {
-  "text": "🚨 {name} got caught and has to go to jail!\n👥 {need} members must confirm it."
- },
- "dm_jail_prog": {
-  "text": "🚨 {name} got caught and has to go to jail!\n✅ {got} of {need} confirmed."
- },
- "dm_jail_done": {
-  "text": "🔒 {name} went to jail!\n⏳ Can't mine diamonds for {dur}."
- },
- "dm_jail_self": {
-  "text": "You can't send yourself to jail"
- },
- "dm_jail_twice": {
-  "text": "You already confirmed."
- },
- "dm_jail_wait": {
-  "text": "⛔️ {name}, you're in jail right now!\n⏳ You'll be free in {m} min {s} sec."
  },
  "gm_group_only": {
   "text": "🎮 Games only work inside groups."

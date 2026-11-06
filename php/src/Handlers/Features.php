@@ -188,7 +188,7 @@ final class GiftsH
         $total = 0;
         $offset = null;
         for ($i = 0; $i < 4; $i++) {
-            $p = ['limit' => 100] + ($offset ? ['offset' => $offset] : []);
+            $p = ['limit' => 100, 'exclude_unlimited' => true, 'exclude_limited_upgradable' => true, 'exclude_limited_non_upgradable' => true] + ($offset ? ['offset' => $offset] : []);
             $r = $t['kind'] === 'chat' ? TG::api('getChatGifts', ['chat_id' => $t['id']] + $p) : TG::api('getUserGifts', ['user_id' => $t['id']] + $p);
             self::tick();
             if ($r === null) {
@@ -215,13 +215,6 @@ final class GiftsH
     private static function portfolio(array $m, array $t): void
     {
         $extra = Bot::isPrivate($m) ? [] : ['reply_parameters' => Bot::replyParams($m)];
-        $ck = 'gpc:' . ($t['kind'] ?? '') . ':' . ($t['id'] ?? '') . (UI::$lang !== 'fa' ? ':' . UI::$lang : '');
-        $hit = Cache::get($ck);
-        if (!empty($hit['f']) && TG::photo($m['chat']['id'], $hit['f'], $hit['c'], UI::footer(), $extra) !== null) {
-            Perf::mark('cached');
-            Perf::flush('gift');
-            return;
-        }
         self::$wait ??= Waiter::start($m, 'gift_wait');
         $res = self::owned($t);
         self::tick();
@@ -231,7 +224,8 @@ final class GiftsH
             self::say($m, UI::t('gift_user_unknown'));
             return;
         }
-        [$owned, $count] = $res;
+        $owned = array_values(array_filter($res[0], fn($og) => ($og['type'] ?? '') === 'unique'));
+        $count = count($owned);
         if (!$owned) {
             self::say($m, UI::t('gift_user_none', ['name' => UI::esc($t['name'])]));
             return;
@@ -242,43 +236,26 @@ final class GiftsH
         $ds = Gifts::dataset();
         self::tick();
         Perf::mark('dataset');
-        Gifts::prefetch(array_map(fn($og) => (string)($og['gift']['base_name'] ?? ''), array_filter($owned, fn($og) => ($og['type'] ?? '') === 'unique')));
+        Gifts::prefetch(array_map(fn($og) => (string)($og['gift']['base_name'] ?? ''), $owned));
         self::tick();
         Perf::mark('floors');
-        $starTon = $tonUsd ? Prices::starUsd() / $tonUsd : null;
         $tiles = [];
         $now = 0.0;
         $then = 0.0;
-        $unique = 0;
         foreach ($owned as $og) {
             $g = $og['gift'] ?? [];
-            if (($og['type'] ?? '') === 'unique') {
-                $unique++;
-                $v = Gifts::valueOf($g['base_name'] ?? '', $g['model']['name'] ?? null, $g['backdrop']['name'] ?? null, $g['symbol']['name'] ?? null);
-                $val = $v['estimate'];
-                if (!$val && !empty($og['value_usd']) && $tonUsd) {
-                    $val = $og['value_usd'] / $tonUsd;
-                }
-                if ($val) {
-                    $now += $val;
-                    $then += $val * (($v['floor'] && $v['floor_7d']) ? $v['floor_7d'] / $v['floor'] : 1.0);
-                }
-                $c = $g['backdrop']['colors'] ?? [];
-                $tiles[] = ['title' => ($g['base_name'] ?? 'Gift') . ' #' . ($g['number'] ?? ''), 'subtitle' => implode(' • ', array_filter([$g['model']['name'] ?? null, $g['backdrop']['name'] ?? null])),
-                    'value' => $val, 'center' => self::rgb($c['center_color'] ?? null, [90, 110, 200]), 'edge' => self::rgb($c['edge_color'] ?? null, [30, 30, 60]), 'name' => $g['name'] ?? null];
-            } else {
-                $info = $ds['unupgraded'][(string)($g['id'] ?? '')] ?? null;
-                $val = !empty($info['price_ton']) ? (float)$info['price_ton'] : null;
-                if ($val === null && $starTon) {
-                    $stars = $og['convert_star_count'] ?? $g['star_count'] ?? 0;
-                    $val = $stars ? $stars * $starTon : null;
-                }
-                if ($val) {
-                    $now += $val;
-                    $then += $val;
-                }
-                $tiles[] = ['title' => $info['full_name'] ?? 'Star Gift', 'subtitle' => ($g['star_count'] ?? 0) . ' Stars' . (!empty($g['total_count']) ? ' • Limited' : ''), 'value' => $val, 'name' => null];
+            $v = Gifts::valueOf($g['base_name'] ?? '', null, null, null);
+            $val = $v['floor'];
+            if (!$val && !empty($og['value_usd']) && $tonUsd) {
+                $val = $og['value_usd'] / $tonUsd;
             }
+            if ($val) {
+                $now += $val;
+                $then += $v['floor'] && $v['floor_7d'] ? $v['floor_7d'] : $val;
+            }
+            $c = $g['backdrop']['colors'] ?? [];
+            $tiles[] = ['title' => ($g['base_name'] ?? 'Gift') . ' #' . ($g['number'] ?? ''), 'subtitle' => implode(' • ', array_filter([$g['model']['name'] ?? null, $g['backdrop']['name'] ?? null])),
+                'value' => $val, 'center' => self::rgb($c['center_color'] ?? null, [90, 110, 200]), 'edge' => self::rgb($c['edge_color'] ?? null, [30, 30, 60]), 'name' => $g['name'] ?? null];
         }
         usort($tiles, fn($a, $b) => ($b['value'] ?? 0) <=> ($a['value'] ?? 0));
         Perf::mark('values');
@@ -287,6 +264,13 @@ final class GiftsH
         Perf::mark('images');
         foreach ($imgs as $i => $bytes) {
             $tiles[$i]['image'] = $bytes;
+        }
+        $ck = 'gpc:' . md5(json_encode([$t['id'] ?? 0, array_map(fn($x) => [$x['title'], round((float)$x['value'], 3)], $tiles), date('YmdHi'), UI::$lang]));
+        $hit = Cache::get($ck);
+        if (!empty($hit['f']) && TG::photo($m['chat']['id'], $hit['f'], $hit['c'], UI::footer(), $extra) !== null) {
+            Perf::mark('cached');
+            Perf::flush('gift');
+            return;
         }
         $pl = $then ? $now - $then : null;
         $pct = ($pl !== null && $then) ? $pl / $then * 100 : null;
@@ -311,7 +295,7 @@ final class GiftsH
         }
         for ($n = count($top); $n >= 0; $n--) {
             $links = array_slice($top, 0, $n);
-            $caption = UI::t('gift_user_caption', ['name' => UI::esc($t['name']), 'count' => Fmt::int($count), 'unique_count' => Fmt::int($unique),
+            $caption = UI::t('gift_user_caption', ['name' => UI::esc($t['name']), 'count' => Fmt::int($count),
                 'total_ton' => Fmt::num($now), 'total_usd' => $tonUsd ? Fmt::usd($now * $tonUsd) : '—', 'total_toman' => $tonToman ? Fmt::toman($now * $tonToman) : '—',
                 'pl_line' => $plLine, 'change_line' => $change, 'links' => $links ? implode("\n", array_map(fn($l) => "🔗 $l", $links)) : null, 'time' => Fmt::now()]);
             if (UI::textLen($caption) <= 1000) {
@@ -321,7 +305,7 @@ final class GiftsH
         $sent = TG::photo($m['chat']['id'], $png, $caption, UI::footer(), $extra);
         $ph = $sent['photo'] ?? [];
         if ($ph && !empty(end($ph)['file_id'])) {
-            Cache::set($ck, ['f' => end($ph)['file_id'], 'c' => $caption], 1800);
+            Cache::set($ck, ['f' => end($ph)['file_id'], 'c' => $caption], 120);
         }
         Perf::mark('sent');
         Perf::flush('gift');

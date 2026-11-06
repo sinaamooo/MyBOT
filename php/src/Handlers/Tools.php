@@ -410,7 +410,7 @@ final class Tools
         $text = UI::t('account', [
             'name' => UI::mention($t), 'id' => $t['id'], 'username' => UI::uname($t['username'] ?? null),
             'premium_icon' => UI::badge('PREMIUM', '💫'), 'premium' => UI::l(!empty($t['is_premium']) ? '✅   دارد' : '❌   ندارد'), 'level' => $level,
-            'created' => Fmt::jalaliLong(Account::created((int)$t['id'])), 'dc' => $dc ? "DC$dc • " . (Account::DC[$dc] ?? '') : null,
+            'created' => '≈ ' . Fmt::monthYear(min(time(), Account::created((int)$t['id']))), 'dc' => $dc ? "DC$dc • " . (Account::DC[$dc] ?? '') : null,
             'lang' => !empty($t['language_code']) ? strtoupper($t['language_code']) : null, 'birthdate' => $bd,
             'bio' => !empty($info['bio']) ? UI::esc($info['bio']) : null, 'gifts' => $gifts ? Fmt::int($gifts['total_count'] ?? 0) : null,
             'diamonds' => Fmt::int($pts = Diamonds::points((int)$t['id'])), 'dlevel' => Diamonds::level($pts),

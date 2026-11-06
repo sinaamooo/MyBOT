@@ -8,9 +8,6 @@ final class Diamonds
     const MIN = 20;
     const CAP = 1000000000;
     const STEP = 10000;
-    const JAIL_WORDS = ['میو', 'هاپ'];
-    const JAIL_NEED = 3;
-    const JAIL_SECS = 3600;
 
     public static function get(int $uid): ?array
     {
@@ -104,12 +101,6 @@ final class Diamonds
         self::ensure($uid);
         self::touch((int)$m['chat']['id'], $uid);
         Cache::set("nm:$uid", ['name' => UI::fullName($u), 'username' => $u['username'] ?? null], 86400);
-        $row = self::get($uid);
-        $jail = (int)$row['jailed_until'] - $now;
-        if ($jail > 0) {
-            Bot::reply($m, UI::t('dm_jail_wait', ['name' => self::name($u), 'm' => intdiv($jail, 60), 's' => $jail % 60]), null);
-            return;
-        }
         $pdo = DB::pdo();
         $pdo->exec('BEGIN IMMEDIATE');
         try {
@@ -336,59 +327,6 @@ final class Diamonds
         TG::answer($cq['id'], UI::plain('dm_account_alert', ['points' => Fmt::int($pts), 'level' => self::level($pts), 'rank' => $rank ? Fmt::int($rank) : '—',
             'total' => Fmt::int($row['total'] ?? 0)]), true);
     }
-
-    private static function jailKb(string $id): array
-    {
-        $b = UI::button('btn_jail', ['cb' => "gj:$id"]);
-        return UI::kb(array_chunk(array_fill(0, self::JAIL_NEED, $b), 2));
-    }
-
-    public static function jailStart(array $m): void
-    {
-        $u = $m['from'];
-        $chat = (int)$m['chat']['id'];
-        $live = DB::one('SELECT COUNT(*) c, SUM(target=?) mine FROM jails WHERE chat=? AND created>?', [$u['id'], $chat, time() - 600]);
-        if ((int)($live['mine'] ?? 0) > 0 || (int)($live['c'] ?? 0) >= 5) {
-            return;
-        }
-        $id = bin2hex(random_bytes(4));
-        DB::q('INSERT INTO jails(id, chat, target, name, msg, confirmed, created) VALUES(?, ?, ?, ?, 0, ?, ?)', [$id, $chat, $u['id'], UI::fullName($u), '[]', time()]);
-        $sent = Bot::send($m, UI::t('dm_jail_hit', ['name' => self::name($u), 'need' => self::JAIL_NEED]), self::jailKb($id));
-        if (!empty($sent['message_id'])) {
-            DB::q('UPDATE jails SET msg=? WHERE id=?', [$sent['message_id'], $id]);
-        }
-    }
-
-    public static function jailCb(array $cq, string $id): void
-    {
-        $uid = (int)$cq['from']['id'];
-        $j = DB::one('SELECT * FROM jails WHERE id=?', [$id]);
-        if (!$j || time() - (int)$j['created'] > 3600) {
-            TG::answer($cq['id'], UI::l('این دیگر معتبر نیست.'), true);
-            return;
-        }
-        if ((int)$j['target'] === $uid) {
-            TG::answer($cq['id'], UI::plain('dm_jail_self'), true);
-            return;
-        }
-        $conf = json_decode($j['confirmed'], true) ?: [];
-        if (in_array($uid, $conf, true)) {
-            TG::answer($cq['id'], UI::plain('dm_jail_twice'), true);
-            return;
-        }
-        $conf[] = $uid;
-        TG::answer($cq['id'], '✅');
-        $name = UI::esc($j['name']);
-        if (count($conf) >= self::JAIL_NEED) {
-            DB::q('DELETE FROM jails WHERE id=?', [$id]);
-            self::ensure((int)$j['target']);
-            DB::q('UPDATE diamonds SET jailed_until=? WHERE id=?', [time() + self::JAIL_SECS, $j['target']]);
-            TG::edit((int)$j['chat'], (int)$j['msg'], UI::t('dm_jail_done', ['name' => $name, 'dur' => Fmt::duration(intdiv(self::JAIL_SECS, 60))]), null);
-            return;
-        }
-        DB::q('UPDATE jails SET confirmed=? WHERE id=?', [json_encode($conf), $id]);
-        TG::edit((int)$j['chat'], (int)$j['msg'], UI::t('dm_jail_prog', ['name' => $name, 'got' => count($conf), 'need' => self::JAIL_NEED]), self::jailKb($id));
-    }
 }
 
 final class Games
@@ -441,12 +379,11 @@ final class Games
         $t = self::norm($text);
         $priv = Bot::isPrivate($m);
         $hit = in_array($t, self::WORDS_DIAMOND, true);
-        $jail = in_array($t, self::norms(Diamonds::JAIL_WORDS), true);
         $dooz = self::amount($text, self::DOOZ);
         $mine = self::amount($text, self::MINE);
         $bareDooz = in_array($t, self::DOOZ, true);
         $bareMine = in_array($t, self::MINE, true);
-        if ($priv && ($hit || $jail || $dooz || $mine || $bareDooz || $bareMine)) {
+        if ($priv && ($hit || $dooz || $mine || $bareDooz || $bareMine)) {
             Bot::reply($m, UI::t('gm_group_only'), null);
             return true;
         }
@@ -467,10 +404,6 @@ final class Games
         }
         if ($hit) {
             Diamonds::hit($m);
-            return true;
-        }
-        if ($jail) {
-            Diamonds::jailStart($m);
             return true;
         }
         if ($bareDooz) {
@@ -1046,6 +979,5 @@ final class Games
         }
         UI::$lang = $was;
         DB::q("DELETE FROM games WHERE status NOT IN ('open','playing','waiting','active') AND created < ?", [$now - 3 * 86400]);
-        DB::q('DELETE FROM jails WHERE created < ?', [$now - 3600]);
     }
 }

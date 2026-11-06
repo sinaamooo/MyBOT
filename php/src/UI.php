@@ -482,6 +482,12 @@ final class UI
             }
         }
         unset($line);
+        if (self::$lang === 'fa' && isset($lines[0]) && !str_starts_with($lines[0], "\u{200F}") && preg_match('/<blockquote[^>]*>(?:(?!<\/blockquote>).)*?\p{Arabic}/su', $html)) {
+            $first = html_entity_decode(strip_tags(preg_replace('/<tg-emoji[^>]*>.*?<\/tg-emoji>/u', '', $lines[0])), ENT_QUOTES, 'UTF-8');
+            if (!preg_match('/\p{L}/u', $first, $lm) || !preg_match('/\p{Arabic}/u', $lm[0])) {
+                $lines[0] = "\u{200F}" . $lines[0];
+            }
+        }
         return implode("\n", $lines);
     }
 

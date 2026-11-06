@@ -139,6 +139,19 @@ final class Fmt
         return self::fa("$dd " . self::MONTHS[$m - 1] . " $y");
     }
 
+    public static function monthYear(int $ts): string
+    {
+        $d = self::tehran($ts);
+        if (UI::$lang === 'ru') {
+            return ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь', 'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь'][(int)$d->format('n') - 1] . ' ' . $d->format('Y');
+        }
+        if (UI::$lang === 'en') {
+            return $d->format('M Y');
+        }
+        [$y, $m] = self::jalaliParts((int)$d->format('Y'), (int)$d->format('n'), (int)$d->format('j'));
+        return self::fa(self::MONTHS[$m - 1] . " $y");
+    }
+
     public static function now(): string
     {
         return self::jalali();

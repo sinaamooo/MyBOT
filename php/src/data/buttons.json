@@ -119,11 +119,6 @@
   "style": "primary",
   "desc": "لینک یوزرنیم در فرگمنت"
  },
- "btn_jail": {
-  "text": "🔒 بفرستش زندان",
-  "style": "danger",
-  "desc": "دکمه زندان الماس"
- },
  "btn_gm_join": {
   "text": "✅ پیوستن",
   "style": "success",

@@ -132,7 +132,7 @@
   "text": "📸 <b>Информация о странице Instagram</b>\n\n<blockquote>🆔 ID: <code>{id}</code>\n👤 Имя: <b>{name}</b>\n🔗 Юзернейм: <code>{username}</code>\n👥 Подписчики: <code>{followers}</code>\n👀 Подписки: <code>{following}</code>\n🖼 Посты: <code>{posts}</code>\n✅ Галочка: {verified}\n🔒 Закрытый: {private}</blockquote>\n📝 Био:\n<blockquote expandable>{bio}</blockquote>"
  },
  "bot_off": {
-  "text": "⛔️ Бот сейчас выключен."
+  "text": "⛔️ Бот временно выключен для обновления. Попробуйте чуть позже."
  },
  "banned": {
   "text": "⛔️ Вы заблокированы в боте."
@@ -147,7 +147,7 @@
   "text": "🎁 <b>{name} #{number}</b>\n\n<blockquote>🎨 Модель: <b>{model}</b> {model_rarity}\n🖼 Фон: <b>{backdrop}</b> {backdrop_rarity}\n✨ Символ: <b>{symbol}</b> {symbol_rarity}\n👤 Владелец: {owner}\n🔢 Выпущено: {quantity}</blockquote>\n<blockquote>📉 Флор коллекции: <code>{floor_ton}</code> TON\n🎨 Флор модели: <code>{model_floor}</code> TON\n🖼 Флор фона: <code>{backdrop_floor}</code> TON\n✨ Флор символа: <code>{symbol_floor}</code> TON</blockquote>\n🏷 <b>Оценочная стоимость:</b>\n<blockquote>{ton_icon} <code>{est_ton}</code> TON\n{usd_icon} <code>{est_usd}</code> $</blockquote>\n{toman_icon} <code>{est_toman}</code> томан\n⭐️ <code>{est_stars}</code> Stars\n<blockquote>🔗 {link}</blockquote>"
  },
  "gift_user_caption": {
-  "text": "🎁 <b>Коллекция подарков {name}</b>\n\n<blockquote>🔢 Подарков: <b>{count}</b> (уникальных: {unique_count})</blockquote>\n{pl_line}\n{change_line}\n<blockquote>{ton_icon} Общая стоимость: <code>{total_ton}</code> TON</blockquote>\n<blockquote>{usd_icon} В долларах: <code>{total_usd}</code> $</blockquote>\n<blockquote>{toman_icon} В томанах: <code>{total_toman}</code> томан</blockquote>\n<blockquote>{links}</blockquote>\n🗓 {time}"
+  "text": "🎁 <b>Коллекция подарков {name}</b>\n\n<blockquote>🔢 Уникальных подарков: <b>{count}</b></blockquote>\n{pl_line}\n{change_line}\n<blockquote>{ton_icon} Общая стоимость: <code>{total_ton}</code> TON</blockquote>\n<blockquote>{usd_icon} В долларах: <code>{total_usd}</code> $</blockquote>\n<blockquote>{toman_icon} В томанах: <code>{total_toman}</code> томан</blockquote>\n<blockquote>{links}</blockquote>\n🗓 {time}"
  },
  "gift_profit": {
   "text": "📈 Прибыль рынка за 7 дней: <b>+{ton} TON</b> (+{percent}%) ≈ {toman} T"
@@ -159,7 +159,7 @@
   "text": "🔄 С прошлой проверки: <b>{sign}{ton} TON</b> ({sign}{percent}%)"
  },
  "gift_user_none": {
-  "text": "📭 Публичных подарков у {name} не найдено."
+  "text": "📭 Публичных уникальных подарков у {name} не найдено."
  },
  "gift_user_unknown": {
   "text": "❌ Не удалось найти этого пользователя.\n💬 Пользователь должен хотя бы раз написать в группе с ботом или запустить бота.\n💡 Можно ответить на его сообщение и отправить <code>/gift</code>."
@@ -331,24 +331,6 @@
  },
  "dm_top_none": {
   "text": "💎 Пока никто не добывал алмазы."
- },
- "dm_jail_hit": {
-  "text": "🚨 {name} попался и должен отправиться в тюрьму!\n👥 {need} участников должны подтвердить."
- },
- "dm_jail_prog": {
-  "text": "🚨 {name} попался и должен отправиться в тюрьму!\n✅ Подтвердили {got} из {need}."
- },
- "dm_jail_done": {
-  "text": "🔒 {name} отправлен в тюрьму!\n⏳ Не может добывать алмазы {dur}."
- },
- "dm_jail_self": {
-  "text": "Нельзя отправить себя в тюрьму"
- },
- "dm_jail_twice": {
-  "text": "Вы уже подтвердили."
- },
- "dm_jail_wait": {
-  "text": "⛔️ {name}, вы сейчас в тюрьме!\n⏳ Освобождение через {m} мин {s} сек."
  },
  "gm_group_only": {
   "text": "🎮 Игры работают только в группах."

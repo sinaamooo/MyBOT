@@ -156,7 +156,6 @@ CREATE INDEX IF NOT EXISTS idx_diamonds_points ON diamonds(points DESC);
 CREATE TABLE IF NOT EXISTS games (id TEXT PRIMARY KEY, kind TEXT, status TEXT, host INTEGER, chat INTEGER, created INTEGER, data TEXT);
 CREATE INDEX IF NOT EXISTS idx_games_status ON games(status, created);
 CREATE INDEX IF NOT EXISTS idx_games_host ON games(host, kind, status);
-CREATE TABLE IF NOT EXISTS jails (id TEXT PRIMARY KEY, chat INTEGER, target INTEGER, name TEXT, msg INTEGER, confirmed TEXT, created INTEGER);
 CREATE TABLE IF NOT EXISTS members (chat INTEGER NOT NULL, uid INTEGER NOT NULL, at INTEGER NOT NULL, PRIMARY KEY (chat, uid));
 CREATE INDEX IF NOT EXISTS idx_members_at ON members(at);
 SQL);

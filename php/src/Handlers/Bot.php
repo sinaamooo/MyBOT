@@ -10,7 +10,7 @@ final class Bot
         'fj:' => ['Bot', 'forceJoinCheck'], 'unmute:' => ['Bot', 'unmuteCb'], 'tr:' => ['Tools', 'translateCb'], 'gs:' => ['Groups', 'toggle'], 'ul:' => ['Start', 'langCb'], 'md:' => ['Moderation', 'cb'],
         'scam:' => ['Scam', 'buttons'], 'scamadm:' => ['Scam', 'decision'], 'adm:' => ['Admin', 'callback'], 'wl:' => ['Tools', 'walletButton'],
         'tt:' => ['Tools', 'transfers'], 'tp:' => ['Tools', 'transfers'], 'is:' => ['Extras', 'story'],
-        'ih:' => ['Extras', 'highlights'], 'hi:' => ['Extras', 'highlightItems'], 'gd:' => ['Games', 'doozCb'], 'gn:' => ['Games', 'mineCb'], 'gj:' => ['Diamonds', 'jailCb'], 'gb:' => ['Diamonds', 'accountCb'],
+        'ih:' => ['Extras', 'highlights'], 'hi:' => ['Extras', 'highlightItems'], 'gd:' => ['Games', 'doozCb'], 'gn:' => ['Games', 'mineCb'], 'gb:' => ['Diamonds', 'accountCb'],
     ];
 
     public static function handle(array $u): void
@@ -490,6 +490,10 @@ final class Bot
     private static function message(array $m): void
     {
         self::track($m);
+        if (!Settings::get('bot_enabled') && isset($m['from']) && !Config::isAdmin($m['from']['id'])) {
+            self::access($m['from'], $m, null);
+            return;
+        }
         $priv = self::isPrivate($m);
         if ($priv && !self::forceJoinPrivate($m)) {
             return;

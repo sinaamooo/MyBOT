@@ -102,9 +102,15 @@ final class Admin
         return mb_strlen($d) > 28 ? mb_substr($d, 0, 27) . '…' : $d;
     }
 
+    private static function powerBtn(string $to): array
+    {
+        return Settings::get('bot_enabled') ? UI::raw('🔴 خاموش کردن کل ربات', "adm:power:$to", 'danger') : UI::raw('🟢 روشن کردن کل ربات', "adm:power:$to", 'success');
+    }
+
     public static function homeKb(): array
     {
         return UI::kb([
+            [self::powerBtn('home')],
             [UI::raw('📊 آمار کاربران', 'adm:stats', 'primary'), UI::raw('👥 گروه‌ها', 'adm:groups:0', 'primary')],
             [UI::raw('🔍 جستجوی کاربر', 'adm:find')],
             [UI::raw('⛔️ مسدود / آزاد', 'adm:ban', 'danger'), UI::raw('⛔️ حذف کاربر', 'adm:del', 'danger')],
@@ -589,8 +595,12 @@ final class Admin
                 return;
             case 'power':
                 Settings::set('bot_enabled', !Settings::get('bot_enabled'));
-                TG::answer($cq['id'], Settings::get('bot_enabled') ? '🟢' : '🔴');
-                TG::api('editMessageReplyMarkup', ['chat_id' => $chat, 'message_id' => $cq['message']['message_id'], 'reply_markup' => self::homeKb()]);
+                TG::answer($cq['id'], Settings::get('bot_enabled') ? '🟢 ربات روشن شد' : '🔴 ربات خاموش شد', true);
+                if (($p[1] ?? '') === 'set') {
+                    self::settingsView($chat, $cq, 1);
+                } else {
+                    TG::api('editMessageReplyMarkup', ['chat_id' => $chat, 'message_id' => $cq['message']['message_id'], 'reply_markup' => self::homeKb()]);
+                }
                 return;
             case 'ban':
                 self::wait($cq, 'ban', '⛔️ آیدی عددی کاربر را بفرستید (مسدود / آزاد).');
@@ -706,7 +716,7 @@ final class Admin
             foreach (self::toggles() as $k => $l) {
                 $btns[] = UI::raw((Settings::get($k) ? '🟢 ' : '🔴 ') . $l, "adm:tog:$k:set", Settings::get($k) ? 'success' : null);
             }
-            $rows = self::grid($btns);
+            $rows = array_merge([[self::powerBtn('set')]], self::grid($btns));
             $rows[] = [UI::raw('⬇️ صفحه ۲: مقادیر', 'adm:set:2'), ...self::back()];
             $text = "⚙️ <b>تنظیمات کلی</b> · صفحه ۱ از ۲\nروی هر قابلیت بزنید تا روشن/خاموش شود.";
         }
