@@ -64,6 +64,12 @@ TG::$fake = function (string $method, array $p) {
                 return ['ok' => true, 'result' => ['id' => $p['chat_id'] === '@mychan' ? -100777 : -100778, 'type' => 'channel', 'title' => $p['chat_id'] === '@mychan' ? 'My Chan' : 'Other', 'username' => ltrim($p['chat_id'], '@')]];
             }
             return ['ok' => false, 'description' => 'Bad Request: chat not found'];
+        case 'setMyCommands':
+            if (!empty($GLOBALS['cmd429'])) {
+                $GLOBALS['cmd429']--;
+                return ['ok' => false, 'error_code' => 429, 'description' => 'Too Many Requests: retry after 0', 'parameters' => ['retry_after' => 0]];
+            }
+            return ['ok' => true, 'result' => true];
         case 'getChatAdministrators':
             return ['ok' => true, 'result' => [['status' => 'creator', 'user' => ['id' => 777, 'is_bot' => false, 'first_name' => 'adm']]]];
         case 'setMessageReaction':
@@ -565,6 +571,24 @@ check(!(Settings::get('extra_buttons') ?: []), 'extra button removed');
 reset_calls();
 feed(msg('/panel', -4400, 777));
 check(str_contains((string)last_text(), 'تنظیمات گروه'), 'panel in group opens group settings');
+reset_calls();
+feed(msg('/panel', -4400, 999));
+check(!str_contains((string)last_text(), 'تنظیمات گروه') && str_contains((string)last_text(), '⛔'), 'bot owner who is not a group admin gets no group panel');
+reset_calls();
+feed(msg('/panel', -4400, 778));
+check(!str_contains((string)last_text(), 'تنظیمات گروه'), 'member gets no group panel');
+$before = Settings::on(-4400, 'translate');
+reset_calls();
+cb('gs:translate', 999, -4400);
+cb('gs:translate', 778, -4400);
+check(Settings::on(-4400, 'translate') === $before && !sent(['editMessageText']) && count(array_filter(sent(['answerCallbackQuery']), fn($c) => !empty($c[1]['show_alert']))) === 2, 'only group admins can press panel buttons');
+reset_calls();
+$anon = msg('/panel', -4400, 1087968824, null, null, 'Group');
+$anon['from']['is_bot'] = true;
+$anon['from']['username'] = 'GroupAnonymousBot';
+$anon['sender_chat'] = ['id' => -4400, 'type' => 'supergroup', 'title' => 'G'];
+feed($anon);
+check(str_contains((string)last_text(), 'تنظیمات گروه'), 'anonymous group admin opens group panel');
 
 reset_calls();
 feed(msg('الماس', -7100, 501, null, null, 'Ali'));
@@ -674,6 +698,12 @@ reset_calls();
 Start::registerCommands();
 $cmds = array_values(array_filter($GLOBALS['calls'], fn($c) => $c[0] === 'setMyCommands'));
 check(count($cmds) === 3 && array_column($cmds[2][1]['commands'], 'command') === ['gift', 'account', 'emoji', 'help'] && array_column($cmds[0][1]['commands'], 'command') === ['gift', 'account', 'emoji', 'help'] && (int)DB::kvGet('commands_v') === Start::COMMANDS_V, 'command menu registered');
+check(!sent(['deleteMyCommands']), 'command menu is never deleted');
+reset_calls();
+DB::kvSet('commands_v', 0);
+$GLOBALS['cmd429'] = 2;
+$cmdOk = Start::registerCommands();
+check($cmdOk && count(sent(['setMyCommands'])) === 5 && (int)DB::kvGet('commands_v') === Start::COMMANDS_V, 'command menu retried after flood limit');
 
 reset_calls();
 foreach (['6037-9975-9950-3209', 'IR820540102680020817909002', 'شماره 09121234567', '/phone +15005550006', '/card 6037997599503209'] as $i => $ex) {
@@ -966,7 +996,7 @@ foreach (['price ton', '500 try usd', '2 eur to try', 'stars', 'premium', 'xo 10
 }
 check(!$miss, 'english help examples get a reply: ' . implode(' | ', $miss));
 reset_calls();
-feed(msg('/panel', -2234, 999));
+feed(msg('/panel', -2234, 777));
 $gp = sent(['sendMessage'])[0] ?? null;
 $gpb = array_merge(...($gp[1]['reply_markup']['inline_keyboard'] ?? [[]]));
 check($gp && str_contains($gp[1]['text'], 'Group settings') && !array_filter($gpb, fn($b) => str_contains($b['callback_data'] ?? '', 'lang')) && (bool)array_filter($gpb, fn($b) => str_contains($b['text'] ?? '', 'Anti-scam')), 'english group settings without language buttons');

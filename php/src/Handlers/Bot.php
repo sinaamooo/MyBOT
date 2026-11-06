@@ -183,6 +183,21 @@ final class Bot
         });
     }
 
+    public static function groupStaff(int $chat, int $user, ?array $m = null): bool
+    {
+        if ($chat >= 0) {
+            return false;
+        }
+        if ($m !== null && (int)($m['sender_chat']['id'] ?? 0) === $chat) {
+            return true;
+        }
+        if (($ids = self::chatAdmins($chat)) !== null) {
+            return in_array($user, $ids, true);
+        }
+        $r = TG::api('getChatMember', ['chat_id' => $chat, 'user_id' => $user]);
+        return in_array($r['status'] ?? '', ['administrator', 'creator'], true);
+    }
+
     public static function isMember($channel, int $user): bool
     {
         $k = "mem:$channel:$user";
@@ -756,23 +771,35 @@ final class Bot
 
 final class Start
 {
-    const COMMANDS_V = 7;
+    const COMMANDS_V = 8;
 
     public static function registerCommands(): bool
     {
         $list = [['command' => 'gift', 'description' => 'قیمت گیفت و کلکسیون گیفت'], ['command' => 'account', 'description' => 'اطلاعات اکانت'], ['command' => 'emoji', 'description' => 'کد ایموجی پریمیوم'], ['command' => 'help', 'description' => 'راهنمای ربات']];
-        foreach (['default', 'all_private_chats', 'all_group_chats', 'all_chat_administrators'] as $scope) {
-            foreach ([null, 'fa', 'en', 'ru'] as $lang) {
-                TG::api('deleteMyCommands', ['scope' => ['type' => $scope], 'language_code' => $lang]);
+        $ok = true;
+        foreach ([null, 'all_private_chats', 'all_group_chats'] as $scope) {
+            $p = ['commands' => $list] + ($scope ? ['scope' => ['type' => $scope]] : []);
+            for ($try = 0; $try < 3; $try++) {
+                if (TG::api('setMyCommands', $p) !== null) {
+                    continue 2;
+                }
+                if (!preg_match('/retry after (\d+)/i', (string)TG::$lastError, $w) || (int)$w[1] > 20) {
+                    break;
+                }
+                sleep((int)$w[1] + 1);
             }
+            $ok = false;
         }
-        $ok = TG::api('setMyCommands', ['commands' => $list]) !== null
-            && TG::api('setMyCommands', ['commands' => $list, 'scope' => ['type' => 'all_private_chats']]) !== null
-            && TG::api('setMyCommands', ['commands' => $list, 'scope' => ['type' => 'all_group_chats']]) !== null;
         if ($ok) {
             DB::kvSet('commands_v', self::COMMANDS_V);
         }
         return $ok;
+    }
+
+    public static function commandsShown(): ?int
+    {
+        $r = TG::api('getMyCommands', ['scope' => ['type' => 'all_group_chats']]);
+        return is_array($r) ? count($r) : null;
     }
 
     public static function start(array $m, string $args): void
@@ -899,7 +926,7 @@ final class Groups
     {
         $chat = (int)$m['chat']['id'];
         $uid = (int)$m['from']['id'];
-        if ($chat >= 0 || !Bot::isChatAdmin($chat, $uid)) {
+        if (!Bot::groupStaff($chat, $uid, $m)) {
             return;
         }
         $k = 'gfjp:' . $chat . ':' . $uid;
@@ -963,7 +990,7 @@ final class Groups
     public static function settings(array $m, string $args): void
     {
         $chat = (int)$m['chat']['id'];
-        if (!Bot::isChatAdmin($chat, $m['from']['id'])) {
+        if (!Bot::groupStaff($chat, (int)$m['from']['id'], $m)) {
             Bot::reply($m, UI::t('only_group_admins'), null);
             return;
         }
@@ -973,7 +1000,7 @@ final class Groups
     public static function toggle(array $cq, string $key): void
     {
         $chat = (int)$cq['message']['chat']['id'];
-        if (!Bot::isChatAdmin($chat, $cq['from']['id'])) {
+        if (!Bot::groupStaff($chat, (int)$cq['from']['id'])) {
             TG::answer($cq['id'], UI::plain('only_group_admins'), true);
             return;
         }

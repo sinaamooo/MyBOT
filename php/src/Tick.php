@@ -12,7 +12,7 @@ final class Tick
         $left = fn() => microtime(true) - $t0 < (PHP_SAPI === 'cli' ? 90 : 25);
         try {
             DB::kvSet('last_tick', time());
-            if ((int)DB::kvGet('commands_v', 0) < Start::COMMANDS_V) {
+            if ((int)DB::kvGet('commands_v', 0) < Start::COMMANDS_V && !Cache::throttled('commands_try', 300)) {
                 Start::registerCommands();
             }
             Bot::processDeletes();
