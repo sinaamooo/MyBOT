@@ -49,6 +49,7 @@ https://yourdomain.com/MyBOT/check.php?key=SETUP_KEY
 | چکر ولت | آدرس کیف پول (EVM، ترون، تون، سولانا، بیت‌کوین، لایت‌کوین، دوج، دش، بیت‌کوین کش، ریپل، سویی، آپتوس) |
 | چکر هش | هش یا لینک تراکنش همین شبکه‌ها |
 | گیفت | لینک `t.me/nft/...` یا `/gift @username` |
+| قیمت یوزرنیم (فرگمنت) | `/user @username` : وضعیت، بالاترین و حداقل پیشنهاد، قیمت فروش، دلار و تومان، پایان حراج و مالک |
 | اینستاگرام | لینک پست و ریلز |
 | پینترست | لینک پین (`pinterest.com/pin/...` یا `pin.it/...`): ویدیو، عکس و پین‌های چندتایی |
 | ترجمه | ریپلای و `ترجمه` |
@@ -63,7 +64,7 @@ https://yourdomain.com/MyBOT/check.php?key=SETUP_KEY
 
 ## دستورها
 
-`/start` ، `/help` ، `/gift` ، `/account` ، `/emoji` ، `/panel` ، `/check` ، `/scam`
+`/start` ، `/help` ، `/gift` ، `/user` ، `/account` ، `/emoji` ، `/panel` ، `/check` ، `/scam`
 
 ## مدیریت گروه (با ریپلای)
 
@@ -130,6 +131,7 @@ https://yourdomain.com/MyBOT/check.php?key=SETUP_KEY
 | سویی | fullnode.mainnet.sui.io | publicnode |
 | آپتوس | fullnode.mainnet.aptoslabs | api.mainnet.aptoslabs |
 | گیفت | دیتای گیت‌هاب TelegramGiftsAssests | Fragment، ارزش خود تلگرام |
+| قیمت یوزرنیم | صفحه یوزرنیم در Fragment | جستجوی Fragment (حراج، فروش، فروخته‌شده) |
 | ترجمه | Google (بعد از خطای محدودیت ۱۰ دقیقه کنار گذاشته می‌شود) | Lingva، MyMemory |
 | پینترست | PinResource خود پینترست (ویدیوهای استریمی دانلود، رمزگشایی و به mp4 تبدیل می‌شوند) | صفحه پین |
 

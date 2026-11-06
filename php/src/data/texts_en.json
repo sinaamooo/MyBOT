@@ -173,6 +173,18 @@
  "gift_not_found": {
   "text": "❌ No data was found for this gift."
  },
+ "user_price": {
+  "text": "🆔 <b>Username</b> {username}\n\n<blockquote>🏷 Status: {status}</blockquote>\n{lines}\n<blockquote>⏳ Auction ends: {ends}</blockquote>\n<blockquote>👤 Owner: <code>{owner}</code></blockquote>\n🗓 {time}"
+ },
+ "user_line": {
+  "text": "<blockquote>💎 {label}: <code>{ton}</code> TON\n💵 Dollar: <code>{usd}</code> $\n💰 Toman: <code>{toman}</code></blockquote>"
+ },
+ "user_usage": {
+  "text": "🆔 Send the username after the command.\nExample: <code>/user @username</code>"
+ },
+ "user_failed": {
+  "text": "❌ Couldn't get {username} from Fragment. Try again in a moment."
+ },
  "self_warn": {
   "text": "⚠️ {mention}\n🤖 <b>A self-bot (auto control) was detected on your account!</b>\nPlease turn your self-bot <b>off</b>, otherwise you will be <b>muted</b>. ⛔️"
  },

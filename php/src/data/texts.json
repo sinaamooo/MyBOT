@@ -231,6 +231,22 @@
   "text": "❌ اطلاعات این گیفت پیدا نشد.",
   "desc": "گیفت پیدا نشد"
  },
+ "user_price": {
+  "text": "🆔 <b>یوزرنیم</b> {username}\n\n<blockquote>🏷 وضعیت: {status}</blockquote>\n{lines}\n<blockquote>⏳ پایان حراج: {ends}</blockquote>\n<blockquote>👤 مالک: <code>{owner}</code></blockquote>\n🗓 {time}",
+  "desc": "قیمت یوزرنیم از فرگمنت ({username} {status} {lines} {ends} {owner} {time})"
+ },
+ "user_line": {
+  "text": "<blockquote>💎 {label}: <code>{ton}</code> TON\n💵 دلار: <code>{usd}</code> $\n💰 تومان: <code>{toman}</code></blockquote>",
+  "desc": "هر قیمت یوزرنیم ({label} {ton} {usd} {toman})"
+ },
+ "user_usage": {
+  "text": "🆔 یوزرنیم را بعد از دستور بفرستید.\nمثال: <code>/user @username</code>",
+  "desc": "راهنمای دستور یوزرنیم"
+ },
+ "user_failed": {
+  "text": "❌ اطلاعات {username} از فرگمنت دریافت نشد. کمی بعد دوباره امتحان کنید.",
+  "desc": "خطای فرگمنت ({username})"
+ },
  "self_warn": {
   "text": "⚠️ {mention}\n🤖 <b>سلف (کنترل خودکار) روی اکانت شما شناسایی شد!</b>\nلطفا سلف خود را <b>خاموش</b> کنید، در غیر این صورت <b>سکوت</b> می‌شوید. ⛔️",
   "desc": "اخطار سلف ({mention})"

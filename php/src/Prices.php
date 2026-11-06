@@ -364,7 +364,24 @@ final class Prices
                 $reqs["$sym|$src"] = $r;
             }
         }
-        $got = $reqs ? Http::collect($reqs, fn($k) => $k, fn($k, $d) => is_array($d) ? $d : null, $deadline) : [];
+        $need = count($syms);
+        $enough = function (array $out, float $t) use ($need) {
+            $n = [];
+            foreach (array_keys($out) as $k) {
+                $sym = strstr($k, '|', true);
+                $n[$sym] = ($n[$sym] ?? 0) + 1;
+            }
+            if (count($n) < $need) {
+                return false;
+            }
+            $min = min($n);
+            return $min >= 3 || $min >= 2 && $t > 0.6 || $t > 1.2;
+        };
+        $valid = function ($k, $d) {
+            [$sym, $src] = explode('|', $k, 2);
+            return is_array($d) && self::quoteParse($sym, [$src => $d]) ? $d : null;
+        };
+        $got = $reqs ? Http::collect($reqs, fn($k) => $k, $valid, $deadline, $enough) : [];
         $by = [];
         foreach ($got as $k => $d) {
             [$sym, $src] = explode('|', $k, 2);

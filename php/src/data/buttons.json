@@ -114,6 +114,11 @@
   "style": "primary",
   "desc": "دکمه مشاهده گیفت"
  },
+ "btn_fragment": {
+  "text": "💎 مشاهده در فرگمنت",
+  "style": "primary",
+  "desc": "لینک یوزرنیم در فرگمنت"
+ },
  "btn_jail": {
   "text": "🔒 بفرستش زندان",
   "style": "danger",

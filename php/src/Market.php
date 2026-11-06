@@ -45,7 +45,7 @@ final class Market
         $s = is_array($s) ? $s : [];
         $age = time() - (int)($s['at'] ?? 0);
         if ($age > self::FRESH && !Http::$fake) {
-            if (!empty($s['irt']) && $age < 86400) {
+            if (!empty($s['irt']) && $age < self::COIN_TTL - 60) {
                 register_shutdown_function(function () use ($s) {
                     try {
                         self::refresh($s);
@@ -138,7 +138,7 @@ final class Market
             $reqs['er'] = ['url' => 'https://open.er-api.com/v6/latest/USD', 'timeout' => 7];
             $reqs['fawaz'] = ['url' => 'https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json', 'timeout' => 7];
         }
-        $res = Http::multiJson($reqs);
+        $res = Http::multiJson($reqs, 5.0);
         $cand = [];
         $add = function (string $src, string $sym, $price, $chg, ?string $name = null, $vol = 0, int $w = 1) use (&$cand) {
             $sym = strtoupper(trim($sym));

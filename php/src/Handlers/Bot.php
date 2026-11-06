@@ -4,7 +4,7 @@ final class Bot
 {
     const COMMANDS = [
         'start' => ['Start', 'start'], 'help' => ['Start', 'help'], 'gift' => ['GiftsH', 'cmd'], 'account' => ['Tools', 'account'], 'emoji' => ['Tools', 'emoji'],
-        'panel' => ['Admin', 'panel'], 'check' => ['Scam', 'check'], 'scam' => ['Scam', 'cmd'],
+        'panel' => ['Admin', 'panel'], 'check' => ['Scam', 'check'], 'scam' => ['Scam', 'cmd'], 'user' => ['Usernames', 'cmd'],
     ];
     const CALLBACKS = [
         'fj:' => ['Bot', 'forceJoinCheck'], 'unmute:' => ['Bot', 'unmuteCb'], 'tr:' => ['Tools', 'translateCb'], 'gs:' => ['Groups', 'toggle'], 'ul:' => ['Start', 'langCb'], 'md:' => ['Moderation', 'cb'],

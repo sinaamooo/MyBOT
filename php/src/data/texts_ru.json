@@ -173,6 +173,18 @@
  "gift_not_found": {
   "text": "❌ Данные об этом подарке не найдены."
  },
+ "user_price": {
+  "text": "🆔 <b>Юзернейм</b> {username}\n\n<blockquote>🏷 Статус: {status}</blockquote>\n{lines}\n<blockquote>⏳ Конец аукциона: {ends}</blockquote>\n<blockquote>👤 Владелец: <code>{owner}</code></blockquote>\n🗓 {time}"
+ },
+ "user_line": {
+  "text": "<blockquote>💎 {label}: <code>{ton}</code> TON\n💵 Доллар: <code>{usd}</code> $\n💰 Томан: <code>{toman}</code></blockquote>"
+ },
+ "user_usage": {
+  "text": "🆔 Отправьте юзернейм после команды.\nПример: <code>/user @username</code>"
+ },
+ "user_failed": {
+  "text": "❌ Не удалось получить {username} с Fragment. Попробуйте чуть позже."
+ },
  "self_warn": {
   "text": "⚠️ {mention}\n🤖 <b>На вашем аккаунте обнаружен селф-бот (автоуправление)!</b>\nПожалуйста, <b>выключите</b> селф-бот, иначе вы получите <b>мут</b>. ⛔️"
  },

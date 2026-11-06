@@ -1405,6 +1405,42 @@ Market::refresh([], true, true);
 check(Market::coin('TON') === null && Market::coin('BTC') === null, 'old prices are never shown as live when the sources fail');
 @unlink($mk);
 Market::reset([]);
+$fragAuction = '<html><script>var a={"apiUrl":"\/api?hash=abc123def"};</script><section class="tm-section"><div class="tm-section-header"><h2 class="tm-section-header-domain">@niktob</h2>'
+    . '<span class="tm-section-header-status tm-status-avail">On auction</span></div><div class="tm-section-bid-info"><table class="table tm-table"><thead><tr><th>Highest Bid</th><th>Minimum Bid</th></tr></thead>'
+    . '<tbody><tr><td><div class="table-cell-value tm-value icon-before icon-ton">5,250</div><div class="table-cell-desc">~ $5,817</div></td><td><div class="table-cell-value tm-value icon-before icon-ton">5,513</div><div class="table-cell-desc">~ $6,108</div></td></tr></tbody></table></div>'
+    . '<div class="tm-section-countdown"><time datetime="' . date('c', time() + 86400 * 2) . '">2 days</time></div></section></html>';
+$fragTaken = '<html><script>var a={"apiUrl":"\/api?hash=abc123def"};</script><span class="tm-section-header-status tm-status-unavail">Sold</span><a href="https://tonviewer.com/UQAK2ROcYvpGLXVmSzbFt3B3spriK8MINHAbCdEfGhIjKlMn">owner</a></html>';
+$fragForms = [];
+$GLOBALS['http']['fragment.com/username/niktob'] = $fragAuction;
+$GLOBALS['http']['fragment.com/username/oldname'] = $fragTaken;
+$GLOBALS['http']['fragment.com/api'] = function ($r) use (&$fragForms) {
+    parse_str((string)($r['form'] ?? ''), $f);
+    $fragForms[] = $f;
+    if (($f['filter'] ?? '') !== 'sold') {
+        return ['html' => ''];
+    }
+    return ['html' => '<tr class="tm-row-selectable"><td><a href="/username/oldname"><div class="table-cell-value tm-value">@oldname</div></a></td><td><div class="table-cell-value tm-value icon-before icon-ton">1,200</div></td>'
+        . '<td><time datetime="2025-03-01T10:00:00+00:00">Mar 1</time></td><td><div class="table-cell-value tm-value tm-status-unavail">Sold</div></td></tr>'];
+};
+reset_calls();
+feed(msg('/User @niktob', -4520, 821));
+$ut = (string)last_text();
+check(str_contains($ut, '@niktob') && str_contains($ut, 'در حراج') && str_contains($ut, 'بالاترین پیشنهاد') && str_contains($ut, '5,250') && str_contains($ut, '5,817') && str_contains($ut, 'حداقل پیشنهاد')
+    && str_contains($ut, '5,513') && str_contains($ut, 'پایان حراج') && array_filter(buttons(sent()[0]), fn($b) => ($b['url'] ?? '') === 'https://fragment.com/username/niktob')
+    && !empty(sent()[0][1]['reply_parameters']), 'username price from the Fragment page: status, bids in TON, dollar, toman and auction end');
+reset_calls();
+feed(msg('/user https://t.me/OldName', -4520, 821));
+$ut = (string)last_text();
+check(str_contains($ut, '@oldname') && str_contains($ut, 'فروخته شده') && str_contains($ut, '1,200') && str_contains($ut, 'UQAK2ROcYvpGLXVmSzbFt3B3spriK8MINHAbCdEfGhIjKlMn')
+    && in_array('sold', array_column($fragForms, 'filter'), true) && ($fragForms[0]['method'] ?? '') === 'searchAuctions' && ($fragForms[0]['type'] ?? '') === 'usernames', 'sold username price found through Fragment search');
+reset_calls();
+feed(msg('/user', -4520, 821));
+check(str_contains((string)last_text(), '/user @username'), 'username price usage');
+unset($GLOBALS['http']['fragment.com/api']);
+reset_calls();
+feed(msg('/user @nofrag1', -4520, 822));
+check(str_contains((string)last_text(), 'فرگمنت'), 'username price reports a Fragment failure');
+unset($GLOBALS['http']['fragment.com/username/niktob'], $GLOBALS['http']['fragment.com/username/oldname']);
 $FG = -9300;
 reset_calls();
 feed(msg('/panel', $FG, 777));

@@ -1133,3 +1133,44 @@ final class Moderation
         TG::edit($chat, $cq['message']['message_id'], UI::t($key, ['target' => $target, 'by' => UI::mention($cq['from'])] + $vars), null);
     }
 }
+
+final class Usernames
+{
+    const STATUS = ['available' => 'آزاد برای حراج', 'avail' => 'آزاد برای حراج', 'on auction' => 'در حراج', 'auction' => 'در حراج', 'for sale' => 'برای فروش', 'sale' => 'برای فروش',
+        'sold' => 'فروخته شده', 'taken' => 'گرفته شده', 'not available' => 'غیرقابل خرید', 'unavailable' => 'غیرقابل خرید', 'unavail' => 'غیرقابل خرید'];
+    const LABELS = ['highest bid' => 'بالاترین پیشنهاد', 'auction' => 'بالاترین پیشنهاد', 'minimum bid' => 'حداقل پیشنهاد', 'avail' => 'حداقل پیشنهاد', 'price' => 'قیمت خرید',
+        'sale' => 'قیمت خرید', 'buy now' => 'خرید فوری', 'sold for' => 'فروخته شده به', 'sold' => 'فروخته شده به'];
+
+    public static function cmd(array $m, string $args): void
+    {
+        $name = Fragment::name($args !== '' ? $args : (string)($m['reply_to_message']['from']['username'] ?? ''));
+        if (!$name) {
+            Bot::reply($m, UI::t('user_usage'), null);
+            return;
+        }
+        TG::warm();
+        $f = Fragment::lookup($name);
+        $at = '@' . UI::esc($name);
+        if (!$f) {
+            Bot::reply($m, UI::t('user_failed', ['username' => $at]), null);
+            return;
+        }
+        $ton = Prices::usd('TON');
+        $usdt = Prices::usdtToman();
+        $lines = [];
+        foreach (array_slice($f['prices'], 0, 3) as $p) {
+            if (!$p['ton']) {
+                continue;
+            }
+            $usd = $p['usd'] ?: ($ton ? $p['ton'] * $ton : null);
+            $label = self::LABELS[strtolower(trim($p['label']))] ?? ($p['label'] !== '' ? $p['label'] : 'قیمت خرید');
+            $lines[] = UI::fill(UI::template('user_line'), ['label' => UI::esc(UI::l($label)), 'ton' => Fmt::num($p['ton']),
+                'usd' => $usd ? Fmt::usd($usd) : null, 'toman' => $usd && $usdt ? Fmt::toman($usd * $usdt) : null]);
+        }
+        $st = strtolower(trim((string)$f['status']));
+        $status = self::STATUS[$st] ?? self::STATUS[(string)$f['kind']] ?? ($f['status'] ?: null);
+        $text = UI::t('user_price', ['username' => $at, 'status' => $status ? UI::esc(UI::l($status)) : null, 'lines' => $lines ? implode("\n", $lines) : null,
+            'ends' => $f['ends'] && $f['ends'] > time() ? Fmt::jalali((int)$f['ends']) : null, 'owner' => $f['owner'] ? UI::esc($f['owner']) : null, 'time' => Fmt::now()]);
+        Bot::reply($m, $text, UI::footer([[UI::button('btn_fragment', ['url' => Fragment::BASE . '/username/' . $name])]]));
+    }
+}

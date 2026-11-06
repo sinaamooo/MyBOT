@@ -1187,3 +1187,112 @@ final class Guard
         return [$score, $reasons];
     }
 }
+
+final class Fragment
+{
+    const BASE = 'https://fragment.com';
+    const FILTERS = ['auction' => 'auction', 'sale' => 'sale', 'sold' => 'sold', 'avail' => ''];
+
+    public static function name(string $t): ?string
+    {
+        $t = preg_replace('~^(?:https?://)?(?:www\.)?(?:t\.me/|telegram\.me/|fragment\.com/username/)~i', '', trim($t));
+        $t = ltrim(strtok($t, " \n/?"), '@');
+        return preg_match('/^[A-Za-z][A-Za-z0-9_]{3,31}$/', (string)$t) ? strtolower($t) : null;
+    }
+
+    private static function text(string $h): string
+    {
+        return trim(preg_replace('/\s+/u', ' ', html_entity_decode(strip_tags($h), ENT_QUOTES | ENT_HTML5, 'UTF-8')));
+    }
+
+    private static function num(?string $v): ?float
+    {
+        $v = $v === null ? '' : preg_replace('/[^\d.]/', '', str_replace(',', '', $v));
+        return $v !== '' && is_numeric($v) ? (float)$v : null;
+    }
+
+    public static function page(string $html): array
+    {
+        $out = ['status' => null, 'kind' => null, 'prices' => [], 'ends' => null, 'owner' => null];
+        if (preg_match('~class="[^"]*\btm-section-header-status\b[^"]*"[^>]*>(.*?)</(?:span|div)>~s', $html, $m)
+            || preg_match('~class="[^"]*\btm-status-\w+[^"]*"[^>]*>(.*?)</(?:span|div)>~s', $html, $m)) {
+            $out['status'] = self::text($m[1]);
+            if (preg_match('~tm-status-(\w+)~', $m[0], $k)) {
+                $out['kind'] = $k[1];
+            }
+        }
+        $sec = preg_match('~<div[^>]*class="[^"]*\btm-section-bid-info\b[^"]*"[^>]*>(.*?)</table>~s', $html, $b) ? $b[1]
+            : (preg_match('~<table[^>]*class="[^"]*\btm-table\b[^"]*"[^>]*>(.*?)</table>~s', $html, $b) ? $b[1] : '');
+        if ($sec !== '') {
+            preg_match_all('~<th[^>]*>(.*?)</th>~s', $sec, $th);
+            preg_match_all('~<td[^>]*>(.*?)</td>~s', $sec, $td);
+            foreach ($td[1] as $i => $cell) {
+                if (!preg_match('~class="[^"]*\bicon-ton\b[^"]*"[^>]*>\s*([0-9][^<]*?)\s*<~', $cell, $v)) {
+                    continue;
+                }
+                $usd = preg_match('~class="[^"]*\btable-cell-desc\b[^"]*"[^>]*>(.*?)</div>~s', $cell, $d) ? self::num(self::text($d[1])) : null;
+                $out['prices'][] = ['label' => isset($th[1][$i]) ? self::text($th[1][$i]) : '', 'ton' => self::num($v[1]), 'usd' => $usd];
+            }
+        }
+        if (preg_match('~<time[^>]+datetime="([^"]+)"~', $html, $t)) {
+            $out['ends'] = strtotime($t[1]) ?: null;
+        }
+        if (preg_match('~href="https://tonviewer\.com/([A-Za-z0-9_-]{40,70})"~', $html, $o)) {
+            $out['owner'] = $o[1];
+        }
+        return $out;
+    }
+
+    public static function rows(string $html): array
+    {
+        $out = [];
+        preg_match_all('~<tr\b[^>]*class="[^"]*tm-row-selectable[^"]*"[^>]*>(.*?)</tr>~s', $html, $rows);
+        foreach ($rows[1] as $r) {
+            if (!preg_match('~href="/username/([^"/?]+)"~', $r, $h)) {
+                continue;
+            }
+            $st = preg_match('~class="[^"]*\btm-value\b[^"]*\btm-status-(\w+)[^"]*"[^>]*>\s*([^<]+?)\s*<~', $r, $s) ? [$s[1], trim($s[2])] : [null, null];
+            $out[strtolower($h[1])] = ['kind' => $st[0], 'status' => $st[1],
+                'ton' => preg_match('~class="[^"]*\btm-value\b[^"]*\bicon-ton\b[^"]*"[^>]*>\s*([0-9][^<]*?)\s*<~', $r, $p) ? self::num($p[1]) : null,
+                'date' => preg_match('~<time[^>]+datetime="([^"]+)"~', $r, $t) ? (strtotime($t[1]) ?: null) : null];
+        }
+        return $out;
+    }
+
+    public static function lookup(string $name): ?array
+    {
+        $k = 'frag:' . $name;
+        $v = Cache::get($k, $hit);
+        if ($hit) {
+            return $v;
+        }
+        $h = ['User-Agent' => Hls::UA, 'Accept' => 'text/html,application/xhtml+xml', 'Accept-Language' => 'en-US,en;q=0.9'];
+        $r = Http::request(['url' => self::BASE . '/username/' . $name, 'timeout' => 8, 'headers' => $h]);
+        if ($r['status'] !== 200 || $r['body'] === '') {
+            return null;
+        }
+        $info = self::page($r['body']) + ['name' => $name];
+        if (!$info['prices'] && preg_match('~(?:https://fragment\.com)?\\\\?/api\?hash=([a-f0-9]+)~', $r['body'], $hm)) {
+            $reqs = [];
+            foreach (self::FILTERS as $key => $f) {
+                $reqs[$key] = ['url' => self::BASE . '/api?hash=' . $hm[1], 'method' => 'POST', 'timeout' => 6,
+                    'form' => http_build_query(['type' => 'usernames', 'query' => $name, 'filter' => $f, 'method' => 'searchAuctions']),
+                    'headers' => ['User-Agent' => Hls::UA, 'Accept' => 'application/json, text/javascript, */*; q=0.01', 'Content-Type' => 'application/x-www-form-urlencoded; charset=UTF-8',
+                        'Origin' => self::BASE, 'Referer' => self::BASE . '/', 'X-Requested-With' => 'XMLHttpRequest']];
+            }
+            foreach (Http::multi($reqs, 7) as $key => $res) {
+                $j = json_decode((string)$res['body'], true);
+                $row = is_array($j) ? (self::rows((string)($j['html'] ?? (($j['body'] ?? '') . ($j['foot'] ?? ''))))[$name] ?? null) : null;
+                if ($row && $row['ton']) {
+                    $info['prices'][] = ['label' => $key, 'ton' => $row['ton'], 'usd' => null];
+                    $info['status'] ??= $row['status'];
+                    $info['kind'] ??= $row['kind'];
+                    $info['ends'] ??= $key === 'auction' ? $row['date'] : null;
+                    break;
+                }
+            }
+        }
+        Cache::set($k, $info, 60);
+        return $info;
+    }
+}
